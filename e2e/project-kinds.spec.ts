@@ -115,3 +115,23 @@ test('a project with no software kind has a plain work folder under the data fol
   const soft = await ok<{ workFolder: string | null }>(human.get(`/api/projects/${software.id}`))
   expect(soft.workFolder).toBeNull()
 })
+
+test('the human approves a ticket of a project with no software kind, and taking it back reopens it', async ({
+  human,
+}) => {
+  const music = await createProject(human, `Hand-off ${Date.now()}`, ['music'])
+  const t = await ok<{ id: number; complexity: string }>(
+    human.post(`/api/projects/${music.id}/tickets`, { data: { title: 'Record the take' } }),
+  )
+  // No repo, so no review rounds: low, the builder checks its own work.
+  expect(t.complexity).toBe('low')
+  await ok(human.patch(`/api/tickets/${t.id}`, { data: { status: 'review' } }))
+
+  await ok(human.put(`/api/tickets/${t.id}/approval`, { data: { verdict: 'approved' } }))
+  const approved = await ok<{ stage: { kind: string } }>(human.get(`/api/tickets/${t.id}`))
+  expect(approved.stage.kind).toBe('done')
+
+  await ok(human.put(`/api/tickets/${t.id}/approval`, { data: { verdict: null } }))
+  const back = await ok<{ stage: { kind: string } }>(human.get(`/api/tickets/${t.id}`))
+  expect(back.stage.kind).toBe('review')
+})

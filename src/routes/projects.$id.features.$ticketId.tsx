@@ -433,7 +433,8 @@ function TicketPage() {
               <Scale className="size-3.5" /> decision needed
             </span>
           )}
-          {(t.parentId || verdictOf(t)) && (
+          {/* Without a git side the human's approval is the hand-off: shown on every ticket, not only lanes. */}
+          {(t.parentId || verdictOf(t) || !gitSide) && (
             <VerdictButtons t={t} disabled={judge.isPending} onSet={(verdict) => decide(t, verdict)} />
           )}
           <StatusSelect

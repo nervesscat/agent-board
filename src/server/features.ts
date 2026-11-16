@@ -643,7 +643,8 @@ export function createTicket(
             status,
             ...startedPatch(stages, null, status),
             // A lane copies its parent's level as it is now; a later change to the parent does not reach it.
-            complexity: input.complexity ?? parent?.complexity ?? DEFAULT_COMPLEXITY,
+            // Work with no repo (a project with no software kind) has no review rounds: low, the builder's own check.
+            complexity: input.complexity ?? parent?.complexity ?? (repo ? DEFAULT_COMPLEXITY : 'low'),
             assignee: input.assignee ?? '',
             branch: input.branch ?? '',
             baseBranch,
@@ -1078,13 +1079,17 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
   const now = new Date().toISOString()
   const stages = listStages(t.projectId)
   const cancel = firstOfKind(stages, 'cancelled')
-  // A PR review (tagged PR) is finished by the call: approving it closes it as done.
+  // A PR review (tagged PR) is finished by the call: approving it closes it as done. So is the hand-off
+  // of work in a project with no software kind: the files are the deliverable, and the human's approval
+  // is its review.
   const pr = t.tags.some((tag) => tag.toLowerCase() === 'pr')
-  const finish = verdict === 'approved' && pr ? firstOfKind(stages, 'done') : undefined
+  const handOff = !hasGitSide(getProject(t.projectId).kinds)
+  const closes = pr || handOff
+  const finish = verdict === 'approved' && closes ? firstOfKind(stages, 'done') : undefined
   const kind = kindOf(stages, t.status)
   const reopen =
     (before === 'disapproved' && kind === 'cancelled') ||
-    (before === 'approved' && pr && kind === 'done' && verdict === null)
+    (before === 'approved' && closes && kind === 'done' && verdict === null)
   const reopenTo = opts.reopenTo
     ? resolveStage(stages, opts.reopenTo, projectWorkStage(t.projectId, stages))
     : before === 'approved'
