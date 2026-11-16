@@ -648,7 +648,11 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
             spaceDown.current = false
             open()
           }}
-          className="inline cursor-text text-left decoration-muted-foreground/50 decoration-dotted underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          // A Space held across a Tab must not leave its press behind for the next keyup on the title.
+          onBlur={() => {
+            spaceDown.current = false
+          }}
+          className="inline cursor-text text-left decoration-muted-foreground/50 decoration-dotted underline-offset-4 hover:underline"
         >
           {t.title}
         </span>
