@@ -612,7 +612,9 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
             setValue(t.title)
             setEditing(true)
           }}
-          className="cursor-text text-left decoration-muted-foreground/50 decoration-dotted underline-offset-4 hover:underline"
+          // Inline, not an inline-block: a block-level button drops its whole title under the #id when
+          // the title is too wide for the line, and an inline one wraps its text in the heading's flow.
+          className="inline cursor-text text-left decoration-muted-foreground/50 decoration-dotted underline-offset-4 hover:underline"
         >
           {t.title}
         </button>
