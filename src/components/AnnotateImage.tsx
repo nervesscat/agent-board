@@ -1,5 +1,15 @@
-import { Circle, MessageSquarePlus, MoveUpRight, Pencil, Square, Type, Undo2 } from 'lucide-react'
-import { type PointerEvent, type RefObject, useCallback, useEffect, useRef, useState } from 'react'
+import {
+  Circle,
+  MessageSquarePlus,
+  MousePointer2,
+  MoveUpRight,
+  Pencil,
+  Redo2,
+  Square,
+  Type,
+  Undo2,
+} from 'lucide-react'
+import { type PointerEvent, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { TrashIcon } from '#/components/TrashIcon'
@@ -15,6 +25,28 @@ import {
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Tip } from '#/components/ui/tooltip'
+import {
+  type Box,
+  type History,
+  type Point,
+  carryNotes,
+  createHistory,
+  edit,
+  handleAt,
+  isTinyDrag,
+  markAt,
+  markBounds,
+  marqueeIds,
+  pivotOf,
+  redo,
+  replace,
+  rotateMark,
+  textSize,
+  translateMark,
+  turnBetween,
+  unionBounds,
+  undo,
+} from '#/lib/annotationEdit'
 import type { Annotation, AnnotationDoc, AnnotationKind } from '#/lib/annotations'
 import { ANNOTATION_TEXT_MAX, annotatable, keepAnnotations } from '#/lib/annotations'
 import { errorMessage } from '#/lib/api'
@@ -22,9 +54,9 @@ import { cn } from '#/lib/utils'
 
 /**
  * The canvas an image passes through before it is attached: draw on the picture with a pencil, a
- * box, an arrow, an ellipse or text, write what each mark means beside it, and attach the flattened
- * picture, which carries the drawings and, as data next to it, the notes. Plain Canvas 2D: the repo
- * has no drawing library.
+ * box, an arrow, an ellipse or text, select marks to move, turn or delete them, write what each mark
+ * means beside it, and attach the flattened picture, which carries the drawings and, as data next to
+ * it, the notes. Plain Canvas 2D: the repo has no drawing library.
  */
 export interface AnnotatedImage {
   /** The picture as it was drawn on, ready to attach. */
@@ -33,9 +65,10 @@ export interface AnnotatedImage {
   annotations: AnnotationDoc
 }
 
-type Tool = AnnotationKind | 'note'
+type Tool = AnnotationKind | 'note' | 'select'
 
 const TOOLS: { tool: Tool; label: string; hint: string; Icon: typeof Pencil }[] = [
+  { tool: 'select', label: 'Select', hint: 'Pick marks to move, turn or delete them', Icon: MousePointer2 },
   { tool: 'pen', label: 'Pencil', hint: 'Draw freehand', Icon: Pencil },
   { tool: 'rect', label: 'Box', hint: 'Draw a box around something', Icon: Square },
   { tool: 'arrow', label: 'Arrow', hint: 'Point at something', Icon: MoveUpRight },
@@ -47,46 +80,34 @@ const TOOLS: { tool: Tool; label: string; hint: string; Icon: typeof Pencil }[] 
 const DEFAULT_COLOR = '#e11d48'
 const DEFAULT_WIDTH = 4
 
-/** Text is drawn at four times the stroke width, so one control sizes everything drawn. */
-const textSize = (a: Annotation) => Math.max(12, a.width * 4)
+/** The rotate handle sits this far above the selection's box, and is this big, in css pixels. */
+const HANDLE_GAP = 26
+const HANDLE_RADIUS = 7
 
-function bounds(a: Annotation) {
-  if (a.rect) return a.rect
-  if (a.kind === 'text' && a.from) {
-    const size = textSize(a)
-    return { x: a.from[0], y: a.from[1], w: (a.text?.length ?? 1) * size * 0.6, h: size * 1.2 }
-  }
-  const points = a.points ?? [a.from, a.to].filter((p): p is [number, number] => Boolean(p))
-  if (!points.length) return { x: 0, y: 0, w: 0, h: 0 }
-  const xs = points.map(([x]) => x)
-  const ys = points.map(([, y]) => y)
-  const x = Math.min(...xs)
-  const y = Math.min(...ys)
-  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }
+/** What the canvas paints over the picture while marks are selected: the group box and its handle. */
+interface Overlay {
+  picked: Annotation[]
+  marquee: Box | null
 }
 
-function distanceToSegment(x: number, y: number, [x1, y1]: [number, number], [x2, y2]: [number, number]) {
-  const dx = x2 - x1
-  const dy = y2 - y1
-  const length = dx * dx + dy * dy
-  const t = length ? Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / length)) : 0
-  return Math.hypot(x - (x1 + t * dx), y - (y1 + t * dy))
-}
-
-/** The mark under a point, the newest first, so a click with the Note tool picks the one on top. */
-function markAt(items: Annotation[], x: number, y: number) {
-  for (let i = items.length - 1; i >= 0; i--) {
-    const a = items[i]!
-    const reach = a.width + 6
-    if (a.kind === 'pen' && a.points?.some(([px, py]) => Math.hypot(px - x, py - y) <= reach)) return a
-    if ((a.kind === 'line' || a.kind === 'arrow') && a.from && a.to) {
-      if (distanceToSegment(x, y, a.from, a.to) <= reach) return a
-    }
-    const b = bounds(a)
-    const inside = x >= b.x - reach && x <= b.x + b.w + reach && y >= b.y - reach && y <= b.y + b.h + reach
-    if (inside && a.kind !== 'pen') return a
-  }
-  return undefined
+/**
+ * A pointer gesture on the picture in Select mode. `next` is the picture the gesture would leave,
+ * painted as a preview and committed as one history step when the pointer lets go.
+ */
+interface Gesture {
+  mode: 'move' | 'turn' | 'marquee'
+  start: Point
+  /** The marks the gesture moves or turns. */
+  ids: Set<string>
+  /** The picture when the gesture began. */
+  base: Annotation[]
+  /** What a turn turns about: the centre of the selection's box. */
+  centre: Point
+  /** A marquee added to the selection (Shift held) rather than replacing it. */
+  additive: boolean
+  /** A press on a mark that was part of several: a click without a drag picks it alone. */
+  pick?: string
+  next: Annotation[] | null
 }
 
 function drawMark(ctx: CanvasRenderingContext2D, a: Annotation) {
@@ -96,6 +117,12 @@ function drawMark(ctx: CanvasRenderingContext2D, a: Annotation) {
   ctx.lineWidth = a.width
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
+  if (a.rotation) {
+    const [cx, cy] = pivotOf(a)
+    ctx.translate(cx, cy)
+    ctx.rotate(a.rotation)
+    ctx.translate(-cx, -cy)
+  }
   if (a.kind === 'pen' && a.points?.length) {
     const [[x0, y0], ...rest] = a.points
     if (!rest.length) {
@@ -148,8 +175,12 @@ function drawMark(ctx: CanvasRenderingContext2D, a: Annotation) {
   ctx.restore()
 }
 
-/** The picture, the marks, the numbered notes and the mark being drawn, at the picture's own size. */
-function paint(canvas: HTMLCanvasElement, bitmap: ImageBitmap, items: Annotation[], selected: string | null) {
+/**
+ * The picture, the marks, the numbered notes and, when an overlay is given, the selection's box with
+ * its rotate handle and the marquee being dragged, at the picture's own size. The overlay is on
+ * screen only: the attached render is painted without one.
+ */
+function paint(canvas: HTMLCanvasElement, bitmap: ImageBitmap, items: Annotation[], overlay: Overlay | null) {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   ctx.clearRect(0, 0, canvas.width, canvas.height)
@@ -160,7 +191,7 @@ function paint(canvas: HTMLCanvasElement, bitmap: ImageBitmap, items: Annotation
   for (const item of items) {
     if (!item.note?.trim()) continue
     n++
-    const box = bounds(item)
+    const box = markBounds(item)
     const r = Math.max(9, item.width * 2.5)
     const x = Math.min(canvas.width - r, Math.max(r, box.x))
     const y = Math.min(canvas.height - r, Math.max(r, box.y))
@@ -176,16 +207,34 @@ function paint(canvas: HTMLCanvasElement, bitmap: ImageBitmap, items: Annotation
   }
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
-  const picked = items.find((i) => i.id === selected)
-  if (picked) {
-    const box = bounds(picked)
-    ctx.save()
-    ctx.strokeStyle = '#0ea5e9'
-    ctx.lineWidth = Math.max(2, picked.width / 2)
-    ctx.setLineDash([8, 5])
-    ctx.strokeRect(box.x - 6, box.y - 6, box.w + 12, box.h + 12)
-    ctx.restore()
+  if (!overlay) return
+  // Image pixels per css pixel: the overlay keeps the same size on screen whatever the picture's size.
+  const css = canvas.getBoundingClientRect().width
+  const k = css > 0 ? canvas.width / css : 1
+  ctx.save()
+  ctx.strokeStyle = '#0ea5e9'
+  ctx.fillStyle = '#ffffff'
+  ctx.lineWidth = 2 * k
+  ctx.setLineDash([8 * k, 5 * k])
+  if (overlay.marquee) {
+    const m = overlay.marquee
+    ctx.strokeRect(m.x, m.y, m.w, m.h)
   }
+  const box = unionBounds(overlay.picked)
+  if (box) {
+    ctx.strokeRect(box.x - 6 * k, box.y - 6 * k, box.w + 12 * k, box.h + 12 * k)
+    const [hx, hy] = handleAt(box, HANDLE_GAP * k)
+    ctx.setLineDash([])
+    ctx.beginPath()
+    ctx.moveTo(box.x + box.w / 2, box.y - 6 * k)
+    ctx.lineTo(hx, hy)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(hx, hy, HANDLE_RADIUS * k, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+  }
+  ctx.restore()
 }
 
 /**
@@ -210,16 +259,29 @@ export function AnnotateImage({
 }) {
   const [bitmap, setBitmap] = useState<ImageBitmap | null>(null)
   const [failed, setFailed] = useState('')
-  const [items, setItems] = useState<Annotation[]>([])
+  // The marks and their undo history: `history.present` is the picture as it stands.
+  const [history, setHistory] = useState<History<Annotation[]>>(() => createHistory<Annotation[]>([]))
+  const items = history.present
+  // The picture while a select gesture is under way; the committed one otherwise.
+  const [preview, setPreview] = useState<Annotation[] | null>(null)
+  const shown = preview ?? items
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const [marquee, setMarquee] = useState<[Point, Point] | null>(null)
   const [tool, setTool] = useState<Tool>('pen')
   const [color, setColor] = useState(DEFAULT_COLOR)
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [text, setText] = useState('')
-  const [selected, setSelected] = useState<string | null>(null)
   const [draft, setDraft] = useState<Annotation | null>(null)
   const [busy, setBusy] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const origin = useRef<[number, number] | null>(null)
+  const origin = useRef<Point | null>(null)
+  const gesture = useRef<Gesture | null>(null)
+
+  // The marks selected that are still on the picture (an undo can take one away).
+  const picked = useMemo(() => shown.filter((a) => selected.has(a.id)), [shown, selected])
+  const selectedItem = picked.length === 1 ? picked[0] : undefined
+  const canUndo = history.past.length > 0 && !busy
+  const canRedo = history.future.length > 0 && !busy
 
   // The picture is decoded once, at its natural size: the marks and the flattened render are in its pixels.
   const decoded = useRef<ImageBitmap | null>(null)
@@ -228,9 +290,12 @@ export function AnnotateImage({
     let dead = false
     setBitmap(null)
     setFailed('')
-    setItems([])
-    setSelected(null)
+    setHistory(createHistory<Annotation[]>([]))
+    setSelected(new Set())
+    setPreview(null)
+    setMarquee(null)
     setDraft(null)
+    gesture.current = null
     createImageBitmap(file).then(
       (made) => {
         if (dead) return made.close()
@@ -249,16 +314,28 @@ export function AnnotateImage({
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !bitmap) return
-    paint(canvas, bitmap, draft ? [...items, draft] : items, selected)
-  }, [bitmap, items, draft, selected])
+    const drawn = draft ? [...shown, draft] : shown
+    const box = marquee && {
+      x: Math.min(marquee[0][0], marquee[1][0]),
+      y: Math.min(marquee[0][1], marquee[1][1]),
+      w: Math.abs(marquee[1][0] - marquee[0][0]),
+      h: Math.abs(marquee[1][1] - marquee[0][1]),
+    }
+    paint(canvas, bitmap, drawn, { picked, marquee: box || null })
+  }, [bitmap, shown, draft, picked, marquee])
 
-  const at = (e: PointerEvent<HTMLCanvasElement>): [number, number] => {
+  // Image pixels for a css pixel of the canvas as it is shown, and where a pointer is in the picture.
+  const scale = (e: PointerEvent<HTMLCanvasElement>) => {
+    const box = e.currentTarget.getBoundingClientRect()
+    return box.width ? e.currentTarget.width / box.width : 1
+  }
+  const at = (e: PointerEvent<HTMLCanvasElement>): Point => {
     const el = e.currentTarget
     const box = el.getBoundingClientRect()
     return [((e.clientX - box.left) * el.width) / box.width, ((e.clientY - box.top) * el.height) / box.height]
   }
 
-  const fresh = (kind: AnnotationKind, [x, y]: [number, number]): Annotation => ({
+  const fresh = (kind: AnnotationKind, [x, y]: Point): Annotation => ({
     id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     kind,
     color,
@@ -266,17 +343,78 @@ export function AnnotateImage({
     ...(kind === 'rect' || kind === 'ellipse'
       ? { rect: { x, y, w: 0, h: 0 } }
       : {
-          from: [x, y] as [number, number],
-          ...(kind === 'pen' ? { points: [[x, y] as [number, number]] } : {}),
+          from: [x, y] as Point,
+          ...(kind === 'pen' ? { points: [[x, y] as Point] } : {}),
         }),
     ...(kind === 'text' ? { text } : {}),
   })
 
+  const startSelect = (e: PointerEvent<HTMLCanvasElement>, point: Point) => {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    // The rotate handle of the selection, first: it sits above the box, outside the marks.
+    const box = unionBounds(picked)
+    if (box) {
+      const handle = handleAt(box, HANDLE_GAP * scale(e))
+      const reach = HANDLE_RADIUS * 3 * scale(e)
+      if (Math.hypot(point[0] - handle[0], point[1] - handle[1]) <= reach) {
+        gesture.current = {
+          mode: 'turn',
+          start: point,
+          ids: new Set(picked.map((a) => a.id)),
+          base: items,
+          centre: [box.x + box.w / 2, box.y + box.h / 2],
+          additive: false,
+          next: null,
+        }
+        return
+      }
+    }
+    const hit = markAt(items, point[0], point[1])
+    if (hit && e.shiftKey) {
+      // Shift-click adds one mark to the selection or takes it away, with no drag.
+      setSelected((prev) => {
+        const next = new Set(prev)
+        if (next.has(hit.id)) next.delete(hit.id)
+        else next.add(hit.id)
+        return next
+      })
+      return
+    }
+    if (hit) {
+      const inGroup = picked.some((a) => a.id === hit.id)
+      const group = inGroup ? picked : [hit]
+      if (!inGroup) setSelected(new Set([hit.id]))
+      gesture.current = {
+        mode: 'move',
+        start: point,
+        ids: new Set(group.map((a) => a.id)),
+        base: items,
+        centre: point,
+        additive: false,
+        pick: hit.id,
+        next: null,
+      }
+      return
+    }
+    gesture.current = {
+      mode: 'marquee',
+      start: point,
+      ids: new Set(),
+      base: items,
+      centre: point,
+      additive: e.shiftKey,
+      next: null,
+    }
+    setMarquee([point, point])
+  }
+
   const onPointerDown = (e: PointerEvent<HTMLCanvasElement>) => {
     if (!bitmap || busy) return
     const point = at(e)
+    if (tool === 'select') return startSelect(e, point)
     if (tool === 'note') {
-      setSelected(markAt(items, point[0], point[1])?.id ?? null)
+      const hit = markAt(items, point[0], point[1])
+      setSelected(new Set(hit ? [hit.id] : []))
       return
     }
     if (tool === 'text' && !text.trim()) return
@@ -286,6 +424,24 @@ export function AnnotateImage({
   }
 
   const onPointerMove = (e: PointerEvent<HTMLCanvasElement>) => {
+    const g = gesture.current
+    if (g) {
+      const p = at(e)
+      if (g.mode === 'marquee') {
+        setMarquee([g.start, p])
+        return
+      }
+      if (g.mode === 'move') {
+        const dx = p[0] - g.start[0]
+        const dy = p[1] - g.start[1]
+        g.next = g.base.map((a) => (g.ids.has(a.id) ? translateMark(a, dx, dy) : a))
+      } else {
+        const angle = turnBetween(g.centre, g.start, p)
+        g.next = g.base.map((a) => (g.ids.has(a.id) ? rotateMark(a, g.centre, angle) : a))
+      }
+      setPreview(g.next)
+      return
+    }
     if (!draft || !origin.current) return
     const [x, y] = at(e)
     const [x0, y0] = origin.current
@@ -303,7 +459,31 @@ export function AnnotateImage({
     )
   }
 
-  const onPointerUp = () => {
+  const onPointerUp = (e: PointerEvent<HTMLCanvasElement>) => {
+    const g = gesture.current
+    if (g) {
+      gesture.current = null
+      if (g.mode === 'marquee') {
+        setMarquee(null)
+        const end = at(e)
+        if (isTinyDrag(g.start, end)) {
+          // A click on empty picture: it clears the selection, unless Shift was held.
+          if (!g.additive) setSelected(new Set())
+          return
+        }
+        const hits = marqueeIds(items, g.start, end)
+        setSelected((prev) => (g.additive ? new Set([...prev, ...hits]) : new Set(hits)))
+        return
+      }
+      setPreview(null)
+      if (g.next && g.next.some((a, i) => a !== g.base[i])) {
+        const next = g.next
+        setHistory((h) => edit(h, next))
+      } else if (g.pick) {
+        setSelected(new Set([g.pick]))
+      }
+      return
+    }
     if (!draft) return
     const box = draft.rect
     const line =
@@ -314,35 +494,91 @@ export function AnnotateImage({
         ? (draft.points?.length ?? 0) < 2
         : (draft.kind === 'line' || draft.kind === 'arrow') && line < 3
     if (!tiny) {
-      setItems((prev) => [...prev, draft])
-      setSelected(draft.id)
+      setHistory((h) => edit(h, [...h.present, draft]))
+      setSelected(new Set([draft.id]))
     }
     setDraft(null)
     origin.current = null
   }
 
-  const selectedItem = items.find((i) => i.id === selected)
-
-  const setNote = (note: string) =>
-    setItems((prev) =>
-      prev.map((i) => (i.id === selected ? { ...i, note: note.slice(0, ANNOTATION_TEXT_MAX) } : i)),
+  const setNote = (note: string) => {
+    if (!selectedItem) return
+    const id = selectedItem.id
+    // A note is written into the picture as it stands, without a step of its own.
+    setHistory((h) =>
+      replace(
+        h,
+        h.present.map((i) => (i.id === id ? { ...i, note: note.slice(0, ANNOTATION_TEXT_MAX) } : i)),
+      ),
     )
-
-  const remove = (id: string) => {
-    setItems((prev) => prev.filter((i) => i.id !== id))
-    if (selected === id) setSelected(null)
   }
 
-  const undo = () => {
-    const last = items[items.length - 1]
-    if (last) remove(last.id)
+  const deleteSelected = () => {
+    if (!picked.length || busy) return
+    const gone = new Set(picked.map((a) => a.id))
+    setHistory((h) =>
+      edit(
+        h,
+        h.present.filter((a) => !gone.has(a.id)),
+      ),
+    )
+    setSelected(new Set())
   }
+
+  const travel = (step: 'undo' | 'redo') => {
+    if (busy) return
+    setHistory((h) => {
+      const moved = step === 'undo' ? undo(h) : redo(h)
+      return moved === h ? h : { ...moved, present: carryNotes(moved.present, h.present) }
+    })
+  }
+
+  // The keys the canvas takes, read at the window (see the effect below): Escape clears a selection
+  // before the dialog would close, and the other keys act unless a field has the focus, which keeps
+  // its own typing and undo.
+  const onKeyDown = (e: globalThis.KeyboardEvent) => {
+    if (busy) return
+    if (e.key === 'Escape') {
+      if (!picked.length) return
+      e.preventDefault()
+      e.stopPropagation()
+      setSelected(new Set())
+      return
+    }
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+    const mod = e.ctrlKey || e.metaKey
+    const key = e.key.toLowerCase()
+    if (mod && key === 'z') {
+      e.preventDefault()
+      travel(e.shiftKey ? 'redo' : 'undo')
+    } else if (mod && key === 'y') {
+      e.preventDefault()
+      travel('redo')
+    } else if (mod && key === 'a') {
+      e.preventDefault()
+      setSelected(new Set(items.map((a) => a.id)))
+    } else if (!mod && (e.key === 'Delete' || e.key === 'Backspace') && picked.length) {
+      e.preventDefault()
+      deleteSelected()
+    }
+  }
+
+  // Read at the window, in the capture phase: the keys reach the canvas whatever has the focus (a
+  // button that becomes disabled drops it), and Escape is taken before the dialog closes on it.
+  const keys = useRef(onKeyDown)
+  keys.current = onKeyDown
+  useEffect(() => {
+    if (!file) return
+    const listener = (e: globalThis.KeyboardEvent) => keys.current(e)
+    window.addEventListener('keydown', listener, true)
+    return () => window.removeEventListener('keydown', listener, true)
+  }, [file])
 
   const attach = async () => {
     if (!bitmap || !file || busy) return
     // The picture this encode is for, and its size: the flattened image and the document go with it,
     // whichever picture the canvas is showing by the time the encode has finished.
-    const shown = file
+    const shownFile = file
     const width = bitmap.width
     const height = bitmap.height
     setBusy(true)
@@ -352,6 +588,7 @@ export function AnnotateImage({
       canvas.height = height
       const ctx = canvas.getContext('2d')
       if (!ctx) throw new Error('this browser cannot draw the picture')
+      // No overlay: the selection is a tool on screen, never part of the picture.
       paint(canvas, bitmap, items, null)
       const blob = await new Promise<Blob>((resolve, reject) =>
         canvas.toBlob(
@@ -360,13 +597,13 @@ export function AnnotateImage({
         ),
       )
       // The attachment is the annotated render, under a name that says it is a PNG.
-      const name = `${shown.name.replace(/\.[^./\\]+$/, '')}.png`
+      const name = `${shownFile.name.replace(/\.[^./\\]+$/, '')}.png`
       onAttach(
         {
           file: new File([blob], name, { type: 'image/png', lastModified: Date.now() }),
           annotations: { version: 1, width, height, items },
         },
-        shown,
+        shownFile,
       )
     } catch (err) {
       toast.error(errorMessage(err, 'the picture could not be saved'))
@@ -375,12 +612,19 @@ export function AnnotateImage({
     }
   }
 
-  const notes = items.flatMap((item) => {
+  const notes = shown.flatMap((item) => {
     const note = item.note?.trim()
     return note ? [{ id: item.id, note }] : []
   })
 
-  const cursor = tool === 'note' ? 'cursor-pointer' : tool === 'text' ? 'cursor-text' : 'cursor-crosshair'
+  const cursor =
+    tool === 'select'
+      ? 'cursor-default'
+      : tool === 'note'
+        ? 'cursor-pointer'
+        : tool === 'text'
+          ? 'cursor-text'
+          : 'cursor-crosshair'
 
   // Nothing to annotate: the dialog leaves the page rather than sitting closed in it with a stale
   // picture, so a form's next step never finds it.
@@ -455,16 +699,40 @@ export function AnnotateImage({
               />
             )}
             <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
-            <Button type="button" size="sm" variant="ghost" onClick={undo} disabled={!items.length || busy}>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => travel('undo')}
+              disabled={!canUndo}
+            >
               <Undo2 data-icon="inline-start" /> Undo
             </Button>
             <Button
               type="button"
               size="sm"
               variant="ghost"
+              onClick={() => travel('redo')}
+              disabled={!canRedo}
+            >
+              <Redo2 data-icon="inline-start" /> Redo
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={deleteSelected}
+              disabled={!picked.length || busy}
+            >
+              <TrashIcon data-icon="inline-start" /> Delete
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
               onClick={() => {
-                setItems([])
-                setSelected(null)
+                setHistory((h) => edit(h, []))
+                setSelected(new Set())
               }}
               disabled={!items.length || busy}
             >
