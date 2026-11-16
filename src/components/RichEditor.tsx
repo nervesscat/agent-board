@@ -1,6 +1,6 @@
-import { type ChainedCommands, type Editor, Node as EditorNode } from '@tiptap/core'
+import { type ChainedCommands, type Editor, type JSONContent, Node as EditorNode } from '@tiptap/core'
 import Image from '@tiptap/extension-image'
-import { TaskItem, TaskList } from '@tiptap/extension-list'
+import { ListItem, OrderedList, TaskItem, TaskList } from '@tiptap/extension-list'
 import { TableKit } from '@tiptap/extension-table'
 import { Placeholder } from '@tiptap/extensions'
 import { Markdown } from '@tiptap/markdown'
@@ -86,17 +86,68 @@ const Paragraph = EditorNode.create({
       return previous?.type === 'paragraph' && previousEmpty ? EMPTY_PARAGRAPH_MARKDOWN : ''
     }
     const text = h.renderChildren(content)
-    return ctx?.previousNode?.type === 'taskList' && text.startsWith(' ') ? `&#32;${text.slice(1)}` : text
+    // After a numbered or checklist list, a paragraph that starts with a space reads back inside the item unless the
+    // space is written as an entity.
+    const afterList = ctx?.previousNode?.type === 'taskList' || ctx?.previousNode?.type === 'orderedList'
+    return afterList && text.startsWith(' ') ? `&#32;${text.slice(1)}` : text
   },
   addKeyboardShortcuts() {
     return { 'Mod-Alt-0': () => this.editor.commands.setNode(this.name) }
   },
 })
 
+/** Inline nodes that can sit in a list item without a paragraph around them. */
+const looseInline = ['text', 'hardBreak']
+
+/**
+ * A list item's text after a block (a heading, say) is read as loose inline content, with no paragraph around it, so
+ * the item does not read back as the editor has it. Those runs go in paragraphs of their own.
+ */
+const ListItemWithParagraphs = ListItem.extend({
+  parseMarkdown(token, helpers) {
+    const parsed = this.parent?.(token, helpers)
+    if (!parsed || Array.isArray(parsed) || !parsed.content) return parsed ?? []
+    const content: JSONContent[] = []
+    let run: JSONContent[] = []
+    const endRun = () => {
+      if (run.length) content.push({ type: 'paragraph', content: run })
+      run = []
+    }
+    for (const child of parsed.content) {
+      if (looseInline.includes(child.type ?? '')) run.push(child)
+      else {
+        endRun()
+        content.push(child)
+      }
+    }
+    endRun()
+    return { ...parsed, content }
+  },
+})
+
+/**
+ * A numbered list in a list item that does not start at 1 cannot follow a paragraph or a quote on the next line: the
+ * reader takes its first line for more of that text. It goes after a blank line.
+ */
+const OrderedListWithBlankLine = OrderedList.extend({
+  renderMarkdown(node, h, ctx) {
+    const list = this.parent?.(node, h, ctx) ?? ''
+    const inItem = ctx?.parentType === 'listItem' || ctx?.parentType === 'taskItem'
+    return inItem && ctx.previousNode && (node.attrs?.start ?? 1) !== 1 ? `\n${list}` : list
+  },
+})
+
 /** What the editor understands; each one reads and writes its own markdown. */
 export function richExtensions(placeholder = '') {
   return [
-    StarterKit.configure({ link: { openOnClick: false, autolink: true }, paragraph: false }),
+    StarterKit.configure({
+      link: { openOnClick: false, autolink: true },
+      paragraph: false,
+      listItem: false,
+      orderedList: false,
+    }),
+    ListItemWithParagraphs,
+    OrderedListWithBlankLine,
     Paragraph,
     Markdown,
     Image,
@@ -366,10 +417,15 @@ function splitSelection(tr: Transaction, splitBreaks = false): number[] {
     const first = tr.mapping.map(from, 1)
     const last = tr.mapping.map(to, -1)
     tr.doc.nodesBetween(first, last, (node, pos) => {
-      if (node.type.name === 'hardBreak' && pos > first && pos < last) breaks.push(pos)
+      if (node.type.name === 'hardBreak' && pos >= first && pos < last) breaks.push(pos)
       return true
     })
     for (const pos of breaks.reverse()) {
+      // A break that opens its block has no text in front of it to split off: it just goes.
+      if (tr.doc.resolve(pos).parentOffset === 0) {
+        tr.delete(pos, pos + 1)
+        continue
+      }
       tr.split(pos)
       tr.delete(pos + 2, pos + 3) // the break now starts the block after the split
     }
