@@ -184,6 +184,32 @@ test('a drag moves the selection, and the rotate handle turns it about the centr
   expect('rotation' in other!).toBe(false)
 })
 
+test('Escape while a mouse button is held on a selected mark leaves the canvas open and the drag finishes', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Escape during drag')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+
+  const from = await at(canvas, [60, 60])
+  const to = await at(canvas, [70, 60])
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  await page.mouse.move(to.x, to.y, { steps: 4 })
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(300)
+  await expect(canvas).toBeVisible()
+  await page.mouse.up()
+
+  await expect(canvas).toBeVisible()
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [moved] = storedItems(attached)
+  expect(moved!.rect!.x).toBeCloseTo(30, 0)
+})
+
 test('Delete removes the selection, and undo and redo bring it back and take it away again', async ({
   page,
   project,

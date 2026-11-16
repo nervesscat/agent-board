@@ -225,7 +225,7 @@ function paint(canvas: HTMLCanvasElement, bitmap: ImageBitmap, items: Annotation
   const box = unionBounds(overlay.picked)
   if (box) {
     ctx.strokeRect(box.x - 6 * k, box.y - 6 * k, box.w + 12 * k, box.h + 12 * k)
-    const [hx, hy] = handleAt(box, HANDLE_GAP * k, bitmap.height)
+    const [hx, hy] = handleAt(box, HANDLE_GAP * k, bitmap)
     ctx.setLineDash([])
     ctx.beginPath()
     ctx.moveTo(box.x + box.w / 2, box.y - 6 * k)
@@ -356,7 +356,7 @@ export function AnnotateImage({
     // The rotate handle of the selection, first: it sits above the box, outside the marks.
     const box = unionBounds(picked)
     if (box) {
-      const handle = handleAt(box, HANDLE_GAP * scale(e), bitmap?.height ?? 0)
+      const handle = handleAt(box, HANDLE_GAP * scale(e), bitmap ?? { width: 0, height: 0 })
       const reach = HANDLE_RADIUS * 3 * scale(e)
       if (Math.hypot(point[0] - handle[0], point[1] - handle[1]) <= reach) {
         gesture.current = {
@@ -548,8 +548,15 @@ export function AnnotateImage({
   // before the dialog would close, and the other keys act unless a field has the focus, which keeps
   // its own typing and undo.
   const onKeyDown = (e: globalThis.KeyboardEvent) => {
-    // A key pressed during a pointer gesture waits: the gesture commits its own step on release.
-    if (busy || gesture.current) return
+    // A key pressed during a pointer gesture waits: the gesture commits its own step on release. Escape is
+    // still taken here, so the dialog does not close on the picture while the button is held.
+    if (busy || gesture.current) {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+      return
+    }
     if (e.key === 'Escape') {
       if (!picked.length) return
       e.preventDefault()
@@ -593,6 +600,11 @@ export function AnnotateImage({
     const shownFile = file
     const width = bitmap.width
     const height = bitmap.height
+    // A pointer gesture still in progress is dropped, not committed: the attached picture is the committed
+    // state, and the canvas ignores its pointers while the picture is being attached.
+    gesture.current = null
+    setPreview(null)
+    setMarquee(null)
     setBusy(true)
     try {
       const canvas = document.createElement('canvas')
