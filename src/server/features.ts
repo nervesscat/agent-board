@@ -832,6 +832,10 @@ export function updateTicket(
     .set({
       ...patch,
       ...(patch.status ? movePatch(stages, before.status, patch.status, before.startedAt) : {}),
+      // A ticket sent back from done is no longer approved: the approval was for the work it closed.
+      ...(patch.status && kindOf(stages, before.status) === 'done' && kindOf(stages, patch.status) !== 'done'
+        ? { approvedAt: null, approvedBy: '', closedByApproval: false }
+        : {}),
       updatedAt: new Date().toISOString(),
     })
     .where(eq(schema.tickets.id, id))
@@ -1124,9 +1128,8 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
   const approve = verdict === 'approved' && kind === 'review' && approved ? approved : undefined
   const reopen =
     (before === 'disapproved' && kind === 'cancelled') ||
-    // Taking back the approval of a ticket that closed on it: a PR review, or a ticket with no repo (the
-    // hand-off of work with no software kind). Not the project's kinds as they are now.
-    (before === 'approved' && (pr || t.repoId === null) && kind === 'done' && verdict === null) ||
+    // Taking back the approval of a ticket that closed on it: a PR review, or a hand-off (closedByApproval).
+    (before === 'approved' && (pr || t.closedByApproval) && kind === 'done' && verdict === null) ||
     // Taking back an approval returns a ticket in Approved to the review column it came from.
     (before === 'approved' && verdict === null && t.status === 'approved')
   const reopenTo = opts.reopenTo
@@ -1149,6 +1152,7 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     .set({
       approvedAt: verdict === 'approved' ? now : null,
       approvedBy: verdict === 'approved' ? actor : '',
+      closedByApproval: verdict === 'approved' && finish !== undefined,
       disapprovedAt: verdict === 'disapproved' ? now : null,
       disapprovedBy: verdict === 'disapproved' ? actor : '',
       status,

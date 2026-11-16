@@ -277,6 +277,8 @@ export const tickets = sqliteTable(
     // The human's sign-off (on a lane, usually); null until approved. Agents can read it, not set it.
     approvedAt: text('approved_at'),
     approvedBy: text('approved_by').notNull().default(''),
+    // Set when the approval closed the ticket to done (a PR review, or a hand-off): taking it back reopens it.
+    closedByApproval: integer('closed_by_approval', { mode: 'boolean' }).notNull().default(false),
     // The opposite call: the human rejected it, which also cancels it. At most one of the two is set.
     disapprovedAt: text('disapproved_at'),
     disapprovedBy: text('disapproved_by').notNull().default(''),

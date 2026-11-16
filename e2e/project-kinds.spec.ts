@@ -241,3 +241,50 @@ test('an agent cannot close a hand-off, and approving a ticket that names a repo
     'review',
   )
 })
+
+test('a hand-off sent back from done loses its approval; an agent cannot close it from Approved', async ({
+  human,
+  agent,
+}) => {
+  const music = await createProject(human, `Sent back ${Date.now()}`, ['music'])
+  const t = await ok<{ id: number }>(
+    human.post(`/api/projects/${music.id}/tickets`, { data: { title: 'Sent back', status: 'review' } }),
+  )
+  await ok(human.put(`/api/tickets/${t.id}/approval`, { data: { verdict: 'approved' } }))
+  // Sent back by the human, then sent to review again by an agent: not approved any more.
+  await ok(human.patch(`/api/tickets/${t.id}`, { data: { status: 'in_progress' } }))
+  await ok(agent.patch(`/api/tickets/${t.id}`, { data: { status: 'review' } }))
+  const reworked = await ok<{ approvedAt: string | null; stage: { kind: string } }>(
+    human.get(`/api/tickets/${t.id}`),
+  )
+  expect(reworked.stage.kind).toBe('review')
+  expect(reworked.approvedAt).toBeNull()
+
+  // An approved hand-off is not closed by an agent, whatever stage it is in.
+  const held = await ok<{ id: number }>(
+    human.post(`/api/projects/${music.id}/tickets`, { data: { title: 'Approved', status: 'in_progress' } }),
+  )
+  await ok(human.patch(`/api/tickets/${held.id}`, { data: { status: 'approved' } }))
+  const closed = await agent.patch(`/api/tickets/${held.id}`, { data: { status: 'done' } })
+  expect(closed.status()).toBe(403)
+})
+
+test('deleting a software ticket repo does not reopen it when its approval is taken back', async ({
+  human,
+}) => {
+  const soft = await createProject(human, `Repo gone ${Date.now()}`)
+  const repo = await ok<{ id: number }>(
+    human.post('/api/repos', { data: { projectId: soft.id, repoPath: e2eEnv().repoPath, name: 'gone' } }),
+  )
+  const t = await ok<{ id: number }>(
+    human.post(`/api/projects/${soft.id}/tickets`, {
+      data: { title: 'Software', status: 'review', repoId: repo.id },
+    }),
+  )
+  await ok(human.put(`/api/tickets/${t.id}/approval`, { data: { verdict: 'approved' } }))
+  await ok(human.patch(`/api/tickets/${t.id}`, { data: { status: 'done' } }))
+  await ok(human.delete(`/api/repos/${repo.id}`))
+  await ok(human.put(`/api/tickets/${t.id}/approval`, { data: { verdict: null } }))
+  // Done stays done: a software ticket reopens only as a pull request review does.
+  expect((await ok<{ stage: { kind: string } }>(human.get(`/api/tickets/${t.id}`))).stage.kind).toBe('done')
+})

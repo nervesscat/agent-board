@@ -386,6 +386,13 @@
       "when": 1794805629939,
       "tag": "0054_project_kinds",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "6",
+      "when": 1794820074683,
+      "tag": "0055_closed_by_approval",
+      "breakpoints": true
     }
   ]
 }

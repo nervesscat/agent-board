@@ -421,13 +421,19 @@ function logOverride(t: Ticket, unmet: Need[], actor: string) {
  */
 function refuseAgentApproved(projectId: number, status: string | undefined) {
   if (status === undefined) return
-  const stages = listStages(projectId)
-  const to = resolveStage(stages, status)
+  const to = resolveStage(listStages(projectId), status)
   if (to.key === 'approved')
     throw new HttpError(
       403,
       'only the human puts a ticket in Approved: a verdict or a move by the human does',
     )
+  refuseAgentDone(projectId, status)
+}
+
+/** An agent never closes the work of a project with no software kind: the human's approval does. */
+function refuseAgentDone(projectId: number, status: string | undefined) {
+  if (status === undefined) return
+  const to = resolveStage(listStages(projectId), status)
   if (to.kind === 'done' && !hasGitSide(getProject(projectId).kinds))
     throw new HttpError(403, 'only the human closes work in a project with no software kind: by approving it')
 }
@@ -452,6 +458,8 @@ export async function changeTicket(
   if (position !== undefined) features.checkPlacement(before, position)
   // An agent never puts a ticket in Approved: the orchestrator reads that stage as the human's go-ahead.
   if (opts.agent && before.status !== 'approved') refuseAgentApproved(before.projectId, patch.status)
+  // From Approved an agent may still not close the work of a project with no software kind.
+  if (opts.agent) refuseAgentDone(before.projectId, patch.status)
   const ids = needs !== undefined ? checkNeeds(before, needs) : needIds(id)
   // Judged against the primary the write produces: a swap or a reordered list brings that repo's base.
   const { repos, ...fields } = patch
