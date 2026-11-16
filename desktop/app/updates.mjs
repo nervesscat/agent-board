@@ -216,6 +216,418 @@ export function notesText(notes) {
 }
 
 /**
+ * The release notes as markdown, from the same HTML `notesText` flattens (or a feed's list per version):
+ * what Settings shows as plain text, the update card renders as the release's own story. Headings, lists,
+ * emphasis, inline code, links and code blocks keep their markdown; script and style go with their
+ * contents; entities are decoded. Nothing here makes HTML: the page renders the markdown with its own
+ * renderer, which escapes raw HTML.
+ * @param {unknown} notes
+ * @returns {string}
+ */
+export function notesMarkdown(notes) {
+  // A feed's notes come per version: each entry under its own version heading, like notesText's lines.
+  if (Array.isArray(notes))
+    return notes
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return ''
+        const version = typeof entry.version === 'string' ? entry.version.trim() : ''
+        const body = notesMarkdown(entry.note).trim()
+        return [version && `## ${version}`, body].filter(Boolean).join('\n\n')
+      })
+      .filter(Boolean)
+      .join('\n\n')
+  if (typeof notes !== 'string') return ''
+  return htmlToMarkdown(notes)
+}
+
+/** The entities GitHub's release bodies carry, decoded as the page would show them. */
+const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'", '#x27': "'" }
+
+/**
+ * Decodes the common entities in one pass, so `&amp;lt;` reads as `&lt;` rather than as a tag, and
+ * leaves anything it does not know as it is.
+ * @param {string} text
+ */
+function decodeEntities(text) {
+  return text.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (whole, name) => {
+    const decoded = ENTITIES[/** @type {keyof typeof ENTITIES} */ (name.toLowerCase())]
+    return decoded ?? whole
+  })
+}
+
+/** @param {string} html */
+const stripTags = (html) => html.replace(/<[^>]*>/g, '')
+
+/**
+ * The attributes of one tag: an anchor's href is the only one read, and it must be the author's own.
+ * @param {string} source
+ */
+function attributes(source) {
+  /** @type {Record<string, string>} */
+  const found = {}
+  for (const m of source.matchAll(/([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>]+))/g))
+    found[m[1].toLowerCase()] = m[3] ?? m[4] ?? m[5] ?? ''
+  return found
+}
+
+/** Marks where a lifted-out code block goes: a private-use character no release body carries. */
+const FENCE_MARK = '\uF8FF'
+
+/** Marks one column of a list's indentation: the converter writes these, and they become spaces at the end. */
+const INDENT_MARK = '\uF8FD'
+
+/** @param {number} columns */
+const indentation = (columns) => INDENT_MARK.repeat(columns)
+
+/**
+ * The HTML of one release body as markdown. Code blocks are lifted out first (their contents are text,
+ * not markup), then each tag is replaced by its markdown and the text between them is decoded.
+ * @param {string} html
+ */
+function htmlToMarkdown(html) {
+  /** @type {string[]} */
+  const fences = []
+  let text = html
+    // Scripts, styles and comments are not notes: they go with their contents.
+    .replace(/<(script|style|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<pre\b[^>]*>([\s\S]*?)<\/pre\s*>/gi, (_whole, body) => {
+      // A line break in the code is a `<br>`, which the tag strip would otherwise drop.
+      const code = decodeEntities(stripTags(body.replace(/<br\s*\/?>/gi, '\n'))).replace(/^\n+|\s+$/g, '')
+      // A fence longer than any run of backticks in the code, so a code line never closes it.
+      const runs = [...code.matchAll(/`+/g)].map((m) => m[0].length + 1)
+      const fence = '`'.repeat(Math.max(3, ...runs))
+      fences.push(`${fence}\n${code}\n${fence}`)
+      return `${FENCE_MARK}${fences.length - 1}${FENCE_MARK}`
+    })
+  // The collapse runs on the text alone: the code blocks go back in after it, with their spaces and blank lines.
+  text = tagsToMarkdown(text)
+    .replace(/[ \t\uF8FD]+\n/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(
+      /[ \t\n\uF8FD]*\uF8FF(\d+)\uF8FF[ \t\n\uF8FD]*/g,
+      (_whole, i) => `\n\n${fences[Number(i)] ?? ''}\n\n`,
+    )
+    // The list indentation the converter marked goes back in as spaces, after the collapse above.
+    .replace(/\uF8FD/g, ' ')
+  return text.trim()
+}
+
+/**
+ * Escapes what release text would otherwise read as markdown: emphasis, code, strikethrough, links and the
+ * escape itself.
+ * @param {string} text
+ */
+const escapeMarkdown = (text) => text.replace(/[\\`*_~[\]]/g, '\\$&')
+
+/** An ampersand that starts something the markdown pass would read as an entity (`&lt;`, `&#39;`). */
+const ENTITY_START = /&(?=#?\w+;)/g
+
+/** The output is at the start of a line (after its indentation). */
+const LINE_START = /(^|\n)[ \t\uF8FD]*$/
+
+/** A block marker at the start of a line of text: a heading, quote, bullet, or ordered-list number. */
+const BLOCK_MARKER = /^([ \t]*)(?:([#>+-])|(\d+)([.)]))/
+
+/** @param {string} line */
+const escapeBlockMarker = (line) =>
+  line.replace(BLOCK_MARKER, (_whole, space, sign, digits, delimiter) =>
+    sign ? `${space}\\${sign}` : `${space}${digits}\\${delimiter}`,
+  )
+
+/** The output ends with a list item's marker (`- `, `1. `): what follows it starts the item's text. */
+const ITEM_START = /(^|\n)[ \t\uF8FD]*(?:\d+\.|-)[ \t]+$/
+
+/** The block tags: whitespace between them, or before their closers, is layout. */
+const BLOCK_TAGS = /^(p|div|h[1-6]|ul|ol|li|table|tr|blockquote|hr)$/
+
+/**
+ * Whether whitespace between two tags is layout (the source's line breaks and indentation) rather than the
+ * space between two inline elements.
+ * @param {{ name: string, closing: boolean } | null} before the tag before the whitespace
+ * @param {{ name: string, closing: boolean } | null} after the tag after it
+ */
+function isLayout(before, after) {
+  if (before && !before.closing && before.name === 'li') return true
+  if (after && after.closing && BLOCK_TAGS.test(after.name)) return true
+  return Boolean(before && after && BLOCK_TAGS.test(before.name) && BLOCK_TAGS.test(after.name))
+}
+
+/**
+ * A code span for `content`: its fence is one backtick longer than the longest run in it, and it is padded
+ * with a space when the content starts or ends with a backtick, so the backticks stay part of the code.
+ * @param {string} content
+ */
+function codeSpan(content) {
+  if (content === '') return ''
+  const longest = Math.max(0, ...[...content.matchAll(/`+/g)].map((m) => m[0].length))
+  const pad = content.startsWith('`') || content.endsWith('`') ? ' ' : ''
+  const fence = '`'.repeat(longest + 1)
+  return `${fence}${pad}${content}${pad}${fence}`
+}
+
+/**
+ * Replaces the tags release notes carry with their markdown, keeping the text between them (decoded).
+ * Unknown tags are dropped; their text stays.
+ * @param {string} html
+ */
+function tagsToMarkdown(html) {
+  /**
+   * The open lists. `base` is the column their markers start at (the content column of the item they nest
+   * in, 0 at the top), `content` the column of the text of the item now open, where its continuation lines go.
+   * @type {{ ordered: boolean, count: number, base: number, content: number }[]}
+   */
+  const lists = []
+  /** The column a line of the innermost list item's text starts at. */
+  const contentColumn = () => (lists.length > 0 ? lists[lists.length - 1].content : 0)
+  /** @type {{ header: boolean } | null} */
+  let table = null
+  /** @type {{ start: number, cells: number } | null} */
+  let row = null
+  let inCell = false
+  /** The output position of each open code element's backtick. @type {number[]} */
+  const codes = []
+  /** The open emphasis elements: their marker and the output position of the opening one. @type {{ marker: string, start: number }[]} */
+  const emphasis = []
+  /** @type {string | null} */
+  let href = null
+  /** A heading outside a list: one line of markdown, so a break in it is a space. */
+  let blockHeading = false
+  let out = ''
+  let last = 0
+
+  /**
+   * The text between two tags: decoded, escaped outside code, and kept on one line in a table. Whitespace
+   * between tags is layout where isLayout says so, and goes; elsewhere it is one space. Inside a list item the
+   * text's leading and trailing whitespace goes too, so a bullet is never left empty.
+   * @param {string} raw
+   * @param {{ name: string, closing: boolean } | null} before the tag before the text
+   * @param {{ name: string, closing: boolean } | null} after the tag after the text
+   */
+  const text = (raw, before, after) => {
+    if (table && !inCell && /^\s*$/.test(raw)) return ''
+    if (/^\s*$/.test(raw)) {
+      if (isLayout(before, after)) return ''
+      return out === '' || /[\s\uF8FD]$/.test(out) ? '' : ' '
+    }
+    let chunk = raw
+    if (after?.closing && after.name === 'li') chunk = chunk.replace(/\s+$/, '')
+    if (ITEM_START.test(out)) chunk = chunk.replace(/^\s+/, '')
+    // The text after a `<br>` starts its own line, indented under the item: the source's own line break goes.
+    let lineStart = ''
+    if (before?.name === 'br' && out.endsWith('\\\n')) {
+      chunk = chunk.replace(/^\s+/, '')
+      lineStart = indentation(contentColumn())
+    }
+    let decoded = decodeEntities(chunk)
+    if (codes.length === 0) {
+      decoded = escapeMarkdown(decoded).replace(ENTITY_START, '\\&')
+      // A block marker at the start of a line would make a list, heading or quote: escape it, on every line
+      // of the text (the first only when the output is at a line start).
+      const startsLine = LINE_START.test(out) || ITEM_START.test(out)
+      decoded = decoded
+        .split('\n')
+        .map((line, i) => (i === 0 && !startsLine ? line : escapeBlockMarker(line)))
+        .join('\n')
+    }
+    // A pipe would end its table cell, even inside code.
+    return lineStart + (table ? decoded.replace(/\|/g, '\\|') : decoded)
+  }
+
+  /**
+   * A hard break at the end of its line (nothing but whitespace after it) becomes a plain line break before a block tag.
+   * @param {string} name the block tag that ends the line
+   */
+  const dropBreakBefore = (name) => {
+    if (BLOCK_TAGS.test(name) && out.endsWith('\\\n')) out = `${out.slice(0, -2)}\n`
+  }
+
+  /** Closes the innermost open code element: its text becomes a code span. */
+  const closeCode = () => {
+    const start = codes.pop()
+    if (start !== undefined) out = out.slice(0, start) + codeSpan(out.slice(start + 1))
+  }
+
+  /** @param {string} marker */
+  const openEmphasis = (marker) => {
+    emphasis.push({ marker, start: out.length })
+    out += marker
+  }
+
+  /**
+   * Closes the innermost emphasis with this marker. Whitespace at the edges of its text moves outside the
+   * markers: `**Fixed **` would show its asterisks.
+   * @param {string} marker
+   */
+  const closeEmphasis = (marker) => {
+    const index = emphasis.map((e) => e.marker).lastIndexOf(marker)
+    if (index < 0) {
+      out += marker
+      return
+    }
+    const [{ start }] = emphasis.splice(index, 1)
+    // A break at the very end of the emphasis has no text after it to break: it goes, or its marker would close after a backslash.
+    const inner = out.slice(start + marker.length).replace(/\\\n$/, '')
+    const body = inner.trim()
+    if (body === '') {
+      out = out.slice(0, start) + inner
+      return
+    }
+    const lead = inner.slice(0, inner.indexOf(body))
+    const trail = inner.slice(lead.length + body.length)
+    out = `${out.slice(0, start)}${lead}${marker}${body}${marker}${trail}`
+  }
+
+  /** @type {{ name: string, closing: boolean } | null} */
+  let previous = null
+
+  for (const m of html.matchAll(/<\/?([a-zA-Z][\w-]*)((?:\s[^>]*?)?)\/?>/g)) {
+    const name = m[1].toLowerCase()
+    const closing = m[0].startsWith('</')
+    const piece = text(html.slice(last, m.index), previous, { name, closing })
+    out += piece
+    // A hard break is only a break when text follows it: before a block tag it would end the line with a backslash.
+    if (piece === '') dropBreakBefore(name)
+    previous = { name, closing }
+    last = m.index + m[0].length
+    if (name === 'br') {
+      // A hard break needs a line of its own: in a table cell, a heading or a code span it is a space.
+      out += table || codes.length > 0 || blockHeading ? ' ' : '\\\n'
+      continue
+    }
+    if (/^h[1-6]$/.test(name)) {
+      // In a list item a heading is bold text on the bullet's line: a block break would end the item.
+      if (lists.length > 0) {
+        if (closing) {
+          closeEmphasis('**')
+          // The text after the heading (a paragraph of the item) must not run into its closing asterisks.
+          out += ' '
+        } else openEmphasis('**')
+        continue
+      }
+      blockHeading = !closing
+      out += closing ? '\n\n' : `\n\n${'#'.repeat(Number(name[1]))} `
+      continue
+    }
+    if (name === 'table') {
+      table = closing ? null : { header: false }
+      out += '\n\n'
+      continue
+    }
+    if (name === 'tr') {
+      if (closing && row) {
+        if (row.cells > 0) {
+          // The row is one line: a break inside a cell would end the table.
+          const line = out.slice(row.start).replace(/\s*\n\s*/g, ' ')
+          out = `${out.slice(0, row.start)}${line}|\n`
+          if (table && !table.header) {
+            table.header = true
+            // The separator under the first row makes it the table's header.
+            out += `|${' --- |'.repeat(row.cells)}\n`
+          }
+        } else out = out.slice(0, row.start)
+      }
+      row = closing ? null : { start: out.length, cells: 0 }
+      continue
+    }
+    if (name === 'td' || name === 'th') {
+      if (!row) continue
+      inCell = !closing
+      if (closing) out += ' '
+      else {
+        row.cells += 1
+        out += '| '
+      }
+      continue
+    }
+    if (name === 'ul' || name === 'ol') {
+      if (closing) {
+        lists.pop()
+        // A nested list ends with its item's line; only a top-level list is followed by a block break.
+        if (lists.length === 0) out += '\n\n'
+        continue
+      }
+      // An ordered list's start attribute numbers its first item.
+      const start = attributes(m[2] ?? '').start
+      const number = start !== undefined && /^\s*-?\d+\s*$/.test(start) ? Number(start) : NaN
+      const first = name === 'ol' && Number.isSafeInteger(number) ? number : 1
+      const base = contentColumn()
+      // A list inside an item starts on the next line, indented under the item's text.
+      out += lists.length > 0 ? '\n' : '\n\n'
+      lists.push({ ordered: name === 'ol', count: first - 1, base, content: base })
+      continue
+    }
+    if (name === 'li') {
+      const list = lists[lists.length - 1]
+      if (closing) {
+        // A nested list's last item already ended its line.
+        if (!out.endsWith('\n')) out += '\n'
+      } else if (list) {
+        const marker = list.ordered ? `${(list.count += 1)}. ` : '- '
+        // A new line starts at the list's column; the first item of a list after text is on a line of its own.
+        const lead = out === '' || out.endsWith('\n') ? indentation(list.base) : ''
+        out += `${lead}${marker}`
+        list.content = list.base + marker.length
+      } else out += '- '
+      continue
+    }
+    if (name === 'strong' || name === 'b' || name === 'em' || name === 'i') {
+      const marker = name === 'strong' || name === 'b' ? '**' : '*'
+      if (closing) closeEmphasis(marker)
+      else openEmphasis(marker)
+      continue
+    }
+    if (name === 'code') {
+      if (closing) closeCode()
+      else {
+        codes.push(out.length)
+        out += '`'
+      }
+      continue
+    }
+    if (name === 'a') {
+      if (closing) {
+        if (href !== null) out += `](${href})`
+        href = null
+      } else {
+        // A destination's parentheses and spaces would end the link early: they are percent-encoded.
+        const url = decodeEntities(attributes(m[2] ?? '').href ?? '')
+          .trim()
+          .replace(/[()\s]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`)
+        href = url ? url : null
+        if (href !== null) {
+          // A `!` right before a link would make it an image: it is escaped, as its text is.
+          if (codes.length === 0 && out.endsWith('!')) out = `${out.slice(0, -1)}\\!`
+          out += '['
+        }
+      }
+      continue
+    }
+    if (name === 'hr') {
+      out += '\n\n---\n\n'
+      continue
+    }
+    // A loose item's paragraph (`<li><p>…</p></li>`) stays on the bullet's line: a break here would leave the bullet empty.
+    if (name === 'p' && lists.length > 0) {
+      if (closing) out += ' '
+      // A further paragraph of the item (after its text, or after a nested list) starts a new paragraph on the
+      // item's column, not on the same line and not inside the nested item.
+      else if (!ITEM_START.test(out) && /[ \t\n]$/.test(out)) {
+        out = `${out.replace(/[ \t\n]+$/, '')}\n\n${indentation(contentColumn())}`
+      }
+      continue
+    }
+    // Paragraphs and divisions end a block; every other tag only wraps its text.
+    if (closing && (name === 'p' || name === 'div' || name === 'blockquote')) out += '\n\n'
+  }
+  out += text(html.slice(last), previous, null)
+  if (out.endsWith('\\\n')) out = `${out.slice(0, -2)}\n`
+  while (codes.length > 0) closeCode()
+  return out
+}
+
+/**
  * An error as the Updates section shows it, on one line. A download that did not match the release's sha512 says
  * so in words, with electron-updater's own message after.
  * @param {unknown} err
@@ -232,7 +644,7 @@ export function updateError(err) {
 /**
  * @typedef {'unsupported' | 'idle' | 'checking' | 'none' | 'available' | 'downloading' | 'installing'
  *   | 'manual' | 'error'} UpdateStatus
- * @typedef {{ version: string, notes: string, date: string | null }} Offer
+ * @typedef {{ version: string, notes: string, notesMarkdown: string, date: string | null }} Offer
  * @typedef {{ percent: number, transferred: number, total: number }} Progress
  * @typedef {{ mode: 'desktop', installed: string, packageType: PackageType | null, status: UpdateStatus,
  *   newest: Offer | null, progress: Progress | null, error: string | null,
@@ -358,7 +770,12 @@ export function createUpdates({
         set({
           status: offered ? 'available' : 'none',
           newest: offered
-            ? { version: info.version, notes: notesText(info.releaseNotes), date: info.releaseDate ?? null }
+            ? {
+                version: info.version,
+                notes: notesText(info.releaseNotes),
+                notesMarkdown: notesMarkdown(info.releaseNotes),
+                date: info.releaseDate ?? null,
+              }
             : null,
           manual: null,
           progress: null,
