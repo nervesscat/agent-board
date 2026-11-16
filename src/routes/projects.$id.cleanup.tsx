@@ -1,7 +1,7 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { Copy, FolderGit2, GitBranch, Layers, Paperclip, RefreshCw, X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Empty } from '#/components/Empty'
@@ -20,6 +20,7 @@ import {
 } from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '#/components/ui/card'
+import { Progress } from '#/components/ui/progress'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '#/components/ui/table'
 import { Tip } from '#/components/ui/tooltip'
@@ -32,7 +33,9 @@ import {
   type DeleteItem,
   type DeleteKind,
   type DeleteResult,
+  type JobState,
 } from '#/lib/api'
+import { countsOf, deleteResults, keptItems } from '#/lib/cleanupResults'
 import { fileSize, shortSha } from '#/lib/format'
 import { useStages } from '#/lib/project'
 import { stageOf } from '#/lib/stages'
@@ -161,20 +164,68 @@ function Cleanup() {
   const ask = (kind: DeleteKind, chosen: Target[]) => {
     if (chosen.length) setPending({ kind, targets: chosen })
   }
+  // The deletion the page is following: the job its request answered, with the items it asked for
+  // (the job itself does not carry them), and the poll's latest word on it.
+  const [run, setRun] = useState<{ job: JobState; items: DeleteItem[] } | null>(null)
+  /** The poll that has seen the job at all: a read from before the request is not a job that vanished. */
+  const seenJob = useRef(false)
+  /** The job whose end was already told, so a poll of a finished job does not say it twice. */
+  const handled = useRef<number | null>(null)
+  const queryClient = useQueryClient()
   const remove = useMutation({
-    mutationFn: (items: DeleteItem[]) =>
-      post<DeleteResult[]>(`/api/projects/${id}/cleanup/delete`, { items }),
-    onSuccess: (r) => {
-      setResults(r)
-      const done = r.filter((x) => x.outcome === 'deleted').length
-      const kept = r.filter((x) => !x.ok).length
-      if (kept) toast.error(`${done} deleted; ${kept} kept: see why below`)
-      else toast.success(`${plural(done, 'item')} deleted`)
-      void refetch()
+    mutationFn: (items: DeleteItem[]) => post<JobState>(`/api/projects/${id}/cleanup/delete`, { items }),
+    onSuccess: (job, items) => {
+      seenJob.current = false
+      setRun({ job, items })
+      void queryClient.invalidateQueries({ queryKey: ['jobs', id] })
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
+  // The job's progress: read from the same list the top bar polls, twice a second while it runs, so a
+  // short deletion is followed as it lands instead of being read a whole second late.
+  const jobs = useQuery({
+    queryKey: ['jobs', id],
+    queryFn: () => get<JobState[]>(`/api/projects/${id}/jobs`),
+    enabled: !!run,
+    refetchInterval: (query) =>
+      query.state.data?.some((job) => job.id === run?.job.id && job.state === 'running') ? 500 : false,
+  })
+  const polled = run ? (jobs.data?.find((job) => job.id === run.job.id) ?? null) : null
+  const job = polled ?? run?.job ?? null
+  const running = job?.state === 'running' ? job : null
+  // Only a read of the list that holds the job says it is there: the request's own copy does not, so a
+  // list read from before the request cannot be taken for a job that vanished.
+  useEffect(() => {
+    if (polled) seenJob.current = true
+  }, [polled])
+  useEffect(() => {
+    if (!job || job.state === 'running') return
+    if (handled.current === job.id) return
+    handled.current = job.id
+    // The job keeps what it did as its result: the last deletion, as the route used to answer it.
+    if (job.state === 'succeeded') {
+      const done = deleteResults(job.result)
+      if (done) setResults(done)
+      const counts = countsOf(done ?? [])
+      if (counts.kept) toast.error(`${counts.text}: see why below`)
+      else toast.success(counts.text)
+    } else toast.error(`${job.title} failed: ${job.reason ?? 'no reason given'}`)
+    void refetch()
+  }, [job, refetch])
+  useEffect(() => {
+    if (!run || !jobs.data || polled || !seenJob.current) return
+    // Dismissed from the top bar while it ran: nothing left to follow, and the report is read again.
+    seenJob.current = false
+    setRun(null)
+    void refetch()
+  }, [run, polled, jobs.data, refetch])
   const actionsOff = data?.deleteOff ?? null
+  /** The items of the deletion being followed: their controls stay off until it ends. */
+  const inRun = (branch: string, kind: DeleteKind) =>
+    !!running && !!run?.items.some((item) => item.branch === branch && item.kind === kind)
+  const busy = (branch: string, kind: DeleteKind) => remove.isPending || inRun(branch, kind)
+  const busyAll = (kind: DeleteKind) => eligible(kind).some((t) => busy(t.branch.name, kind))
+  const retry = results ? keptItems(results) : []
 
   return (
     <div className="space-y-4">
@@ -210,7 +261,52 @@ function Cleanup() {
             {r.name}: {r.error}. Its branches and worktrees are unknown, so nothing in it can be deleted.
           </p>
         ))}
-      {results && <Results results={results} onClose={() => setResults(null)} />}
+      {job && (
+        <section aria-label="Delete progress" className="space-y-1.5 rounded-lg border p-3">
+          {job.state === 'running' ? (
+            <>
+              <Progress
+                value={job.done}
+                max={Math.max(1, job.total)}
+                getAriaValueText={(formatted) => `${formatted} of ${job.total}`}
+                className="gap-1.5"
+              >
+                <span className="text-xs font-medium">{job.title}</span>
+                <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+                  {job.done} of {job.total}
+                </span>
+              </Progress>
+              <p className="text-xs text-muted-foreground" aria-live="polite">
+                {job.step ?? 'Starting…'}
+              </p>
+            </>
+          ) : (
+            <p
+              role="status"
+              className={
+                job.state === 'failed'
+                  ? 'text-xs text-destructive'
+                  : 'text-xs text-emerald-700 dark:text-emerald-400'
+              }
+            >
+              {job.done} of {job.total} ·{' '}
+              {job.state === 'failed'
+                ? `Failed · ${job.reason ?? 'no reason given'}`
+                : `Succeeded · ${countsOf(deleteResults(job.result) ?? []).text}`}
+            </p>
+          )}
+        </section>
+      )}
+      {results && (
+        <Results
+          results={results}
+          onClose={() => {
+            setResults(null)
+            setRun(null)
+          }}
+          onRetry={retry.length ? () => remove.mutate(retry) : null}
+        />
+      )}
       {isLoading ? (
         <Skeleton className="h-64" />
       ) : !rows.length && !data?.untracked.length ? (
@@ -226,7 +322,7 @@ function Cleanup() {
                       key={kind}
                       variant="outline"
                       size="sm"
-                      disabled={remove.isPending}
+                      disabled={busyAll(kind)}
                       onClick={() => ask(kind, eligible(kind))}
                     >
                       <TrashIcon data-icon="inline-start" /> {ACTIONS[kind].all} ({eligible(kind).length})
@@ -320,7 +416,7 @@ function Cleanup() {
                             {b && !actionsOff && (
                               <RowActions
                                 branch={b}
-                                busy={remove.isPending}
+                                busy={(kind) => busy(b.name, kind)}
                                 onAsk={(kind) => ask(kind, [{ ticket: t, branch: b }])}
                               />
                             )}
@@ -424,7 +520,7 @@ function Cleanup() {
                             {b && !actionsOff && (
                               <RowActions
                                 branch={b}
-                                busy={remove.isPending}
+                                busy={(kind) => busy(b.name, kind)}
                                 onAsk={(kind) => ask(kind, [{ ticket: t, branch: b }])}
                               />
                             )}
@@ -447,7 +543,7 @@ function Cleanup() {
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={remove.isPending}
+                    disabled={busyAll('remote')}
                     onClick={() => ask('remote', eligible('remote'))}
                   >
                     <TrashIcon data-icon="inline-start" /> {ACTIONS.remote.all} ({eligible('remote').length})
@@ -501,7 +597,7 @@ function Cleanup() {
                             <Button
                               variant="outline"
                               size="sm"
-                              disabled={remove.isPending}
+                              disabled={busy(b.name, 'remote')}
                               onClick={() => ask('remote', [{ ticket: t, branch: b }])}
                             >
                               {ACTIONS.remote.row}
@@ -566,7 +662,7 @@ function Cleanup() {
                               <Button
                                 variant="outline"
                                 size="xs"
-                                disabled={remove.isPending}
+                                disabled={busy(b.name, 'remote')}
                                 onClick={() => ask('remote', [{ ticket: t, branch: b }])}
                               >
                                 {ACTIONS.remote.row}
@@ -673,7 +769,7 @@ function Kept({ reason }: { reason: string | null }) {
 
 /**
  * What a row may do: remove its worktrees with the branch, or delete the branch alone; when neither,
- * why it stays.
+ * why it stays. `busy` is per kind, since a delete of one kind leaves the other free.
  */
 function RowActions({
   branch: b,
@@ -681,7 +777,7 @@ function RowActions({
   onAsk,
 }: {
   branch: Branch
-  busy: boolean
+  busy: (kind: DeleteKind) => boolean
   onAsk: (kind: DeleteKind) => void
 }) {
   const hasTrees = b.worktrees.some((w) => !w.main)
@@ -693,7 +789,7 @@ function RowActions({
   return (
     <div className="flex flex-wrap gap-1">
       {kinds.map((k) => (
-        <Button key={k} variant="outline" size="xs" disabled={busy} onClick={() => onAsk(k)}>
+        <Button key={k} variant="outline" size="xs" disabled={busy(k)} onClick={() => onAsk(k)}>
           {ACTIONS[k].row}
         </Button>
       ))}
@@ -980,8 +1076,20 @@ function Deleted({ items }: { items: DeleteResult[] }) {
   )
 }
 
-/** What the last deletion did, each item once, with what was kept and why, and what puts back what went. */
-function Results({ results, onClose }: { results: DeleteResult[]; onClose: () => void }) {
+/**
+ * What the last deletion did, each item once, with what was kept and why, and what puts back what went.
+ * When something was kept, `onRetry` resends exactly those items (the page's own retry; the top bar's
+ * card offers the same for a job it holds).
+ */
+function Results({
+  results,
+  onClose,
+  onRetry,
+}: {
+  results: DeleteResult[]
+  onClose: () => void
+  onRetry: (() => void) | null
+}) {
   const sections = OUTCOME_ORDER.map((outcome) => ({
     outcome,
     items: results.filter((r) => r.outcome === outcome),
@@ -992,11 +1100,18 @@ function Results({ results, onClose }: { results: DeleteResult[]; onClose: () =>
         <h2 className="text-sm font-medium">
           Last deletion <span className="text-muted-foreground">· {results.length}</span>
         </h2>
-        <Tip content="Dismiss">
-          <Button variant="ghost" size="icon-sm" aria-label="Dismiss" onClick={onClose}>
-            <X />
-          </Button>
-        </Tip>
+        <div className="flex items-center gap-1">
+          {onRetry && (
+            <Button variant="outline" size="sm" onClick={onRetry}>
+              <RefreshCw data-icon="inline-start" /> Retry kept items
+            </Button>
+          )}
+          <Tip content="Dismiss">
+            <Button variant="ghost" size="icon-sm" aria-label="Dismiss" onClick={onClose}>
+              <X />
+            </Button>
+          </Tip>
+        </div>
       </div>
       <div className="divide-y rounded-lg border px-3 text-xs">
         {sections.map(({ outcome, items }) => (

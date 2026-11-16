@@ -76,7 +76,7 @@ describe('mergeLayout', () => {
     expect(merged).toEqual(layout)
     expect(shownIn(merged, 'nav')).not.toContain('nav.gallery')
     expect(shownIn(merged, 'nav')[0]).toBe('nav.settings')
-    expect(shownIn(merged, 'overview')[0]).toBe('overview.carryingOver')
+    expect(shownIn(merged, 'overview')[0]).toBe('overview.notes')
     expect(shownIn(merged, 'ticket.main')).toEqual([
       'ticket.details',
       'ticket.instructions',
@@ -101,6 +101,7 @@ describe('mergeLayout', () => {
       'nav.roadmap',
       'nav.previews',
       'nav.agents',
+      'nav.runReports',
       'nav.daily',
       'nav.cleanup',
       'nav.repositories',
@@ -136,6 +137,7 @@ describe('mergeLayout', () => {
       'nav.previews',
       'nav.gallery',
       'nav.agents',
+      'nav.runReports',
       'nav.cleanup',
       'nav.repositories',
       'nav.instructions',
@@ -165,6 +167,7 @@ describe('mergeLayout', () => {
       .filter((it) => it.id !== 'overview.needsYou')
     expect(ids(inArea(mergeLayout(overview), 'overview'))).toEqual([
       'overview.needsYou',
+      'overview.notes',
       'overview.carryingOver',
       'overview.next',
       'overview.doneToday',

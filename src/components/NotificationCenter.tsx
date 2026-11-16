@@ -7,7 +7,17 @@ import { toast } from 'sonner'
 import { Button } from '#/components/ui/button'
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '#/components/ui/popover'
 import { Progress } from '#/components/ui/progress'
-import { type AgentCard, del, errorMessage, get, type JobState, type NoticeCard } from '#/lib/api'
+import {
+  type AgentCard,
+  del,
+  errorMessage,
+  get,
+  post,
+  type DeleteItem,
+  type JobState,
+  type NoticeCard,
+} from '#/lib/api'
+import { CLEANUP_DELETE_JOB, countsOf, deleteResults, keptItems } from '#/lib/cleanupResults'
 import { currentProjectId, useProjects } from '#/lib/project'
 
 /**
@@ -89,7 +99,11 @@ export function NotificationCenter() {
       const was = before.get(job.id) ?? 'running'
       if (was !== 'running' || job.state === 'running') continue
       if (job.state === 'failed') toast.error(`${job.title} failed`, { description: job.reason ?? undefined })
-      else toast.success(`${job.title} finished`)
+      else {
+        // The card's own line: a cleanup delete says what it did in counts, not the raw result.
+        const summary = summaryOf(job)
+        toast.success(`${job.title} finished${summary ? ` · ${summary}` : ''}`)
+      }
     }
   }, [jobData])
 
@@ -150,6 +164,13 @@ export function NotificationCenter() {
     onSuccess: refresh,
     onError: (err) => toast.error(errorMessage(err)),
   })
+  // A cleanup delete's kept items tried again: the same request as the page's, as a new job.
+  const retry = useMutation({
+    mutationFn: ({ projectId, items }: { projectId: number; items: DeleteItem[] }) =>
+      post<JobState>(`/api/projects/${projectId}/cleanup/delete`, { items }),
+    onSuccess: refresh,
+    onError: (err) => toast.error(errorMessage(err)),
+  })
 
   return (
     <Popover open={open} onOpenChange={changeOpen}>
@@ -186,7 +207,13 @@ export function NotificationCenter() {
             {entries.map((entry) => {
               if (entry.kind === 'job')
                 return (
-                  <JobCard key={entry.key} job={entry.job} onDismiss={() => dismissJob.mutate(entry.job)} />
+                  <JobCard
+                    key={entry.key}
+                    job={entry.job}
+                    onDismiss={() => dismissJob.mutate(entry.job)}
+                    onRetry={(items) => retry.mutate({ projectId: entry.job.projectId, items })}
+                    retrying={retry.isPending}
+                  />
                 )
               const { card } = entry
               if (card.kind === 'notice')
@@ -254,7 +281,22 @@ function Dismiss({ label, onDismiss }: { label: string; onDismiss: () => void })
   )
 }
 
-function JobCard({ job, onDismiss }: { job: JobState; onDismiss: () => void }) {
+function JobCard({
+  job,
+  onDismiss,
+  onRetry,
+  retrying,
+}: {
+  job: JobState
+  onDismiss: () => void
+  onRetry: (items: DeleteItem[]) => void
+  retrying: boolean
+}) {
+  // A cleanup delete that kept something offers the same retry as the page: only those items again.
+  const kept =
+    job.kind === CLEANUP_DELETE_JOB && job.state === 'succeeded'
+      ? keptItems(deleteResults(job.result) ?? [])
+      : []
   return (
     <li className="flex flex-col gap-1.5 p-3">
       <div className="flex items-start gap-1">
@@ -297,6 +339,17 @@ function JobCard({ job, onDismiss }: { job: JobState; onDismiss: () => void }) {
             ? `Failed · ${elapsed(job)} · ${job.reason ?? 'no reason given'}`
             : `Succeeded · ${elapsed(job)}${summaryOf(job) ? ` · ${summaryOf(job)}` : ''}`}
         </p>
+      )}
+      {kept.length > 0 && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="self-start"
+          disabled={retrying}
+          onClick={() => onRetry(kept)}
+        >
+          Retry kept items
+        </Button>
       )}
     </li>
   )
@@ -379,7 +432,10 @@ function NoticeCardView({ card, onDismiss }: { card: NoticeCard; onDismiss: () =
   )
 }
 
-/** `result.summary` when the caller shaped one, else the result as compact JSON. */
+/**
+ * How a job's result reads in its card: `result.summary` when the caller shaped one, a cleanup delete's
+ * counts (`3 deleted, 1 kept`) from the items it answered, else the result as compact JSON.
+ */
 function summaryOf(job: JobState): string | null {
   const result = job.result
   if (result === null || result === undefined) return null
@@ -388,6 +444,8 @@ function summaryOf(job: JobState): string | null {
     const summary = (result as { summary?: unknown }).summary
     if (typeof summary === 'string') return summary
   }
+  const items = job.kind === CLEANUP_DELETE_JOB ? deleteResults(result) : null
+  if (items) return countsOf(items).text
   try {
     return JSON.stringify(result)
   } catch {

@@ -142,7 +142,6 @@ describe('tooltips', () => {
       'routes/projects.$id.instructions.tsx',
       'routes/projects.$id.previews.tsx',
       'routes/projects.$id.prs.tsx',
-      'routes/projects.$id.tsx',
     ]
     const without = had.filter((file) => {
       const source = readFileSync(path.join(SRC, file), 'utf8')

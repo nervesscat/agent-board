@@ -34,7 +34,7 @@ import { callerInfo, isAgent } from './auth'
 import { authRoutes } from './authApi'
 import { previewBranch } from './branchPreview'
 import { cleanupReport } from './cleanup'
-import { DeleteItems, deleteLeftovers } from './cleanupActions'
+import { DeleteItems, startCleanupDelete } from './cleanupActions'
 import { authMode, servedEntrance } from './config'
 import { dailyReport, today } from './daily'
 import * as features from './features'
@@ -57,7 +57,9 @@ import {
 import { handleMcp } from './mcp'
 import { linkFor } from './previewProxy'
 import * as needs from './needs'
+import { getLiveWork } from './liveWork'
 import { checkOpencodeConfig } from './opencodeConfig'
+import * as notes from './notes'
 import * as projectAgents from './projectAgents'
 import * as prs from './prs'
 import { projectPush, refreshProjectPush } from './push'
@@ -72,6 +74,7 @@ import * as settingsHistory from './reportSettingsHistory'
 import { reportsOverview } from './reportsOverview'
 import * as repos from './repos'
 import * as reviews from './reviews'
+import * as runReports from './runReports'
 import { ApiRouter } from './router'
 import * as stages from './stages'
 import { fileStore, parseRange } from './storage'
@@ -251,6 +254,16 @@ api.get('/api/agent-setup/board-mcp', () => {
     headers: {
       'content-type': 'text/javascript; charset=utf-8',
       'content-disposition': 'attachment; filename="board-mcp.mjs"',
+      'cache-control': 'no-store',
+    },
+  })
+})
+// The runtime beater (scripts/board-beat.mjs) a session saves as board-beat.mjs and wraps a long tool with.
+api.get('/api/agent-setup/board-beat', () => {
+  return new Response(agents.boardBeat(), {
+    headers: {
+      'content-type': 'text/javascript; charset=utf-8',
+      'content-disposition': 'attachment; filename="board-beat.mjs"',
       'cache-control': 'no-store',
     },
   })
@@ -477,6 +490,8 @@ const AgentBody = z.object({
   instructions: Instructions.optional(),
   // For the orchestrator: when to delegate to this agent, what to give it, what comes back.
   delegation: Instructions.optional(),
+  // How a run of it reports back: the template it fills in after each run (the common part when left out).
+  reportTemplate: Instructions.optional(),
   // An upload from POST /api/uploads, shown as the agent's picture.
   avatarId: z.number().int().nullable().optional(),
 })
@@ -505,6 +520,34 @@ api.patch('/api/agents/:id', async ({ request, params, actor }) => {
 api.delete('/api/agents/:id', ({ request, params, actor }) => {
   humanAgents(request)
   projectAgents.deleteAgent(id(params), actor)
+  return json({ ok: true })
+})
+
+// --- the project's notes: short facts the human and its agents must not rediscover ---
+// The human and any agent add one; a note's author, an orchestrator or the human changes or removes it.
+const NoteBody = z.object({ label: z.string(), body: z.string() })
+const NotePatch = z.object({
+  label: z.string().optional(),
+  body: z.string().optional(),
+  // Above the unpinned notes (true) or back after them (false); the board keeps the position.
+  pinned: z.boolean().optional(),
+})
+api.get('/api/projects/:id/notes', ({ params }) => json(notes.listNotes(id(params))))
+api.post('/api/projects/:id/notes', async ({ request, params }) =>
+  json(notes.createNote(id(params), await readJson(request, NoteBody), callerInfo(request)), 201),
+)
+api.patch('/api/projects/:id/notes/:noteId', async ({ request, params }) =>
+  json(
+    notes.updateNote(
+      id(params),
+      id(params, 'noteId'),
+      await readJson(request, NotePatch),
+      callerInfo(request),
+    ),
+  ),
+)
+api.delete('/api/projects/:id/notes/:noteId', ({ request, params }) => {
+  notes.deleteNote(id(params), id(params, 'noteId'), callerInfo(request))
   return json({ ok: true })
 })
 
@@ -801,10 +844,12 @@ api.get('/api/projects/:id/cleanup', async ({ params, url }) =>
 // Deletes closed tickets' worked branches, here or on origin, or with their worktrees: the human's,
 // once confirmed on the Cleanup page, and an agent's (also MCP `cleanup_delete`) for local branches
 // alone: a request of theirs with a worktree or an origin branch in it gets 403 whole. Each item is
-// checked again first.
+// checked again first. Answers the job the work runs under at once (202): it reports each item as it
+// lands and ends with the items' outcomes as its result; `GET /api/projects/:id/jobs` follows it.
 api.post('/api/projects/:id/cleanup/delete', async ({ request, params, actor }) => {
   const body = await readJson(request, z.object({ items: DeleteItems }))
-  return json(await deleteLeftovers(id(params), body.items, actor, { agent: isAgent(request) }))
+  const { job } = startCleanupDelete(id(params), body.items, actor, { agent: isAgent(request) })
+  return json(job, 202)
 })
 
 // --- jobs: long operations reporting their progress, for the top bar to poll (jobs.ts) ---
@@ -1365,6 +1410,30 @@ api.post('/api/projects/:id/reviews/results', async ({ request, params, actor })
 })
 api.get('/api/reviews/results/:id', ({ params }) => json(reviews.getResult(id(params))))
 
+// --- run reports: how each subagent run went, written before it hands back (runReports.ts) ---
+// ?agent=&ticketId=&round=&limit= narrow the project's list (newest first, each with its ticket's title).
+api.get('/api/projects/:id/run-reports', ({ params, url }) => {
+  const q = url.searchParams
+  const num = (k: string) => (q.get(k) ? intParam(q.get(k)!, k) : undefined)
+  return json(
+    runReports.listReports(id(params), Math.min(num('limit') ?? 60, 200), {
+      agent: q.get('agent') || undefined,
+      ticketId: num('ticketId'),
+      round: num('round'),
+    }),
+  )
+})
+api.post('/api/projects/:id/run-reports', async ({ request, params, actor }) => {
+  const body = await readJson(request, runReports.RunReportBody)
+  return json(runReports.writeReport(id(params), body, actor), 201)
+})
+// One report in full, scoped to its project: another project's is a 404.
+api.get('/api/projects/:id/run-reports/:reportId', ({ params }) =>
+  json(runReports.getReport(id(params), id(params, 'reportId'))),
+)
+// The common part every template carries: what a new project agent's report template starts as.
+api.get('/api/run-reports/template', () => json({ template: projectAgents.commonRunReportTemplate }))
+
 // --- summary: what waits on the human, in progress, done today, next, carrying over ---
 // ?projectId= for one project; every project otherwise, one block each. `actor` names who asked, for the
 // Needs you entries this browser remembers as opened for them (per actor, src/lib/needsYou.ts).
@@ -1374,6 +1443,16 @@ api.get('/api/summary', ({ url, actor }) => {
     ...getSummary(project ? intParam(project, 'projectId') : undefined, { refreshPrs: true }),
     actor,
   })
+})
+
+// What is happening on one project right now, for a session that is starting: live now, recently
+// active, what waits on the human, what is in review, the last posts, and the clock it measured
+// against. `?windowMinutes=` widens or narrows the live window (the project's stallMinutes by default).
+api.get('/api/projects/:id/live-work', ({ params, url }) => {
+  const window = url.searchParams.get('windowMinutes')
+  return json(
+    getLiveWork(id(params), { windowMinutes: window ? intParam(window, 'windowMinutes') : undefined }),
+  )
 })
 
 // --- daily ---

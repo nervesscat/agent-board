@@ -16,6 +16,37 @@ For the mechanics of the board's tools (its posts, tasks, timeline and cleanup) 
 For the build-and-review protocol read `todo-review`. This skill says what you do in the
 conversation; those say how the board and the protocol work, and this one does not repeat them.
 
+## Step 0: look before you start
+
+Before anything else — before the opening brief below, and before you write, delegate or pick up
+anything — call `get_live_work` with the project's `projectId`. It answers one project right now, in
+five parts: **live now** (the tickets other sessions' agents are on, with their agents, phase, when
+they were last heard and how long ago, and any wait), **recently active** (what was worked before,
+nothing running, with its one-line state), **waiting on the human** (decisions, blocked steps,
+blocked tickets), **in review** (the PRs and their verdicts) and **recent posts** (the end of the
+last session's thread), with the clock it measured against and the totals.
+
+What you do with it:
+
+- **Before anything else, call it.** It is your first read of the project, and it is cheaper than
+  learning the same thing from five tickets.
+- **approved, to merge** (`approvedToMerge`): the tickets in Approved are the human's go-ahead to merge; an orchestrator merges them without asking again. Name them; they are not waiting on the human.
+- **Do not take or duplicate a ticket a live entry names.** Another session's agent is on it: wait,
+  ask in its thread, or work something else, and never claim it behind its back.
+- **Pick up what nobody holds**: the first ticket with no live entry, no open span and no wait.
+- **Say in your first message** what you found there and how you continue with it.
+
+A quiet ticket is not proof that nobody is working: the read says when each one was last heard from
+(`lastHeardAt`, `silentMinutes`), and an agent that records no events is invisible to it. Before you
+call a quiet ticket free, read its own `get_ticket` (`work.open`).
+
+## Make yourself visible
+
+The work timeline is how the next session sees your session and the agents it starts: `start_span`
+when a phase begins, `heartbeat` every few minutes while it runs, `start_wait` and `end_wait`, and
+`handoff` as it happens. Keeping it current is what makes your session visible to the next one — an
+agent that records nothing reads as no work at all.
+
 ## Opening: the brief
 
 On invocation with no other input, find the project with `find_project` for the repo in front of you,
@@ -26,6 +57,13 @@ then read `get_summary` with its `projectId`, and answer in a handful of lines:
 - **what waits on the human** (reviews, decisions, threads), as counts, with the one or two that
   matter most named;
 - **what is next** to work on today.
+- **approved, to merge**: the tickets in Approved, each one the human's go-ahead to merge. An orchestrator merges its PR(s) without asking again once the facts allow it (the board skill's Approved section); name them, and do not take a ticket out from under the agent that is merging it.
+
+`get_project` carries the project's `notes`: read them before the brief, and name the ones that matter.
+Read them before starting any work, too. Add a note (`add_note`) for a command, path, rule or reminder a
+future session must not rediscover: one short fact per note, never a document. `list_notes`,
+`update_note` and `delete_note` manage the rest; a note's author, an orchestrator or the human changes or
+removes it.
 
 The brief has no ticket bodies and no explanations of the work. A handful of lines is the whole
 answer; the human asks for more on whatever they want. Follow the message shape below.

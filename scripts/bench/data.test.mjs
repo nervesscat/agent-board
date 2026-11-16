@@ -21,9 +21,23 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bench-data-test-'))
 const migrationsFolder = path.resolve('drizzle')
 afterAll(() => fs.rmSync(root, { recursive: true, force: true, maxRetries: 3 }))
 
-/** The times each read stamps at its own hour (the summary's generatedAt, and each activity's now), which the reads leave out. */
-const withoutReadTimes = (value) =>
-  JSON.parse(JSON.stringify(value, (k, v) => (k === 'now' && typeof v === 'string' ? undefined : v)))
+/**
+ * A read's own clock, left out: the times it stamps (`generatedAt`, each activity's `now`), and the
+ * liveness it works out against that clock. A ticket whose last word came today reads Working early in
+ * the day and Stalled late in it, so `liveness` (`silentMinutes`, the `stalled` flag it sets, the
+ * `stalled` and `lostContact` lists it fills) is left out, and so is the count of the stalled rows in
+ * `needsYou.total`, which it feeds. What is left must not differ.
+ */
+const READ_CLOCK = new Set(['now', 'liveness', 'silentMinutes', 'stalled', 'lostContact'])
+const withoutReadTimes = (value) => {
+  const copy = JSON.parse(JSON.stringify(value))
+  for (const p of copy.projects ?? []) if (p.needsYou?.stalled) p.needsYou.total -= p.needsYou.stalled.length
+  return JSON.parse(
+    JSON.stringify(copy, (k, v) =>
+      (k === 'now' && typeof v === 'string') || READ_CLOCK.has(k) ? undefined : v,
+    ),
+  )
+}
 
 describe('assertBenchDataDir', () => {
   const live = path.join(root, 'checkout', 'data')

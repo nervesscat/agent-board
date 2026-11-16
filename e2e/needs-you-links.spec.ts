@@ -1385,7 +1385,9 @@ test('Back from Previews, its stage remembered, scrolled as the link is clicked,
   await expectBackAt(page, project, left)
 })
 
-test("Back from the project's Agents, its shell remembered, scrolled as the link is clicked, returns to where the reader left the Overview", async ({
+// The project's Team page keeps no shell of its own (the install lines live on Connect an agent, below), so
+// nothing is remembered for it: its URL stays plain, and the Back place is the same as for the pages above.
+test("Back from the project's Team, scrolled as the link is clicked, returns to where the reader left the Overview", async ({
   page,
   project,
 }) => {
@@ -1393,11 +1395,11 @@ test("Back from the project's Agents, its shell remembered, scrolled as the link
   const left = await leaveOverview(
     page,
     project,
-    { 'agents.shell': 'powershell' },
+    {},
     page.locator(`a[href="/projects/${project.id}/agents"]`),
     { sameFrame: true },
   )
-  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/agents\\?shell=powershell$`))
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/agents$`))
   await expect(page.getByRole('heading', { name: 'Team', exact: true })).toBeVisible()
   await expect(page.getByText('The roles agents work as.')).toBeVisible()
   await expectBackAt(page, project, left)

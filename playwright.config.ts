@@ -44,6 +44,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
+  // On CI, 2 workers, not one per core: with 4 on the hosted runner the boards answered slowly under
+  // load, and UI steps that wait 10 s or 30 s missed their budgets on some runs. Locally the suite keeps
+  // 4 workers.
   workers: process.env.CI ? 2 : 4,
   timeout: 30_000,
   expect: { timeout: 10_000 },

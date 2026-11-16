@@ -101,7 +101,10 @@ test('a newer release: the badge, its notes and Download and install, which show
         progress: { percent: 40, transferred: 40, total: 100 },
       })),
   })
-  await page.goto('/')
+  // Not from Home: it fetches the notes of every project, hundreds of requests on the shared e2e data,
+  // and the browser queues Settings' own requests behind them past the 10 s wait. The badge is in the
+  // top bar of every page, so the click is the same from here.
+  await page.goto('/agents')
   const badge = page.getByRole('link', { name: 'Update available' })
   await expect(badge).toBeVisible()
   await badge.click()

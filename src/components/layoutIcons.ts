@@ -3,6 +3,7 @@ import {
   BrushCleaning,
   CalendarDays,
   CheckCircle2,
+  ClipboardList,
   Clock,
   FolderGit2,
   GitBranch,
@@ -22,6 +23,7 @@ import {
   ScrollText,
   Settings,
   SquareCheckBig,
+  StickyNote,
 } from 'lucide-react'
 
 import type { LayoutId } from '#/lib/layout'
@@ -35,6 +37,7 @@ export const LAYOUT_ICONS: Record<LayoutId, typeof Home> = {
   'nav.previews': MonitorPlay,
   'nav.gallery': Images,
   'nav.agents': Bot,
+  'nav.runReports': ClipboardList,
   'nav.daily': CalendarDays,
   'nav.cleanup': BrushCleaning,
   'nav.repositories': FolderGit2,
@@ -45,6 +48,7 @@ export const LAYOUT_ICONS: Record<LayoutId, typeof Home> = {
   'overview.doneToday': CheckCircle2,
   'overview.next': ListTodo,
   'overview.carryingOver': Clock,
+  'overview.notes': StickyNote,
   'ticket.instructions': ScrollText,
   'ticket.tasks': SquareCheckBig,
   'ticket.timeline': History,

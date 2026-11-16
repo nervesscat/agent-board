@@ -28,6 +28,7 @@ import {
 } from '#/lib/constants'
 import type { AnnotationDoc } from '#/lib/annotations'
 import type { SavedLayout } from '#/lib/layout'
+import type { RunReportDurationSource, RunReportStep, RunReportTime } from '#/lib/runReports'
 import type { RunType } from '#/lib/runs'
 
 export { COMMENT_PARENTS, STAGE_KINDS, type CommentParent, type StageColor, type StageKind }
@@ -97,6 +98,9 @@ export const agents = sqliteTable(
     // What the orchestrator reads: when to hand work to this agent, what to give it, what comes back
     // and what comes next.
     delegation: text().notNull().default(''),
+    // The run report template this agent fills in after each run (src/server/runReports.ts); a new agent
+    // starts with the common part every template carries.
+    reportTemplate: text('report_template').notNull().default(''),
     avatarId: integer('avatar_id').references((): AnySQLiteColumn => attachments.id, {
       onDelete: 'set null',
     }),
@@ -105,6 +109,28 @@ export const agents = sqliteTable(
     updatedAt: now(),
   },
   (t) => [uniqueIndex('agents_project_name').on(t.projectId, t.name)],
+)
+
+// A project's notes: the short facts the human and every agent must not rediscover (a command, a path,
+// a rule, a reminder). One fact each; position orders them, a negative one pinning a note above the rest.
+export const projectNotes = sqliteTable(
+  'project_notes',
+  {
+    id: id(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // A few words saying why the note is there, at most 60 characters.
+    label: text().notNull(),
+    // The fact itself, plain text, at most 500 characters.
+    body: text().notNull(),
+    createdBy: text('created_by').notNull(),
+    createdAt: now(),
+    updatedAt: now(),
+    // Ascending order, ties by id; a new note goes last, a pinned one before every unpinned note.
+    position: integer().notNull().default(0),
+  },
+  (t) => [index('project_notes_project').on(t.projectId, t.position)],
 )
 
 export const repos = sqliteTable('repos', {
@@ -493,6 +519,62 @@ export const reviewResults = sqliteTable(
   (t) => [index('review_results_pr').on(t.projectId, t.prNumber)],
 )
 
+// One run report: how one execution of a subagent went — its identity, its measured or self-reported
+// time, the steps of its instructions it did and skipped, its ratings, and named prose sections
+// (src/server/runReports.ts). One row per run: a ticket with three rounds has three hunt reports, each
+// with its round. Numbers are columns (json where they come in groups) instead of prose, so a run's
+// agent, round, duration and counts can be listed and added up without parsing text.
+export const runReports = sqliteTable(
+  'run_reports',
+  {
+    id: id(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    // The kind of run: spec, builder, runner, env, verify, hunt, refute, merge, or a project agent's name.
+    agent: text().notNull(),
+    round: integer(),
+    branch: text().notNull().default(''),
+    headSha: text('head_sha').notNull().default(''),
+    model: text().notNull().default(''),
+    effort: text().notNull().default(''),
+    briefedBy: text('briefed_by').notNull().default(''),
+    // When the run started and ended (the measured span's when one covers it), or null when unknown.
+    startedAt: text('started_at'),
+    endedAt: text('ended_at'),
+    // The duration read back: the work timeline's span when one covers the run, else the agent's estimate.
+    durationMs: integer('duration_ms').notNull().default(0),
+    durationSource: text('duration_source').$type<RunReportDurationSource>().notNull().default('self'),
+    // The agent's own estimate, kept beside a measured duration so its account stands.
+    reportedDurationMs: integer('reported_duration_ms'),
+    // Where the time went: readingMs, runningMs, waitingMs, writingMs, otherMs.
+    time: text({ mode: 'json' })
+      .$type<RunReportTime>()
+      .notNull()
+      .default(sql`'{}'`),
+    // The agent's own ratings, 1 (easy, no confidence) to 5 (hard, full confidence); null when unrated.
+    difficulty: integer(),
+    confidence: integer(),
+    // One entry per step of its instructions: {name, done, note}.
+    steps: text({ mode: 'json' })
+      .$type<RunReportStep[]>()
+      .notNull()
+      .default(sql`'[]'`),
+    counts: text({ mode: 'json' }).$type<Record<string, number>>().notNull().default({}),
+    // The prose, one named field per section (RUN_REPORT_SECTIONS, then the agent's own).
+    sections: text({ mode: 'json' }).$type<Record<string, string>>().notNull().default({}),
+    author: text().notNull(),
+    createdAt: now(),
+  },
+  (t) => [
+    index('run_reports_project_agent').on(t.projectId, t.agent, t.createdAt),
+    index('run_reports_ticket').on(t.ticketId, t.agent),
+  ],
+)
+
 // One row per write anyone makes; the Daily module groups these by hour.
 export const activity = sqliteTable(
   'activity',
@@ -791,6 +873,7 @@ export const agentTokens = sqliteTable('agent_tokens', {
 export type Activity = typeof activity.$inferSelect
 export type Project = typeof projects.$inferSelect
 export type Agent = typeof agents.$inferSelect
+export type ProjectNote = typeof projectNotes.$inferSelect
 export type Stage = typeof stages.$inferSelect
 export type Repo = typeof repos.$inferSelect
 export type RunConfig = typeof runConfigs.$inferSelect
@@ -804,6 +887,7 @@ export type Update = typeof updates.$inferSelect
 export type Attachment = typeof attachments.$inferSelect
 export type Comment = typeof comments.$inferSelect
 export type ReviewResult = typeof reviewResults.$inferSelect
+export type RunReportRecord = typeof runReports.$inferSelect
 export type ReportSettings = typeof reportSettings.$inferSelect
 export type Report = typeof reports.$inferSelect
 export type AgentCardRow = typeof agentCards.$inferSelect

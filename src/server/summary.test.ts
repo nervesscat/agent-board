@@ -293,6 +293,17 @@ describe('done today', () => {
   })
 })
 
+describe('approved, to merge', () => {
+  it('lists the tickets in Approved, labelled, for an orchestrator to merge without asking again', () => {
+    const pid = project('approved-summary')
+    const ready = ticket(pid, 'Ready to merge', { status: 'approved', prNumber: 9 })
+    ticket(pid, 'Still in review', { status: 'review', prNumber: 10 })
+    expect(take(pid).approvedToMerge).toEqual([
+      { ticketId: ready.id, title: 'Ready to merge', prNumber: 9, label: 'approved, to merge' },
+    ])
+  })
+})
+
 describe('next', () => {
   it('lists the head of the first open stage that is not a backlog, in board order, with the counts', () => {
     const pid = project('next')
@@ -380,18 +391,21 @@ describe('needs you', () => {
     expect(s.needsYou.threads).toMatchObject([{ parentType: 'ticket', parentId: asked.id, waiting: 1 }])
     expect(s.needsYou.reviews).toMatchObject([{ id: review.id, prNumber: 7, parent: null }])
     // The tickets in progress have no work-timeline event since long before now: stalled, and counted.
+    // None is lost contact: nothing is open on them.
     expect(s.needsYou.stalled.map((x) => x.ticketId).sort()).toEqual(
       [asked.id, reported.id, answered.id].sort(),
     )
+    expect(s.lostContact).toEqual([])
     expect(s.needsYou.total).toBe(4 + 3)
-    // Each stalled row carries its ticket's activity: the open spans and waits, and the last heard.
+    // Each stalled row carries its ticket's activity: no open span or wait, and its state.
     for (const x of s.needsYou.stalled) {
-      expect(x.activity).toEqual({
+      expect(x.activity).toMatchObject({
         spans: [],
         waits: [],
         lastHeard: null,
         lastClosedSpan: null,
         now: expect.any(String),
+        liveness: expect.objectContaining({ state: 'stalled' }),
       })
     }
     // Nobody signed in as the human yet: no threads, the rest stays.
@@ -623,9 +637,10 @@ describe('blocked tasks', () => {
     expect(base.needsYou.blockedTasks.map((x) => x.taskId)).not.toContain(own.get('deploy')!.id)
     // The ticket in review is there twice: once to review, once for its blocked task.
     expect(base.needsYou.reviews.map((r) => r.id)).toEqual([review.id])
-    // The ticket and its lane in progress are silent on the work timeline: stalled, and counted.
-    expect(base.needsYou.stalled.map((x) => x.ticketId).sort()).toEqual([t.id, lane.id].sort())
-    expect(base.needsYou.total).toBe(3 + 1 + 2)
+    // Each ticket's blocked step is the one it works next: the ticket and its lane read Waiting on you
+    // from it, so neither is stalled, and the ticket in review is waiting on its own blocked step.
+    expect(base.needsYou.stalled).toEqual([])
+    expect(base.needsYou.total).toBe(3 + 1)
 
     // In progress carries the true count of each ticket, its lanes' included, and says a blocked step
     // is the one it works next.
@@ -640,10 +655,10 @@ describe('blocked tasks', () => {
     expect(more.needsYou.blockedTasks).toHaveLength(3)
     expect(more.needsYou.blockedTasks.map((x) => x.taskId)).not.toContain(own.get('webhook')!.id)
     expect(more.inProgress.find((x) => x.id === t.id)!.blockedTasks).toBe(4)
-    expect(more.needsYou.total).toBe(3 + 1 + 2)
+    expect(more.needsYou.total).toBe(3 + 1)
     // Ticked done: gone from the count too (it never surfaced).
     features.updateTask(own.get('webhook')!.id, { done: true }, 'claude')
-    expect(take(pid).needsYou.total).toBe(3 + 1 + 2)
+    expect(take(pid).needsYou.total).toBe(3 + 1)
   })
 
   it('leaves a blocked step out while an earlier open one comes first, and still counts it', () => {
@@ -756,9 +771,10 @@ describe('blocked tasks', () => {
 
     const s = take(pid)
     expect(s.needsYou.blockedTasks.map((x) => [x.ticketId, x.text])).toEqual([[live.id, 'open']])
-    // The tickets in progress (not the archived one) are silent on the work timeline: stalled, and counted.
-    expect(s.needsYou.stalled.map((x) => x.ticketId).sort()).toEqual([parent.id, under.id, live.id].sort())
-    expect(s.needsYou.total).toBe(1 + 3)
+    // Every ticket in progress but the parent works a blocked step next: Waiting on you, never stalled.
+    // The parent has nothing blocked and nothing open, so it is the one stalled row.
+    expect(s.needsYou.stalled.map((x) => x.ticketId)).toEqual([parent.id])
+    expect(s.needsYou.total).toBe(1 + 1)
     expect(s.inProgress.find((x) => x.id === parent.id)!.blockedTasks).toBe(0)
   })
 })
@@ -979,5 +995,14 @@ describe('the stalled rows of the Overview: the span that ended last', () => {
     expect(
       summary.getSummary(pid, { now: NOW, humans: [HUMAN] }).projects[0]!.needsYou.stalled,
     ).toContainEqual(expect.objectContaining({ ticketId: t.id, lastSignalAt: iso(at(7, 9, 30)) }))
+  })
+})
+
+describe('approved, to merge: lanes and the review kind', () => {
+  it('lists an approved lane too, and not a stage of another kind that is keyed approved', () => {
+    const pid = project('approved-lanes')
+    const parent = ticket(pid, 'Parent', { status: 'review' })
+    const lane = ticket(pid, 'Lane', { status: 'approved', parentId: parent.id })
+    expect(take(pid).approvedToMerge.map((x) => x.ticketId)).toEqual([lane.id])
   })
 })

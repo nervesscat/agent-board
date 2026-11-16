@@ -372,6 +372,16 @@ test('a tab order that changes during a click leaves the spy reading the page ag
   await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')))
   await expect.poll(() => asked, { timeout: 15_000 }).toBe(true)
 
+  // The click's scroll starts inside the click. The held read is released at that point, not once click()
+  // returns: by then a short smooth scroll may be over, and the change would land after the hold it is meant
+  // to fall in. A fallback keeps the wait bounded when no scroll starts; the check below then says so.
+  const scrollStarted = page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        window.addEventListener('scroll', () => resolve(), { once: true, capture: true })
+        setTimeout(resolve, 8_000)
+      }),
+  )
   // Watch when the order changes and when the click's scroll ends, to know the change landed inside
   // the hold the click takes while its smooth scroll runs.
   const during = page.evaluate(
@@ -402,8 +412,10 @@ test('a tab order that changes during a click leaves the spy reading the page ag
         setTimeout(() => resolve({ order: order ?? -1, end: end ?? -1 }), 8_000)
       }),
   )
-  await sectionTab(page, 'Lanes').click()
+  const clicked = sectionTab(page, 'Lanes').click()
+  await scrollStarted
   handed()
+  await clicked
   await expect(tabs).toHaveCount(5)
   const seen = await during
   expect(seen.order, 'the order changed before the click scroll ended').toBeGreaterThan(0)

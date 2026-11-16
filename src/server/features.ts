@@ -4,7 +4,8 @@ import { db, schema } from '#/db'
 import { retryWhileLocked } from '#/db/busy'
 import { COMMENT_PARENTS, type Complexity, DEFAULT_COMPLEXITY, type FeedTab } from '#/lib/constants'
 import { AUTO_PHASE_RULE, autoPhaseOf } from '#/lib/autoPhases'
-import { columnOrder, placeInColumn, stageColumn } from '#/lib/stages'
+import { columnOrder, isClosed, placeInColumn, stageColumn } from '#/lib/stages'
+import { nextTask, treeTasks } from '#/lib/tasks'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import { logActivity } from './activity'
 import { reconcileTicket } from './autoPhases'
@@ -72,32 +73,6 @@ export type LaneCounts = {
 }
 
 /**
- * The ticket's tasks as one flat list in tree order: each top-level task, then its subtasks, by
- * ascending position (id breaks a tie) — the order `getTicketFull` hands them out in.
- */
-function treeTasks<T extends Pick<schema.Task, 'id' | 'parentId' | 'position'>>(tasks: T[]): T[] {
-  const rank = (a: T, b: T) => a.position - b.position || a.id - b.id
-  return tasks
-    .filter((task) => task.parentId === null)
-    .sort(rank)
-    .flatMap((task) => [task, ...tasks.filter((sub) => sub.parentId === task.id).sort(rank)])
-}
-
-/**
- * The task a ticket works next: the first open one in tree order that is no container. An open parent
- * with open subtasks is skipped in favour of its subtasks (its last one ticked settles it done), so a
- * blocked parent surfaces only once it is its own first open task. Null when every task is done.
- */
-export function nextTask<T extends Pick<schema.Task, 'id' | 'parentId' | 'position' | 'done'>>(
-  tasks: T[],
-): T | null {
-  const openParents = new Set(
-    tasks.flatMap((task) => (!task.done && task.parentId !== null ? [task.parentId] : [])),
-  )
-  return treeTasks(tasks).find((task) => !task.done && !openParents.has(task.id)) ?? null
-}
-
-/**
  * Every ticket of a project with its own task progress, the progress rolled up over its lanes (and
  * theirs), how many of those tasks are blocked on the human and whether one of them is the step the
  * ticket (or a lane of it) works next, and how many lanes it has in each stage. One pass over the
@@ -146,9 +121,11 @@ function projectTickets(projectId: number, opts: { prTickets?: boolean } = {}) {
       openDecisions.set(u.ticketId, (openDecisions.get(u.ticketId) ?? 0) + 1)
   const children = new Map<number, schema.Ticket[]>()
   for (const t of rows) if (t.parentId) children.set(t.parentId, [...(children.get(t.parentId) ?? []), t])
-  // A cancelled lane's tasks are no longer part of the work.
+  // A lane that finished or was dropped is no longer part of the work: the same scope the liveness
+  // roll-up (a closed lane's blocked step is not the step it works next) and the summary's blocked
+  // tasks use, so a card's badge, its count and its progress cannot say what the one line does not.
   const workingLanes = (id: number) =>
-    (children.get(id) ?? []).filter((lane) => kindOf(stages, lane.status) !== 'cancelled')
+    (children.get(id) ?? []).filter((lane) => !isClosed(kindOf(stages, lane.status)))
   const rollup = (id: number): Progress =>
     workingLanes(id).reduce(
       (acc, lane) => {
@@ -1080,10 +1057,16 @@ export const verdictOf = (t: Pick<schema.Ticket, 'approvedAt' | 'disapprovedAt'>
 
 /**
  * The human's call on a ticket or lane: approve it, disapprove it (which moves it to the project's
- * first cancelled stage), or clear the call. Approving a PR review (a ticket tagged `PR`) also moves
- * it to the first done stage; taking that back returns it to `reopenTo` or the first review stage. Taking back a disapproval puts a cancelled ticket back
- * to `reopenTo` (the stage it had, when an undo knows it) or the stage new tickets start in. Callers make sure
- * the actor is the human.
+ * first cancelled stage), or clear the call. Approving a ticket in a review stage moves it to Approved
+ * (the review-kind stage the default layout puts after In review), where an orchestrator merges the PR
+ * without asking again, the move there being the human's go-ahead; approving a PR review (a ticket tagged `PR`) finishes it in the first
+ * done stage instead. Taking that back returns it to `reopenTo` or the first review stage. Taking back
+ * a disapproval puts a cancelled ticket back to `reopenTo` (the stage it had, when an undo knows it) or
+ * the stage new tickets start in. Callers make sure the actor is the human.
+ *
+ * Only the verdict and a move put a ticket in Approved: no stage kind sends one there, since it is a
+ * `review` stage, the same as In review. The default `review` stage stays the first of its kind, so
+ * the board's by-kind picks (the PR sync's `reviewed`, the preview filter) still land in In review.
  */
 export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { reopenTo?: string } = {}) {
   const t = getTicket(id)
@@ -1093,24 +1076,44 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
       `ticket ${id} is PR #${t.prNumber}'s: a PR is reviewed on the PR queue, not approved`,
     )
   const before = verdictOf(t)
-  if (before === verdict) return t
   const now = new Date().toISOString()
   const stages = listStages(t.projectId)
+  // The ticket's own Approved stage, when the project kept it: a key, and a review stage still.
+  const approved = stages.find((s) => s.key === 'approved' && s.kind === 'review')
+  // Approving again a ticket that a move took out of Approved puts it back there: the approval is the go-ahead.
+  const reapprove =
+    verdict === 'approved' &&
+    before === 'approved' &&
+    !!approved &&
+    t.status !== approved.key &&
+    kindOf(stages, t.status) === 'review'
+  if (before === verdict && !reapprove) return t
   const cancel = firstOfKind(stages, 'cancelled')
   // A PR review (tagged PR) is finished by the call: approving it closes it as done.
   const pr = t.tags.some((tag) => tag.toLowerCase() === 'pr')
   const finish = verdict === 'approved' && pr ? firstOfKind(stages, 'done') : undefined
   const kind = kindOf(stages, t.status)
+  const approve = verdict === 'approved' && kind === 'review' && approved ? approved : undefined
   const reopen =
     (before === 'disapproved' && kind === 'cancelled') ||
-    (before === 'approved' && pr && kind === 'done' && verdict === null)
+    (before === 'approved' && pr && kind === 'done' && verdict === null) ||
+    // Taking back an approval returns a ticket in Approved to the review column it came from.
+    (before === 'approved' && verdict === null && t.status === 'approved')
   const reopenTo = opts.reopenTo
     ? resolveStage(stages, opts.reopenTo, projectWorkStage(t.projectId, stages))
     : before === 'approved'
       ? (firstOfKind(stages, 'review') ?? startStage(stages))
       : startStage(stages)
   const status =
-    verdict === 'disapproved' && cancel ? cancel.key : finish ? finish.key : reopen ? reopenTo.key : t.status
+    verdict === 'disapproved' && cancel
+      ? cancel.key
+      : finish
+        ? finish.key
+        : approve
+          ? approve.key
+          : reopen
+            ? reopenTo.key
+            : t.status
   const row = db
     .update(schema.tickets)
     .set({
@@ -1135,7 +1138,7 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     kind: 'ticket',
     text:
       verdict === 'approved'
-        ? `approved ${what}${finish ? ` (${finish.name})` : ''}`
+        ? `approved ${what}${finish ? ` (${finish.name})` : approve ? ` (${approve.name})` : ''}`
         : verdict === 'disapproved'
           ? `disapproved ${what}${cancel ? ` (${cancel.name})` : ''}`
           : `withdrew the ${before === 'approved' ? 'approval' : 'disapproval'} of ${what}${reopen ? ` (back to ${reopenTo.name})` : ''}`,

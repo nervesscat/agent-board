@@ -9,7 +9,7 @@ import { ChipTabs } from '#/components/Chips'
 import { Empty } from '#/components/Empty'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
-import { NowLine, StallNotice, WorkSummary } from '#/components/WorkStatus'
+import { WorkLine, WorkSummary } from '#/components/WorkStatus'
 import { WorkTimelineBar, hasWork } from '#/components/WorkTimeline'
 import { errorMessage, get, type ProjectWork, type RoadmapTicket } from '#/lib/api'
 import { type Step, type StepGroup, type StepState, stepCounts, timeline } from '#/lib/roadmap'
@@ -138,7 +138,7 @@ function Roadmap() {
           <Stat n={every.filter((b) => hasState(b, 'now')).length} label="working now" />
           <Stat n={every.filter(isBlocked).length} label="blocked" amber />
           <Stat n={review.length} label="in review" />
-          <Stat n={every.filter((b) => b.row.work.stalled).length} label="stalled" amber />
+          <Stat n={every.filter((b) => b.row.work.stalled).length} label="no word" amber />
         </div>
       </div>
       {work && (
@@ -286,8 +286,7 @@ function Row({
           <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${stageBadge(stage)}`}>
             {stage.name}
           </span>
-          <NowLine timeline={row.work} />
-          <StallNotice timeline={row.work} stage={item.stall} />
+          <WorkLine timeline={row.work} stage={item.stall} detail />
           {children}
           {total > 0 && (
             <Tip content={`${done} of ${total} done`}>

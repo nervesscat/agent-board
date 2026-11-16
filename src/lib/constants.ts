@@ -53,6 +53,12 @@ export const DEFAULT_STAGES: { key: string; name: string; kind: StageKind; color
   { key: 'in_progress', name: 'In progress', kind: 'active', color: 'sky' },
   { key: 'blocked', name: 'Blocked', kind: 'blocked', color: 'amber' },
   { key: 'review', name: 'In review', kind: 'review', color: 'violet' },
+  /**
+   * The human approved it and the merge is left: a second review-kind stage, so nothing moves a ticket
+   * into it by kind (only the human's verdict or a move does), and moving it there is the go-ahead: an
+   * orchestrator merges the PR without asking again.
+   */
+  { key: 'approved', name: 'Approved', kind: 'review', color: 'teal' },
   { key: 'done', name: 'Done', kind: 'done', color: 'emerald' },
   { key: 'cancelled', name: 'Cancelled', kind: 'cancelled', color: 'slate' },
 ]
@@ -146,3 +152,11 @@ export type WaitReason = (typeof WAIT_REASONS)[number]
 export const KNOWN_PHASES = ['spec', 'build', 'review', 'verify', 'pr', 'preview', 'merge'] as const
 /** How long an active ticket may go without an event before it reads as stalled, unless its project says. */
 export const STALL_MINUTES = { default: 30, min: 1, max: 1440 } as const
+/**
+ * How long a ticket's lease lasts: a heartbeat, a post, a span or hand-off event, or the board's own
+ * event keeps the ticket `working` for this long. Past it, an open span reads as `lost` contact (the
+ * agent is gone) and a ticket with nothing open waits for `stallMinutes` before it reads as stalled.
+ * A few beat intervals: the runtime beats every couple of minutes, so ten minutes leaves room for a
+ * slow tool call between beats. One constant, so every read expires the lease the same way.
+ */
+export const LEASE_TTL_MINUTES = 10

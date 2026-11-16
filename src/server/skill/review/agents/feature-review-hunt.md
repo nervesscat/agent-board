@@ -110,6 +110,17 @@ If there are none, write `# Candidates` followed by `None.`
 [free form]
 ```
 
+## Run report
+
+One report per subagent run, written before the hand-off: it is part of finishing, not a step
+after it. The orchestrator writes none. Its template is
+`run-reports/hunt.md` in the review bundle, beside `agents/` where this file is installed: it carries
+the common part (identity, time, brief, what you read and ran, steps, ratings, problems, gaps,
+suggestions) and what this agent adds. Fill it in with `write_run_report` (`agent: "hunt"`, the
+ticket, the round, times, steps, counts and sections) before you return; a run that hands back
+without one has not finished, and the orchestrator checks for it as it checks your result. The
+ticket's Agents side shows it, and `list_run_reports` reads this agent's across tickets.
+
 ## Keeping the board current
 
 The board is part of the work: post your progress, tick the tasks you finished, close your spans

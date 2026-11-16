@@ -27,6 +27,7 @@ export const LAYOUT_ELEMENTS = [
   { id: 'nav.previews', label: 'Previews', area: 'nav' },
   { id: 'nav.gallery', label: 'Gallery', area: 'nav' },
   { id: 'nav.agents', label: 'Team', area: 'nav' },
+  { id: 'nav.runReports', label: 'Run reports', area: 'nav' },
   { id: 'nav.daily', label: 'Daily', area: 'nav' },
   { id: 'nav.cleanup', label: 'Cleanup', area: 'nav' },
   { id: 'nav.repositories', label: 'Repositories', area: 'nav' },
@@ -43,6 +44,7 @@ export const LAYOUT_ELEMENTS = [
   { id: 'overview.doneToday', label: 'Done today', area: 'overview' },
   { id: 'overview.next', label: 'Next', area: 'overview' },
   { id: 'overview.carryingOver', label: 'Carrying over', area: 'overview' },
+  { id: 'overview.notes', label: 'Notes', area: 'overview' },
   // A ticket's page.
   { id: 'ticket.instructions', label: 'Instructions', area: 'ticket.main', locked: "The ticket's own text" },
   { id: 'ticket.tasks', label: 'Tasks', area: 'ticket.main', locked: 'Where blocked-task links land' },

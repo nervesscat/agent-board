@@ -1,5 +1,12 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { type HistoryState, Link, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
+import {
+  type HistoryState,
+  Link,
+  createFileRoute,
+  useLocation,
+  useNavigate,
+  useRouter,
+} from '@tanstack/react-router'
 import {
   Archive,
   ArchiveRestore,
@@ -60,6 +67,7 @@ import { TrashIcon } from '#/components/TrashIcon'
 import { TagsInput, useTagChoices } from '#/components/TagsInput'
 import { ReachBadge } from '#/components/ReachBadge'
 import { ReviewResultButton } from '#/components/ReviewResult'
+import { RunReportsPanel } from '#/components/RunReport'
 import { ActionButton, EditBox, Edited, PostActions } from '#/components/PostTools'
 import { Thread } from '#/components/Thread'
 import { type Verdict, VerdictButtons, verdictOf } from '#/components/Verdict'
@@ -121,7 +129,7 @@ import {
 } from '#/lib/lanes'
 import { type AreaId, type Layout, defaultLayout, layoutElement, shownIn } from '#/lib/layout'
 import { useProject, useStages } from '#/lib/project'
-import { type Anchor, anchorId, useAnchor, useReveal } from '#/lib/reveal'
+import { type Anchor, anchorId, cameBack, useAnchor, useReveal } from '#/lib/reveal'
 import { addTags, overTagLimits } from '#/lib/tags'
 import { type StepList, columnNeighbours, isClosed, stageBadge, stageOf } from '#/lib/stages'
 import { ticketsKey, ticketsQuery } from '#/lib/tickets'
@@ -130,6 +138,12 @@ export const Route = createFileRoute('/projects/$id/features/$ticketId')({
   component: TicketPage,
   validateSearch: validateLaneSearch,
 })
+
+/**
+ * The window's scroll on each ticket the reader left, by ticket id. Stepping or following a link back to
+ * a ticket lands where it was, as Back does (the router keeps that place for Back itself).
+ */
+const leftAt = new Map<string, number>()
 
 function TicketPage() {
   const { id, ticketId } = Route.useParams()
@@ -249,6 +263,39 @@ function TicketPage() {
   const linkedTo = useLocation({ select: (l) => l.pathname.split('/').at(-1) })
   const drawn = t !== undefined && String(t.id) === ticketId && ticketId === linkedTo
   useReveal(anchor, { page: ticketId, ready: drawn && layout !== undefined })
+  // Before a move, the window still shows the ticket being left: its scroll is kept for it.
+  const router = useRouter()
+  useEffect(
+    () =>
+      router.subscribe('onBeforeNavigate', ({ fromLocation }) => {
+        const from = /\/projects\/[^/]+\/features\/([^/]+)$/.exec(fromLocation?.pathname ?? '')
+        if (from) leftAt.set(from[1], window.scrollY)
+      }),
+    [router],
+  )
+  // Arriving at a ticket left before (a step, a link; Back and an anchor are the router's and reveal's):
+  // the page goes back to where it was, once it is drawn and tall enough. The reader turning the wheel,
+  // touching or typing takes the page back.
+  useEffect(() => {
+    const at = leftAt.get(ticketId)
+    if (!drawn || at === undefined || window.location.hash || cameBack()) return
+    let frame = 0
+    let tries = 0
+    const step = () => {
+      if (Math.abs(window.scrollY - at) < 1 || tries++ > 90) return
+      window.scrollTo(0, at)
+      frame = requestAnimationFrame(step)
+    }
+    const stop = () => {
+      cancelAnimationFrame(frame)
+      for (const e of ['wheel', 'touchstart', 'keydown', 'mousedown'] as const)
+        window.removeEventListener(e, stop)
+    }
+    for (const e of ['wheel', 'touchstart', 'keydown', 'mousedown'] as const)
+      window.addEventListener(e, stop, { passive: true })
+    frame = requestAnimationFrame(step)
+    return stop
+  }, [drawn, ticketId])
   // A lane's post linked to on this ticket is in the feed with the lanes' posts folded in: folded in
   // once per anchor, so turning it off again stays off.
   const anchoredPost = anchorId(anchor?.holder ?? anchor?.target, 'post')
@@ -582,6 +629,21 @@ function measureHeader(header: HTMLElement | null) {
 function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => void }) {
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(t.title)
+  const titleRef = useRef<HTMLSpanElement>(null)
+  // Enter or Escape closes the field from the keyboard: the focus goes back to the title, not the page.
+  const returnFocus = useRef(false)
+  // A Space pressed on the title, so that its keyup opens the field.
+  const spaceDown = useRef(false)
+  useEffect(() => {
+    if (!editing && returnFocus.current) {
+      returnFocus.current = false
+      titleRef.current?.focus()
+    }
+  }, [editing])
+  const open = () => {
+    setValue(t.title)
+    setEditing(true)
+  }
   const done = (save: boolean) => {
     setEditing(false)
     const title = value.trim()
@@ -596,6 +658,9 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
         onChange={(e) => setValue(e.target.value)}
         onBlur={() => done(true)}
         onKeyDown={(e) => {
+          // A held Enter that opened the field must not close it again through its repeats.
+          if (e.key === 'Enter' && e.repeat) return
+          if (e.key === 'Enter' || e.key === 'Escape') returnFocus.current = true
           if (e.key === 'Enter') done(true)
           if (e.key === 'Escape') done(false)
         }}
@@ -605,17 +670,39 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
   return (
     <h1 className="text-xl font-semibold tracking-tight">
       <span className="text-muted-foreground">#{t.id}</span>{' '}
+      {/* A span with the button's role, not a button: browsers draw a button as an inline-block, which drops a
+            title too wide for the line under the #id, while a span wraps its text in the heading's own flow.
+            Like a button, Space opens the field on its keyup, so a held Space does not type into it. */}
       <Tip content="Click to rename">
-        <button
-          type="button"
-          onClick={() => {
-            setValue(t.title)
-            setEditing(true)
+        <span
+          ref={titleRef}
+          role="button"
+          tabIndex={0}
+          onClick={open}
+          onKeyDown={(e) => {
+            if (e.key === ' ') {
+              e.preventDefault()
+              spaceDown.current = true
+            }
+            if (e.key === 'Enter' && !e.repeat) {
+              e.preventDefault()
+              open()
+            }
           }}
-          className="cursor-text text-left decoration-muted-foreground/50 decoration-dotted underline-offset-4 hover:underline"
+          onKeyUp={(e) => {
+            // Only a Space that went down on the title opens the field, as a button's does.
+            if (e.key !== ' ' || !spaceDown.current) return
+            spaceDown.current = false
+            open()
+          }}
+          // A Space held across a Tab must not leave its press behind for the next keyup on the title.
+          onBlur={() => {
+            spaceDown.current = false
+          }}
+          className="inline cursor-text text-left decoration-muted-foreground/50 decoration-dotted underline-offset-4 hover:underline"
         >
           {t.title}
-        </button>
+        </span>
       </Tip>
     </h1>
   )
@@ -759,12 +846,14 @@ function Instructions({
   return (
     <section
       {...drop.props}
-      className={cn('rounded-lg border p-4', drop.className)}
+      className={cn('group rounded-lg border p-4', drop.className)}
       aria-label="Instructions"
     >
       <div className="mb-2 flex items-center gap-3">
         <h2 className="text-sm font-medium">Instructions</h2>
-        <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+        {/* The attach and edit buttons show while the card is hovered, or when one of them has keyboard focus;
+            their labels are for screen readers only. */}
+        <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           <input
             ref={fileInput}
             type="file"
@@ -779,10 +868,12 @@ function Instructions({
           {!editing && (
             <>
               <Button type="button" variant="ghost" size="xs" onClick={() => fileInput.current?.click()}>
-                <Paperclip data-icon="inline-start" /> {attaching > 0 ? 'attaching…' : 'attach'}
+                <Paperclip />
+                <span className="sr-only">{attaching > 0 ? 'attaching…' : 'attach'}</span>
               </Button>
               <Button type="button" variant="ghost" size="xs" onClick={open}>
-                <Pencil data-icon="inline-start" /> edit
+                <Pencil />
+                <span className="sr-only">edit</span>
               </Button>
             </>
           )}
@@ -1952,6 +2043,8 @@ function Activity({
           </label>
         )}
       </div>
+      {/* The agents' side also carries what each subagent run reported about itself: one report per run. */}
+      {tab === 'agents' && <RunReportsPanel reports={t.runReports} />}
       <form
         {...drop.props}
         className={cn('mb-4 space-y-2 rounded-lg border p-3', drop.className)}
@@ -2197,9 +2290,10 @@ function SummaryCard({ t }: { t: TicketFull }) {
     <article
       id={s.fallback ? undefined : `post-${s.postId}`}
       aria-label="Summary"
-      className="mb-4 scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border border-primary/30 bg-primary/5 p-3"
+      className="relative mb-4 scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border border-primary/30 bg-primary/5 p-3"
     >
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+      {/* pr-9 keeps the header's line clear of the history button, floating in the card's top-right. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pr-9 text-xs text-muted-foreground">
         <h3 className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground">
           <ScrollText className="size-4" /> Summary
         </h3>
@@ -2211,16 +2305,19 @@ function SummaryCard({ t }: { t: TicketFull }) {
           </span>
         </Tip>
         {s.versions > 1 && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            className="ml-auto"
-            aria-expanded={history}
-            onClick={() => setHistory((v) => !v)}
-          >
-            <History data-icon="inline-start" /> {history ? 'hide history' : `history (${s.versions - 1})`}
-          </Button>
+          <Tip content={`History (${s.versions - 1})`}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="absolute top-2 right-2 text-muted-foreground"
+              aria-expanded={history}
+              aria-label={`History (${s.versions - 1})`}
+              onClick={() => setHistory((v) => !v)}
+            >
+              <History />
+            </Button>
+          </Tip>
         )}
       </div>
       {s.fallback && (

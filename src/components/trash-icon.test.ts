@@ -24,6 +24,7 @@ const parse = (file: string) =>
 
 /** The files that show a trash button, and how many of them each holds. */
 const TRIGGERS: Record<string, number> = {
+  'components/Notes.tsx': 1,
   'components/PostTools.tsx': 1,
   'components/ProjectSwitcher.tsx': 1,
   'components/RunsSettings.tsx': 1,
