@@ -353,9 +353,11 @@ export function AnnotateImage({
 
   const startSelect = (e: PointerEvent<HTMLCanvasElement>, point: Point) => {
     e.currentTarget.setPointerCapture(e.pointerId)
-    // The rotate handle of the selection, first: it sits above the box, outside the marks.
+    const hit = markAt(items, point[0], point[1])
+    // The rotate handle of the selection sits above its box, in a band that can hold a mark: a mark under the
+    // pointer is picked first, and the handle takes only a press that lands on no mark.
     const box = unionBounds(picked)
-    if (box) {
+    if (box && !hit) {
       const handle = handleAt(box, HANDLE_GAP * scale(e), bitmap ?? { width: 0, height: 0 })
       const reach = HANDLE_RADIUS * 3 * scale(e)
       if (Math.hypot(point[0] - handle[0], point[1] - handle[1]) <= reach) {
@@ -372,7 +374,6 @@ export function AnnotateImage({
         return
       }
     }
-    const hit = markAt(items, point[0], point[1])
     if (hit && e.shiftKey) {
       // Shift-click adds one mark to the selection or takes it away, with no drag.
       setSelected((prev) => {
@@ -548,9 +549,10 @@ export function AnnotateImage({
   // before the dialog would close, and the other keys act unless a field has the focus, which keeps
   // its own typing and undo.
   const onKeyDown = (e: globalThis.KeyboardEvent) => {
-    // A key pressed during a pointer gesture waits: the gesture commits its own step on release. Escape is
-    // still taken here, so the dialog does not close on the picture while the button is held.
-    if (busy || gesture.current) {
+    // A key pressed during a pointer gesture waits: the gesture commits its own step on release. A drawing
+    // tool's press is a gesture too (its origin is set until release). Escape is still taken here, so the
+    // dialog does not close on the picture while the button is held.
+    if (busy || gesture.current || origin.current) {
       if (e.key === 'Escape') {
         e.preventDefault()
         e.stopPropagation()

@@ -135,6 +135,15 @@ describe('markAt', () => {
     expect(markAt([rect('r', 40, 0, 20, 100)], 105, 50)).toBeUndefined()
     expect(markAt([tall], 50, -20)).toBeUndefined()
   })
+
+  it('does not pick a turned box by the empty corners inside its turned bounds', () => {
+    // A flat box turned 45 degrees: its turned bounds reach (88, -30), but that point is off the box itself.
+    const flat = { ...rect('r', 0, 0, 100, 10), rotation: Math.PI / 4 }
+    expect(markAt([flat], 88, -30)).toBeUndefined()
+    // The box's own middle, and a point on its turned length, are still picked.
+    expect(markAt([flat], 50, 5)?.id).toBe('r')
+    expect(markAt([flat], 78, 33)?.id).toBe('r')
+  })
 })
 
 describe('markBounds', () => {

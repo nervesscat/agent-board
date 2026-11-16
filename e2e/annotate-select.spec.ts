@@ -210,6 +210,53 @@ test('Escape while a mouse button is held on a selected mark leaves the canvas o
   expect(moved!.rect!.x).toBeCloseTo(30, 0)
 })
 
+test('Escape while a mouse button is held on a drawing tool, with nothing selected, leaves the canvas open and the box finishes', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Escape during draw')
+  await control(canvas, 'Box').click()
+
+  const from = await at(canvas, [40, 40])
+  const to = await at(canvas, [120, 120])
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  await page.mouse.move(to.x, to.y, { steps: 4 })
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(300)
+  await expect(canvas).toBeVisible()
+  await page.mouse.up()
+
+  await expect(canvas).toBeVisible()
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [drawn] = storedItems(attached)
+  expect(drawn!.rect!.x).toBeCloseTo(40, 0)
+  expect(drawn!.rect!.w).toBeCloseTo(80, 0)
+})
+
+test('a click on a mark in the band under the rotate handle picks that mark, not the handle', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Mark under the handle')
+  // A small box whose middle sits 8 pixels above the rotate handle of the box drawn after it.
+  await draw(page, canvas, 'Box', [118, 60], [132, 80])
+  await noteField(canvas).fill('under')
+  await draw(page, canvas, 'Box', [100, 100], [150, 150])
+  await control(canvas, 'Select').click()
+
+  await click(page, canvas, [125, 66])
+  await expect(noteField(canvas)).toHaveValue('under')
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [under, drawn] = storedItems(attached)
+  expect(under!.note).toBe('under')
+  expect(drawn!.rect!.x).toBeCloseTo(100, 0)
+  expect(drawn!.rotation).toBeUndefined()
+})
+
 test('Delete removes the selection, and undo and redo bring it back and take it away again', async ({
   page,
   project,

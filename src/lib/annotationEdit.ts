@@ -106,8 +106,12 @@ export function markAt(items: Annotation[], x: number, y: number): Annotation | 
       // A line or an arrow is picked by its segment only: its box would catch the empty corners of a diagonal.
       continue
     }
-    const b = markBounds(a)
-    const inside = x >= b.x - reach && x <= b.x + b.w + reach && y >= b.y - reach && y <= b.y + b.h + reach
+    // A box, an ellipse or text is picked where its shape is: the point is turned back into the unturned
+    // box it was drawn in, so the empty corners of a turned box's bounds do not catch the pointer.
+    const b = localBox(a)
+    const [ux, uy] = a.rotation ? turn([x, y], pivotOf(a), -a.rotation) : [x, y]
+    const inside =
+      ux >= b.x - reach && ux <= b.x + b.w + reach && uy >= b.y - reach && uy <= b.y + b.h + reach
     if (inside && a.kind !== 'pen') return a
   }
   return undefined
