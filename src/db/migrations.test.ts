@@ -1466,7 +1466,10 @@ describe('0051_agent_cards', () => {
       sqlite
         .prepare('SELECT * FROM projects ORDER BY id')
         .all()
-        .map(({ kinds: _kinds, ...kept }) => kept),
+        .map((row) => {
+          const { kinds: _kinds, ...kept } = row as Record<string, unknown>
+          return kept
+        }),
     ).toEqual(before.projects)
     expect(sqlite.prepare('SELECT * FROM tickets ORDER BY id').all()).toEqual(before.tickets)
     expect(sqlite.prepare('SELECT * FROM tasks ORDER BY id').all()).toEqual(before.tasks)
