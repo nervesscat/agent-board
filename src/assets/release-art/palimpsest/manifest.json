@@ -1,0 +1,141 @@
+{
+  "direction": "palimpsest",
+  "madeBy": "Claude Opus 5.5 (medium effort)",
+  "generator": "scripts/release-art/palimpsest.mjs",
+  "canvas": {
+    "width": 1600,
+    "height": 900
+  },
+  "palette": {
+    "light": {
+      "ground": "#ECE5D8",
+      "cleaned": "#F4EFE5",
+      "ink": "#28304F",
+      "spot": "#B4532F"
+    },
+    "dark": {
+      "ground": "#17181D",
+      "cleaned": "#101115",
+      "ink": "#C9CFE6",
+      "spot": "#E2875C"
+    }
+  },
+  "releases": [
+    {
+      "version": "v0.2.2",
+      "seed": 3272317361,
+      "ghostOf": "v0.2.1",
+      "themes": {
+        "items": 160,
+        "hands": 0.528,
+        "precision": 0.141,
+        "wayfinding": 0.331,
+        "volume": 1,
+        "carry": 0.006,
+        "clearing": 0.101
+      },
+      "reading": "hands",
+      "mix": 0.35,
+      "swaths": 8,
+      "spotSwaths": 3,
+      "handAngle": 19,
+      "angleSpread": 44.1,
+      "regularity": 0,
+      "stagger": 0.2,
+      "erased": 0.3,
+      "eraserStrokes": 3,
+      "ghostWeight": 0.76,
+      "files": {
+        "light": "v0.2.2-light.svg",
+        "dark": "v0.2.2-dark.svg"
+      }
+    },
+    {
+      "version": "v0.2.3",
+      "seed": 3255539742,
+      "ghostOf": "v0.2.2",
+      "themes": {
+        "items": 16,
+        "hands": 0.119,
+        "precision": 0.812,
+        "wayfinding": 0.069,
+        "volume": 0.747,
+        "carry": 0.063,
+        "clearing": 0.133
+      },
+      "reading": "precision",
+      "mix": 0,
+      "swaths": 4,
+      "spotSwaths": 1,
+      "handAngle": 18.5,
+      "angleSpread": 1.3,
+      "regularity": 1,
+      "stagger": 0,
+      "erased": 0.24,
+      "eraserStrokes": 3,
+      "ghostWeight": 0.9,
+      "files": {
+        "light": "v0.2.3-light.svg",
+        "dark": "v0.2.3-dark.svg"
+      }
+    },
+    {
+      "version": "v0.2.4",
+      "seed": 3305872599,
+      "ghostOf": "v0.2.3",
+      "themes": {
+        "items": 14,
+        "hands": 0.435,
+        "precision": 0.092,
+        "wayfinding": 0.473,
+        "volume": 0.711,
+        "carry": 0.071,
+        "clearing": 0.462
+      },
+      "reading": "wayfinding",
+      "mix": 0.53,
+      "swaths": 4,
+      "spotSwaths": 1,
+      "handAngle": 15.4,
+      "angleSpread": 31.4,
+      "regularity": 0,
+      "stagger": 0.56,
+      "erased": 0.82,
+      "eraserStrokes": 7,
+      "ghostWeight": 0.77,
+      "files": {
+        "light": "v0.2.4-light.svg",
+        "dark": "v0.2.4-dark.svg"
+      }
+    },
+    {
+      "version": "v0.2.5",
+      "seed": 3289094980,
+      "ghostOf": "v0.2.4",
+      "themes": {
+        "items": 36,
+        "hands": 0.347,
+        "precision": 0.327,
+        "wayfinding": 0.327,
+        "volume": 0.933,
+        "carry": 0.139,
+        "clearing": 0.097
+      },
+      "reading": "hands",
+      "mix": 0.96,
+      "swaths": 6,
+      "spotSwaths": 2,
+      "handAngle": -25.2,
+      "angleSpread": 14.6,
+      "regularity": 0.3,
+      "stagger": 0.19,
+      "erased": 0.08,
+      "eraserStrokes": 2,
+      "ghostWeight": 1.11,
+      "files": {
+        "light": "v0.2.5-light.svg",
+        "dark": "v0.2.5-dark.svg"
+      }
+    }
+  ]
+}
