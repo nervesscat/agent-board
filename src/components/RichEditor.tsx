@@ -199,12 +199,26 @@ function liftOutOfItem(tr: Transaction, pos: number, size: number): number | nul
     tr.lift(range, target)
     return true
   }
+  const $block = tr.doc.resolve(pos)
+  const list = $block.node($block.depth - 1)
+  const index = $block.index($block.depth - 1)
+  const hasRest = $block.parent.childCount > 1
   const mark = tr.mapping.maps.length
   if (!liftRange(pos, pos + size)) {
     const itemEnd = tr.doc.resolve(pos).end()
     if (!(pos + size < itemEnd && liftRange(pos + size, itemEnd)) || !liftRange(pos, pos + size)) return null
   }
-  return tr.mapping.slice(mark).map(pos, 1)
+  const next = tr.mapping.slice(mark).map(pos, 1)
+  // The items after the lifted one go on in a list of their own, which copied the start of the list it was
+  // cut from: it starts at the number of its first item (the lifted item's number is gone unless it has more).
+  const after = tr.doc.resolve(next + size).nodeAfter
+  if (list.type.name === 'orderedList' && index < list.childCount - 1 && after?.type.name === 'orderedList') {
+    tr.setNodeMarkup(next + size, undefined, {
+      ...after.attrs,
+      start: list.attrs.start + index + (hasRest ? 0 : 1),
+    })
+  }
+  return next
 }
 
 /**
@@ -264,15 +278,17 @@ export function narrowBlocks(tr: Transaction, keep: Keep = {}): { converted: boo
       // The item is only this block and nested lists: the item itself moves into a list of the style's
       // type, its nested lists stay inside it. The block keeps its position (the item's start and the
       // block's start do not move), so the selection is the block's text.
-      convertItemTo(tr, $pos.before(), listType)
-      converted = { from: pos + 1, to: pos + size - 1 }
+      const at = convertItemTo(tr, $pos.before(), listType)
+      converted = { from: at + 1, to: at + size - 1 }
       continue
     }
     // Out of the list items it sits in, the innermost first, so a block of a nested list ends up outside the lists.
     for (;;) {
       const $inner = tr.doc.resolve(pos)
       if (!listItemTypes.includes($inner.parent.type.name)) break
-      if ($inner.node($inner.depth - 1).type.name === keep.list) break
+      // A single block already in an item of the list stays there. Over several blocks every block comes out of
+      // its item: the list is wrapped around them, and an item of that list left in the range would be nested.
+      if (blocks.length === 1 && $inner.node($inner.depth - 1).type.name === keep.list) break
       const next = liftOutOfItem(tr, pos, size)
       if (next === null) break
       pos = next
@@ -290,9 +306,10 @@ export function narrowBlocks(tr: Transaction, keep: Keep = {}): { converted: boo
 
 /**
  * Moves the list item at `itemPos` into a list of `listType` of its own, in its place: its list is split
- * around it, and only that piece changes type. Its nested lists stay inside it.
+ * around it, and only that piece changes type. Its nested lists stay inside it. Returns the position of the
+ * item's block after the change.
  */
-function convertItemTo(tr: Transaction, itemPos: number, listType: NodeType): void {
+function convertItemTo(tr: Transaction, itemPos: number, listType: NodeType): number {
   const $item = tr.doc.resolve(itemPos)
   const list = $item.parent
   const index = $item.index()
@@ -304,18 +321,21 @@ function convertItemTo(tr: Transaction, itemPos: number, listType: NodeType): vo
   }
   if (index < list.childCount - 1) tr.split(p + size, 1)
   const listPos = tr.doc.resolve(p).before()
+  // The item's block starts two tokens into the piece (its list and its item open before it), in either case.
+  const blockPos = listPos + 2
   if (listType.name !== 'taskList') {
     tr.setNodeMarkup(listPos, listType)
-    return
+    return blockPos
   }
   // A task list holds task items: the one-item list is replaced by a task list whose item is unchecked and
   // keeps the item's content (its nested lists included). One step, so the intermediate document stays valid.
   const piece = tr.doc.nodeAt(listPos)
-  if (!piece) return
-  const item = piece.firstChild
-  if (!item) return
-  const taskItem = listType.schema.nodes.taskItem.create({ checked: false }, item.content)
-  tr.replaceWith(listPos, listPos + piece.nodeSize, listType.create(piece.attrs, taskItem))
+  const item = piece?.firstChild
+  if (piece && item) {
+    const taskItem = listType.schema.nodes.taskItem.create({ checked: false }, item.content)
+    tr.replaceWith(listPos, listPos + piece.nodeSize, listType.create(piece.attrs, taskItem))
+  }
+  return blockPos
 }
 
 /**

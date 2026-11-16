@@ -288,6 +288,37 @@ describe('RichEditor styles on a partial selection', () => {
     ).toBe('- x\n\n- [ ] a\n- [ ] b')
   })
 
+  it('keeps the selected text selected when a nested-list item that is not the first item becomes a checklist item', () => {
+    expect(
+      after('- a\n- bb\n  - n', 8, 10, (e) => {
+        toggleBlock(e, (c) => c.toggleTaskList(), 'taskList')
+        e.chain().focus().toggleBold().run()
+      }),
+    ).toBe('- a\n\n- [ ] **bb**\n  - n')
+  })
+
+  it('does not nest a bullet item under a bullet item that was not nested before, across checklist items', () => {
+    expect(
+      after('- [ ] a\n- b\n- [ ] c', 3, 18, (e) => toggleBlock(e, (c) => c.toggleBulletList(), 'bulletList')),
+    ).toBe('- a\n- b\n- c')
+  })
+
+  it('does not nest a bullet item under a paragraph it follows, when the selection runs into it', () => {
+    expect(
+      after('Hello brave\n\n- world x', 7, 21, (e) =>
+        toggleBlock(e, (c) => c.toggleBulletList(), 'bulletList'),
+      ),
+    ).toBe('Hello \n\n- brave\n- world\n-  x')
+  })
+
+  it('keeps the numbers of the unselected items after a lifted item in a numbered list', () => {
+    expect(
+      after('1. x\n2. a\n3. bb\n4. c', 13, 15, (e) =>
+        toggleBlock(e, (c) => c.toggleBulletList(), 'bulletList'),
+      ),
+    ).toBe('1. x\n2. a\n\n- bb\n\n4. c')
+  })
+
   it('leaves a collapsed caret on its whole paragraph, as before', () => {
     expect(after(sentence, 7, 7, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 })))).toBe(
       '## Hello brave world',
