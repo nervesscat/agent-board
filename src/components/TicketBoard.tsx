@@ -227,27 +227,30 @@ export function TicketBoard({
                               <span className="text-muted-foreground">#{t.id}</span> {t.title}
                             </div>
                           </div>
-                          {(hasWork(kind) || t.needs.some((n) => !n.merged) || after?.has(t.id)) && (
+                          {(hasWork(kind) ||
+                            t.needs.some((n) => !n.merged) ||
+                            after?.has(t.id) ||
+                            t.tags.length > 0) && (
                             <div className="mt-1.5 flex flex-wrap items-center gap-1">
                               <WorkLine
                                 timeline={work}
                                 stage={stallStage(stages, t.status)}
                                 variant="badge"
                               />
+                              {t.tags.length > 0 && (
+                                // Tags clip on their own, so a long list never pushes the badges out of view.
+                                <div className="flex min-w-0 gap-1 overflow-hidden">
+                                  {[...t.tags].sort(compareTags).map((tag) => (
+                                    <Tag key={tag} tag={tag} className="shrink-0" />
+                                  ))}
+                                </div>
+                              )}
                               {after?.has(t.id) && <MergeAfterBadge ids={after.get(t.id)!} />}
                               <NeedsBadge needs={t.needs} />
                             </div>
                           )}
                           {/* The time sits at the end of the row, so it always shares a line. */}
                           <div className={INFO_ROW}>
-                            {t.tags.length > 0 && (
-                              // Tags clip on their own, so a long list never pushes the time out of view.
-                              <div className="flex min-w-0 gap-1 overflow-hidden">
-                                {[...t.tags].sort(compareTags).map((tag) => (
-                                  <Tag key={tag} tag={tag} className="shrink-0" />
-                                ))}
-                              </div>
-                            )}
                             <Updated at={t.updatedAt} />
                           </div>
                           {t.lanes.total > 0 && <LaneCount lanes={t.lanes} stages={stages} />}
@@ -647,7 +650,6 @@ export function TicketList({ projectId, items }: { projectId: string; items: Tic
                     variant="badge"
                     className="ml-2 align-[1px]"
                   />
-                  <NeedsBadge needs={t.needs} className="ml-2 align-[1px]" />
                   {t.tags.length > 0 && (
                     <span className="ml-2 inline-flex flex-wrap gap-1 align-[1px]">
                       {[...t.tags].sort(compareTags).map((tag) => (
@@ -655,6 +657,7 @@ export function TicketList({ projectId, items }: { projectId: string; items: Tic
                       ))}
                     </span>
                   )}
+                  <NeedsBadge needs={t.needs} className="ml-2 align-[1px]" />
                 </div>
                 {t.lanes.total > 0 && (
                   <div
