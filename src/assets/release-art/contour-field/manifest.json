@@ -1,0 +1,96 @@
+{
+  "direction": "contour-field",
+  "generator": "scripts/release-art/contour-field.mjs",
+  "canvas": {
+    "width": 1600,
+    "height": 900
+  },
+  "palette": {
+    "light": {
+      "ground": "#f3f0e8",
+      "ink": "#1c1b18",
+      "accent": "#a2563a",
+      "grain": "multiply",
+      "grainOpacity": 0.16,
+      "accentBand": 0.16,
+      "inkBand": 0.04
+    },
+    "dark": {
+      "ground": "#15161a",
+      "ink": "#ded9cc",
+      "accent": "#c9714b",
+      "grain": "screen",
+      "grainOpacity": 0.14,
+      "accentBand": 0.1,
+      "inkBand": 0.04
+    }
+  },
+  "releases": [
+    {
+      "version": "v0.2.2",
+      "seed": 479613003,
+      "notes": "scripts/release-art/notes/v0.2.2.md",
+      "themes": {
+        "density": 0.958,
+        "hands": 0.894,
+        "precision": 0.365,
+        "wayfinding": 0.387
+      },
+      "field": {
+        "summits": 16,
+        "levels": 18,
+        "wobble": 1.608,
+        "ridge": false,
+        "corridor": false
+      },
+      "files": {
+        "light": "v0.2.2-light.svg",
+        "dark": "v0.2.2-dark.svg"
+      }
+    },
+    {
+      "version": "v0.2.3",
+      "seed": 462835384,
+      "notes": "scripts/release-art/notes/v0.2.3.md",
+      "themes": {
+        "density": 0.534,
+        "hands": 0.393,
+        "precision": 0.556,
+        "wayfinding": 0
+      },
+      "field": {
+        "summits": 10,
+        "levels": 19,
+        "wobble": 1.455,
+        "ridge": true,
+        "corridor": false
+      },
+      "files": {
+        "light": "v0.2.3-light.svg",
+        "dark": "v0.2.3-dark.svg"
+      }
+    },
+    {
+      "version": "v0.2.4",
+      "seed": 580278717,
+      "notes": "scripts/release-art/notes/v0.2.4.md",
+      "themes": {
+        "density": 0.511,
+        "hands": 0.445,
+        "precision": 0,
+        "wayfinding": 0.473
+      },
+      "field": {
+        "summits": 11,
+        "levels": 12,
+        "wobble": 1.9,
+        "ridge": false,
+        "corridor": true
+      },
+      "files": {
+        "light": "v0.2.4-light.svg",
+        "dark": "v0.2.4-dark.svg"
+      }
+    }
+  ]
+}
