@@ -61,17 +61,26 @@ function ProjectLayout() {
   const closeTimer = useRef<number | undefined>(undefined)
   const asideRef = useRef<HTMLElement>(null)
   const toggleRef = useRef<HTMLButtonElement>(null)
+  // A link was clicked in this peek. Some browsers (Safari) do not focus a link on a mouse click, so focus
+  // may be on the page body although the click was in the sidebar.
+  const linkClickedInPeek = useRef(false)
   useEffect(() => () => window.clearTimeout(closeTimer.current), [])
   const openPeek = () => {
     window.clearTimeout(closeTimer.current)
+    linkClickedInPeek.current = false
     setPeeking(true)
   }
   const closePeekSoon = () => {
     window.clearTimeout(closeTimer.current)
     closeTimer.current = window.setTimeout(() => {
       // A link clicked in the peeked sidebar holds focus; hiding the sidebar would drop it to the page body,
-      // so the toggle that shows the sidebar again takes it first.
-      if (asideRef.current?.contains(document.activeElement)) toggleRef.current?.focus()
+      // so the toggle that shows the sidebar again takes it first. The same holds when the click did not
+      // focus the link and focus is on the body.
+      const active = document.activeElement
+      const onBody = active === null || active === document.body
+      if (asideRef.current?.contains(active) || (linkClickedInPeek.current && onBody))
+        toggleRef.current?.focus()
+      linkClickedInPeek.current = false
       setPeeking(false)
     }, PEEK_CLOSE_MS)
   }
@@ -121,6 +130,10 @@ function ProjectLayout() {
         ref={asideRef}
         onMouseEnter={hiddenNow ? openPeek : undefined}
         onMouseLeave={hiddenNow ? closePeekSoon : undefined}
+        onClickCapture={(event) => {
+          if (hiddenNow && event.target instanceof Element && event.target.closest('a'))
+            linkClickedInPeek.current = true
+        }}
         className={cn(
           'md:max-h-[calc(100vh-6rem-1px-env(safe-area-inset-top))] md:self-start md:overflow-y-auto',
           STICKY_TOP,

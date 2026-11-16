@@ -90,6 +90,28 @@ test('a peeked hidden sidebar that closes after a click keeps focus on the toggl
   await expect(page.getByRole('button', { name: 'Show sidebar' })).toBeFocused()
 })
 
+test('a click in a peeked sidebar that leaves focus on the body still closes it with focus on the toggle', async ({
+  page,
+  project,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto(`/projects/${project.id}/prs`)
+  await page.getByRole('button', { name: 'Shrink sidebar' }).click()
+  await page.getByRole('button', { name: 'Hide sidebar' }).click()
+  const aside = sidebar(page)
+  await expect(aside).toBeHidden()
+
+  await page.mouse.move(640, 400)
+  await page.mouse.move(2, 400)
+  await aside.getByRole('link', { name: 'Roadmap' }).click()
+  // Some browsers (Safari) do not focus a link on a mouse click: the focus is on the page body here.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true)
+  await page.mouse.move(640, 400)
+  await expect(aside).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Show sidebar' })).toBeFocused()
+})
+
 test('the chosen mode is remembered per browser across a reload', async ({ page, project }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto(`/projects/${project.id}/prs`)
