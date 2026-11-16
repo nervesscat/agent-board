@@ -402,7 +402,8 @@ export function applyBlockStyle(tr: Transaction, style: BlockStyle, active: bool
     const groups: number[][] = []
     // The parent of a block is the one its position is in: the document, or the start of its container.
     const parentOf = (pos: number) => (tr.doc.resolve(pos).depth ? tr.doc.resolve(pos).before() : -1)
-    for (const block of blocks) {
+    // The lifts above moved some blocks, so the positions are taken as they are now.
+    for (const block of blocks.map((b) => at(b))) {
       const last = groups[groups.length - 1]
       if (last && parentOf(block) === parentOf(last[0])) last.push(block)
       else groups.push([block])

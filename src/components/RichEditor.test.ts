@@ -416,6 +416,24 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string][] =
     '1. one\n   - tw\n     > o\n\n> th\n\n2. ree',
   ],
   [
+    'quote over a whole list item and the item after it',
+    '- \u00abone\n- two\n- three\u00bb',
+    'quote',
+    '> one\n>\n> two\n>\n> three',
+  ],
+  [
+    'quote from the middle of a list, not running past the selection',
+    '- one\n- \u00abtwo\n- three\n- four\u00bb five',
+    'quote',
+    '- one\n\n> two\n>\n> three\n>\n> four\n\n-  five',
+  ],
+  [
+    'quote across the last two items of a list',
+    '- one\n- \u00abtwo\n- three\u00bb',
+    'quote',
+    '- one\n\n> two\n>\n> three',
+  ],
+  [
     'across numbered levels | code',
     '1. one\n   - tw«o\n2. th»ree',
     'code',
