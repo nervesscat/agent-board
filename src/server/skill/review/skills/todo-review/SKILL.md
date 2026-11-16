@@ -1,6 +1,6 @@
 ---
 name: todo-review
-description: "Works a board project's To do tickets to hand-off, several at once (same repo included): one unattended todo-review-ticket agent per ticket builds the change and runs the /feature-review cycle (verify and hunt, refute) as many rounds as the ticket's complexity sets (low none, mid one, high three), at a depth scaled to the change, until the change survives it, then pushes, opens the PR, starts a preview and posts screenshots; a ticket is moved to blocked only for what only the human can provide, after the agent has gone as far as it can. The orchestrator schedules, checks each result against the board, and sends weak blockers back."
+description: "Works a board project's To do tickets to hand-off, several at once (same repo included): one unattended todo-review-ticket agent per ticket builds the change and runs the /feature-review cycle (verify and hunt, refute) as many rounds as the ticket's complexity sets (low none, mid one, high three, max up to ten for work built from scratch), at a depth scaled to the change, until the change survives it, then pushes, opens the PR, starts a preview and posts screenshots; a ticket is moved to blocked only for what only the human can provide, after the agent has gone as far as it can. The orchestrator schedules, checks each result against the board, and sends weak blockers back."
 user-invocable: true
 argument-hint: "[project=<id>] [<ticket id> ...] [parallel=N] [depth=auto|light|standard|deep] [model=<name>] [dry]"
 ---
@@ -42,7 +42,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 |---|---|---|
 | `project=<id>` | the board project | the project of the repo in the current directory (`find_project` with its origin, folder and path) |
 | a number | work only these ticket ids, in this order | every eligible To do ticket |
-| `parallel=N` | maximum tickets in flight, 1 to 3, tickets of the same repo included | 2 |
+| `parallel=N` | maximum tickets in flight, 1 to N+1 (so 1 to 3 with N = 2; the cap is one more than the repo's test slots, since a ticket waiting for one still does its light work), tickets of the same repo included | 2 |
 | `depth=auto\|light\|standard\|deep` | the review depth: `auto` lets each ticket agent pick it from the size of its change (`todo-review-ticket`, "Review depth"); any other value is used for every ticket and every round | `auto` |
 | `model=<name>` | model for the ticket agents, which their own agents inherit | the session model |
 | `dry` | inventory and schedule only: write the plan, start nothing | off |
@@ -50,7 +50,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 ## Step 1: Inventory
 
 Create `QUEUE = ~/.claude/feature-review/todo-<YYYYMMDD-HHMM>/` (resolve `~` with `echo ~`) and
-`QUEUE/locks/`, where the ticket agents keep their repos' test locks (Step 2).
+`QUEUE/locks/`, where the ticket agents keep their repos' test slots (Step 2).
 
 1. `whoami` (your board name) and `get_project`: its `instructions`, `repos[]` (id, checkout path,
    base branch), `stages[]` and `agents[]`. The agents' `delegation` notes are the routing table
@@ -92,7 +92,7 @@ on its own branch. What they still share is guarded by step, not for the whole r
 | Shared | Guard | Rule in |
 |---|---|---|
 | the main checkout's git (`fetch`, `worktree add` and `remove`, the push updating its refs) | a git command that meets another one's `.lock` waits and runs again; never deletes the lock; a lock error is never the ticket's failure | `todo-review-ticket`, "Shared with the other tickets of this repo"; `/feature-review` Setup |
-| the machine's CPU: two test runs of one repo at once make its tests flaky | the repo's **test lock** `QUEUE/locks/tests-<repo id>/`: only its holder runs the repo's heavy runs (checks, unit and end-to-end tests, scoped or full, a build); the ticket agent holds it from its gate through its review | `todo-review-ticket`, same section |
+| the machine's CPU: two heavy runs of one repo at once make its tests flaky | the repo's **test slots** `QUEUE/locks/tests-<repo id>-1` … `-N` (N = 2, the measured count) and `QUEUE/locks/tests-<repo id>-full` for a full suite: a heavy run holds one slot, a light one none. Heavy is a build, the end-to-end tests scoped or full, and the full unit suite; the typecheck, lint, formatter, migration check, scoped unit tests and probe tests take none. The ticket agent takes the first free slot right before a heavy run and releases it right after | `todo-review-ticket`, same section |
 
 Rules:
 1. Tickets of the same repo may run at the same time, up to `parallel`. Only the lanes above keep
@@ -103,20 +103,28 @@ Rules:
 3. Each ticket in flight gets its own slot, whatever its repo, and each slot its own port range for
    the review's servers: slot 1 `8100-8199`, slot 2 `8200-8299`, slot 3 `8300-8399`. Two tickets
    in flight never share a slot.
-4. The total never exceeds `parallel`: each ticket runs a build and its review (none for low), so 3 is
-   the ceiling.
+4. The total never exceeds `parallel`, and that cap is one above the test slots, not equal to
+   them: a ticket waiting for a test slot still does its typecheck, lint and scoped unit tests, so
+   N tickets may be running heavy checks while another one does its light work. With N = 2 that
+   is 3 in flight.
+5. The order the ticket agents take their test slots in: they take their own with a plain
+   `mkdir`, and a heavy run's slot goes to the ticket closest to hand-off — a fix pass after a
+   review, one whose PR, CI or preview is pending, one whose open tasks are nearly done — before a
+   ticket still in its first build. A ticket takes a slot only for the run that needs it and never
+   waits on one it does not need.
 
 ## Step 3: Run
 
 Loop until nothing is pending or running:
-- Fill every free slot with the first pending ticket whose lanes are free. Spawn one
+- Fill every free ticket slot with the pending ticket closest to hand-off whose lanes are free
+  (Step 2 rule 5). Spawn one
   `todo-review-ticket` agent per ticket, all in one message when several start together, with:
   `PROJECT=<id>`, `TICKET=<id>`, `REPO=<checkout path>`, `REPO_ID=<id>`, `BASE=<base branch>`,
-  `PORTS=<slot range>`, `BROWSER=<yes|no>`, `COMPLEXITY=<low, mid or high>`,
+  `PORTS=<slot range>`, `BROWSER=<yes|no>`, `COMPLEXITY=<low, mid, high or max>`,
   `DEPTH=<light|standard|deep>` when
   `depth=` was given and is not `auto`, `AS=<agent name>` when the ticket is reserved, and
   `QUEUE`. Pass `model` on the Agent call when `model=` was given. Pass `effort` on the Agent call
-  as the ticket's complexity sets it: `low` for low, `medium` for mid and high; the ticket agent passes
+  as the ticket's complexity sets it: `low` for low, `medium` for mid and high, `high` for max; the ticket agent passes
   the same effort to every agent it starts (spec, builder, the review's phase agents). Tell it to
   `get_ticket` the ticket before anything else and to carry its context — the instructions, the
   human's posts and replies, the decisions and their answers, the attachments — into every agent
@@ -129,10 +137,12 @@ Loop until nothing is pending or running:
   `needsYou.stalled`, or `stalled` on `list_tickets`) has an agent that stopped saying anything:
   check on its run (a notification you missed, an agent that died) before anything else.
 - On completion, however the run ended (a result, an error, an agent that died), release the
-  ticket's lanes and slot, and remove its repo's test lock `QUEUE/locks/tests-<repo id>/` when the
-  lock's `holder.txt` names this ticket: the agent releases it itself, this covers a run that ended
-  any other way. You are the only one besides the holder who removes a test lock, and only
-  then. Then check the result (Step 4) and fill the slot again.
+  ticket's lanes and slot, and clear the repo's dead test slots: remove every folder under
+  `QUEUE/locks/` whose `holder.txt` names this ticket (`tests-<repo id>-<n>` and
+  `tests-<repo id>-full`), and nothing else. The agent releases its own right after each heavy
+  run; this covers a run that ended any other way, and clears a slot a dead run left behind. You
+  are the only one besides the holder who clears a dead run's slot, and only when its
+  `holder.txt` names that ticket. Then check the result (Step 4) and fill the slot again.
 
 ## Step 4: Check each result
 
@@ -145,7 +155,7 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    change cannot be tried. The ticket's summary (`summary` on `get_ticket`, `fallback: false`:
    the hand-off is the summary the agent wrote, not a separate post) has
    screenshots in its attachments when the change has a UI, and a "Tested" part that names the
-   level and what checked it (for mid and high, the review depth and why). Unless `depth=` was given
+   level and what checked it (for mid, high and max, the review depth and why). Unless `depth=` was given
    (other than `auto`), measure the branch
    yourself the way the ticket agent's "Review depth" says
    (`git -C REPO diff --numstat origin/BASE...<branch>`, lockfiles and generated files left out,
@@ -172,10 +182,11 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
 3. **`needs-browser`**: re-queue once with `browser=yes` (it waits for the browser lane).
 4. **`error`**: if `NOTES` shows contention (a port held by another process, the browser
    unavailable, a git lock still held after the retries or a review's "git lock on MAIN", a
-   test lock waited on too long), re-queue once to run alone after everything else: it starts
+   test slot waited on too long), re-queue once to run alone after everything else: it starts
    only when no other ticket is in flight, and nothing else starts while it runs. Otherwise record
    it, and make sure the ticket is not left in progress with no word: `comment` on it with the
-   error and leave it where it is.
+   error, say that the work was stopped and why, and leave the ticket's summary saying stopped, so
+   the next reader can tell a stop from a failure.
 
 **Sending back** is one more `todo-review-ticket` run for the same ticket with `RETRY=<what the
 check found>` added. It resumes from the ticket's summary and posts, not from scratch. It goes
@@ -184,6 +195,24 @@ returned (`ticket:<id>`). Each ticket is sent back or re-queued at most once; af
 is recorded as it is.
 
 Record the row: ticket, title, repo, status, verdict, rounds, depth, PR, preview, blocker, notes.
+
+## Keeping the board current
+
+The board is part of the work: post progress, tick the ticket's steps, close the spans and waits its
+ticket agents opened, and see that each ticket's summary says where it stands when a run returns.
+You are not finished while the board is behind what you did: a ticket whose agent returned is checked
+against the board (Step 4), never left in progress with a claim and no word.
+
+**A stop is recorded on the ticket.** When work stops before its end (you interrupt it, its agent
+returns `error`, or you stop it at the human's word or your own), record on every ticket in flight
+that it was stopped and why: a `comment`, and a `set_ticket_summary` whose state says stopped and the
+reason. The next reader must be able to tell a deliberate stop from a failure.
+
+**Clean up what you started when the work ends.** Stop what you or your agents started (the review's
+servers, test boards, watchers), remove this run's temporary files and folders, and release the test
+lock when its `holder.txt` names a ticket whose run returned. The review's own scratch worktree may
+go; the tickets' worktrees and their branches on origin are the human's: list them, never delete
+them.
 
 ## Step 5: Report
 
@@ -217,7 +246,9 @@ Record the row: ticket, title, repo, status, verdict, rounds, depth, PR, preview
   does both; when you check a `handed-off` result, see that it did.
 - Nothing here merges, approves, or comments on GitHub. Pushing the ticket's own branch and opening
   its PR (the project's way) are the ticket agent's only remote writes.
-- If the user interrupts, tell them which tickets were in flight. Their worktrees are registered
+- If the user interrupts, tell them which tickets were in flight, and record on each of those
+  tickets that it was stopped and why: a `comment`, and a `set_ticket_summary` saying stopped and
+  the reason. Their worktrees are registered
   on the tickets (`get_ticket` → `workspaces`), and `git worktree list` in each repo shows what is
-  left, review worktrees under `~/.claude/feature-review/` included. The test locks live in this
-  run's `QUEUE` only: a new run starts with none.
+  left, review worktrees under `~/.claude/feature-review/` included. The test slot folders live in
+  this run's `QUEUE` only: a new run starts with none.

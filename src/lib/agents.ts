@@ -3,16 +3,30 @@ import type { AgentClient } from './constants'
 /** How each agent CLI is named, and where it keeps its user-wide skills and MCP servers. */
 export const AGENTS: Record<
   AgentClient,
-  { label: string; skillDir: { unix: string; windows: string }; mcpFile: string | null }
+  {
+    label: string
+    skillDir: { unix: string; windows: string }
+    /** Where the session skill (`/session`) goes: its own folder, beside the board skill's. */
+    sessionSkillDir: { unix: string; windows: string }
+    mcpFile: string | null
+  }
 > = {
   claude: {
     label: 'Claude Code',
     skillDir: { unix: '~/.claude/skills/board', windows: '$HOME\\.claude\\skills\\board' },
+    sessionSkillDir: {
+      unix: '~/.claude/skills/session',
+      windows: '$HOME\\.claude\\skills\\session',
+    },
     mcpFile: null,
   },
   codex: {
     label: 'Codex',
     skillDir: { unix: '~/.agents/skills/board', windows: '$HOME\\.agents\\skills\\board' },
+    sessionSkillDir: {
+      unix: '~/.agents/skills/session',
+      windows: '$HOME\\.agents\\skills\\session',
+    },
     mcpFile: '~/.codex/config.toml',
   },
   opencode: {
@@ -20,6 +34,10 @@ export const AGENTS: Record<
     skillDir: {
       unix: '~/.config/opencode/skills/board',
       windows: '$HOME\\.config\\opencode\\skills\\board',
+    },
+    sessionSkillDir: {
+      unix: '~/.config/opencode/skills/session',
+      windows: '$HOME\\.config\\opencode\\skills\\session',
     },
     mcpFile: '~/.config/opencode/opencode.json',
   },
@@ -124,6 +142,17 @@ export function skillInstall(client: AgentClient, shell: Shell, boardUrl: string
   const src = `${boardUrl}/api/agent-setup/skill?client=${client}`
   const auth = `Bearer ${token || TOKEN_PLACEHOLDER}`
   const dir = AGENTS[client].skillDir
+  return shell === 'bash'
+    ? `mkdir -p ${dir.unix} && curl -fsS -H "Authorization: ${auth}" "${src}" -o ${dir.unix}/SKILL.md`
+    : `New-Item -ItemType Directory -Force "${dir.windows}" | Out-Null; ` +
+        `Invoke-WebRequest -UseBasicParsing -Headers @{ Authorization = '${auth}' } '${src}' -OutFile "${dir.windows}\\SKILL.md"`
+}
+
+/** One line that downloads the session skill (`/session`) into the CLI's skills folder. */
+export function sessionSkillInstall(client: AgentClient, shell: Shell, boardUrl: string, token: string) {
+  const src = `${boardUrl}/api/agent-setup/session-skill`
+  const auth = `Bearer ${token || TOKEN_PLACEHOLDER}`
+  const dir = AGENTS[client].sessionSkillDir
   return shell === 'bash'
     ? `mkdir -p ${dir.unix} && curl -fsS -H "Authorization: ${auth}" "${src}" -o ${dir.unix}/SKILL.md`
     : `New-Item -ItemType Directory -Force "${dir.windows}" | Out-Null; ` +

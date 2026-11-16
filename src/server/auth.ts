@@ -56,6 +56,8 @@ export interface Caller {
   parent: string
   /** The credential's own name: the agent token's (in test the X-Test-Actor's); null for the human. */
   token: string | null
+  /** A skill download credential's scope: the skill downloads, and no other route (admit). */
+  scope?: 'skill'
 }
 
 const human = (name: string): Caller => ({ name, kind: 'human', role: 'human', parent: '', token: null })
@@ -141,12 +143,14 @@ export function asSubIdentity(
     )
   if (isHumanName(name) || getAccount()?.name === name)
     throw new HttpError(400, `${label}: ${name} is the human's name on the board`)
+  // Everything else of the credential stays, the scope included: a sub-identity of a skill credential
+  // is no way around it.
   return {
+    ...caller,
     name,
     kind: 'agent',
     role: 'worker',
     parent: name.slice(0, name.lastIndexOf('/')),
-    token: caller.token,
   }
 }
 
@@ -160,6 +164,8 @@ export function offHuman(auth: AuthMode): string {
 function agentCaller(token: string): Caller | null {
   const hit = agentTokenOf(db.$client, token)
   if (!hit) return null
+  // A skill download credential is no agent: it has no last use to keep, and no route but its two.
+  if (hit.scope === 'skill') return { ...agent(hit.name, 'worker'), scope: 'skill' }
   if (!hit.lastUsedAt || Date.now() - Date.parse(hit.lastUsedAt) > 60_000)
     db.update(schema.agentTokens)
       .set({ lastUsedAt: new Date().toISOString() })
@@ -215,7 +221,9 @@ export async function authenticate(
   auth: AuthMode = authMode(),
 ): Promise<string | null> {
   const caller = await callerOf(request, auth, site)
-  if (caller) noteActor(caller.name, caller.kind, caller.role, caller.parent)
+  // A skill download credential is nobody the board works with: it is not listed with the actors, and it
+  // leaves no trace of its own (the routes it reaches read no actor).
+  if (caller && caller.scope !== 'skill') noteActor(caller.name, caller.kind, caller.role, caller.parent)
   return caller?.name ?? null
 }
 
@@ -263,6 +271,25 @@ export function isBrowserNavigation(request: Request): boolean {
 
 // Answered without a session on this machine only: through the tailnet entrance it needs one too.
 const PUBLIC = new Set(['/api/health'])
+
+/**
+ * The only routes a skill download credential reaches: the board skill, the session skill and the review
+ * bundle, whatever their query string (`?client=`, `?transport=`, `?list`). Anything else, `/api/mcp`
+ * included, is refused here, before a handler runs: a check inside these routes could not keep it off the
+ * rest.
+ */
+const SKILL_DOWNLOADS = new Set([
+  '/api/agent-setup/skill',
+  '/api/agent-setup/session-skill',
+  '/api/agent-setup/review-skills',
+])
+
+/** The refusal for a skill credential asking for anything but those, else null. */
+function skillScopeRefusal(caller: Caller, pathname: string): Response | null {
+  if (caller.scope !== 'skill') return null
+  if (SKILL_DOWNLOADS.has(pathname.replace(/\/+$/, ''))) return null
+  return Response.json({ error: 'this credential only downloads the skills' }, { status: 401 })
+}
 
 /**
  * What the board's request middleware does with a request, before any handler (src/start.ts):
@@ -321,7 +348,12 @@ export async function admit(
     }
     return refuse(Response.json({ error: 'sign in' }, { status: 401 }))
   }
-  return { kind: 'actor', actor, caller: callerInfo(request) }
+  const caller = callerInfo(request)
+  // A skill download credential's scope is settled here, before the route's handler: only its two
+  // downloads are open to it.
+  const outOfScope = skillScopeRefusal(caller, pathname)
+  if (outOfScope) return refuse(outOfScope)
+  return { kind: 'actor', actor, caller }
 }
 
 /** authenticate, with a malformed X-Agent-Name answered as its 400. */

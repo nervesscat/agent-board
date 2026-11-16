@@ -3,11 +3,13 @@ import type { APIRequestContext, Locator, Page } from '@playwright/test'
 import type { TicketFull, TicketRow } from '#/lib/api'
 import { expect, expectTooltip, ok, test } from './fixtures'
 
-const SELECT_HINT = 'Low: no review. Mid: one review round. High: up to three.'
+const SELECT_HINT =
+  'Low: no review. Mid: one review round. High: up to three. Max: up to ten rounds, for work built from scratch; a feature in an existing codebase is never max, however difficult.'
 const CHIP_HINT = {
   Low: 'Low: no review. The builder verifies it itself.',
   Mid: 'Mid: one review round.',
   High: 'High: up to three review rounds.',
+  Max: 'Max: up to ten review rounds, for a whole site or app built from scratch, a new product or a standalone service, and it stops at the first round that survives. A feature in an existing codebase is at most high, however difficult.',
 } as const
 
 async function box(el: Locator) {
@@ -88,7 +90,7 @@ test('in the New ticket dialog Complexity sits to the right of Stage on its row,
   expect(await scrollsSideways(page), 'the page does not scroll sideways at 390px').toBe(false)
 })
 
-test('the Complexity dropdown offers Low, Mid and High, and opens on Mid each time, after a create too', async ({
+test('the Complexity dropdown offers Low, Mid, High and Max, and opens on Mid each time, after a create too', async ({
   page,
   project,
 }) => {
@@ -97,10 +99,11 @@ test('the Complexity dropdown offers Low, Mid and High, and opens on Mid each ti
   await expect(level).toContainText('Mid')
   await level.click()
   const options = page.getByRole('option')
-  await expect(options).toHaveCount(3)
-  for (const [i, name] of ['Low', 'Mid', 'High'].entries()) await expect(options.nth(i)).toContainText(name)
-  await page.getByRole('option', { name: 'High', exact: true }).click()
-  await expect(level).toContainText('High')
+  await expect(options).toHaveCount(4)
+  for (const [i, name] of ['Low', 'Mid', 'High', 'Max'].entries())
+    await expect(options.nth(i)).toContainText(name)
+  await page.getByRole('option', { name: 'Max', exact: true }).click()
+  await expect(level).toContainText('Max')
 
   // Closed without a create, the next opening starts on Mid again.
   await page.keyboard.press('Escape')
@@ -117,7 +120,7 @@ test('the Complexity dropdown offers Low, Mid and High, and opens on Mid each ti
   await expect(dialog.getByLabel('Title')).toHaveValue('')
 })
 
-test('the Complexity control explains the three levels on hover, with a tooltip and no title attribute', async ({
+test('the Complexity control explains the four levels on hover, with a tooltip and no title attribute', async ({
   page,
   project,
 }) => {
@@ -127,7 +130,7 @@ test('the Complexity control explains the three levels on hover, with a tooltip 
   await expectTooltip(level, SELECT_HINT)
 })
 
-test('a High ticket made in the dialog is stored as high, and its card shows a High chip', async ({
+test('a ticket made in the dialog at a level is stored at it, and its card shows that chip', async ({
   page,
   project,
   human,
@@ -139,10 +142,21 @@ test('a High ticket made in the dialog is stored as high, and its card shows a H
   await dialog.getByRole('button', { name: 'Create' }).click()
   await expect(dialog).toBeHidden()
 
-  const [row] = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
-  expect(row).toMatchObject({ title: 'Made high in the dialog', complexity: 'high' })
+  // The top level, from the same select: it is stored as max and its card says so.
+  await page.getByRole('button', { name: 'New ticket' }).click()
+  await expect(dialog.getByLabel('Complexity')).toContainText('Mid')
+  await dialog.getByLabel('Title').fill('Made max in the dialog')
+  await dialog.getByRole('combobox', { name: 'Complexity' }).click()
+  await page.getByRole('option', { name: 'Max', exact: true }).click()
+  await dialog.getByRole('button', { name: 'Create' }).click()
+  await expect(dialog).toBeHidden()
+
+  const rows = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
+  expect(rows.find((r) => r.title === 'Made high in the dialog')).toMatchObject({ complexity: 'high' })
+  expect(rows.find((r) => r.title === 'Made max in the dialog')).toMatchObject({ complexity: 'max' })
   await page.goto(`/projects/${project.id}/features?view=board`)
   await expect(cardOf(page, 'Made high in the dialog').getByText('High', { exact: true })).toBeVisible()
+  await expect(cardOf(page, 'Made max in the dialog').getByText('Max', { exact: true })).toBeVisible()
 })
 
 test('every ticket card shows its level as a chip with its own hint, and a busy card keeps the chip inside it', async ({
@@ -152,6 +166,7 @@ test('every ticket card shows its level as a chip with its own hint, and a busy 
 }) => {
   await ticketWith(human, project.id, { title: 'Chip low card', complexity: 'low' })
   await ticketWith(human, project.id, { title: 'Chip mid card', complexity: 'mid' })
+  await ticketWith(human, project.id, { title: 'Chip max card', complexity: 'max' })
   const busy = await ticketWith(human, project.id, {
     title: 'Chip busy card with every badge and tag',
     complexity: 'high',
@@ -169,6 +184,7 @@ test('every ticket card shows its level as a chip with its own hint, and a busy 
     ['Chip low card', 'Low'],
     ['Chip mid card', 'Mid'],
     ['Chip busy card with every badge and tag', 'High'],
+    ['Chip max card', 'Max'],
   ] as const) {
     const card = cardOf(page, title)
     const chip = card.getByText(level, { exact: true })
@@ -181,6 +197,10 @@ test('every ticket card shows its level as a chip with its own hint, and a busy 
     expect(k.y + k.height, `${title}: chip inside the card, bottom`).toBeLessThanOrEqual(c.y + c.height)
     await expectTooltip(chip, CHIP_HINT[level])
   }
+  // Max reads as the top level: its chip is drawn differently from high's, and says what it is for.
+  const maxChip = cardOf(page, 'Chip max card').getByText('Max', { exact: true })
+  const highChip = cardOf(page, 'Chip busy card with every badge and tag').getByText('High', { exact: true })
+  expect(await maxChip.getAttribute('class')).not.toBe(await highChip.getAttribute('class'))
 })
 
 test('the ticket page header sets the level: it persists after a reload, and the card shows it', async ({
@@ -201,4 +221,15 @@ test('the ticket page header sets the level: it persists after a reload, and the
   expect((await ok<TicketFull>(human.get(`/api/tickets/${t.id}`))).complexity).toBe('low')
   await page.goto(`/projects/${project.id}/features?view=board`)
   await expect(cardOf(page, 'Header level').getByText('Low', { exact: true })).toBeVisible()
+
+  // The top level is set from the header too, and survives a reload.
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  await page.getByRole('combobox', { name: 'Complexity' }).click()
+  await page.getByRole('option', { name: 'Max', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: 'Complexity' })).toContainText('Max')
+  await page.reload()
+  await expect(page.getByRole('combobox', { name: 'Complexity' })).toContainText('Max')
+  expect((await ok<TicketFull>(human.get(`/api/tickets/${t.id}`))).complexity).toBe('max')
+  await page.goto(`/projects/${project.id}/features?view=board`)
+  await expect(cardOf(page, 'Header level').getByText('Max', { exact: true })).toBeVisible()
 })

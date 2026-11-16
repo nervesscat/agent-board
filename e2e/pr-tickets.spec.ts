@@ -7,7 +7,8 @@ import { expect, ok, section, test } from './fixtures'
 
 /**
  * A PR of the queue has a ticket of its own, unless a feature ticket names it: its card opens that
- * ticket, it lives in To do, it is on no features view, and its decisions and replies wait in Needs you.
+ * ticket, it lives in To do, it is on no features view, and its decisions and replies wait in Needs
+ * you while it is being worked.
  */
 
 type Row = { id: number }
@@ -166,6 +167,8 @@ test("a decision on a PR's ticket is a PR row in Needs you, linked to its post",
 }) => {
   const pr = seedPr(project, 'Ship it?')
   const { ticket } = await refreshedRow(human, project, pr)
+  // Worked on, so its card waits in Needs you (a ticket still lined up does not).
+  await ok(human.patch(`/api/tickets/${ticket!.id}`, { data: { status: 'in_progress' } }))
   const decision = await ok<Row>(
     agent.post(`/api/tickets/${ticket!.id}/decisions`, {
       data: { body: 'Merge it now?', options: [{ label: 'Merge' }, { label: 'Wait' }] },
@@ -189,6 +192,8 @@ test("a reply on a PR's ticket that waits on the human is a PR row in Needs you,
 }) => {
   const pr = seedPr(project, 'Mine, waiting', HUMAN)
   const { ticket } = await refreshedRow(human, project, pr)
+  // Worked on, so its card waits in Needs you (a ticket still lined up does not).
+  await ok(human.patch(`/api/tickets/${ticket!.id}`, { data: { status: 'in_progress' } }))
   const question = await ok<Row>(
     human.post(`/api/tickets/${ticket!.id}/updates`, { data: { body: 'Is CI green?', progress: false } }),
   )

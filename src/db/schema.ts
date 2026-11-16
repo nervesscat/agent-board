@@ -26,6 +26,7 @@ import {
   type StageKind,
   type FeedTab,
 } from '#/lib/constants'
+import type { AnnotationDoc } from '#/lib/annotations'
 import type { SavedLayout } from '#/lib/layout'
 import type { RunType } from '#/lib/runs'
 
@@ -106,6 +107,28 @@ export const agents = sqliteTable(
   (t) => [uniqueIndex('agents_project_name').on(t.projectId, t.name)],
 )
 
+// A project's notes: the short facts the human and every agent must not rediscover (a command, a path,
+// a rule, a reminder). One fact each; position orders them, a negative one pinning a note above the rest.
+export const projectNotes = sqliteTable(
+  'project_notes',
+  {
+    id: id(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // A few words saying why the note is there, at most 60 characters.
+    label: text().notNull(),
+    // The fact itself, plain text, at most 500 characters.
+    body: text().notNull(),
+    createdBy: text('created_by').notNull(),
+    createdAt: now(),
+    updatedAt: now(),
+    // Ascending order, ties by id; a new note goes last, a pinned one before every unpinned note.
+    position: integer().notNull().default(0),
+  },
+  (t) => [index('project_notes_project').on(t.projectId, t.position)],
+)
+
 export const repos = sqliteTable('repos', {
   id: id(),
   projectId: integer('project_id')
@@ -175,6 +198,9 @@ export const prs = sqliteTable(
     reviewDecision: text('review_decision'),
     // The human's standing review verdict (approved / changes_requested / commented), or `none`.
     myReview: text('my_review').notNull().default('none'),
+    // GitHub still asks me for a review (its `review-requested:@me` search found it): what the To
+    // review switch's Just me as reviewer narrows to. GitHub drops the request once the review is given.
+    requested: integer({ mode: 'boolean' }).notNull().default(false),
     // `me`: someone else's PR, for the human to review. `others`: the human authored it.
     waitingOn: text('waiting_on').$type<'me' | 'others'>().notNull().default('me'),
     // Where its reviews stand on GitHub as of the last refresh; a hold or a merge overrides it.
@@ -227,7 +253,8 @@ export const tickets = sqliteTable(
     // Where it was placed in its stage's column (its siblings in that stage): placed tickets come first,
     // lowest rank first, then the rest last updated first. Null until placed; any change of stage clears it.
     rank: integer(),
-    // How much review the ticket gets: low none, mid one round, high three (COMPLEXITIES).
+    // How much review the ticket gets: low none, mid one round, high three, max up to ten
+    // (COMPLEXITIES).
     complexity: text().$type<Complexity>().notNull().default(DEFAULT_COMPLEXITY),
     assignee: text().notNull().default(''),
     branch: text().notNull().default(''),
@@ -264,7 +291,7 @@ export const tickets = sqliteTable(
   },
   (t) => [
     index('tickets_parent').on(t.parentId),
-    check('tickets_complexity', sql`${t.complexity} IN ('low', 'mid', 'high')`),
+    check('tickets_complexity', sql`${t.complexity} IN ('low', 'mid', 'high', 'max')`),
   ],
 )
 
@@ -463,6 +490,9 @@ export const attachments = sqliteTable('attachments', {
   storedAs: text('stored_as').notNull(),
   uploadedBy: text('uploaded_by').notNull(),
   createdAt: now(),
+  // What was drawn on the picture before it was attached: the shapes and their notes, the file itself
+  // being the flattened picture. Null when nothing was drawn on it (an agent's upload included).
+  annotations: text({ mode: 'json' }).$type<AnnotationDoc>(),
 })
 
 export const reviewResults = sqliteTable(
@@ -599,6 +629,47 @@ export const reports = sqliteTable(
   (t) => [index('reports_project_period').on(t.projectId, t.period)],
 )
 
+// A card an agent opened for the human's notification center (src/server/agentCards.ts): a tracked
+// request the human asked to watch, or an important notice. It is not a board job: it survives a
+// restart and stays until the human dismisses it.
+export const agentCards = sqliteTable(
+  'agent_cards',
+  {
+    id: id(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    kind: text().$type<'tracked' | 'notice'>().notNull(),
+    // Who opened it: the agent's name, a sub-identity's included.
+    actor: text().notNull(),
+    title: text().notNull(),
+    // The human's own request, on a tracked card ('' on a notice).
+    request: text().notNull().default(''),
+    // A notice's body: what happened and what the human should do ('' on a tracked card).
+    body: text().notNull().default(''),
+    // A notice's reason it cannot wait, or a tracked card's failure reason ('' until one is given).
+    reason: text().notNull().default(''),
+    total: integer().notNull().default(0),
+    done: integer().notNull().default(0),
+    // A tracked card's state; a notice has no progress, so it reads notice.
+    state: text().$type<'running' | 'succeeded' | 'failed' | 'notice'>().notNull().default('running'),
+    // The item being worked on now, on a running tracked card.
+    step: text(),
+    // A tracked card's one-line success result.
+    result: text(),
+    // Where the result lives: a board path or an absolute http(s) URL.
+    href: text(),
+    startedAt: now(),
+    updatedAt: now(),
+    finishedAt: text(),
+  },
+  (t) => [
+    index('agent_cards_project').on(t.projectId),
+    check('agent_cards_kind', sql`${t.kind} IN ('tracked', 'notice')`),
+    check('agent_cards_state', sql`${t.state} IN ('running', 'succeeded', 'failed', 'notice')`),
+  ],
+)
+
 // Origin's branches of a repo as the board last saw them, and each move it saw since (a branch that
 // appeared, moved or went away): what reached origin on a given day.
 export const originRefs = sqliteTable(
@@ -715,6 +786,16 @@ export const enrolCodes = sqliteTable('enrol_codes', {
   usedAt: text('used_at'),
 })
 
+// The short-lived credentials an install line carries (skillTokens.ts): only the hash is kept, and they
+// reach the two skill downloads and nothing else (credentials.ts, auth.ts `admit`). Expired rows are
+// deleted when the next one is made.
+export const skillTokens = sqliteTable('skill_tokens', {
+  id: id(),
+  tokenHash: text('token_hash').notNull().unique(),
+  createdAt: now(),
+  expiresAt: text('expires_at').notNull(),
+})
+
 // The tokens agents sign in with (`Authorization: Bearer <token>`): only the hash is kept, and the
 // name is the agent's name on the board. The role is the human's call (Settings > Agents): an
 // orchestrator also changes the projects' instructions; every token starts as a worker.
@@ -732,6 +813,7 @@ export const agentTokens = sqliteTable('agent_tokens', {
 export type Activity = typeof activity.$inferSelect
 export type Project = typeof projects.$inferSelect
 export type Agent = typeof agents.$inferSelect
+export type ProjectNote = typeof projectNotes.$inferSelect
 export type Stage = typeof stages.$inferSelect
 export type Repo = typeof repos.$inferSelect
 export type RunConfig = typeof runConfigs.$inferSelect
@@ -747,6 +829,7 @@ export type Comment = typeof comments.$inferSelect
 export type ReviewResult = typeof reviewResults.$inferSelect
 export type ReportSettings = typeof reportSettings.$inferSelect
 export type Report = typeof reports.$inferSelect
+export type AgentCardRow = typeof agentCards.$inferSelect
 export type ReportSettingsChange = typeof reportSettingsChanges.$inferSelect
 export type ProjectInstructionChange = typeof projectInstructionChanges.$inferSelect
 export type OriginRef = typeof originRefs.$inferSelect

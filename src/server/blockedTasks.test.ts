@@ -461,10 +461,39 @@ describe('blockedTasks on ticket rows', () => {
 
     features.updateTicket(lane.id, { status: 'cancelled' }, 'claude')
     expect(row(t.id).blockedTasks).toBe(2)
+    expect(row(t.id).blockedNext).toBe(true)
     expect(features.getTicketFull(t.id).blockedTasks).toBe(2)
     // Done tasks are never blocked.
     features.updateTask(byText(t.id, 'b').id, { done: true }, 'claude')
     expect(row(t.id).blockedTasks).toBe(1)
+    expect(row(t.id).blockedNext).toBe(true)
+  })
+
+  it('says blockedNext only while a blocked step is the next one, and rolls a lane’s up to its parent', async () => {
+    const t = ticket('next', ['write', 'publish'])
+    features.updateTask(byText(t.id, 'publish').id, { blocked: true }, 'claude')
+    // Counted, but `write` is the step being worked.
+    expect(row(t.id)).toMatchObject({ blockedTasks: 1, blockedNext: false })
+    const rest = (await (await call('GET', `/api/projects/${projectId}/tickets`)).json()) as {
+      id: number
+      blockedTasks: number
+      blockedNext: boolean
+    }[]
+    expect(rest.find((x) => x.id === t.id)).toMatchObject({ blockedTasks: 1, blockedNext: false })
+
+    features.updateTask(byText(t.id, 'write').id, { done: true }, 'claude')
+    expect(row(t.id)).toMatchObject({ blockedTasks: 1, blockedNext: true })
+
+    // A lane's blocked next step marks the parent too, though the parent's own next step is unblocked.
+    const parent = ticket('next lane parent', ['write'])
+    const lane = features.createTicket(
+      projectId,
+      { title: 'next lane', parentId: parent.id, tasks: ['proofread'] },
+      'claude',
+    )
+    features.updateTask(byText(lane.id, 'proofread').id, { blocked: true }, 'claude')
+    expect(row(parent.id)).toMatchObject({ blockedTasks: 1, blockedNext: true })
+    expect(row(lane.id)).toMatchObject({ blockedTasks: 1, blockedNext: true })
   })
 })
 

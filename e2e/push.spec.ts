@@ -29,18 +29,8 @@ test('a branch on origin shows a green dot, one that is not a red one', async ({
     })
     .toEqual({ [pushed.id]: 'pushed', [local.id]: 'local-only', [ahead.id]: 'ahead' })
 
-  await page.goto(`/projects/${project.id}/features?view=board`)
-  const column = page.locator('[data-column="in_progress"]')
-  const card = (title: string) => column.getByRole('link', { name: new RegExp(title) })
-  const dot = (title: string) => card(title).getByRole('img')
-
-  await expect(dot('On origin')).toHaveAttribute('aria-label', /^pushed\n/)
-  await expect(dot('On origin')).toHaveClass(/bg-emerald-500/)
-  await expect(dot('Only here')).toHaveAttribute('aria-label', /^not pushed: no such branch on origin/)
-  await expect(dot('Only here')).toHaveClass(/bg-red-500/)
-  await expect(dot('A commit ahead')).toHaveAttribute('aria-label', /^not pushed: 1 commit only here/)
-  await expect(dot('A commit ahead')).toHaveClass(/bg-red-500/)
   // The dots are the tickets': the page itself says nothing about branches not pushed.
+  await page.goto(`/projects/${project.id}/features`)
   await expect(page.getByRole('button', { name: /branches not pushed/ })).toHaveCount(0)
 
   // The ticket page says it in words.
@@ -49,8 +39,33 @@ test('a branch on origin shows a green dot, one that is not a red one', async ({
   await page.goto(`/projects/${project.id}/features/${pushed.id}`)
   await expect(page.getByText('pushed', { exact: true })).toBeVisible()
 
+  // A workspace's branch carries the dot: green when it is on origin, red when it is not.
+  for (const [t, title] of [
+    [pushed, 'On origin'],
+    [local, 'Only here'],
+    [ahead, 'A commit ahead'],
+  ] as const) {
+    await ok(human.post(`/api/tickets/${t.id}/workspaces`, { data: { name: title, branch: t.branch! } }))
+  }
+  const dotOf = async (t: TicketFull) => {
+    await page.goto(`/projects/${project.id}/features/${t.id}`)
+    const panel = page.getByRole('heading', { name: 'Workspaces' }).locator('..')
+    await expect(panel).toContainText(t.branch!)
+    return panel.getByRole('img')
+  }
+  const green = await dotOf(pushed)
+  await expect(green).toHaveAttribute('aria-label', /^pushed\n/)
+  await expect(green).toHaveClass(/bg-emerald-500/)
+  const red = await dotOf(local)
+  await expect(red).toHaveAttribute('aria-label', /^not pushed: no such branch on origin/)
+  await expect(red).toHaveClass(/bg-red-500/)
+  const aheadDot = await dotOf(ahead)
+  await expect(aheadDot).toHaveAttribute('aria-label', /^not pushed: 1 commit only here/)
+  await expect(aheadDot).toHaveClass(/bg-red-500/)
+
   // Someone else pushes to the branch: the checkout learns of it when origin is fetched, which the
   // page does on demand.
+  await page.goto(`/projects/${project.id}/features/${pushed.id}`)
   const theirs = commitFile(name('pushed'), 'theirs.txt', 'from elsewhere\n', 'from elsewhere')
   git('push', '-q', 'origin', `${theirs}:refs/heads/${name('elsewhere')}`)
   git('--git-dir', e2eEnv().originPath, 'update-ref', `refs/heads/${name('pushed')}`, theirs)

@@ -15,6 +15,7 @@ import { CommandPalette } from '#/components/CommandPalette'
 import { Gallery } from '#/components/Gallery'
 import { GettingStartedEntry, GettingStartedMenuItem } from '#/components/GettingStarted'
 import { HostToolsBanner } from '#/components/HostToolsBanner'
+import { NotificationCenter } from '#/components/NotificationCenter'
 import { PreviewWindows } from '#/components/PreviewWindow'
 import { ProjectSwitcher } from '#/components/ProjectSwitcher'
 import { ReportDueBanner } from '#/components/ReportDueBanner'
@@ -112,10 +113,11 @@ function App() {
           <Tip content="Home">
             <Link to="/" className="flex shrink-0 items-center gap-2">
               <CrossBoardMark className="size-[22px] shrink-0" />
-              {/* Below 360 px the wordmark leaves the row (the mark alone links home, its name kept
-                  for screen readers): with the test mode badge, the switcher, the search button and
-                  the Pages menu, the row would otherwise push the page wider than the screen. */}
-              <span className="font-brand text-[17px] leading-none font-bold tracking-[-0.035em] whitespace-nowrap max-[359px]:sr-only">
+              {/* Below 390 px the wordmark leaves the row (the mark alone links home, its name kept
+                  for screen readers): with the test mode badge, the switcher, the search button, the
+                  notifications and the Pages menu, the row would otherwise push the page wider than
+                  the screen at 360 and 375 px. */}
+              <span className="font-brand text-[17px] leading-none font-bold tracking-[-0.035em] whitespace-nowrap max-[389px]:sr-only">
                 CrossBoard
               </span>
             </Link>
@@ -124,8 +126,9 @@ function App() {
           <UpdateBadge />
           <ProjectSwitcher />
           <CommandPalette />
-          <div className="ml-auto flex shrink-0 items-center">
+          <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-5">
             <GettingStartedEntry />
+            <NotificationCenter />
           </div>
           <div className="hidden items-center gap-5 md:flex">
             {PAGES.map((p) => (

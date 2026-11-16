@@ -64,6 +64,12 @@ http_headers = { Authorization = "Bearer <token>" }
                       "headers": { "Authorization": "Bearer <token>" } } } }
 ```
 
+To open a session, install the session skill beside the board skill and type `/session` alone: it
+briefs you on the board, delegates every ticket you name to the project's protocol, and keeps one
+short message shape with the numbered list of what needs the human. Its line is
+`mkdir -p ~/.claude/skills/session && curl -fsS -H "Authorization: Bearer <token>" "http://localhost:47100/api/agent-setup/session-skill" -o ~/.claude/skills/session/SKILL.md`
+(the Connect an agent page shows it for each CLI and shell).
+
 ## The rhythm
 
 1. **Before touching a project**: `get_project` — its `instructions` are the rules for its repos
@@ -133,12 +139,17 @@ http_headers = { Authorization = "Bearer <token>" }
    that task or subtask blocked, `update_task` with `blocked: true` and `blockedReason` saying what
    they must do (or `{text, blocked, blockedReason}` items on `add_tasks`), and keep working on the
    rest. Every task carries `blocked` and `blockedReason` (`''` when none); a ticket's
-   `blockedTasks` counts its blocked tasks, its lanes' included, and its card shows them; the
-   summary lists each one under Needs you (`needsYou.blockedTasks`). A blocked task still counts as
-   open and does not move the ticket. Ticking it done clears the tag (on the subtasks a tick
-   reaches and on a parent its last subtask ticks, too); `blocked: false` clears it once resolved.
-   Tagging a done task reopens it. Move the whole ticket to `blocked` only when nothing else can go
-   on (step 6).
+   `blockedTasks` counts its blocked tasks, its lanes' in work included (a done or cancelled lane's
+   are out of it and out of the rolled-up progress), and `blockedNext` says whether one
+   of them is the step to work next (the first open task with no open subtask, its lanes' own next
+   steps counting too). Only that next step shows on its card and in the summary's Needs you
+   (`needsYou.blockedTasks`), and there only while the ticket it is on is being worked: a lined-up,
+   done or cancelled ticket, nor one under such a ticket, asks nothing; one further down the order
+   surfaces once the steps before it are done.
+   A blocked task still counts as open and does not move the ticket. Ticking it done clears the tag
+   (on the subtasks a tick reaches and on a parent its last subtask ticks, too); `blocked: false`
+   clears it once resolved. Tagging a done task reopens it. Move the whole ticket to `blocked` only
+   when nothing else can go on (step 6).
 
 4. **Parallel work goes in lanes**: when parts of a ticket run at once (subagents, worktrees, other
    agents), `create_ticket` with `parentId` = the ticket for each part, with its own `branch` and
@@ -262,13 +273,23 @@ http_headers = { Authorization = "Bearer <token>" }
    keep the cursor. `list_my_threads` takes the same `since` and returns `{ cursor, threads }`; the
    cursor is yours to hold, the board stores nothing per agent.
    **Record your work on the ticket's timeline** as you go: the Roadmap and the ticket page draw it,
-   so the human sees who worked when, who waited on what, and what stalled. Each call takes
+   so the human sees who worked when, who waited on what, and what is going on now. Each call takes
    `projectId` and `ticketId`, and only a ticket of that project (another project's is a 403 and
    writes nothing); `agent` names who did the work (a sub-agent's name too; you by default).
    - `heartbeat` every few minutes while you work a ticket (in Claude Code under `/loop`, or between
-     steps). A ticket in an active stage with no event of any kind for longer than its project's
-     `stallMinutes` (30 by default, set by the human) reads as **stalled**: on its card, in
-     `list_tickets` and `get_ticket`, and in the human's Needs you.
+     steps). A heartbeat, a post, a span, a hand-off or the board's own push/PR/preview event refreshes
+     the ticket's lease, which lasts ten minutes. The ticket reads **Working** while the lease is live
+     or a span is younger than it, **Waiting on you** for a `human` wait, an undecided decision card or
+     a blocked task that is the step it works next (its lanes' next steps count), **Lost contact** when
+     the lease ran out with a span still open (the agent is gone), and **Stalled** when nothing is open
+     and the silence is past the project's `stallMinutes` (30 by default, set by the human; the silence
+     decides before the lease does). An open span never puts a ticket in Needs you: that is the
+     human's turn.
+   - **Beat during long calls without remembering**: save `board-beat.mjs` from the board's
+     `/api/agent-setup/board-beat` and run it around the heavy commands
+     (`node board-beat.mjs --project <id> --ticket <id> -- pnpm build`), or wire it as an OpenCode
+     plugin's tool-start/tool-end hook. It beats on start, every two minutes while the tool runs and
+     when it ends, so a phase longer than the lease stays Working.
    - `start_span` when you start a phase (`spec`, `build`, `review` with its `round`, `verify`, `pr`,
      `preview`, `merge`, or your own words) and `end_span` when it is done (by `spanId`, or your
      latest open span).
@@ -282,6 +303,13 @@ http_headers = { Authorization = "Bearer <token>" }
      `get_ticket` → `work.open` lists your open spans and waits to close. The board adds its own
      events (pushes, the PR, the preview, the merge, stage moves); nothing of this goes to the feed
      or the Daily view.
+     **The board is part of the work**, not a report on it: post as you go, tick each task you finish,
+     close your spans and waits, and rewrite the summary when you stop or hand off; you are not
+     finished while the board is behind what you did. If you stop work on a ticket before the end, at
+     the human's word or your own, record on the ticket that it was stopped and why (a comment and a
+     line in the summary), so the next reader can tell a stop from a failure. When the work ends,
+     clean up what you started (processes, temporary files, locks, and any scratch worktree of your
+     own), and leave the ticket's worktrees and origin branches to the human, listed, never deleted.
 7. **Hand off**: before `update_ticket` → `review`, every item, in order (the board ticks Pushed,
    PR, CI, Preview, Summary and Merged as their facts hold; Implementation and its steps are ticked
    by hand):
@@ -422,6 +450,28 @@ githubRepo, baseBranch?, as?}`, agents only) posts one decision card, "Add repo 
     stays flagged for the human until they accept or revert it. (`post_daily_summary` is an old name
     for `post_report` on the current period.)
 
+## Notifications: tracked requests and important notices
+
+The top bar's notification center is **not** a place to report your work: the work timeline,
+heartbeats, spans, progress posts and the ticket summary already cover that.
+
+- **A tracked card only when the human explicitly asked** to see the progress of, or to be told
+  about the completion of, one named thing: "show me progress", "let me know when", "notify me
+  when", "tell me once it is ready". One request, one card, about the thing they named.
+  `start_tracked_request` takes the human's request itself (`request`, required: a call without it
+  is refused), `tracked_request_progress` moves it, and `finish_tracked_request` ends it succeeded
+  with a one-line result or failed with the reason.
+- **A notice only for something very important the human must know** and would otherwise miss:
+  data lost or at risk, production or the host broken, a secret exposed, the wrong thing done and
+  needing undo, a deadline missed. `post_notice` takes the reason it cannot wait (`reason`,
+  required: a notice without it is refused). It has no progress and no state to update afterwards.
+- **Never** for routine work: never to start a ticket, never to run tests in normal work, never for
+  an unasked long build, never for a finished ticket. A question for the human is a decision or a
+  wait, not a notice; when in doubt, post on the ticket.
+- Cards and notices stay until the human dismisses them (`dismiss_notification`, the human's only).
+  An agent sees and moves its own and its sub-identities' (`<its name>/…`), never another agent's,
+  and nothing crosses projects.
+
 ## The project's agents
 
 A project can define its own agents (`get_project` → `agents`: name, instructions, picture):
@@ -453,12 +503,14 @@ that agent; the notes pick the next agent. Before moving the ticket to
 the review phases env, verify, hunt, refute, merge): spec → build → a review that tries to break it
 → (a fix pass by the builder on the confirmed findings, each with the project's checks and a new
 review, for as many review rounds as the ticket's complexity allows: none for low, one for mid, three
-for high; round 1 is the first build and its review, so a mid ticket stops after its review, and a
-review that does not survive after the last round goes to a human decision; a high ticket gets two fix
-passes; a low ticket has no review, and its checks return the build at most twice; after the second return,
+for high, up to ten for max (for work built from scratch, a whole site or app or a new product; a
+feature in an existing codebase is at most high, however difficult); round 1 is the first build and
+its review, so a mid ticket stops after its review, and a review that does not survive after the last
+round goes to a human decision; a high ticket gets two fix passes and a max ticket nine; a low ticket
+has no review, and its checks return the build at most twice; after the second return,
 when the checks still fail or a criterion still has no evidence, the human decides (keep going or drop), and
 the build goes to hand-off only with evidence for every criterion) → hand off. The agents' thinking effort follows the complexity too: `low` for a low ticket, `medium` for mid and
-high; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket
+high, `high` for max; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket
 (the ticket agent, the spec agent, the builder and the review's phase agents). The `/review-queue`
 skill is that orchestrator and `/feature-review` its review; the same page installs both. Ask with
 `ask_decision` instead of guessing; never two builders on one branch. The board skill has the full

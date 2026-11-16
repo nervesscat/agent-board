@@ -5,6 +5,7 @@ import { COPY_IMAGE_OVERLAY, CopyImageButton } from '#/components/CopyImage'
 import { galleryItem } from '#/components/Gallery'
 import { Tip } from '#/components/ui/tooltip'
 import type { GalleryFile } from '#/lib/api'
+import { annotationNotes } from '#/lib/annotations'
 import { ago, fileSize, stamp } from '#/lib/format'
 
 /**
@@ -42,7 +43,10 @@ function FileTile({ projectId, file: f }: { projectId: string; file: GalleryFile
           rel="noreferrer"
           aria-label={`Open ${f.name}`}
           className="relative block aspect-[4/3] overflow-hidden bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          {...galleryItem({ src: f.url, name: f.name, mime: f.mime }, GROUP)}
+          {...galleryItem(
+            { src: f.url, name: f.name, mime: f.mime, notes: annotationNotes(f.annotations) },
+            GROUP,
+          )}
         >
           <Thumb file={f} />
         </a>

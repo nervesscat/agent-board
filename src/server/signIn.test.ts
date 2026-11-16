@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -14,6 +15,8 @@ import { SoftAuthenticator } from './softAuthenticator'
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-test-'))
 process.env.DATA_DIR = tmp
+// The user-wide .claude folder an install writes into: a folder of the test's own, never the real ~/.claude.
+process.env.CLAUDE_HOME = path.join(tmp, 'claude-home')
 const PUBLIC = 'devbox.example-tailnet.ts.net'
 const PUBLIC_ORIGIN = `https://${PUBLIC}`
 process.env.PUBLIC_ORIGIN = PUBLIC_ORIGIN
@@ -1095,5 +1098,248 @@ describe("agent roles: the human's call alone, bound to the token", () => {
       (await send('POST', `/api/instructions/changes/${changes[0].id}/revert`, { cookie: hostSession }))
         .status,
     ).toBe(200)
+  })
+})
+
+describe('the skill download credential', () => {
+  // A year-long agent token of this test's own: it reaches every route it always did.
+  const AGENT_TOKEN = 'token-for-the-skill-tests'
+  beforeAll(() => {
+    dbm.db
+      .insert(dbm.schema.agentTokens)
+      .values({
+        tokenHash: hashSecret(AGENT_TOKEN),
+        name: 'skill-tests',
+        expiresAt: '2099-01-01T00:00:00.000Z',
+      })
+      .run()
+  })
+
+  const mint = (o: Send = { cookie: hostSession }) =>
+    send('POST', '/api/agent-setup/skill-token', { ...o, body: {} })
+  const skillRows = () => dbm.db.select().from(dbm.schema.skillTokens).all()
+
+  it('is minted by the signed-in human only, ten minutes at a time, and never listed with the tokens', async () => {
+    expect((await mint({})).status).toBe(401)
+    const before = skillRows().length
+    const agent = await mint({ token: AGENT_TOKEN })
+    expect(agent.status).toBe(403)
+    expect((await agent.json()).error).toMatch(/only the human/)
+    expect(skillRows()).toHaveLength(before)
+
+    const listed = await json<any[]>(send('GET', '/api/agent-tokens', { cookie: hostSession }))
+    const res = await mint()
+    expect(res.status).toBe(201)
+    const made = await res.json()
+    expect(made).toEqual({ token: expect.stringMatching(/^[\w-]{43}$/), expiresAt: expect.any(String) })
+    const minutes = (Date.parse(made.expiresAt) - Date.now()) / 60_000
+    expect(minutes).toBeGreaterThanOrEqual(9)
+    expect(minutes).toBeLessThanOrEqual(11)
+    // Every press makes another one, and none of them shows in the agent tokens.
+    expect((await json(mint())).token).not.toBe(made.token)
+    for (let i = 0; i < 3; i++) await mint()
+    expect(await json(send('GET', '/api/agent-tokens', { cookie: hostSession }))).toEqual(listed)
+    expect(skillRows()).toHaveLength(before + 5)
+  })
+
+  it('downloads the skills, and is refused on every other route', async () => {
+    const { token } = await json(mint())
+    const human = (target: string) => send('GET', target, { cookie: hostSession })
+    for (const target of [
+      '/api/agent-setup/skill',
+      '/api/agent-setup/skill?client=codex',
+      '/api/agent-setup/skill?client=opencode',
+      '/api/agent-setup/skill?client=claude&transport=rest',
+      '/api/agent-setup/session-skill',
+      '/api/agent-setup/review-skills',
+      '/api/agent-setup/review-skills?list',
+    ]) {
+      const theirs = await human(target)
+      const ours = await send('GET', target, { token })
+      expect(ours.status, target).toBe(200)
+      expect(
+        Buffer.from(await ours.arrayBuffer()).equals(Buffer.from(await theirs.arrayBuffer())),
+        target,
+      ).toBe(true)
+    }
+
+    const refused: [string, string, unknown?][] = [
+      ['GET', '/api/mcp'],
+      [
+        'POST',
+        '/api/mcp',
+        { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'whoami', arguments: {} } },
+      ],
+      ['GET', '/api/me'],
+      ['GET', '/api/projects'],
+      ['GET', '/api/agent-tokens'],
+      ['GET', '/api/settings'],
+      ['GET', '/api/agent-setup/review-skills/status'],
+      [
+        'GET',
+        `/api/agent-setup/review-skills/diff?path=${encodeURIComponent('skills/feature-review/SKILL.md')}`,
+      ],
+      ['POST', '/api/agent-setup/skill/install'],
+    ]
+    for (const [method, target, body] of refused) {
+      const res = await send(method, target, {
+        token,
+        body,
+        headers: target === '/api/mcp' ? { accept: 'application/json, text/event-stream' } : {},
+      })
+      expect(res.status, `${method} ${target}`).toBe(401)
+      expect(await res.json()).toEqual({ error: expect.stringMatching(/only downloads the skills/) })
+    }
+    // No handler ran with it: nothing it could write, and no actor of its own.
+    expect(
+      dbm.db
+        .select()
+        .from(dbm.schema.actors)
+        .all()
+        .filter((a) => a.name === 'skill-download'),
+    ).toEqual([])
+  })
+
+  it('is refused from its expiresAt on either download, without a revocation', async () => {
+    const { token, expiresAt } = await json(mint())
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(Date.parse(expiresAt) - 1000)
+    for (const target of ['/api/agent-setup/skill', '/api/agent-setup/review-skills'])
+      expect((await send('GET', target, { token })).status, target).toBe(200)
+    vi.setSystemTime(Date.parse(expiresAt))
+    for (const target of ['/api/agent-setup/skill', '/api/agent-setup/review-skills'])
+      expect((await send('GET', target, { token })).status, target).toBe(401)
+  })
+
+  it("is no way around admission with a sub-identity's name", async () => {
+    const { token } = await json(mint())
+    for (const target of ['/api/projects', '/api/agent-setup/review-skills/status'])
+      expect(
+        (
+          await send('GET', target, {
+            token,
+            headers: { 'x-agent-name': 'skill-download/worker-1' },
+          })
+        ).status,
+        target,
+      ).toBe(401)
+  })
+
+  it('leaves a year-long agent token every route it had', async () => {
+    for (const target of [
+      '/api/agent-setup/skill?client=claude',
+      '/api/agent-setup/review-skills',
+      '/api/agent-setup/review-skills?list',
+      '/api/agent-setup/review-skills/status',
+      '/api/me',
+    ])
+      expect((await send('GET', target, { token: AGENT_TOKEN })).status, target).toBe(200)
+  })
+
+  it('leaves the credential in no post, activity entry or other text', async () => {
+    const { token } = await json(mint())
+    const sqlite = dbm.db.$client
+    const tables = sqlite
+      .prepare(
+        "select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name not like '__drizzle%'",
+      )
+      .all() as { name: string }[]
+    const fragment = token.slice(0, 8)
+    for (const { name } of tables) {
+      const rows = JSON.stringify(sqlite.prepare(`select * from "${name}"`).all())
+      expect(rows, name).not.toContain(token)
+      expect(rows, name).not.toContain(fragment)
+    }
+  })
+})
+
+describe('installing the skills on the board’s machine', () => {
+  const claudeHome = process.env.CLAUDE_HOME!
+  const install = (body: unknown, o: Send = {}) =>
+    send('POST', '/api/agent-setup/skill/install', { ...o, body })
+
+  it("is the human's alone", async () => {
+    for (const body of [{ client: 'claude', kind: 'skill' }, { kind: 'review-skills' }]) {
+      expect((await install(body)).status).toBe(401)
+      const agent = await install(body, { token: 'token-for-the-skill-tests' })
+      expect(agent.status).toBe(403)
+      expect((await agent.json()).error).toMatch(/only the human/)
+    }
+  })
+
+  it('writes the board skill under the home, and the bundle into CLAUDE_HOME, saying what each file took', async () => {
+    const home = fs.mkdtempSync(path.join(tmp, 'home-'))
+    const homedir = vi.spyOn(os, 'homedir').mockReturnValue(home)
+    fs.rmSync(claudeHome, { recursive: true, force: true })
+    try {
+      const human = { cookie: hostSession }
+      const skillFile = path.join(home, '.claude', 'skills', 'board', 'SKILL.md')
+      const first = await install({ client: 'claude', kind: 'skill' }, human)
+      expect(first.status).toBe(200)
+      const made = await first.json()
+      expect(Date.parse(made.at)).not.toBeNaN()
+      expect(made).toEqual({
+        at: expect.any(String),
+        files: [{ path: skillFile, action: 'created' }],
+      })
+      expect(fs.readFileSync(skillFile, 'utf8')).toBe(
+        await (await send('GET', '/api/agent-setup/skill?client=claude', human)).text(),
+      )
+      expect((await (await install({ client: 'claude', kind: 'skill' }, human)).json()).files[0].action).toBe(
+        'unchanged',
+      )
+      fs.appendFileSync(skillFile, '\nAn older line.\n')
+      expect((await (await install({ client: 'claude', kind: 'skill' }, human)).json()).files[0].action).toBe(
+        'updated',
+      )
+      expect(fs.readFileSync(skillFile, 'utf8')).not.toContain('An older line.')
+      // The CLI is needed for its own skill, not for the bundle.
+      expect((await install({ kind: 'skill' }, human)).status).toBe(400)
+
+      const bundle = await install({ kind: 'review-skills' }, human)
+      expect(bundle.status).toBe(200)
+      const installed = await bundle.json()
+      const paths = await json<string[]>(
+        send('GET', '/api/agent-setup/review-skills?list', { cookie: hostSession }),
+      )
+      expect(installed.files.map((f: { path: string }) => f.path)).toEqual(
+        paths.map((p) => path.join(claudeHome, ...p.split('/'))),
+      )
+      expect(installed.files.every((f: { action: string }) => f.action === 'created')).toBe(true)
+      // Byte for byte what the tar holds.
+      const served = fs.mkdtempSync(path.join(tmp, 'served-'))
+      fs.writeFileSync(
+        path.join(served, 'b.tar'),
+        Buffer.from(await (await send('GET', '/api/agent-setup/review-skills', human)).arrayBuffer()),
+      )
+      execFileSync('tar', ['-xf', 'b.tar'], { cwd: served })
+      for (const p of paths)
+        expect(
+          fs
+            .readFileSync(path.join(claudeHome, ...p.split('/')))
+            .equals(fs.readFileSync(path.join(served, p))),
+          p,
+        ).toBe(true)
+      expect(
+        (await (await install({ kind: 'review-skills' }, human)).json()).files.every(
+          (f: { action: string }) => f.action === 'unchanged',
+        ),
+      ).toBe(true)
+
+      // A folder where a file must be: an error naming the file, and the earlier copy as it was.
+      const target = path.join(claudeHome, 'skills', 'todo-review', 'SKILL.md')
+      const kept = path.join(claudeHome, 'skills', 'feature-review', 'SKILL.md')
+      const bytes = fs.readFileSync(kept)
+      fs.rmSync(target, { force: true })
+      fs.mkdirSync(target)
+      const failed = await install({ kind: 'review-skills' }, human)
+      expect(failed.status).toBe(500)
+      expect((await failed.json()).error).toContain(target)
+      expect(fs.readFileSync(kept).equals(bytes)).toBe(true)
+    } finally {
+      homedir.mockRestore()
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(claudeHome, { recursive: true, force: true })
+    }
   })
 })

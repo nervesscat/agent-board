@@ -68,7 +68,14 @@ Then:
    `active` (`in_progress`) the stage work starts in (the project's `workStage`, else the first
    active stage), for any other kind the first stage of that kind. Below, `todo`, `in_progress`,
    `blocked`, `review`, `done` and `cancelled` mean exactly that. Its `agents` are the project's own agents (see
-   [The project's agents](#the-projects-agents)).
+   [The project's agents](#the-projects-agents)). Its `notes` are the project's short shared facts
+   (a `label` and a `body`, one fact each): **read them before starting**, so you do not rediscover
+   what someone already learned. When you learn something a future session must not rediscover — a
+   command, a path, a rule, a reminder — add it from your own learning with `add_note`, not only when
+   the human asks. Keep each note to one short fact (a label of a few words and a body of a few lines,
+   at most 500 characters), never a document: if it needs paragraphs it is a doc, not a note. The
+   other notes tools are `list_notes`, `update_note` and `delete_note`; a note's author, an
+   orchestrator or the human changes or removes it.
 3. `get_summary` with your `projectId`: where the project stands in one read (what waits on the
    human, in progress and since when, done today, next, and what carries over from before today).
 
@@ -108,8 +115,8 @@ Then:
   tasks and subtasks, all counted, and the open ones are what a move to review answers with (`open`).
 
 Creating a top-level ticket (only when the human asks): `create_ticket` with your `projectId` and
-`repoId` and, when the human says how much review it gets, `complexity` (`low`, `mid` or `high`;
-`mid` when left out); it starts with the default phases, the `tasks` you give as plain texts under
+`repoId` and, when the human says how much review it gets, `complexity` (`low`, `mid`, `high` or
+`max`; `mid` when left out); it starts with the default phases, the `tasks` you give as plain texts under
 the first.
 Lanes of a ticket you are working are yours to create (next section).
 
@@ -133,12 +140,28 @@ Lanes of a ticket you are working are yours to create (next section).
   steps). When the plan changes, `update_task` rewords a task and `remove_task` drops one
   that no longer applies (a phase goes with its steps), so the progress bar stays honest.
 - Record your work on the ticket's timeline (the Roadmap and the ticket page draw it; the human
-  sees from it who worked when, who waited on what, and what stalled). Each call takes `projectId`
-  and `ticketId`, and only a ticket of that project:
+  sees from it who worked when, who waited on what, and what is going on now). Each call takes
+  `projectId` and `ticketId`, and only a ticket of that project:
   - `heartbeat` every few minutes while you work the ticket: in Claude Code under `/loop` (the same
-    loop as [Watch for feedback](#watch-for-feedback)), elsewhere between steps. An active ticket
-    with no event for longer than the project's `stallMinutes` (30 by default) reads as stalled in
-    the human's Needs you.
+    loop as [Watch for feedback](#watch-for-feedback)), elsewhere between steps. A heartbeat, a
+    post, a span, a hand-off — or the board's own push, PR or preview event — refreshes the ticket's
+    lease, and the lease lasts ten minutes. Within it the ticket reads **Working**. Needs you is the
+    human's turn: an open span never puts a ticket there.
+  - The four states: **Waiting on you** (a `human` wait, an undecided decision card, or a blocked
+    task that is the ticket's next step — or a lane's own next step, rolled up), **Working** (a span
+    open and a live lease or a young span; nothing open, a live lease and silence inside
+    `stallMinutes`), **Lost contact** (the lease ran out with a span still open: the agent is gone,
+    which is not Waiting on you and not Stalled) and **Stalled** (nothing open, silence past the
+    project's `stallMinutes`, 30 by default; the silence decides before the lease does, so a
+    threshold under ten minutes takes effect at once). An open span alone never keeps a dead run
+    reading as Working: Lost contact shows within the lease.
+  - **Beat during long calls without remembering.** Save the beater from
+    `{{BOARD_URL}}/api/agent-setup/board-beat` as `board-beat.mjs` and run it around the heavy
+    commands, or wire it as an OpenCode plugin's tool-start/tool-end hook:
+    `node board-beat.mjs --project <id> --ticket <id> -- pnpm exec playwright test …` beats when the
+    tool starts, every two minutes while it runs and once when it ends (`BOARD_URL` and
+    `BOARD_TOKEN` are its environment; `--once` posts a single beat for a hook). Reliance on a
+    heartbeat you must remember fails exactly when a phase runs long, so let the runtime beat.
   - `start_span` when a phase starts (`spec`, `build`, `review` with its `round`, `verify`, `pr`,
     `preview`, `merge`) and `end_span` when it is done.
   - `start_wait` with the reason when you cannot go on (`lock`, `builder`, `mcp`, `human`, `other`
@@ -149,11 +172,25 @@ Lanes of a ticket you are working are yours to create (next section).
     delegated work and counts as working, not waiting; `on` is 1 to 60 characters.
   - `handoff` when you brief a sub-agent and when it hands back ([Delegating](#delegating)).
     `get_ticket` → `work.open` lists your open spans and waits to close.
+- **The board is part of the work**, not a report on it: post as you go, `set_task_done` each step,
+  close your spans and waits, and rewrite the summary when you stop or hand off. You are not
+  finished while the board is behind what you did. If you stop a ticket before the end, at the
+  human's word or your own, record on the ticket that it was stopped and why (a `comment` and a line
+  in the summary), so the next reader can tell a stop from a failure. When the work ends, clean up
+  what you started: processes, temporary files, locks, and any scratch worktree of your own. A
+  ticket's worktrees and origin branches are the human's: list them and never delete them.
 - A step that needs the human (a credential, a manual action, a call only they can make): tag
   that task or subtask blocked, `update_task` with `blocked: true` and `blockedReason` saying what
   they must do (or `{text, blocked, blockedReason}` items on `add_tasks`), and keep working on the
-  rest. It shows on the task, on the ticket's card (`blockedTasks`) and in the human's Needs you
-  (`get_summary` → `needsYou.blockedTasks`). It still counts as open and does not move the ticket.
+  rest. It shows on the task and the ticket page; the ticket's card and the human's Needs you
+  (`get_summary` → `needsYou.blockedTasks`) show it only while it is the ticket's next step to work
+  (the first open task with no open subtask; a lane's own next step counts for its parent too) —
+  `blockedNext` on the ticket says whether one of them is, while `blockedTasks` stays the full count
+  of blocked steps, its lanes' in work (a done or cancelled lane's are out of it and out of the
+  rolled-up progress). It shows in Needs you only while the ticket it is on is being worked: a
+  lined-up, done or cancelled ticket, nor one under such a ticket, asks nothing. It still counts as open and does not move the
+  ticket. A blocked step further
+  down the order surfaces once the steps before it are done.
   Ticking the task done clears the tag; `blocked: false` clears it once resolved. Move the whole
   ticket to `blocked` (or `ask_decision`) only when nothing else can go on.
 - Parallel work goes in lanes. When parts of the ticket run at once (subagents, worktrees, another
@@ -418,8 +455,8 @@ After that:
 2. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the
    board flags a ticket that is further along than its lanes. Say in the summary which lanes it
    covers.
-3. Dropping work: `status: cancelled`, with a comment saying why. Cancelled lanes' tasks leave the
-   parent's progress.
+3. Dropping work: `status: cancelled`, with a comment saying why. A cancelled or done lane's tasks
+   leave the parent's progress.
 4. Clean up your lane before it goes to `done` (or when the human moves it there): see
    [Clean up](#6-clean-up) for the rule. A ticket in `review` keeps its branch and worktree.
 
@@ -462,6 +499,11 @@ for `post_report` on the current period: use `post_report`.
 
 Finished work leaves worktrees and branches behind. The rule, for every ticket and lane you
 worked:
+
+- What you started goes too: stop the processes you or your agents started (previews, dev servers,
+  test boards, watchers), remove your temporary files and folders, and release any test lock you
+  hold. The review's own scratch worktree under `~/.claude/feature-review/` may go; the ticket's
+  worktrees and origin branches stay the human's, listed below.
 
 - A **lane** can go once its work is on its parent's branch (a lane's base branch is the parent's
   branch). A **ticket** can go once its branch is in its base (dev, main).
@@ -546,13 +588,15 @@ The project's Team page adds a default set, the build and review cycle of the
 criteria) → **builder** (the code) → **runner** (a `/feature-review` of the branch, whose phases
 **env**, **verify**, **hunt**, **refute** and **merge** try to break it) → (a fix pass by the
 **builder** on the confirmed findings, each with the project's checks and a new review, for as many
-review rounds as the ticket's complexity allows: none for low, one for mid, three for high; round 1 is
-the first build and its review, so a mid ticket stops after its review, and a review that does not
-survive after the last round goes to a human decision; a high ticket gets two fix passes; a low ticket
+review rounds as the ticket's complexity allows: none for low, one for mid, three for high, up to ten
+for max (for work built from scratch: a whole site or app, a new product or standalone service; a
+feature in an existing codebase is at most high, however difficult); round 1 is the first build and
+its review, so a mid ticket stops after its review, and a review that does not survive after the last
+round goes to a human decision; a high ticket gets two fix passes and a max ticket nine; a low ticket
 has no review, and its checks return the build at most twice; after the second return, when the checks
 still fail or a criterion still has no evidence, the human decides (keep going or drop), and the build goes
 to hand-off only with evidence for every criterion) → hand off. The agents' thinking effort follows the complexity too: `low` for a low ticket, `medium` for mid and
-high; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket
+high, `high` for max; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket
 (the ticket agent, the spec agent, the builder and the review's phase agents). `/todo-review` is that
 orchestrator for
 the To do tickets: one agent per ticket runs the cycle, checks the proof itself (criteria seen
@@ -611,6 +655,28 @@ review to GitHub.
 `list_actors` gives every name that signs in to the board, with its `role` (human, orchestrator,
 worker) and `parent` (the name a sub-identity works under); the project's agents are in
 `get_project`. Use those exact names for `assignee`.
+
+## Notifications: tracked requests and important notices
+
+The top bar's notification center is **not** a place to report your work: the work timeline,
+heartbeats, spans, progress posts and the ticket summary already cover that.
+
+- **A tracked card only when the human explicitly asked** to see the progress of, or to be told
+  about the completion of, one named thing: "show me progress", "let me know when", "notify me
+  when", "tell me once it is ready". One request, one card, about the thing they named.
+  `start_tracked_request` takes the human's request itself (`request`, required: a call without it
+  is refused), `tracked_request_progress` moves it, and `finish_tracked_request` ends it succeeded
+  with a one-line result or failed with the reason.
+- **A notice only for something very important the human must know** and would otherwise miss:
+  data lost or at risk, production or the host broken, a secret exposed, the wrong thing done and
+  needing undo, a deadline missed. `post_notice` takes the reason it cannot wait (`reason`,
+  required: a notice without it is refused). It has no progress and no state to update afterwards.
+- **Never** for routine work: never to start a ticket, never to run tests in normal work, never for
+  an unasked long build, never for a finished ticket. A question for the human is a decision or a
+  wait, not a notice; when in doubt, post on the ticket.
+- Cards and notices stay until the human dismisses them (`dismiss_notification`, the human's only).
+  An agent sees and moves its own and its sub-identities' (`<its name>/…`), never another agent's,
+  and nothing crosses projects.
 
 ## Style
 

@@ -58,7 +58,16 @@ refute, merge) will try to break what you built. Build so it survives that.
 ## Output
 
 Return, in this order: the commits (\`sha subject\`), what changed per acceptance criterion or
-finding, the tests added and the checks you ran with their results, and anything left open.`
+finding, the tests added and the checks you ran with their results, and anything left open.
+
+## Keeping the board current
+
+The board is part of the work: post your progress, tick the tasks you finished, close your spans
+and waits, and update the ticket's summary when you stop or hand off; you are not finished while
+the board is behind what you did. If you stop before the end, record on the ticket that it was
+stopped and why, so the next reader can tell a stop from a failure. When the work ends, clean up
+what you started (processes, temporary files, locks, and any scratch worktree of your own), and
+leave the ticket's worktrees and origin branches to the human, listed, never deleted.`
 
 export const DEFAULT_AGENTS: { name: string; instructions: string; delegation: string }[] = [
   {
@@ -98,14 +107,17 @@ anything left open.
 
 **Next:** **runner** on the branch, except for a low ticket: its build goes to hand-off on the project's
 checks and the builder's evidence, with no runner. A question it returns → \`ask_decision\`. The review
-rounds its ticket's complexity allows are none for low, one for mid, three for high, round 1 being the
-first build and its review. Mid has one: a review that does not survive then goes to the human (ship as
-is, keep going, or drop). High has three: two fix passes follow the first build, each with the checks and
-a new review, and a round that does not survive after the third goes to the human the same way. Low has
-no review: its checks return the build at most twice, and after the second return, when the checks still
-fail or a criterion still has no evidence, the human decides (keep going or drop). Every agent the cycle
-starts for the ticket runs at the effort its complexity sets: low for low, medium for mid and high (the
-Agent tool's \`effort\`).`,
+rounds its ticket's complexity allows are none for low, one for mid, three for high, up to ten for max,
+round 1 being the first build and its review. Mid has one: a review that does not survive then goes to the
+human (ship as is, keep going, or drop). High has three: two fix passes follow the first build, each with
+the checks and a new review, and a round that does not survive after the third goes to the human the same
+way. Max has up to ten, nine fix passes after the first build, and is for work built from scratch (a
+whole site or app, a new product or service), never for a feature in an existing codebase, however
+difficult: that is at most high. It stops at the first round that survives, and a round that does not
+survive after the tenth goes to the human as high's does. Low has no review: its checks return the build at most twice, and after the
+second return, when the checks still fail or a criterion still has no evidence, the human decides (keep
+going or drop). Every agent the cycle starts for the ticket runs at the effort its complexity sets: low for
+low, medium for mid and high, high for max (the Agent tool's \`effort\`).`,
   },
   {
     name: 'runner',

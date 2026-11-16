@@ -17,6 +17,9 @@ export function e2eEnv() {
   }
   process.env.E2E_ROOT ||= fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-e2e-'))
   const root = process.env.E2E_ROOT
+  /** The board's home: its own folder, so a skill installed under it never reaches the real home. */
+  const home = path.join(root, 'home')
+  fs.mkdirSync(home, { recursive: true })
   return {
     port: Number(process.env.E2E_PORT),
     baseURL: `http://127.0.0.1:${process.env.E2E_PORT}`,
@@ -26,8 +29,10 @@ export function e2eEnv() {
     /** The repo's origin: a bare repo, so branches can be pushed or not. */
     originPath: path.join(root, 'origin.git'),
     seedFile: path.join(root, 'seed.json'),
+    /** The board's home (HOME, USERPROFILE): the board skill installs under it, never under the real one. */
+    home,
     /** The board's user-wide .claude folder (CLAUDE_HOME): never the real ~/.claude. Not there at first. */
-    claudeHome: path.join(root, 'home', '.claude'),
+    claudeHome: path.join(root, 'claude-home', '.claude'),
     /** The opencode global config folder (XDG_CONFIG_HOME): this run's own, never the machine's. */
     opencodeConfigHome: path.join(root, 'home', '.config'),
     opencodeConfigDir: path.join(root, 'home', '.config', 'opencode'),

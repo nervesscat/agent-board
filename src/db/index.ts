@@ -12,6 +12,10 @@ for (const dir of [config.dataDir, uploadsDir, cacheDir, logsDir]) fs.mkdirSync(
 const sqlite = new Database(path.join(config.dataDir, 'board.db'))
 sqlite.pragma('journal_mode = WAL')
 sqlite.pragma('foreign_keys = ON')
+// Wait this long for another connection's write lock before answering SQLITE_BUSY; the write path
+// then tries the whole create again a couple of times (`./busy`), since the lock is normally held for
+// a moment only.
+sqlite.pragma('busy_timeout = 5000')
 
 export const db = drizzle(sqlite, { schema })
 

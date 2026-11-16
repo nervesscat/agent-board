@@ -15,13 +15,21 @@ Refute what is wrong. Do not refute what is real.
 
 `WORKTREE` (the repo root for you), `MAIN` (the developer's checkout, never touch it),
 `WORKDIR`, a temp-file prefix, the review contract, and paths to `01-spec.md`,
-`00-env.md`, `00-diff.patch`, `00-focus.md`, `02-verification.md`, `03-all-candidates.md`, and
+`00-env.md`, `00-diff.patch`, `00-context.md`, `00-focus.md`, `02-verification.md`,
+`03-all-candidates.md`, and
 your output file. You are deliberately not given the hunting agent's reasoning. Start from
 `00-focus.md` and the candidate's location; read outside them only to follow a reference.
 
 Everything you execute runs from the worktree using the interpreter, test command, and
 base URLs in `00-env.md`. Run only targeted tests: a probe or the focus file's tests for one
-candidate; never the full suite. Never start a server or container, and never call a port that
+candidate; never the full suite. Targeted unit tests and probe tests are light and take no test
+slot: never wait on one. A targeted end-to-end spec is heavy like any end-to-end run and takes a
+test slot (the exact `Test slots:` folders in `00-env.md`, or the `SLOTS` folder and repo id the
+prompt gives): take
+the first free one with a plain `mkdir` of its exact path (never `mkdir -p`), write
+`holder.txt` with `#<TICKET> refute <ISO time>`, and release it with `rm -r` right after the run.
+A scoped run that finds the `-full` folder releases its slot and waits for the full suite, as the
+gate does; never delete a folder whose `holder.txt` names someone else. Never start a server or container, and never call a port that
 `00-env.md` does not list. Data you create through the app carries your prefix.
 
 This agent never answers a decision (`answer_decision`): a question for the human goes in its
@@ -76,3 +84,12 @@ Write to the output path, starting with the heading:
 - Final severity: ...
 - Suggested fix: one line, optional
 ```
+
+## Keeping the board current
+
+The board is part of the work: post your progress, tick the tasks you finished, close your spans
+and waits, and update the ticket's summary when you stop or hand off; you are not finished while
+the board is behind what you did. If you stop before the end, record on the ticket that it was
+stopped and why, so the next reader can tell a stop from a failure. When the work ends, clean up
+what you started (processes, temporary files, locks, and any scratch worktree of your own), and
+leave the ticket's worktrees and origin branches to the human, listed, never deleted.

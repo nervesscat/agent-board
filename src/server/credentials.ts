@@ -71,29 +71,48 @@ export function sessionOf(
   return row ?? null
 }
 
+/** What a credential reaches: the whole board, or the two skill downloads only (auth.ts `admit`). */
+export type TokenScope = 'full' | 'skill'
+
+/** The name a skill download credential signs in as: fixed, not an agent's, and it never posts. */
+export const SKILL_TOKEN_ACTOR = 'skill-download'
+
 export interface TokenHit {
   id: number
   name: string
   lastUsedAt: string | null
   /** The role the human gave the token: orchestrator, or worker (every token's at first). */
   role: 'orchestrator' | 'worker'
+  scope: TokenScope
 }
 
-/** The agent token `token` is: not revoked, not expired. Null otherwise. */
+/**
+ * The credential `token` is: a live agent token (the whole board), else a live skill download
+ * credential (the two skill downloads only). Not revoked, not expired. Null otherwise.
+ */
 export function agentTokenOf(sqlite: Database, token: string, now = new Date()): TokenHit | null {
+  const tokenHash = hashSecret(token)
   const row = sqlite
     .prepare(
       `select id, name, last_used_at as lastUsedAt, role from agent_tokens
        where token_hash = ? and revoked_at is null and expires_at > ?`,
     )
-    .get(hashSecret(token), now.toISOString()) as TokenHit | undefined
-  return row ?? null
+    .get(tokenHash, now.toISOString()) as Omit<TokenHit, 'scope'> | undefined
+  if (row) return { ...row, scope: 'full' }
+  // A skill credential is a row of its own: it is never listed with the agent tokens and has no role.
+  const skill = sqlite
+    .prepare(`select id from skill_tokens where token_hash = ? and expires_at > ?`)
+    .get(tokenHash, now.toISOString()) as { id: number } | undefined
+  return skill
+    ? { id: skill.id, name: SKILL_TOKEN_ACTOR, lastUsedAt: null, role: 'worker', scope: 'skill' }
+    : null
 }
 
 /**
  * Whether these headers sign someone in on the origin of `rpId`, on the board on `port`: a valid agent
  * token, else a session of a passkey of that RP ID. A Bearer header that is not a valid token (a bare
- * `Bearer` too) is a no, whatever cookie comes with it.
+ * `Bearer` too) is a no, whatever cookie comes with it. A skill download credential is no sign-in here:
+ * it reaches the two skill downloads and nothing else (auth.ts `admit`).
  */
 export function signedIn(
   sqlite: Database,
@@ -105,7 +124,8 @@ export function signedIn(
   const authorization = headers.get('authorization')
   if (isBearer(authorization)) {
     const token = bearerToken(authorization)
-    return token !== null && agentTokenOf(sqlite, token, now) !== null
+    const hit = token === null ? null : agentTokenOf(sqlite, token, now)
+    return hit?.scope === 'full'
   }
   const cookie = readCookie(headers.get('cookie'), sessionCookieName(port))
   return cookie !== null && sessionOf(sqlite, cookie, rpId, now) !== null

@@ -399,6 +399,32 @@ describe('the queue', () => {
     expect(byNumber(6)).toMatchObject({ waitingOn: 'others', status: 'pending', myReview: 'none' })
   })
 
+  it('stores whether GitHub still asks me to review a PR, and keeps it when GitHub cannot answer', async () => {
+    const { db, schema } = await import('#/db')
+    const projectId = db.insert(schema.projects).values({ name: 'requested' }).returning().get().id
+    db.insert(schema.repos)
+      .values({
+        projectId,
+        name: 'app',
+        repoPath: '/r/requested',
+        baseBranch: 'main',
+        githubRepo: 'acme/app',
+      })
+      .run()
+    const flags = (q: { number: number; requested: boolean }[]) =>
+      q.map((p) => `${p.number}:${p.requested}`).sort()
+    found = [theirs(1, { requested: true }), theirs(2)]
+    const first = await prs.listPrs(projectId, { refresh: true })
+    // Served by the queue's rows: the switch's Just me as reviewer reads `requested` off them.
+    expect(flags(first)).toEqual(['1:true', '2:false'])
+    // The review given: GitHub's search no longer asks for it, and the refresh flips the flag.
+    found = [theirs(1), theirs(2, { requested: true })]
+    expect(flags(await prs.listPrs(projectId, { refresh: true }))).toEqual(['1:false', '2:true'])
+    // GitHub out of reach: the stored values still answer.
+    failing = new Set(['/r/requested'])
+    expect(flags(await prs.listPrs(projectId))).toEqual(['1:false', '2:true'])
+  })
+
   it('answers from the stored rows without a refresh: the stages survive with GitHub out of reach', async () => {
     const { db, schema } = await import('#/db')
     const projectId = db.insert(schema.projects).values({ name: 'stored' }).returning().get().id

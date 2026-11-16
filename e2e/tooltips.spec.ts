@@ -126,6 +126,7 @@ function prRow(projectId: number, n: number, extra: Partial<PrRow> = {}): PrRow 
     isDraft: false,
     reviewDecision: null,
     myReview: 'none',
+    requested: false,
     waitingOn: 'me',
     reviewStage: 'pending',
     mergeable: 'MERGEABLE',
@@ -705,7 +706,7 @@ test('nested tooltips: the innermost shows, the outer one on its own part, never
   await expect(tooltip(page)).toHaveCount(1)
 })
 
-test("nested tooltips on a board card: a badge's or a name's own, the card's title around them", async ({
+test("nested tooltips on a board card: the needs badge's own, the card's title around it", async ({
   page,
   api,
   human,
@@ -720,8 +721,6 @@ test("nested tooltips on a board card: a badge's or a name's own, the card's tit
   const card = (await board(page, project.id))('in_progress', /On the card/)
   const needs = card.locator('span[data-slot="tooltip-trigger"]').filter({ hasText: `needs #${base.id}` })
   const needsTip = `Merge first:\n#${base.id} Underneath: not done, no branch`
-  const actor = card.locator('span[data-slot="tooltip-trigger"]').filter({ hasText: name })
-  const actorTip = `${name} (one of the project's agents)`
   await expectTooltip(needs, needsTip)
   await expect(tooltip(page)).toHaveCount(1)
   // From the badge onto the card's own padding, and back: one bubble each time, the one under the pointer.
@@ -731,13 +730,8 @@ test("nested tooltips on a board card: a badge's or a name's own, the card's tit
   await needs.hover()
   await expect(tooltip(page)).toHaveText(needsTip)
   await expect(tooltip(page)).toHaveCount(1)
-  // The assignee's name, and from it onto the card.
-  await actor.hover()
-  await expect(tooltip(page)).toHaveText(actorTip)
-  await expect(tooltip(page)).toHaveCount(1)
-  await card.hover({ position: { x: 4, y: 4 } })
-  await expect(tooltip(page)).toHaveText('On the card')
-  await expect(tooltip(page)).toHaveCount(1)
+  // The card leaves who holds the ticket to the ticket page: its assignee is not on it.
+  await expect(card.getByText(name)).toHaveCount(0)
 
   // On the ticket, the reserved chip inside the Assignee label; the label itself says nothing.
   await page.goto(`/projects/${project.id}/features/${t.id}`)
@@ -871,40 +865,45 @@ test("the Previews page's hints are tooltips: the limit's use, a row's state, li
   expect(await nativeTitles(page)).toEqual([])
 })
 
-test('no native title is left on the main pages', async ({ page, api, human, project }) => {
-  await ok(human.post(`/api/projects/${project.id}/agents/defaults`, { data: {} }))
-  const t = await api.ticket({ title: 'Everything on it', status: 'in_progress' })
-  await postWithPicture(human, t.id, 'A post with a picture.')
-  await ok(human.post(`/api/tickets/${t.id}/tasks`, { data: { tasks: ['One task'] } }))
-  await ok(
-    human.post(`/api/tickets/${t.id}/workspaces`, {
-      data: { name: 'sandbox', branch: 'sb', previewUrl: 'https://example.com/sandbox' },
-    }),
-  )
-  await stubQueue(page, project.id, [
-    prRow(project.id, 5, { isDraft: true, ci: 'failing', merge: 'conflicts' }),
-    prRow(project.id, 6, {
-      mergeAfter: [{ ticketId: t.id, title: 'Everything on it', repoId: 1, number: 5, url: null }],
-    }),
-  ])
-  for (const url of [
-    '/',
-    `/projects/${project.id}`,
-    `/projects/${project.id}/features?view=board`,
-    `/projects/${project.id}/features?view=list`,
-    `/projects/${project.id}/features/${t.id}`,
-    `/projects/${project.id}/prs`,
-    `/projects/${project.id}/previews`,
-    `/projects/${project.id}/cleanup`,
-    `/projects/${project.id}/agents`,
-    `/projects/${project.id}/settings`,
-    `/projects/${project.id}/daily`,
-  ]) {
+// One test per page. Together the pages took the whole 30 s test budget on a loaded runner; each page gets
+// its own budget now, and every page is still checked.
+const MAIN_PAGES: [string, (projectId: number, ticketId: number) => string][] = [
+  ['the home page', () => '/'],
+  ['the project page', (p) => `/projects/${p}`],
+  ['the board', (p) => `/projects/${p}/features?view=board`],
+  ['the list of features', (p) => `/projects/${p}/features?view=list`],
+  ['a ticket', (p, t) => `/projects/${p}/features/${t}`],
+  ['the PR queue', (p) => `/projects/${p}/prs`],
+  ['the previews', (p) => `/projects/${p}/previews`],
+  ['the cleanup page', (p) => `/projects/${p}/cleanup`],
+  ['the agents page', (p) => `/projects/${p}/agents`],
+  ['the settings page', (p) => `/projects/${p}/settings`],
+  ['the daily page', (p) => `/projects/${p}/daily`],
+]
+
+for (const [name, urlOf] of MAIN_PAGES) {
+  test(`no native title is left on ${name}`, async ({ page, api, human, project }) => {
+    await ok(human.post(`/api/projects/${project.id}/agents/defaults`, { data: {} }))
+    const t = await api.ticket({ title: 'Everything on it', status: 'in_progress' })
+    await postWithPicture(human, t.id, 'A post with a picture.')
+    await ok(human.post(`/api/tickets/${t.id}/tasks`, { data: { tasks: ['One task'] } }))
+    await ok(
+      human.post(`/api/tickets/${t.id}/workspaces`, {
+        data: { name: 'sandbox', branch: 'sb', previewUrl: 'https://example.com/sandbox' },
+      }),
+    )
+    await stubQueue(page, project.id, [
+      prRow(project.id, 5, { isDraft: true, ci: 'failing', merge: 'conflicts' }),
+      prRow(project.id, 6, {
+        mergeAfter: [{ ticketId: t.id, title: 'Everything on it', repoId: 1, number: 5, url: null }],
+      }),
+    ])
+    const url = urlOf(project.id, t.id)
     await page.goto(url)
     await page.waitForLoadState('networkidle')
     expect(await nativeTitles(page), url).toEqual([])
-  }
-})
+  })
+}
 
 test('scrolling closes an open tooltip, which never lengthens the page, and it opens again after', async ({
   page,
