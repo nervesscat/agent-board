@@ -184,6 +184,8 @@ export function RichEditor({
 
 /** The list items a block can sit in: the lift takes a block out of one of these. */
 const listItemTypes = ['listItem', 'taskItem']
+/** The lists a list item can hold, in any kind. */
+const listTypes = ['bulletList', 'orderedList', 'taskList']
 
 /**
  * Lifts the block at `pos` (of `size`) out of the list item it sits in, one level. A list item starts
@@ -202,7 +204,11 @@ function liftOutOfItem(tr: Transaction, pos: number, size: number): number | nul
   const $block = tr.doc.resolve(pos)
   const list = $block.node($block.depth - 1)
   const index = $block.index($block.depth - 1)
-  const hasRest = $block.parent.childCount > 1
+  // A nested list after the block goes out first (below), so only text after the block keeps the item in its list.
+  let hasRest = false
+  for (let i = $block.index() + 1; i < $block.parent.childCount; i++) {
+    if (!listTypes.includes($block.parent.child(i).type.name)) hasRest = true
+  }
   const mark = tr.mapping.maps.length
   if (!liftRange(pos, pos + size)) {
     const itemEnd = tr.doc.resolve(pos).end()
@@ -211,12 +217,17 @@ function liftOutOfItem(tr: Transaction, pos: number, size: number): number | nul
   const next = tr.mapping.slice(mark).map(pos, 1)
   // The items after the lifted one go on in a list of their own, which copied the start of the list it was
   // cut from: it starts at the number of its first item (the lifted item's number is gone unless it has more).
-  const after = tr.doc.resolve(next + size).nodeAfter
-  if (list.type.name === 'orderedList' && index < list.childCount - 1 && after?.type.name === 'orderedList') {
-    tr.setNodeMarkup(next + size, undefined, {
-      ...after.attrs,
-      start: list.attrs.start + index + (hasRest ? 0 : 1),
-    })
+  // The nested lists lifted out with the block sit between the block and that list.
+  if (list.type.name === 'orderedList' && index < list.childCount - 1) {
+    let at = next + size
+    let node = tr.doc.nodeAt(at)
+    while (node && listTypes.includes(node.type.name) && node.type.name !== 'orderedList') {
+      at += node.nodeSize
+      node = tr.doc.nodeAt(at)
+    }
+    if (node?.type.name === 'orderedList') {
+      tr.setNodeMarkup(at, undefined, { ...node.attrs, start: list.attrs.start + index + (hasRest ? 0 : 1) })
+    }
   }
   return next
 }
@@ -242,7 +253,14 @@ export function narrowBlocks(tr: Transaction, keep: Keep = {}): { converted: boo
   // Both checks read the document before either split, so they are about the same paragraphs.
   const inside = (pos: number) => {
     const $pos = tr.doc.resolve(pos)
-    return $pos.parent.isTextblock && $pos.parentOffset > 0 && $pos.parentOffset < $pos.parent.content.size
+    if (!$pos.parent.isTextblock || $pos.parentOffset <= 0 || $pos.parentOffset >= $pos.parent.content.size)
+      return false
+    // A line break is inline content of its paragraph (a hard break, or a newline of a soft break kept in the text): a
+    // split beside one would leave the break and the text after it in a paragraph of their own, so the whole paragraph
+    // is taken instead.
+    const { nodeBefore, nodeAfter } = $pos
+    if (nodeBefore?.type.name === 'hardBreak' || nodeAfter?.type.name === 'hardBreak') return false
+    return !(nodeBefore?.text?.endsWith('\n') || nodeAfter?.text?.startsWith('\n'))
   }
   const splitTo = inside(to)
   const splitFrom = inside(from)
@@ -283,15 +301,27 @@ export function narrowBlocks(tr: Transaction, keep: Keep = {}): { converted: boo
       continue
     }
     // Out of the list items it sits in, the innermost first, so a block of a nested list ends up outside the lists.
+    let lifted = false
     for (;;) {
       const $inner = tr.doc.resolve(pos)
       if (!listItemTypes.includes($inner.parent.type.name)) break
       // A single block already in an item of the list stays there. Over several blocks every block comes out of
       // its item: the list is wrapped around them, and an item of that list left in the range would be nested.
       if (blocks.length === 1 && $inner.node($inner.depth - 1).type.name === keep.list) break
+      // A single block lifted out of a nested item of another list is made a list item of the style's type in
+      // the item it now sits in, so the rest of the nested item stays in its list, under the outer item.
+      if (lifted && blocks.length === 1 && listType && keep.list !== 'taskList' && !keep.once) {
+        const range = tr.doc.resolve(pos).blockRange(tr.doc.resolve(pos + size))
+        if (range) {
+          tr.wrap(range, [{ type: listType }, { type: listType.schema.nodes.listItem }])
+          converted = { from: pos + 3, to: pos + 1 + size }
+          break
+        }
+      }
       const next = liftOutOfItem(tr, pos, size)
       if (next === null) break
       pos = next
+      lifted = true
       if (keep.once) break
     }
   }
@@ -321,6 +351,22 @@ function convertItemTo(tr: Transaction, itemPos: number, listType: NodeType): nu
   }
   if (index < list.childCount - 1) tr.split(p + size, 1)
   const listPos = tr.doc.resolve(p).before()
+  // The list after the converted item copied the start of the list it was cut from: it starts at the number of its
+  // first item (the converted item's number is gone).
+  const head = tr.doc.nodeAt(listPos)
+  const continuation = head && tr.doc.nodeAt(listPos + head.nodeSize)
+  if (
+    head &&
+    continuation &&
+    list.type.name === 'orderedList' &&
+    index < list.childCount - 1 &&
+    continuation.type.name === 'orderedList'
+  ) {
+    tr.setNodeMarkup(listPos + head.nodeSize, undefined, {
+      ...continuation.attrs,
+      start: list.attrs.start + index + 1,
+    })
+  }
   // The item's block starts two tokens into the piece (its list and its item open before it), in either case.
   const blockPos = listPos + 2
   if (listType.name !== 'taskList') {

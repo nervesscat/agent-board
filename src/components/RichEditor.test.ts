@@ -325,6 +325,75 @@ describe('RichEditor styles on a partial selection', () => {
     )
   })
 
+  it('bullet on the whole text of a numbered item with a nested list keeps the numbers of the items after it', () => {
+    expect(
+      after('1. b\n   - n\n2. c\n3. d', 3, 8, (e) =>
+        toggleBlock(e, (c) => c.toggleBulletList(), 'bulletList'),
+      ),
+    ).toBe('- b\n  - n\n\n2. c\n3. d')
+  })
+
+  it('bullet on the whole text of a numbered item in the middle of a list starts the rest at its own number', () => {
+    expect(
+      after('5. x\n6. b\n   - n\n7. c', 8, 9, (e) =>
+        toggleBlock(e, (c) => c.toggleBulletList(), 'bulletList'),
+      ),
+    ).toBe('5. x\n\n- b\n  - n\n\n7. c')
+  })
+
+  it('heading on the text of a numbered item with a nested list keeps the numbers of the items after it', () => {
+    expect(
+      after('2. a\n   - x\n3. b\n4. c', 3, 4, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 }))),
+    ).toBe('## a\n\n- x\n\n3. b\n4. c')
+  })
+
+  it('numbered toggled off on the whole text of a numbered item with a nested list keeps the numbers after it', () => {
+    expect(
+      after('1. x\n2. b\n   - n\n3. c\n4. d', 8, 9, (e) =>
+        toggleBlock(e, (c) => c.toggleOrderedList(), 'orderedList'),
+      ),
+    ).toBe('1. x\n\nb\n\n- n\n\n3. c\n4. d')
+  })
+
+  it('a block style on the text of a nested item leaves the rest of that item in its own list', () => {
+    expect(
+      after('- a\n  - bc d', 8, 10, (e) => toggleBlock(e, (c) => c.toggleOrderedList(), 'orderedList')),
+    ).toBe('- a\n  1. bc\n  -  d')
+  })
+
+  it('a numbered style on a selected word of a deeper nested item leaves the rest of the item in its list', () => {
+    expect(
+      after('- a\n  - b\n    - c d', 13, 15, (e) =>
+        toggleBlock(e, (c) => c.toggleOrderedList(), 'orderedList'),
+      ),
+    ).toBe('- a\n  - b\n    1. c \n    - d')
+  })
+
+  it('a block style on the text before a hard break in a list item keeps the break and the text after it in the item', () => {
+    expect(
+      after('- a\n- bb\\\n  cont', 8, 10, (e) => toggleBlock(e, (c) => c.toggleOrderedList(), 'orderedList')),
+    ).toBe('- a\n\n1. bb  \ncont')
+  })
+
+  it('a heading on the text before a hard break in a nested list item keeps the break and the text after it in one block', () => {
+    const editor = editorWith('- a\n  - b\\\n  cont', 8, 9)
+    try {
+      toggleBlock(editor, (c) => c.toggleHeading({ level: 2 }))
+      const [list, heading] = editor.getJSON().content ?? []
+      expect(list?.type).toBe('bulletList')
+      expect(heading?.type).toBe('heading')
+      expect(heading?.content?.map((n) => n.type)).toEqual(['text', 'hardBreak', 'text'])
+    } finally {
+      editor.destroy()
+    }
+  })
+
+  it('a bullet style on a word before a soft line break in a list item takes the line after it out of the item too', () => {
+    expect(after('- a\ncont', 3, 4, (e) => toggleBlock(e, (c) => c.toggleBulletList(), 'bulletList'))).toBe(
+      'a\ncont',
+    )
+  })
+
   it('applies a block style across two paragraphs to the blocks the selection touches only', () => {
     expect(
       after('one two\n\nthree four', 5, 12, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 }))),
