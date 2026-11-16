@@ -13,6 +13,7 @@ import {
   FEED_TABS,
 } from '#/lib/constants'
 import { AGENT_TOKEN_NAME } from '#/lib/agents'
+import { KINDS } from '#/lib/kinds'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import * as agentCards from './agentCards'
 import * as agents from './agents'
@@ -358,7 +359,11 @@ api.get('/api/projects', () => json(projects.listProjects()))
 api.post('/api/projects', async ({ request, actor }) => {
   const body = await readJson(
     request,
-    z.object({ name: z.string().min(1).max(100), instructions: Instructions.optional() }),
+    z.object({
+      name: z.string().min(1).max(100),
+      instructions: Instructions.optional(),
+      kinds: ProjectKinds.optional(),
+    }),
   )
   // Instructions it starts with are a change of them: the human's or an orchestrator's (as the PUT below).
   return json(projects.createProject(body, actor, callerInfo(request)), 201)
@@ -380,6 +385,8 @@ api.get('/api/projects/:id/tags', ({ params, url }) => {
   )
   return json(projects.projectTags(id(params), page))
 })
+// What a project is for: one or more of the kinds (`#/lib/kinds`), each once.
+const ProjectKinds = z.array(z.enum(KINDS)).min(1).max(KINDS.length)
 // The phases every new ticket of the project starts with; null goes back to the built-in list.
 const DefaultPhases = z.array(z.string().trim().min(1).max(500)).max(20).nullable()
 api.patch('/api/projects/:id', async ({ request, params, actor }) => {
@@ -393,8 +400,12 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
       stallMinutes: z.number().int().min(STALL_MINUTES.min).max(STALL_MINUTES.max).optional(),
       layout: projects.LayoutBody.optional(),
       workStage: z.string().min(1).max(100).nullable().optional(),
+      kinds: ProjectKinds.optional(),
     }),
   )
+  // What the project is for decides which of the board is in use: the human's to choose.
+  if (body.kinds !== undefined && isAgent(request))
+    throw new HttpError(403, 'only the human sets what the project is for')
   if (body.stallMinutes !== undefined && isAgent(request))
     throw new HttpError(403, 'only the human sets when a ticket reads as stalled')
   // They shape every new ticket of the project: agents change the phases of a ticket instead.
