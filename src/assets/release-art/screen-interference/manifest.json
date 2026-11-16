@@ -6,14 +6,26 @@
   "palette": {
     "light": {
       "ground": "#F0EBE1",
-      "inks": ["#2C467C", "#D9553B", "#C99A2E"],
+      "inks": {
+        "indigo": "#2C467C",
+        "vermilion": "#D9553B",
+        "ochre": "#C99A2E",
+        "viridian": "#2D6B57",
+        "plum": "#74406B"
+      },
       "blend": "multiply",
       "grain": "#3A332A",
       "grainOpacity": 0.16
     },
     "dark": {
       "ground": "#14161C",
-      "inks": ["#6F93D8", "#E8694D", "#D8B24E"],
+      "inks": {
+        "indigo": "#6F93D8",
+        "vermilion": "#E8694D",
+        "ochre": "#D8B24E",
+        "viridian": "#5DB396",
+        "plum": "#B784AE"
+      },
       "blend": "screen",
       "grain": "#F0EBE1",
       "grainOpacity": 0.09
@@ -25,11 +37,182 @@
     "minRadius": 0.7,
     "thirdScalePitch": 5.667
   },
+  "styleInks": ["indigo", "ochre"],
+  "thematics": [
+    {
+      "major": 0,
+      "name": "Make-ready",
+      "meaning": "Before 1.0 the product is on the proofing press: every release is a trial pull while the plates are moved toward register, and nothing is locked yet.",
+      "derived": false,
+      "axis": "diagonal",
+      "accent": "vermilion",
+      "arc": {
+        "gap": [6.6, 2.4],
+        "warp": [7, 1.2],
+        "lean": [26, 4],
+        "spread": [0.1, 0.075],
+        "reach": [0.62, 1.6],
+        "breadth": [0.22, 0.25]
+      },
+      "beats": "one",
+      "hold": "earned",
+      "variations": [
+        {
+          "minor": 1,
+          "chapter": "First pull",
+          "t": 0,
+          "gap": 6.6,
+          "warp": 7,
+          "lean": 26,
+          "spread": 0.1,
+          "reach": 0.62,
+          "breadth": 0.22,
+          "beats": 1
+        },
+        {
+          "minor": 2,
+          "chapter": "Finding register",
+          "t": 0.5,
+          "gap": 4.5,
+          "warp": 4.1,
+          "lean": 15,
+          "spread": 0.088,
+          "reach": 1.11,
+          "breadth": 0.235,
+          "beats": 1
+        },
+        {
+          "minor": 3,
+          "chapter": "Near register",
+          "t": 1,
+          "gap": 2.4,
+          "warp": 1.2,
+          "lean": 4,
+          "spread": 0.075,
+          "reach": 1.6,
+          "breadth": 0.25,
+          "beats": 1
+        }
+      ]
+    },
+    {
+      "major": 1,
+      "name": "The run",
+      "meaning": "From 1.0 the press is in register and the edition is printing: people take sheets off the pile and rely on each one being like the last; what grows is the weight, not the doubt.",
+      "derived": false,
+      "axis": "upright",
+      "accent": "viridian",
+      "arc": {
+        "gap": [2.6, 1.5],
+        "warp": [0, 0],
+        "lean": [0, 0],
+        "spread": [0.5, 0.5],
+        "reach": [1.6, 1.6],
+        "breadth": [0.5, 0.62]
+      },
+      "beats": "chapter",
+      "hold": "always",
+      "variations": [
+        {
+          "minor": 1,
+          "chapter": "First sheets",
+          "t": 0,
+          "gap": 2.6,
+          "warp": 0,
+          "lean": 0,
+          "spread": 0.5,
+          "reach": 1.6,
+          "breadth": 0.5,
+          "beats": 1
+        },
+        {
+          "minor": 2,
+          "chapter": "Long run",
+          "t": 0.5,
+          "gap": 2.05,
+          "warp": 0,
+          "lean": 0,
+          "spread": 0.5,
+          "reach": 1.6,
+          "breadth": 0.56,
+          "beats": 2
+        },
+        {
+          "minor": 3,
+          "chapter": "Full stack",
+          "t": 1,
+          "gap": 1.5,
+          "warp": 0,
+          "lean": 0,
+          "spread": 0.5,
+          "reach": 1.6,
+          "breadth": 0.62,
+          "beats": 3
+        }
+      ]
+    }
+  ],
   "releases": [
+    {
+      "version": "v0.1.0",
+      "seed": 543699368,
+      "notes": "scripts/release-art/notes/v0.1.0.md",
+      "standIn": true,
+      "thematic": "Make-ready",
+      "chapter": "First pull",
+      "themes": {
+        "items": 6,
+        "volume": 0.353,
+        "hands": 0.535,
+        "precision": 0,
+        "wayfinding": 0,
+        "signals": 0.253
+      },
+      "speaks": ["hands"],
+      "screens": [
+        { "ink": "vermilion", "angle": 27.46, "pitch": 17, "warp": 0 },
+        { "ink": "ochre", "angle": 33.93, "pitch": 16.868, "warp": 4.93 }
+      ],
+      "edge": null,
+      "holds": [],
+      "lane": null,
+      "ramp": null,
+      "files": { "dark": "v0.1.0-dark.svg", "light": "v0.1.0-light.svg" }
+    },
+    {
+      "version": "v0.2.0",
+      "seed": 2979314309,
+      "notes": "scripts/release-art/notes/v0.2.0.md",
+      "standIn": false,
+      "thematic": "Make-ready",
+      "chapter": "Finding register",
+      "themes": {
+        "items": 131,
+        "volume": 0.961,
+        "hands": 0.977,
+        "precision": 0.713,
+        "wayfinding": 0.846,
+        "signals": 0.632
+      },
+      "speaks": ["hands", "wayfinding"],
+      "screens": [
+        { "ink": "indigo", "angle": 23.74, "pitch": 17, "warp": 0 },
+        { "ink": "vermilion", "angle": 25.91, "pitch": 17.106, "warp": 2.02 },
+        { "ink": "ochre", "angle": 28.95, "pitch": 17.091, "warp": 1.41 }
+      ],
+      "edge": null,
+      "holds": [],
+      "lane": { "at": 0.532, "slope": -0.258, "width": 82.311, "shift": 8.5 },
+      "ramp": null,
+      "files": { "dark": "v0.2.0-dark.svg", "light": "v0.2.0-light.svg" }
+    },
     {
       "version": "v0.2.2",
       "seed": 2945759071,
       "notes": "scripts/release-art/notes/v0.2.2.md",
+      "standIn": false,
+      "thematic": "Make-ready",
+      "chapter": "Finding register",
       "themes": {
         "items": 159,
         "volume": 0.999,
@@ -40,12 +223,13 @@
       },
       "speaks": ["hands", "wayfinding"],
       "screens": [
-        { "ink": 1, "angle": 17.41, "pitch": 17, "warp": 0 },
-        { "ink": 0, "angle": 20.13, "pitch": 16.916, "warp": 2.48 },
-        { "ink": 2, "angle": 23.94, "pitch": 16.861, "warp": 1.73 }
+        { "ink": "indigo", "angle": 17.41, "pitch": 17, "warp": 0 },
+        { "ink": "vermilion", "angle": 19.74, "pitch": 16.92, "warp": 2 },
+        { "ink": "ochre", "angle": 22.99, "pitch": 17.054, "warp": 1.4 }
       ],
       "edge": null,
-      "lane": { "at": 0.575, "slope": -0.015, "width": 83.494, "shift": 8.5 },
+      "holds": [],
+      "lane": { "at": 0.614, "slope": 0.226, "width": 83.494, "shift": 8.5 },
       "ramp": null,
       "files": { "dark": "v0.2.2-dark.svg", "light": "v0.2.2-light.svg" }
     },
@@ -53,6 +237,9 @@
       "version": "v0.2.3",
       "seed": 2928981452,
       "notes": "scripts/release-art/notes/v0.2.3.md",
+      "standIn": false,
+      "thematic": "Make-ready",
+      "chapter": "Finding register",
       "themes": {
         "items": 15,
         "volume": 0.534,
@@ -63,10 +250,11 @@
       },
       "speaks": ["precision"],
       "screens": [
-        { "ink": 2, "angle": 27.93, "pitch": 17, "warp": 0 },
-        { "ink": 0, "angle": 29.32, "pitch": 16.962, "warp": 0.65 }
+        { "ink": "vermilion", "angle": 27.93, "pitch": 17, "warp": 0 },
+        { "ink": "ochre", "angle": 29.23, "pitch": 16.887, "warp": 0.89 }
       ],
-      "edge": { "screen": 0, "vertical": true, "at": 0.503, "keep": "after" },
+      "edge": { "screen": 1, "vertical": false, "at": 0.694, "keep": "before" },
+      "holds": [],
       "lane": null,
       "ramp": null,
       "files": { "dark": "v0.2.3-dark.svg", "light": "v0.2.3-light.svg" }
@@ -75,6 +263,9 @@
       "version": "v0.2.4",
       "seed": 2912203833,
       "notes": "scripts/release-art/notes/v0.2.4.md",
+      "standIn": false,
+      "thematic": "Make-ready",
+      "chapter": "Finding register",
       "themes": {
         "items": 13,
         "volume": 0.505,
@@ -85,11 +276,12 @@
       },
       "speaks": ["hands", "wayfinding"],
       "screens": [
-        { "ink": 1, "angle": 11.83, "pitch": 17, "warp": 0 },
-        { "ink": 0, "angle": 17.41, "pitch": 16.901, "warp": 4.48 }
+        { "ink": "indigo", "angle": 11.83, "pitch": 17, "warp": 0 },
+        { "ink": "vermilion", "angle": 16.39, "pitch": 16.841, "warp": 3.41 }
       ],
       "edge": null,
-      "lane": { "at": 0.387, "slope": 0.247, "width": 85.36, "shift": 8.5 },
+      "holds": [],
+      "lane": { "at": 0.392, "slope": -0.233, "width": 85.36, "shift": 8.5 },
       "ramp": null,
       "files": { "dark": "v0.2.4-dark.svg", "light": "v0.2.4-light.svg" }
     },
@@ -97,6 +289,9 @@
       "version": "v0.2.5",
       "seed": 2895426214,
       "notes": "scripts/release-art/notes/v0.2.5.md",
+      "standIn": false,
+      "thematic": "Make-ready",
+      "chapter": "Finding register",
       "themes": {
         "items": 31,
         "volume": 0.677,
@@ -107,14 +302,125 @@
       },
       "speaks": ["hands", "signals"],
       "screens": [
-        { "ink": 0, "angle": 30.77, "pitch": 17, "warp": 0 },
-        { "ink": 1, "angle": 33.35, "pitch": 16.863, "warp": 2.24 },
-        { "ink": 2, "angle": 36.97, "pitch": 16.917, "warp": 1.57 }
+        { "ink": "indigo", "angle": 30.77, "pitch": 17, "warp": 0 },
+        { "ink": "vermilion", "angle": 33, "pitch": 17.141, "warp": 1.89 },
+        { "ink": "ochre", "angle": 36.12, "pitch": 16.883, "warp": 1.32 }
       ],
       "edge": null,
+      "holds": [],
       "lane": null,
-      "ramp": { "screen": 2, "from": "left", "floor": 0.059 },
+      "ramp": { "screen": 2, "from": "right", "floor": 0.059 },
       "files": { "dark": "v0.2.5-dark.svg", "light": "v0.2.5-light.svg" }
+    },
+    {
+      "version": "v0.3.0",
+      "seed": 3411472350,
+      "notes": "scripts/release-art/notes/v0.3.0.md",
+      "standIn": true,
+      "thematic": "Make-ready",
+      "chapter": "Near register",
+      "themes": {
+        "items": 7,
+        "volume": 0.383,
+        "hands": 0.21,
+        "precision": 0.977,
+        "wayfinding": 0.417,
+        "signals": 0
+      },
+      "speaks": ["precision"],
+      "screens": [
+        { "ink": "vermilion", "angle": 29.13, "pitch": 17, "warp": 0 },
+        { "ink": "ochre", "angle": 30.23, "pitch": 16.925, "warp": 0.23 }
+      ],
+      "edge": { "screen": 1, "vertical": false, "at": 0.314, "keep": "after" },
+      "holds": [],
+      "lane": null,
+      "ramp": null,
+      "files": { "dark": "v0.3.0-dark.svg", "light": "v0.3.0-light.svg" }
+    },
+    {
+      "version": "v1.1.0",
+      "seed": 1989960611,
+      "notes": "scripts/release-art/notes/v1.1.0.md",
+      "standIn": true,
+      "thematic": "The run",
+      "chapter": "First sheets",
+      "themes": {
+        "items": 5,
+        "volume": 0.317,
+        "hands": 0,
+        "precision": 0.922,
+        "wayfinding": 0,
+        "signals": 0.472
+      },
+      "speaks": ["precision"],
+      "screens": [
+        { "ink": "viridian", "angle": 24.06, "pitch": 17, "warp": 0 },
+        { "ink": "indigo", "angle": 25.51, "pitch": 16.953, "warp": 0 }
+      ],
+      "edge": null,
+      "holds": [
+        { "screen": 0, "band": 0, "side": 1 },
+        { "screen": 1, "band": 0, "side": -1 }
+      ],
+      "lane": null,
+      "ramp": null,
+      "files": { "dark": "v1.1.0-dark.svg", "light": "v1.1.0-light.svg" }
+    },
+    {
+      "version": "v1.2.0",
+      "seed": 968913106,
+      "notes": "scripts/release-art/notes/v1.2.0.md",
+      "standIn": true,
+      "thematic": "The run",
+      "chapter": "Long run",
+      "themes": {
+        "items": 7,
+        "volume": 0.383,
+        "hands": 0.982,
+        "precision": 0.741,
+        "wayfinding": 0,
+        "signals": 0.555
+      },
+      "speaks": ["hands"],
+      "screens": [
+        { "ink": "viridian", "angle": 21.8, "pitch": 17, "warp": 0 },
+        { "ink": "indigo", "angle": 23.37, "pitch": 17.088, "warp": 0 }
+      ],
+      "edge": null,
+      "holds": [{ "screen": 0, "band": 0, "side": 1 }],
+      "lane": null,
+      "ramp": null,
+      "files": { "dark": "v1.2.0-dark.svg", "light": "v1.2.0-light.svg" }
+    },
+    {
+      "version": "v1.3.0",
+      "seed": 557543417,
+      "notes": "scripts/release-art/notes/v1.3.0.md",
+      "standIn": true,
+      "thematic": "The run",
+      "chapter": "Full stack",
+      "themes": {
+        "items": 8,
+        "volume": 0.41,
+        "hands": 0.669,
+        "precision": 0.829,
+        "wayfinding": 0.223,
+        "signals": 0.977
+      },
+      "speaks": ["precision", "signals"],
+      "screens": [
+        { "ink": "indigo", "angle": 26.93, "pitch": 17, "warp": 0 },
+        { "ink": "viridian", "angle": 28.18, "pitch": 16.95, "warp": 0 }
+      ],
+      "edge": null,
+      "holds": [
+        { "screen": 0, "band": 0, "side": 1 },
+        { "screen": 1, "band": 1, "side": -1 }
+      ],
+      "lane": null,
+      "ramp": { "screen": 1, "from": "top", "floor": 0.055 },
+      "files": { "dark": "v1.3.0-dark.svg", "light": "v1.3.0-light.svg" }
     }
   ]
 }

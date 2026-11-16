@@ -9,6 +9,11 @@
 // lattice turn into a broad, bending band of colour, and a straight, untouched lattice gives
 // straight, ruled fringes. That is the whole vocabulary: lattice, tone, angle, pitch and warp.
 //
+// Above the piece sit two levels of meaning. The major version picks a thematic (0.x is
+// Make-ready, the proofing press before 1.0; 1.x is The run, the press in register), which sets
+// how the bands lie, how true the screens are and the accent ink; the minor version is a chapter,
+// one step along the arc the thematic declares. See THEMATICS below and RATIONALE.md.
+//
 // The release's notes are read for four themes (many hands, precision, wayfinding, signals) and
 // for their volume, and the version seeds every remaining choice, so the same version and notes
 // write the same bytes on every run. A release nobody has seen needs only its notes file.
@@ -44,28 +49,157 @@ const MAX_TONE = 0.82
 const MIN_RADIUS = 0.7
 const RADIUS_STEP = 0.35
 
-// Three inks and a ground. Light prints the inks over paper and multiplies them where they
-// overlap; dark prints lighter pulls of the same three inks over a blue-black sheet and screens
-// them, so the overlaps brighten instead of darkening. Nothing else is on the sheet.
+// Inks and a ground. Light prints the inks over paper and multiplies them where they overlap;
+// dark prints lighter pulls of the same inks over a blue-black sheet and screens them, so the
+// overlaps brighten instead of darkening. A piece prints three of these inks and nothing else:
+// indigo and ochre are the style's and print in every major; the third is the thematic's accent.
 export const PALETTE = {
   light: {
     ground: '#F0EBE1',
-    inks: ['#2C467C', '#D9553B', '#C99A2E'],
+    inks: { indigo: '#2C467C', vermilion: '#D9553B', ochre: '#C99A2E', viridian: '#2D6B57', plum: '#74406B' },
     blend: 'multiply',
     grain: '#3A332A',
     grainOpacity: 0.16,
   },
   dark: {
     ground: '#14161C',
-    inks: ['#6F93D8', '#E8694D', '#D8B24E'],
+    inks: { indigo: '#6F93D8', vermilion: '#E8694D', ochre: '#D8B24E', viridian: '#5DB396', plum: '#B784AE' },
     blend: 'screen',
     grain: '#F0EBE1',
     grainOpacity: 0.09,
   },
 }
 export const PALETTE_HEXES = [
-  ...new Set(Object.values(PALETTE).flatMap((v) => [v.ground, ...v.inks, v.grain])),
+  ...new Set(Object.values(PALETTE).flatMap((v) => [v.ground, ...Object.values(v.inks), v.grain])),
 ]
+export const STYLE_INKS = ['indigo', 'ochre']
+
+// ---------------------------------------------------------------- version, thematic, variation
+//
+// Four levels. The style (everything above and the drawing below) never changes. The major
+// version picks a thematic: what that phase of the product means, as a grammar of how the bands
+// lie, how true the screens are and which accent ink prints. The minor version is a chapter of
+// the thematic: a step along an arc the thematic declares. The patch is the piece: its notes
+// steer the composition inside what the thematic and the chapter allow, and its version seeds
+// the rest.
+
+export function parseVersion(version) {
+  const match = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(String(version))
+  if (!match) throw new Error(`Not a release version (vMAJOR.MINOR.PATCH): ${version}`)
+  const [major, minor, patch] = match.slice(1).map(Number)
+  return { major, minor, patch, tag: `v${major}.${minor}.${patch}` }
+}
+
+// How the bands lie, for each axis a thematic can take: the band direction in degrees (0 runs
+// left to right, 90 top to bottom), and whether its sign is the seed's to choose.
+const AXES = {
+  diagonal: { from: 8, to: 20, signed: true },
+  upright: { from: 88, to: 92, signed: false },
+  level: { from: -2, to: 2, signed: false },
+  steep: { from: 56, to: 66, signed: true },
+}
+const AXIS_CYCLE = ['diagonal', 'upright', 'level', 'steep']
+const ACCENT_CYCLE = ['vermilion', 'viridian', 'plum']
+
+// Each arc is [first chapter (minor 1), last chapter (minor 3)].
+//   gap:     degrees between the screens' lattices; a small gap is a long, slow fringe.
+//   warp:    the most a later screen is pushed off true, in pixels; the only thing that bends
+//            the fringes.
+//   lean:    degrees between the bands; 0 is parallel.
+//   spread:  how far apart the bands' centres sit, over the sheet's height (leaning bands), or
+//            over a column's half-width (upright columns); less spread is more overlap.
+//   reach:   a band's half-length over the sheet's half-diagonal; under 1 it stops inside the
+//            sheet as a fragment, over it runs off.
+//   breadth: a band's half-width over the sheet's height (across a level or leaning band) or
+//            the share of a beat's slot a column fills (upright).
+//   beats:   'one' prints one band per screen; 'chapter' prints as many beats as the minor.
+//   hold:    'earned' holds an edge only when precision speaks; 'always' holds one on every piece.
+export const THEMATICS = {
+  0: {
+    name: 'Make-ready',
+    meaning:
+      'Before 1.0 the product is on the proofing press: every release is a trial pull while the ' +
+      'plates are moved toward register, and nothing is locked yet.',
+    axis: 'diagonal',
+    accent: 'vermilion',
+    arc: {
+      gap: [6.6, 2.4],
+      warp: [7, 1.2],
+      lean: [26, 4],
+      spread: [0.1, 0.075],
+      reach: [0.62, 1.6],
+      breadth: [0.22, 0.25],
+    },
+    beats: 'one',
+    hold: 'earned',
+    chapters: { 1: 'First pull', 2: 'Finding register', 3: 'Near register' },
+  },
+  1: {
+    name: 'The run',
+    meaning:
+      'From 1.0 the press is in register and the edition is printing: people take sheets off the ' +
+      'pile and rely on each one being like the last; what grows is the weight, not the doubt.',
+    axis: 'upright',
+    accent: 'viridian',
+    arc: {
+      gap: [2.6, 1.5],
+      warp: [0, 0],
+      lean: [0, 0],
+      spread: [0.5, 0.5],
+      reach: [1.6, 1.6],
+      breadth: [0.5, 0.62],
+    },
+    beats: 'chapter',
+    hold: 'always',
+    pair: 'indigo',
+    chapters: { 1: 'First sheets', 2: 'Long run', 3: 'Full stack' },
+  },
+}
+
+// A major nobody has designed yet still gets a thematic, by rule: its axis and accent come from
+// two cycles of different lengths (so no two of the next twelve majors share both), and its arc
+// is The run's, because a product past 1.0 stays in register. Its name and meaning are to be
+// written by a person when that major starts; until then the manifest marks it derived.
+export function thematicFor(major) {
+  if (!Number.isInteger(major) || major < 0) throw new Error(`Not a major version: ${major}`)
+  if (THEMATICS[major]) return { major, derived: false, ...THEMATICS[major] }
+  return {
+    major,
+    derived: true,
+    name: `Major ${major}`,
+    meaning: 'Derived by rule; write its name and meaning when this major starts.',
+    ...THEMATICS[1],
+    axis: AXIS_CYCLE[major % AXIS_CYCLE.length],
+    accent: ACCENT_CYCLE[major % ACCENT_CYCLE.length],
+    chapters: {},
+  }
+}
+
+// Where a minor sits on its thematic's arc: 0.1 at its start, 0.3 at its end, 0.0 a half step
+// before it; minors after the third keep stepping by ever smaller amounts, toward the next
+// thematic, so no two minors of one major are the same chapter.
+export function chapterOf(minor) {
+  if (!Number.isInteger(minor) || minor < 0) throw new Error(`Not a minor version: ${minor}`)
+  if (minor <= 3) return (minor - 1) / 2
+  return 1 + 0.35 * (1 - 0.7 ** (minor - 3))
+}
+
+export function variationFor(thematic, minor) {
+  const t = chapterOf(minor)
+  const along = ([from, to]) => from + (to - from) * t
+  return {
+    minor,
+    chapter: thematic.chapters[minor] || `Chapter ${minor}`,
+    t: round(t),
+    gap: round(clamp(along(thematic.arc.gap), 1.1, 7), 3),
+    warp: round(clamp(along(thematic.arc.warp), 0, 9), 3),
+    lean: round(clamp(along(thematic.arc.lean), 0, 60), 3),
+    spread: round(clamp(along(thematic.arc.spread), 0.04, 0.6), 3),
+    reach: round(clamp(along(thematic.arc.reach), 0.4, 1.8), 3),
+    breadth: round(clamp(along(thematic.arc.breadth), 0.12, 0.66), 3),
+    beats: thematic.beats === 'chapter' ? clamp(minor, 1, 5) : 1,
+  }
+}
 
 const THEME_WORDS = {
   hands: [
@@ -243,12 +377,16 @@ export function readThemes(notes) {
 
 // ---------------------------------------------------------------- the plan
 
-// The plan is everything the notes and the seed decide; the drawing below only follows it.
+// The plan is everything the version and the notes decide; the drawing below only follows it.
 export function planPiece(version, themes, seed) {
+  const { major, minor, tag } = parseVersion(version)
+  const thematic = thematicFor(major)
+  const variation = variationFor(thematic, minor)
   const random = mulberry32(seed)
   const pick = (low, high) => lerp(low, high, random())
   const sign = () => (random() < 0.5 ? -1 : 1)
   const { hands, precision, wayfinding, signals, volume } = themes
+  const upright = thematic.axis === 'upright'
 
   // A release is read for what it is mostly about: a theme speaks when it is strong and close to
   // the strongest one, and no more than two speak, so a sprawling release does not get every
@@ -263,23 +401,26 @@ export function planPiece(version, themes, seed) {
   // Many hands, in a large release, bring a third ink; otherwise two.
   const screens = speaks.has('hands') && volume > 0.6 ? 3 : 2
 
-  // How far the screens are turned from each other sets the fringe width: a small gap is a long,
-  // slow beat; a wider one packs the fringes tight. Precision closes the gap.
+  // How far the screens are turned from each other sets the fringe width: the chapter sets the
+  // gap and precision closes it further.
   const baseAngle = pick(8, 34)
-  const gap = lerp(5.5, 1.4, precision) + pick(-0.4, 0.4)
-  // Warp: how far a lattice is pushed off true, in pixels. Precision keeps it straight; many
-  // hands and a large release push it about.
-  const warp = clamp(lerp(1, 6, hands * 0.6 + volume * 0.4) * (1 - precision * 0.8), 0.5, 6)
+  // Never wider than 7°, so a fringe always spans at least eight dots and still reads at a third.
+  const gap = clamp(lerp(variation.gap, Math.min(variation.gap, 1.3), precision) + pick(-0.3, 0.3), 1.1, 7)
+  // Warp: how far a lattice is pushed off true, in pixels, up to what the chapter allows. Many
+  // hands and a large release push it toward that; precision keeps it straight.
+  const warp = round(variation.warp * (0.45 + 0.55 * (hands * 0.6 + volume * 0.4)) * (1 - precision * 0.7), 2)
   const warpScale = lerp(560, 320, volume)
 
-  const inks = [0, 1, 2]
-  const first = Math.floor(random() * 3)
-  const order = [first, ...inks.filter((ink) => ink !== first)]
+  // Inks: the accent always prints, on one of the first two screens, with one of the style's
+  // inks; a third screen takes the other.
+  const seeded = random() < 0.5 ? [...STYLE_INKS] : [...STYLE_INKS].reverse()
+  const style = thematic.pair ? [thematic.pair, ...STYLE_INKS.filter((ink) => ink !== thematic.pair)] : seeded
+  const inks = random() < 0.5 ? [thematic.accent, ...style] : [style[0], thematic.accent, style[1]]
 
   const plates = []
   for (let s = 0; s < screens; s++) {
     plates.push({
-      ink: order[s],
+      ink: inks[s],
       angle: round(baseAngle + gap * (s === 2 ? 2.4 : s), 2),
       pitch: round(PITCH * (1 + (s === 0 ? 0 : sign() * pick(0.004, 0.016) * (1 - precision * 0.6))), 3),
       origin: [round(pick(0, PITCH)), round(pick(0, PITCH))],
@@ -288,54 +429,109 @@ export function planPiece(version, themes, seed) {
     })
   }
 
-  // The tone: each screen prints one broad band that runs off the sheet at both ends, its long
-  // sides a halftone fade. How the bands lie to one another is the composition: nearly parallel
-  // and stacked when the release is about precision, crossing wide when many hands are in it.
-  const tilt = pick(-16, 16)
-  const spread = speaks.has('hands') ? pick(24, 36) : speaks.has('precision') ? pick(0, 3) : pick(9, 18)
+  // The tone: each screen prints bands that run along the thematic's axis, their long sides a
+  // halftone fade. The chapter sets how far they lean apart, how far they reach and how broad
+  // they are; the notes push the lean: many hands open it, precision closes it.
+  const axis = AXES[thematic.axis]
+  const tilt = pick(axis.from, axis.to) * (axis.signed ? sign() : 1)
+  const lean = variation.lean * (speaks.has('hands') ? 1.3 : 1) * (speaks.has('precision') ? 0.12 : 1)
   const narrow = speaks.has('wayfinding') ? 0.82 : 1
+  const ragged = round(lerp(0.05, 0.18, hands * 0.5 + volume * 0.5) * (1 - precision * 0.6))
+  const halfDiagonal = Math.hypot(WIDTH, HEIGHT) / 2
   const fields = []
-  for (let s = 0; s < screens; s++) {
-    const offset = screens === 2 ? [-1, 1][s] : [-1, 0.15, 1][s]
-    const turn = screens === 2 ? offset * 0.5 : [-0.5, 0.5, -0.05][s]
-    fields.push({
-      angle: round(tilt + spread * turn, 2),
-      x: round(WIDTH * (0.5 + pick(-0.12, 0.12))),
-      y: round(HEIGHT * (0.5 + offset * pick(0.1, 0.17))),
-      half: round(HEIGHT * pick(0.2, 0.27) * narrow),
-      // A third ink prints lighter, so three inks over one another stay inks and not mud.
-      tone: round(pick(0.4, 0.52) * (s === 2 ? 0.72 : 1)),
-      ragged: round(lerp(0.05, 0.18, hands * 0.5 + volume * 0.5) * (1 - precision * 0.6)),
-      raggedSeed: Math.floor(random() * 1e9),
-    })
+  if (upright) {
+    // Columns: the sheet is cut into one slot per beat, and in every slot the screens' columns
+    // stand side by side, overlapping in the middle: one beat of fringes per slot.
+    const slot = WIDTH / variation.beats
+    const drift = pick(-0.08, 0.08) * slot
+    const half = (slot / 2) * variation.breadth * narrow
+    for (let s = 0; s < screens; s++) {
+      const third = s === 2
+      const offset = third ? 0 : [-1, 1][s] * half * variation.spread * pick(0.84, 1.12)
+      const bands = []
+      for (let k = 0; k < variation.beats; k++) {
+        bands.push({
+          angle: round(tilt + pick(-0.6, 0.6), 2),
+          x: round(slot * (k + 0.5) + drift + offset),
+          y: round(HEIGHT * (0.5 + pick(-0.05, 0.05))),
+          half: round(half * (third ? 0.55 : 1)),
+          length: round(halfDiagonal * variation.reach),
+        })
+      }
+      fields.push({
+        bands,
+        tone: round(pick(0.42, 0.52) * (third ? 0.72 : 1)),
+        ragged,
+        raggedSeed: Math.floor(random() * 1e9),
+      })
+    }
+  } else {
+    for (let s = 0; s < screens; s++) {
+      const offset = screens === 2 ? [-1, 1][s] : [-1, 0.15, 1][s]
+      const turn = screens === 2 ? offset * 0.5 : [-0.5, 0.5, -0.05][s]
+      fields.push({
+        bands: [
+          {
+            angle: round(tilt + lean * turn, 2),
+            x: round(WIDTH * (0.5 + pick(-0.12, 0.12))),
+            y: round(HEIGHT * (0.5 + offset * variation.spread * pick(0.85, 1.25))),
+            half: round(HEIGHT * variation.breadth * pick(0.88, 1.12) * narrow),
+            length: round(halfDiagonal * variation.reach * pick(0.9, 1.1)),
+          },
+        ],
+        // A third ink prints lighter, so three inks over one another stay inks and not mud.
+        tone: round(pick(0.4, 0.52) * (s === 2 ? 0.72 : 1)),
+        ragged,
+        raggedSeed: Math.floor(random() * 1e9),
+      })
+    }
   }
 
-  // Precision holds an edge: one screen stops dead on a straight line instead of fading.
-  const edge = speaks.has('precision')
-    ? {
-        screen: Math.floor(random() * screens),
-        vertical: random() < 0.6,
-        at: round(pick(0.42, 0.62)),
-        keep: random() < 0.5 ? 'before' : 'after',
-      }
-    : null
+  // A held edge. Earned by precision in a loose thematic: one screen stops dead on a straight line
+  // across the sheet. In a thematic that always holds, one column of the first screen is cut down
+  // its middle, so one of its sides is a hard edge; precision cuts a second screen's column too.
+  const edge =
+    thematic.hold === 'earned' && speaks.has('precision')
+      ? {
+          screen: Math.floor(random() * screens),
+          vertical: random() < 0.6,
+          ...(random() < 0.5
+            ? { at: round(pick(0.3, 0.45)), keep: 'after' }
+            : { at: round(pick(0.55, 0.7)), keep: 'before' }),
+        }
+      : null
+  const holds = []
+  if (thematic.hold === 'always') {
+    const count = speaks.has('precision') ? 2 : 1
+    for (let h = 0; h < count; h++) {
+      holds.push({
+        screen: h,
+        band: (Math.floor(random() * variation.beats) + h) % variation.beats,
+        // The outer side of the column, away from the overlap, so the beat between the screens
+        // stays whole and the column's outside edge is ruled.
+        side: h === 0 ? 1 : -1,
+      })
+    }
+  }
 
   // Wayfinding clears a lane of paper through the sheet and, across it, shifts the screens a
-  // half dot out of phase, so the fringes break and pick up again somewhere else.
+  // half dot out of phase, so the fringes break and pick up again somewhere else. A thematic in
+  // register keeps the lane upright.
   const lane = speaks.has('wayfinding')
     ? {
         at: round(pick(0.36, 0.62)),
-        slope: round(pick(-0.28, 0.28)),
+        slope: round(upright ? pick(-0.03, 0.03) : pick(-0.28, 0.28)),
         width: round(lerp(40, 90, wayfinding)),
         shift: round(PITCH * 0.5),
       }
     : null
 
-  // Signals grade a screen: its tone climbs steadily from one side of the sheet to the other.
+  // Signals grade a screen: its tone climbs steadily across the sheet, along the bands' run in a
+  // thematic that stands upright, across them otherwise.
   const ramp = speaks.has('signals')
     ? {
         screen: screens - 1,
-        from: random() < 0.5 ? 'left' : 'right',
+        from: upright ? (random() < 0.5 ? 'top' : 'bottom') : random() < 0.5 ? 'left' : 'right',
         floor: round(lerp(0.25, 0.05, signals)),
       }
     : null
@@ -344,13 +540,22 @@ export function planPiece(version, themes, seed) {
   const mottle = { scale: round(pick(220, 340)), strength: round(lerp(0.06, 0.12, volume)) }
 
   return {
-    version,
+    version: tag,
     seed,
+    thematic: {
+      major,
+      name: thematic.name,
+      axis: thematic.axis,
+      accent: thematic.accent,
+      derived: thematic.derived,
+    },
+    variation,
     speaks: [...speaks].sort(),
     screens,
     plates,
     fields,
     edge,
+    holds,
     lane,
     ramp,
     warpScale: round(warpScale),
@@ -365,9 +570,21 @@ function fieldTone(plan, s, x, y) {
   const wobble =
     noise(field.raggedSeed, x, y, 170) * field.ragged +
     noise(field.raggedSeed + 7, x, y, 55) * field.ragged * 0.35
-  const angle = (field.angle * Math.PI) / 180
-  const across = Math.abs(-(x - field.x) * Math.sin(angle) + (y - field.y) * Math.cos(angle)) / field.half
-  const shape = 1 - smoothstep(0.45, 1.05, across + wobble)
+  let shape = 0
+  field.bands.forEach((band, b) => {
+    const angle = (band.angle * Math.PI) / 180
+    const dx = x - band.x
+    const dy = y - band.y
+    const signedAcross = -dx * Math.sin(angle) + dy * Math.cos(angle)
+    for (const hold of plan.holds) {
+      if (hold.screen === s && hold.band === b && signedAcross * hold.side > 0) return
+    }
+    const across = Math.abs(signedAcross) / band.half
+    const along = Math.abs(dx * Math.cos(angle) + dy * Math.sin(angle)) / band.length
+    const value =
+      (1 - smoothstep(0.45, 1.05, across + wobble)) * (1 - smoothstep(0.62, 1, along + wobble * 0.5))
+    shape = Math.max(shape, value)
+  })
   let tone = shape * field.tone
 
   if (plan.edge && plan.edge.screen === s) {
@@ -376,8 +593,8 @@ function fieldTone(plan, s, x, y) {
     if (before !== (plan.edge.keep === 'before')) tone = 0
   }
   if (plan.ramp && plan.ramp.screen === s) {
-    const t = plan.ramp.from === 'left' ? x / WIDTH : 1 - x / WIDTH
-    tone *= lerp(plan.ramp.floor, 1, smoothstep(0.08, 0.92, t))
+    const across = { left: x / WIDTH, right: 1 - x / WIDTH, top: y / HEIGHT, bottom: 1 - y / HEIGHT }
+    tone *= lerp(plan.ramp.floor, 1, smoothstep(0.08, 0.92, across[plan.ramp.from]))
   }
   if (plan.lane) {
     const d = laneDistance(plan.lane, x, y)
@@ -478,7 +695,7 @@ export function renderPiece(plan, variant) {
   const svg = [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${WIDTH} ${HEIGHT}" width="${WIDTH}" height="${HEIGHT}" role="img" aria-labelledby="${id('title')} ${id('desc')}">`,
     `<title id="${id('title')}">Release artwork ${plan.version}, ${variant}</title>`,
-    `<desc id="${id('desc')}">${plan.screens} halftone screens at slightly different angles, printed over one another; their moiré fringes are the image.</desc>`,
+    `<desc id="${id('desc')}">${plan.screens} halftone screens at slightly different angles, printed over one another; their moiré fringes are the image. ${plan.thematic.name}, ${plan.variation.chapter}.</desc>`,
     '<defs>',
     // Dot gain: the dot edges are pushed about by a fine noise, as ink spreads into paper.
     `<filter id="${id('gain')}" x="0" y="0" width="100%" height="100%" filterUnits="userSpaceOnUse"><feTurbulence type="fractalNoise" baseFrequency="0.42" numOctaves="2" seed="${(plan.seed % 89) + 1}"/><feDisplacementMap in="SourceGraphic" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>`,
@@ -514,6 +731,12 @@ function parseArgs(argv) {
   return args
 }
 
+// Notes written for the artwork, for a version with no published release, say so in their
+// first line; the manifest carries the mark.
+export function isStandIn(notes) {
+  return /^>\s*\*\*Stand-in notes\.\*\*/.test(notes)
+}
+
 function notesFiles() {
   return readdirSync(NOTES_DIR)
     .filter((file) => /^v\d+\.\d+\.\d+\.md$/.test(file))
@@ -528,7 +751,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2))
   const outDir = args.out ? resolve(args.out) : ASSET_DIR
   const jobs = args.version
-    ? [{ version: `v${args.version.replace(/^v/, '')}`, file: resolve(args.notes) }]
+    ? [{ version: parseVersion(args.version).tag, file: resolve(args.notes) }]
     : notesFiles().map((file) => ({ version: file.replace(/\.md$/, ''), file: join(NOTES_DIR, file) }))
 
   mkdirSync(outDir, { recursive: true })
@@ -552,6 +775,9 @@ async function main() {
       version,
       seed,
       notes: job.file.startsWith(NOTES_DIR) ? `scripts/release-art/notes/${version}.md` : job.file,
+      standIn: isStandIn(notes),
+      thematic: plan.thematic.name,
+      chapter: plan.variation.chapter,
       themes: Object.fromEntries(
         Object.entries(themes).map(([key, value]) => [key, key === 'items' ? value : round(value)]),
       ),
@@ -563,6 +789,7 @@ async function main() {
         warp: plate.warp,
       })),
       edge: plan.edge,
+      holds: plan.holds,
       lane: plan.lane,
       ramp: plan.ramp,
       files,
@@ -582,6 +809,26 @@ async function main() {
     canvas: { width: WIDTH, height: HEIGHT },
     palette: PALETTE,
     screen: { pitch: PITCH, maxTone: MAX_TONE, minRadius: MIN_RADIUS, thirdScalePitch: round(PITCH / 3) },
+    styleInks: STYLE_INKS,
+    thematics: [...new Set(releases.map((release) => parseVersion(release.version).major))].map((major) => {
+      const thematic = thematicFor(major)
+      const minors = releases
+        .map((release) => parseVersion(release.version))
+        .filter((parsed) => parsed.major === major)
+        .map((parsed) => parsed.minor)
+      return {
+        major,
+        name: thematic.name,
+        meaning: thematic.meaning,
+        derived: thematic.derived,
+        axis: thematic.axis,
+        accent: thematic.accent,
+        arc: thematic.arc,
+        beats: thematic.beats,
+        hold: thematic.hold,
+        variations: [...new Set(minors)].map((minor) => variationFor(thematic, minor)),
+      }
+    }),
     releases,
   }
   // Written the way the repo's formatter writes JSON, so the committed manifest passes its check.
