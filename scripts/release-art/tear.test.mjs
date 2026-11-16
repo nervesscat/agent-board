@@ -14,6 +14,7 @@ import {
   parseVersion,
   planPiece,
   readThemes,
+  refuseRepeatedVersions,
   renderPiece,
   seedFor,
   thematicFor,
@@ -200,6 +201,16 @@ describe('release artwork: tear', () => {
     }
     expect(() => planPiece('next', readThemes(NOTES.hands), 1)).toThrow(/Not a version/)
     expect(failure(['--version', 'next', '--notes', SCRIPT])).toContain('Not a version: next')
+  })
+
+  it('refuses two notes files that name the same version', () => {
+    const one = { version: 'v0.3.0', notes: 'a.md', ref: 'a.md' }
+    const again = { version: 'v0.3.0', notes: 'b.md', ref: 'b.md' }
+
+    expect(refuseRepeatedVersions([one, { ...one, version: 'v0.3.1' }])).toHaveLength(2)
+    expect(() => refuseRepeatedVersions([one, again])).toThrow(
+      'Two notes files name the same version: v0.3.0',
+    )
   })
 
   it('names every spelling of a version by its canonical form, for files and seeds alike', () => {

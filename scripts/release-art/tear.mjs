@@ -1224,24 +1224,38 @@ export function canonicalVersion(text) {
   return `v${major}.${minor}.${patch}${pre ? `-${pre}` : ''}`
 }
 
+// Two notes files naming one version would write the same pieces twice, the later over the first.
+export function refuseRepeatedVersions(releases) {
+  const versions = releases.map((release) => release.version)
+  const twice = versions.find((version, index) => versions.indexOf(version) !== index)
+  if (twice) throw new Error(`Two notes files name the same version: ${twice}`)
+  return releases
+}
+
 function committedReleases() {
-  return readdirSync(NOTES_DIR)
-    .filter((file) => file.endsWith('.md'))
-    .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
-    .map((file) => ({ version: canonicalVersion(file.replace(/\.md$/, '')), notes: join(NOTES_DIR, file) }))
+  return refuseRepeatedVersions(
+    readdirSync(NOTES_DIR)
+      .filter((file) => file.endsWith('.md'))
+      .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
+      .map((file) => ({
+        version: canonicalVersion(file.replace(/\.md$/, '')),
+        notes: join(NOTES_DIR, file),
+        ref: `scripts/release-art/notes/${file}`,
+      })),
+  )
 }
 
 function main() {
   const args = parseArgs(process.argv.slice(2))
   const single = Boolean(args.version)
   const releases = single
-    ? [{ version: canonicalVersion(args.version), notes: resolve(args.notes) }]
+    ? [{ version: canonicalVersion(args.version), notes: resolve(args.notes), ref: args.notes }]
     : committedReleases()
   const out = resolve(args.out ?? ASSET_DIR)
   mkdirSync(out, { recursive: true })
 
   const entries = []
-  for (const { version, notes } of releases) {
+  for (const { version, notes, ref } of releases) {
     const text = readFileSync(notes, 'utf8')
     const themes = readThemes(text)
     const seed = seedFor(version)
@@ -1259,7 +1273,7 @@ function main() {
     entries.push({
       version,
       seed,
-      notes: `scripts/release-art/notes/${version}.md`,
+      notes: ref,
       // A stand-in is not a release: its notes were written to show a version that has none yet.
       standIn: STAND_IN.test(text),
       thematic: plan.thematic.name,
