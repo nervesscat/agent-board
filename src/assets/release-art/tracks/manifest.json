@@ -1,0 +1,191 @@
+{
+  "direction": "tracks",
+  "madeBy": "Claude Fable 5.2",
+  "generator": "scripts/release-art/tracks.mjs",
+  "canvas": {
+    "width": 1600,
+    "height": 900
+  },
+  "palette": {
+    "light": {
+      "ground": "#ECE7DA",
+      "neutral": "#2B3036",
+      "minus": "#1B7F7A",
+      "plus": "#C9621B"
+    },
+    "dark": {
+      "ground": "#12191D",
+      "neutral": "#DED8C8",
+      "minus": "#56BDB0",
+      "plus": "#EDA13A"
+    }
+  },
+  "beads": {
+    "width": {
+      "fast": 4.6,
+      "slowing": 6,
+      "slow": 7.8
+    },
+    "pitch": 1.36,
+    "slowingBelow": 150,
+    "slowBelow": 55
+  },
+  "releases": [
+    {
+      "version": "v0.2.2",
+      "themes": {
+        "lines": 154,
+        "hands": 0.396,
+        "holding": 0.16,
+        "route": 0.215,
+        "flight": 0.229
+      },
+      "plan": {
+        "version": "v0.2.2",
+        "seed": 2717970939,
+        "primary": "hands",
+        "secondary": "flight",
+        "load": 1,
+        "focus": {
+          "x": 1034,
+          "y": 432
+        },
+        "counts": {
+          "forks": 4
+        },
+        "accents": {
+          "passes": 2,
+          "curls": 3
+        },
+        "stray": 520,
+        "scratches": 3,
+        "grainSeed": 94
+      },
+      "files": {
+        "light": "v0.2.2-light.svg",
+        "dark": "v0.2.2-dark.svg"
+      },
+      "bytes": {
+        "light": 15132,
+        "dark": 15127
+      }
+    },
+    {
+      "version": "v0.2.3",
+      "themes": {
+        "lines": 15,
+        "hands": 0.056,
+        "holding": 0.611,
+        "route": 0.111,
+        "flight": 0.222
+      },
+      "plan": {
+        "version": "v0.2.3",
+        "seed": 2701193320,
+        "primary": "holding",
+        "secondary": "flight",
+        "load": 0.558,
+        "focus": {
+          "x": 1052,
+          "y": 462
+        },
+        "counts": {
+          "orbits": 3,
+          "rules": 3
+        },
+        "accents": {
+          "passes": 2,
+          "curls": 3
+        },
+        "stray": 405,
+        "scratches": 4,
+        "grainSeed": 80
+      },
+      "files": {
+        "light": "v0.2.3-light.svg",
+        "dark": "v0.2.3-dark.svg"
+      },
+      "bytes": {
+        "light": 11735,
+        "dark": 11729
+      }
+    },
+    {
+      "version": "v0.2.4",
+      "themes": {
+        "lines": 13,
+        "hands": 0.263,
+        "holding": 0.053,
+        "route": 0.526,
+        "flight": 0.158
+      },
+      "plan": {
+        "version": "v0.2.4",
+        "seed": 2818636653,
+        "primary": "route",
+        "secondary": "hands",
+        "load": 0.529,
+        "focus": {
+          "x": 969,
+          "y": 520
+        },
+        "counts": {
+          "bundle": 9
+        },
+        "accents": {
+          "forks": 1
+        },
+        "stray": 397,
+        "scratches": 3,
+        "grainSeed": 81
+      },
+      "files": {
+        "light": "v0.2.4-light.svg",
+        "dark": "v0.2.4-dark.svg"
+      },
+      "bytes": {
+        "light": 13484,
+        "dark": 13479
+      }
+    },
+    {
+      "version": "v0.2.5",
+      "themes": {
+        "lines": 31,
+        "hands": 0.242,
+        "holding": 0.121,
+        "route": 0.212,
+        "flight": 0.424
+      },
+      "plan": {
+        "version": "v0.2.5",
+        "seed": 2801859034,
+        "primary": "flight",
+        "secondary": "hands",
+        "load": 0.708,
+        "focus": {
+          "x": 511,
+          "y": 472
+        },
+        "counts": {
+          "passes": 9,
+          "curls": 9
+        },
+        "accents": {
+          "forks": 1
+        },
+        "stray": 444,
+        "scratches": 4,
+        "grainSeed": 67
+      },
+      "files": {
+        "light": "v0.2.5-light.svg",
+        "dark": "v0.2.5-dark.svg"
+      },
+      "bytes": {
+        "light": 11620,
+        "dark": 11615
+      }
+    }
+  ]
+}
