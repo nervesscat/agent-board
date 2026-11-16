@@ -31,7 +31,12 @@ const STAGE_KIND: Record<Exclude<PrTicketStatus, 'pending'>, StageKind> = {
  * no stage of that kind.
  */
 export function prTicketStage(stages: Stage[], status: PrTicketStatus): Stage | undefined {
-  return status === 'pending' ? startStage(stages) : firstOfKind(stages, STAGE_KIND[status])
+  if (status === 'pending') return startStage(stages)
+  // The Approved stage is the human's verdict, never where a PR's review lands, even when a reorder puts it first.
+  return firstOfKind(
+    stages.filter((s) => s.key !== 'approved'),
+    STAGE_KIND[status],
+  )
 }
 
 /** The title a PR's ticket starts with: its number and title, cut to 80 characters. */
