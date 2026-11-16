@@ -399,4 +399,53 @@ describe('RichEditor styles on a partial selection', () => {
       after('one two\n\nthree four', 5, 12, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 }))),
     ).toBe('one \n\n## two\n\n## th\n\nree four')
   })
+
+  it('a heading on a word after a hard break styles that word only, and the text before the break keeps its paragraph', () => {
+    // "brave" is selected; "x" before the break stays a paragraph.
+    expect(after('x  \nbrave world', 3, 8, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 })))).toBe(
+      'x\n\n## brave\n\n world',
+    )
+  })
+
+  it('a bullet on a word after a soft line break in a list item keeps the item before the break in its list', () => {
+    // "brave" is selected in the item "- x" + soft break + "brave world": the item keeps "x", "world" stays in the list.
+    expect(
+      after('- x\n  brave world', 5, 10, (e) => toggleBlock(e, (c) => c.toggleBulletList(), 'bulletList')),
+    ).toBe('- x\n\nbrave\n\n-  world')
+  })
+
+  it('a numbered style over the selected nested items of a numbered item keeps the numbers of the items after it', () => {
+    // From the start of "a" to the end of "b"; "y" and "z" keep 2 and 3.
+    expect(
+      after('1. x\n   - a\n   - b\n2. y\n3. z', 8, 14, (e) =>
+        toggleBlock(e, (c) => c.toggleOrderedList(), 'orderedList'),
+      ),
+    ).toBe('1. x\n   1. a\n   2. b\n2. y\n3. z')
+  })
+
+  it('a heading on a word of a nested numbered item keeps the number of the outer item after it', () => {
+    expect(
+      after('1. a\n   1. bc\n   2. d\n2. e', 8, 10, (e) =>
+        toggleBlock(e, (c) => c.toggleHeading({ level: 2 })),
+      ),
+    ).toBe('1. a\n\n## bc\n\n2. d\n\n2. e')
+  })
+
+  it('a bullet on a middle word of a numbered item starts the rest of the item at its own number', () => {
+    expect(
+      after('1. aa bb cc\n2. d', 6, 8, (e) => toggleBlock(e, (c) => c.toggleBulletList(), 'bulletList')),
+    ).toBe('1. aa \n\n- bb\n\n2.  cc\n3. d')
+  })
+
+  it('a bullet on a middle word of a numbered item that starts later starts the rest at its own number too', () => {
+    expect(
+      after('4. aa bb cc\n5. d', 6, 8, (e) => toggleBlock(e, (c) => c.toggleBulletList(), 'bulletList')),
+    ).toBe('4. aa \n\n- bb\n\n5.  cc\n6. d')
+  })
+
+  it('a checklist on a word of a nested item keeps the unselected items after it nested under their outer item', () => {
+    expect(
+      after('- a\n  - bc d\n  - e\n- f', 8, 10, (e) => toggleBlock(e, (c) => c.toggleTaskList(), 'taskList')),
+    ).toBe('- a\n  - [ ] bc\n  -  d\n  - e\n- f')
+  })
 })

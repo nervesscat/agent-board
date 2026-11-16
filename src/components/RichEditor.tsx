@@ -209,27 +209,35 @@ function liftOutOfItem(tr: Transaction, pos: number, size: number): number | nul
   for (let i = $block.index() + 1; i < $block.parent.childCount; i++) {
     if (!listTypes.includes($block.parent.child(i).type.name)) hasRest = true
   }
+  // The item's text before the block stays in the item, so the text after it is a new item of the list.
+  const hasHead = $block.index() > 0
+  const listEnd = $block.after($block.depth - 1)
   const mark = tr.mapping.maps.length
   if (!liftRange(pos, pos + size)) {
     const itemEnd = tr.doc.resolve(pos).end()
     if (!(pos + size < itemEnd && liftRange(pos + size, itemEnd)) || !liftRange(pos, pos + size)) return null
   }
   const next = tr.mapping.slice(mark).map(pos, 1)
-  // The items after the lifted one go on in a list of their own, which copied the start of the list it was
-  // cut from: it starts at the number of its first item (the lifted item's number is gone unless it has more).
-  // The nested lists lifted out with the block sit between the block and that list.
   if (list.type.name === 'orderedList' && index < list.childCount - 1) {
-    let at = next + size
-    let node = tr.doc.nodeAt(at)
-    while (node && listTypes.includes(node.type.name) && node.type.name !== 'orderedList') {
-      at += node.nodeSize
-      node = tr.doc.nodeAt(at)
-    }
-    if (node?.type.name === 'orderedList') {
-      tr.setNodeMarkup(at, undefined, { ...node.attrs, start: list.attrs.start + index + (hasRest ? 0 : 1) })
-    }
+    // The items after the lifted one go on in a list of their own (the nested lists lifted out with the block sit
+    // before it): it starts at the number of its first item, which is the item's own number only when its text
+    // is what follows the block.
+    restartList(tr, mark, listEnd, next, list.attrs.start + index + (hasRest && !hasHead ? 0 : 1))
   }
   return next
+}
+
+/**
+ * Starts the ordered list that continues a list after a split at `number`. The continuation is the list that
+ * ends where `end` (the end of the list before the split, as mapped since `mark`) is, when it starts after `from`.
+ */
+function restartList(tr: Transaction, mark: number, end: number, from: number, number: number) {
+  const at = tr.mapping.slice(mark).map(end, -1)
+  const node = tr.doc.resolve(at).nodeBefore
+  if (node?.type.name !== 'orderedList') return
+  const nodePos = at - node.nodeSize
+  if (nodePos < from) return
+  tr.setNodeMarkup(nodePos, undefined, { ...node.attrs, start: number })
 }
 
 /**
@@ -255,18 +263,34 @@ export function narrowBlocks(tr: Transaction, keep: Keep = {}): { converted: boo
     const $pos = tr.doc.resolve(pos)
     if (!$pos.parent.isTextblock || $pos.parentOffset <= 0 || $pos.parentOffset >= $pos.parent.content.size)
       return false
-    // A line break is inline content of its paragraph (a hard break, or a newline of a soft break kept in the text): a
-    // split beside one would leave the break and the text after it in a paragraph of their own, so the whole paragraph
-    // is taken instead.
+    // A line break is inline content of its paragraph (a hard break, or a newline of a soft break kept in the text). A
+    // split beside one would leave the break in a paragraph of its own, so the whole paragraph is taken instead; a start
+    // right after a break is the one case that splits there (see `afterBreak`).
     const { nodeBefore, nodeAfter } = $pos
     if (nodeBefore?.type.name === 'hardBreak' || nodeAfter?.type.name === 'hardBreak') return false
     return !(nodeBefore?.text?.endsWith('\n') || nodeAfter?.text?.startsWith('\n'))
   }
+  // A selection that starts right after a line break: the split goes there, and the break itself is dropped, so the
+  // text before the break stays in its own block. Not when the break is the first thing in the paragraph.
+  const afterBreak = (pos: number) => {
+    const $pos = tr.doc.resolve(pos)
+    if (!$pos.parent.isTextblock || $pos.parentOffset <= 1 || $pos.parentOffset >= $pos.parent.content.size)
+      return false
+    const { nodeBefore, nodeAfter } = $pos
+    if (nodeAfter?.type.name === 'hardBreak') return false
+    return nodeBefore?.type.name === 'hardBreak' || !!nodeBefore?.text?.endsWith('\n')
+  }
   const splitTo = inside(to)
   const splitFrom = inside(from)
+  const breakFrom = !splitFrom && afterBreak(from)
   // The end first: the start is before it, so its position does not move.
   if (splitTo) tr.split(to)
   if (splitFrom) tr.split(from)
+  if (breakFrom) {
+    tr.split(from)
+    // The break is now the last thing in the paragraph before the split, and it is the separator, so it goes.
+    tr.delete(from - 1, from)
+  }
   // Mapped through the splits: a start that was split lands in the new paragraph, an end that was
   // split lands at the end of the old one.
   const start = tr.mapping.map(from, 1)
@@ -282,6 +306,13 @@ export function narrowBlocks(tr: Transaction, keep: Keep = {}): { converted: boo
   })
   if (!blocks.length) return { converted: false }
   const listType = keep.list ? tr.doc.type.schema.nodes[keep.list] : undefined
+  // When the selected blocks cover the end of their nested list, they stay in the item of the style's list they
+  // come out of: the style then makes a list inside that item, and the list's numbers after the item stay as they were.
+  const coversNestedList =
+    blocks.length > 1 &&
+    !keep.once &&
+    keep.list !== undefined &&
+    endsItsLists(tr, blocks[blocks.length - 1].pos, keep.list)
   let converted: { from: number; to: number } | null = null
   // From the first block on. A block's lift leaves the blocks before it where they are, and the blocks
   // after it are found again by mapping their positions through every step since `mark`.
@@ -306,14 +337,22 @@ export function narrowBlocks(tr: Transaction, keep: Keep = {}): { converted: boo
       const $inner = tr.doc.resolve(pos)
       if (!listItemTypes.includes($inner.parent.type.name)) break
       // A single block already in an item of the list stays there. Over several blocks every block comes out of
-      // its item: the list is wrapped around them, and an item of that list left in the range would be nested.
-      if (blocks.length === 1 && $inner.node($inner.depth - 1).type.name === keep.list) break
+      // its item: the list is wrapped around them, and an item of that list left in the range would be nested. The
+      // exception is a block lifted out of a nested item into the item of the list (see `coversNestedList`).
+      if (
+        (blocks.length === 1 || (coversNestedList && lifted)) &&
+        $inner.node($inner.depth - 1).type.name === keep.list
+      )
+        break
       // A single block lifted out of a nested item of another list is made a list item of the style's type in
       // the item it now sits in, so the rest of the nested item stays in its list, under the outer item.
-      if (lifted && blocks.length === 1 && listType && keep.list !== 'taskList' && !keep.once) {
+      if (lifted && blocks.length === 1 && listType && !keep.once) {
         const range = tr.doc.resolve(pos).blockRange(tr.doc.resolve(pos + size))
         if (range) {
-          tr.wrap(range, [{ type: listType }, { type: listType.schema.nodes.listItem }])
+          // A task list holds task items, which the wrap makes unchecked.
+          const item =
+            listType.name === 'taskList' ? listType.schema.nodes.taskItem : listType.schema.nodes.listItem
+          tr.wrap(range, [{ type: listType }, { type: item }])
           converted = { from: pos + 3, to: pos + 1 + size }
           break
         }
@@ -344,6 +383,8 @@ function convertItemTo(tr: Transaction, itemPos: number, listType: NodeType): nu
   const list = $item.parent
   const index = $item.index()
   const size = $item.nodeAfter?.nodeSize ?? 0
+  const listEnd = $item.after($item.depth)
+  const mark = tr.mapping.maps.length
   let p = itemPos
   if (index > 0) {
     tr.split(p, 1)
@@ -351,21 +392,9 @@ function convertItemTo(tr: Transaction, itemPos: number, listType: NodeType): nu
   }
   if (index < list.childCount - 1) tr.split(p + size, 1)
   const listPos = tr.doc.resolve(p).before()
-  // The list after the converted item copied the start of the list it was cut from: it starts at the number of its
-  // first item (the converted item's number is gone).
-  const head = tr.doc.nodeAt(listPos)
-  const continuation = head && tr.doc.nodeAt(listPos + head.nodeSize)
-  if (
-    head &&
-    continuation &&
-    list.type.name === 'orderedList' &&
-    index < list.childCount - 1 &&
-    continuation.type.name === 'orderedList'
-  ) {
-    tr.setNodeMarkup(listPos + head.nodeSize, undefined, {
-      ...continuation.attrs,
-      start: list.attrs.start + index + 1,
-    })
+  // The list after the converted item starts at the number of the item after it: the converted item's number is gone.
+  if (list.type.name === 'orderedList' && index < list.childCount - 1) {
+    restartList(tr, mark, listEnd, listPos + 1, list.attrs.start + index + 1)
   }
   // The item's block starts two tokens into the piece (its list and its item open before it), in either case.
   const blockPos = listPos + 2
@@ -382,6 +411,22 @@ function convertItemTo(tr: Transaction, itemPos: number, listType: NodeType): nu
     tr.replaceWith(listPos, listPos + piece.nodeSize, listType.create(piece.attrs, taskItem))
   }
   return blockPos
+}
+
+/**
+ * True when the block at `pos` is the last thing in its item, and that item is the last item of every list between
+ * the block and the list named `list` (which holds it). Nothing after the block is left out of the selection in those lists.
+ */
+function endsItsLists(tr: Transaction, pos: number, list: string): boolean {
+  const $pos = tr.doc.resolve(pos)
+  if ($pos.index() !== $pos.parent.childCount - 1) return false
+  for (let depth = $pos.depth - 1; depth >= 0; depth--) {
+    const node = $pos.node(depth)
+    if (!listTypes.includes(node.type.name)) continue
+    if (node.type.name === list) return true
+    if ($pos.index(depth) !== node.childCount - 1) return false
+  }
+  return false
 }
 
 /**
