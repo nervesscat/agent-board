@@ -1,4 +1,4 @@
-import { type ChainedCommands, type Editor } from '@tiptap/core'
+import { type ChainedCommands, type Editor, Node as EditorNode } from '@tiptap/core'
 import Image from '@tiptap/extension-image'
 import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { TableKit } from '@tiptap/extension-table'
@@ -31,20 +31,73 @@ import { cn } from '#/lib/utils'
 
 /**
  * The serializer leaves extra blank lines around tables and at the end. Collapse them, outside code
- * blocks, where blank lines are part of the code.
+ * blocks, where blank lines are part of the code. It also writes an empty list item as a marker and a
+ * space; a marker alone reads back as a list, one with a space after it does not, so the space goes.
  */
 export function tidy(markdown: string): string {
   return markdown
     .split(/(```[\s\S]*?```)/)
-    .map((part, i) => (i % 2 ? part : part.replace(/\n{3,}/g, '\n\n')))
+    .map((part, i) =>
+      i % 2 ? part : part.replace(/\n{3,}/g, '\n\n').replace(/^([ \t]*[-+*])[ \t]+$/gm, '$1'),
+    )
     .join('')
     .trimEnd()
 }
 
+/** The markdown of an empty paragraph, and of a non-breaking space: a line the markdown parser keeps. */
+const EMPTY_PARAGRAPH_MARKDOWN = '&nbsp;'
+const NBSP_CHAR = '\xA0'
+
+/**
+ * The paragraph, read and written as the markdown library does, with one difference: a paragraph that follows a checklist
+ * and starts with a space is written with `&#32;` in front. Read back, `- [ ] a` and then a line of ` b` loses the first
+ * letters of ` b`; the entity keeps the space and the text.
+ */
+const Paragraph = EditorNode.create({
+  name: 'paragraph',
+  priority: 1000,
+  group: 'block',
+  content: 'inline*',
+  parseHTML: () => [{ tag: 'p' }],
+  renderHTML: ({ HTMLAttributes }) => ['p', HTMLAttributes, 0],
+  parseMarkdown: (token, helpers) => {
+    const tokens = token.tokens || []
+    if (tokens.length === 1 && tokens[0].type === 'image') return helpers.parseChildren([tokens[0]])
+    const content = helpers.parseInline(tokens)
+    const isEmptyMarker = (s?: string) => s === EMPTY_PARAGRAPH_MARKDOWN || s === NBSP_CHAR
+    if (
+      tokens.length === 1 &&
+      tokens[0].type === 'text' &&
+      (isEmptyMarker(tokens[0].raw) || isEmptyMarker(tokens[0].text)) &&
+      content.length === 1 &&
+      content[0].type === 'text' &&
+      isEmptyMarker(content[0].text)
+    )
+      return helpers.createNode('paragraph', undefined, [])
+    return helpers.createNode('paragraph', undefined, content)
+  },
+  renderMarkdown: (node, h, ctx) => {
+    const content = Array.isArray(node.content) ? node.content : []
+    if (content.length === 0) {
+      // An empty paragraph after an empty paragraph would vanish: it is written as a non-breaking space.
+      // (An empty paragraph's JSON has no content at all.)
+      const previous = ctx?.previousNode
+      const previousEmpty = !(Array.isArray(previous?.content) && previous.content.length)
+      return previous?.type === 'paragraph' && previousEmpty ? EMPTY_PARAGRAPH_MARKDOWN : ''
+    }
+    const text = h.renderChildren(content)
+    return ctx?.previousNode?.type === 'taskList' && text.startsWith(' ') ? `&#32;${text.slice(1)}` : text
+  },
+  addKeyboardShortcuts() {
+    return { 'Mod-Alt-0': () => this.editor.commands.setNode(this.name) }
+  },
+})
+
 /** What the editor understands; each one reads and writes its own markdown. */
 export function richExtensions(placeholder = '') {
   return [
-    StarterKit.configure({ link: { openOnClick: false, autolink: true } }),
+    StarterKit.configure({ link: { openOnClick: false, autolink: true }, paragraph: false }),
+    Paragraph,
     Markdown,
     Image,
     TableKit,
@@ -235,9 +288,11 @@ function styleActive(editor: Editor, style: BlockStyle): boolean {
 /**
  * Splits the textblocks the selection touches at its ends, so the selection covers whole textblocks, and returns the
  * positions of those blocks (none for a selection that is not text, or covers no character). A split beside a line
- * break would leave the break in a block of its own, so there the break stays where it is.
+ * break would leave the break in a block of its own, so there the break stays where it is. With `splitBreaks`, the
+ * blocks are split at the breaks the selection covers too, and the breaks go: a heading or checklist item cannot hold a
+ * line break once it is saved.
  */
-function splitSelection(tr: Transaction): number[] {
+function splitSelection(tr: Transaction, splitBreaks = false): number[] {
   if (!(tr.selection instanceof TextSelection) || tr.selection.empty) return []
   const { from, to } = tr.selection
   const splittable = (pos: number) => {
@@ -269,6 +324,16 @@ function splitSelection(tr: Transaction): number[] {
   const splitFrom = splittable(from)
   const breakFrom = !splitFrom && afterBreak(from)
   const breakBeforeFrom = !splitFrom && !breakFrom && beforeBreak(from)
+  // A selection that starts in a paragraph that opens with a break (before it or right after it): there is no text in
+  // front of the break to split off, so the break alone goes.
+  const $from = tr.doc.resolve(from)
+  const leadingBreak =
+    !splitFrom &&
+    !breakFrom &&
+    !breakBeforeFrom &&
+    $from.parent.isTextblock &&
+    $from.parentOffset <= 1 &&
+    $from.parent.firstChild?.type.name === 'hardBreak'
   // A selection that ends right after a break: the same split as at a start after one, and the break goes.
   const breakEnd = !splitTo && afterBreak(to)
   const breakTo = !splitTo && !breakEnd && beforeBreak(to)
@@ -290,6 +355,24 @@ function splitSelection(tr: Transaction): number[] {
   if (breakBeforeFrom) {
     tr.split(from)
     tr.delete(from + 2, from + 3) // the break now starts the block after the split
+  }
+  if (leadingBreak) {
+    const opening = from - $from.parentOffset // where the paragraph's content starts: the break is its first child
+    tr.delete(opening, opening + 1)
+  }
+  if (splitBreaks) {
+    // The breaks the selection covers, last first, so the positions of the earlier ones do not move.
+    const breaks: number[] = []
+    const first = tr.mapping.map(from, 1)
+    const last = tr.mapping.map(to, -1)
+    tr.doc.nodesBetween(first, last, (node, pos) => {
+      if (node.type.name === 'hardBreak' && pos > first && pos < last) breaks.push(pos)
+      return true
+    })
+    for (const pos of breaks.reverse()) {
+      tr.split(pos)
+      tr.delete(pos + 2, pos + 3) // the break now starts the block after the split
+    }
   }
   const start = tr.mapping.map(from, 1)
   const end = tr.mapping.map(to, -1)
@@ -431,7 +514,8 @@ function leadsItemWithRest(doc: Node, pos: number): boolean {
  * Unselected text keeps its list, and each ordered item keeps its number (`keepNumbers`).
  */
 export function applyBlockStyle(tr: Transaction, style: BlockStyle, active: boolean) {
-  const blocks = splitSelection(tr)
+  // A heading or checklist item cannot keep a line break when it is saved, so the breaks it covers are split out.
+  const blocks = splitSelection(tr, style === 'heading' || style === 'taskList')
   if (!blocks.length) return
   const { from, to } = tr.selection
   const numbers = orderedNumbers(tr.doc)

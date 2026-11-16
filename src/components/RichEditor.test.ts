@@ -122,7 +122,14 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string, rel
   ['one paragraph | heading', 'Hello «brave» world', 'heading', 'Hello \n\n## brave\n\n world'],
   ['one paragraph | bulletList', 'Hello «brave» world', 'bulletList', 'Hello \n\n- brave\n\n world'],
   ['one paragraph | orderedList', 'Hello «brave» world', 'orderedList', 'Hello \n\n1. brave\n\n world'],
-  ['one paragraph | taskList', 'Hello «brave» world', 'taskList', 'Hello \n\n- [ ] brave\n\n world'],
+  ['one paragraph | taskList', 'Hello «brave» world', 'taskList', 'Hello \n\n- [ ] brave\n\n&#32;world'],
+  [
+    'one paragraph | taskList reads back with the text after it',
+    'Hello «brave» world',
+    'taskList',
+    'Hello \n\n- [ ] brave\n\n&#32;world',
+    true,
+  ],
   ['one paragraph | quote', 'Hello «brave» world', 'quote', 'Hello \n\n> brave\n\n world'],
   ['one paragraph | code', 'Hello «brave» world', 'code', 'Hello \n\n```\nbrave\n```\n\n world'],
   [
@@ -147,7 +154,7 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string, rel
     'several paragraphs | taskList',
     'one «two\n\nthree» four',
     'taskList',
-    'one \n\n- [ ] two\n- [ ] three\n\n four',
+    'one \n\n- [ ] two\n- [ ] three\n\n&#32;four',
   ],
   ['several paragraphs | quote', 'one «two\n\nthree» four', 'quote', 'one \n\n> two\n>\n> three\n\n four'],
   [
@@ -655,7 +662,7 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string, rel
     'bullet on one quoted paragraph of an item keeps the next quoted paragraph in the item',
     '- x\n  > «a»\n  > b',
     'bulletList',
-    '- x\n\n> a\n\n- \n  > b',
+    '- x\n\n> a\n\n-\n  > b',
   ],
   [
     'numbered over a paragraph before a list that goes on from it joins that list',
@@ -751,6 +758,27 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string, rel
     true,
   ],
   [
+    'a selection starting at a leading hard break restyles only the text after it | heading',
+    '«  \nbrave» there',
+    'heading',
+    '## brave\n\n there',
+    true,
+  ],
+  [
+    'a selection starting at a leading hard break restyles only the text after it | bulletList',
+    '«  \nbrave» there',
+    'bulletList',
+    '- brave\n\n there',
+    true,
+  ],
+  [
+    'a selection over the whole text of a paragraph that starts with a hard break | bulletList',
+    '«  \nbrave there»',
+    'bulletList',
+    '- brave there',
+    true,
+  ],
+  [
     'a selection starting right before a soft break restyles only the text after it | heading',
     'Hello«\nbrave» there',
     'heading',
@@ -762,6 +790,20 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string, rel
     'Hello«\nbrave» there',
     'quote',
     'Hello\n\n> brave\n\n there',
+    true,
+  ],
+  [
+    'heading on a selection that covers a hard break reads back with the same blocks',
+    'x«one  \ntwo» y',
+    'heading',
+    'x\n\n## one\n\n## two\n\n y',
+    true,
+  ],
+  [
+    'checklist on a selection that covers a hard break reads back with the same items',
+    'x«one  \ntwo» y',
+    'taskList',
+    'x\n\n- [ ] one\n- [ ] two\n\n&#32;y',
     true,
   ],
   [
@@ -886,7 +928,8 @@ describe('RichEditor block styles on the selected text', () => {
 const EMPTY_LINE_CASES: [name: string, style: BlockStyle, expected: string, reload?: true][] = [
   ['two empty lines | heading', 'heading', 'a\n\nb', true],
   // Saved as two items of one list, which reloads as two lists: the editor's own toggle does the same (not a selection case).
-  ['two empty lines | bulletList', 'bulletList', 'a\n\n- \n- \n\nb'],
+  ['two empty lines | bulletList', 'bulletList', 'a\n\n-\n-\n\nb'],
+  ['two empty lines | bulletList reads back', 'bulletList', 'a\n\n-\n-\n\nb', true],
   ['two empty lines | quote', 'quote', 'a\n\n>\n>\n> &nbsp;\n\nb', true],
 ]
 
