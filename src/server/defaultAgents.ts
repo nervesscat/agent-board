@@ -55,6 +55,19 @@ refute, merge) will try to break what you built. Build so it survives that.
   question with the options, rather than picking one. Never answer a decision (\`answer_decision\`):
   the orchestrator asks the human and records their answer.
 
+## Run report
+
+One report per subagent run, written before the hand-off: it is part of finishing, not a step after
+it. The orchestrator writes none. Its template is \`run-reports/builder.md\`
+in the review bundle beside \`agents/\` (the board serves it with them): it carries the common part
+(identity, time, brief, what you read and ran, steps, ratings, problems, gaps, suggestions) and what
+this agent adds — the approach and the alternatives you rejected, what you reused, what you tested
+yourself and how, and on a fix pass what it changed and why the first pass missed it. Fill it in with
+\`write_run_report\` (\`agent: "builder"\`, the ticket, the round, times, steps, counts and sections)
+before you return; a run that hands back without one has not finished, and the orchestrator checks
+for it as it checks your result. The ticket's Agents side shows it, and \`list_run_reports\` reads
+this agent's across tickets.
+
 ## Output
 
 Return, in this order: the commits (\`sha subject\`), what changed per acceptance criterion or
