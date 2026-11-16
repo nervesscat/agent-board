@@ -582,6 +582,19 @@ function measureHeader(header: HTMLElement | null) {
 function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => void }) {
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(t.title)
+  const titleRef = useRef<HTMLSpanElement>(null)
+  // Enter or Escape closes the field from the keyboard: the focus goes back to the title, not the page.
+  const returnFocus = useRef(false)
+  useEffect(() => {
+    if (!editing && returnFocus.current) {
+      returnFocus.current = false
+      titleRef.current?.focus()
+    }
+  }, [editing])
+  const open = () => {
+    setValue(t.title)
+    setEditing(true)
+  }
   const done = (save: boolean) => {
     setEditing(false)
     const title = value.trim()
@@ -596,6 +609,7 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
         onChange={(e) => setValue(e.target.value)}
         onBlur={() => done(true)}
         onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === 'Escape') returnFocus.current = true
           if (e.key === 'Enter') done(true)
           if (e.key === 'Escape') done(false)
         }}
@@ -606,20 +620,23 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
     <h1 className="text-xl font-semibold tracking-tight">
       <span className="text-muted-foreground">#{t.id}</span>{' '}
       {/* A span with the button's role, not a button: browsers draw a button as an inline-block, which drops a
-            title too wide for the line under the #id, while a span wraps its text in the heading's own flow. */}
+            title too wide for the line under the #id, while a span wraps its text in the heading's own flow.
+            Like a button, Space opens the field on its keyup, so a held Space does not type into it. */}
       <Tip content="Click to rename">
         <span
+          ref={titleRef}
           role="button"
           tabIndex={0}
-          onClick={() => {
-            setValue(t.title)
-            setEditing(true)
-          }}
+          onClick={open}
           onKeyDown={(e) => {
-            if (e.key !== 'Enter' && e.key !== ' ') return
-            e.preventDefault()
-            setValue(t.title)
-            setEditing(true)
+            if (e.key === ' ') e.preventDefault()
+            if (e.key === 'Enter' && !e.repeat) {
+              e.preventDefault()
+              open()
+            }
+          }}
+          onKeyUp={(e) => {
+            if (e.key === ' ') open()
           }}
           className="inline cursor-text text-left decoration-muted-foreground/50 decoration-dotted underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
