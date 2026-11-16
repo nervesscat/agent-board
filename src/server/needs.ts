@@ -1,6 +1,7 @@
 import { asc, eq, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
+import { hasGitSide } from '#/lib/kinds'
 import { isClosed } from '#/lib/stages'
 import { activityOf } from '#/lib/workTimeline'
 import { logActivity } from './activity'
@@ -413,15 +414,22 @@ function logOverride(t: Ticket, unmet: Need[], actor: string) {
   })
 }
 
-/** Refuses an agent's move or create into Approved: only the human's verdict or a move puts a ticket there. */
+/**
+ * Refuses an agent's move or create into Approved: only the human's verdict or a move puts a ticket
+ * there. In a project with no software kind the human's approval also closes the work, so an agent
+ * never moves a ticket to done there either.
+ */
 function refuseAgentApproved(projectId: number, status: string | undefined) {
   if (status === undefined) return
   const stages = listStages(projectId)
-  if (resolveStage(stages, status).key === 'approved')
+  const to = resolveStage(stages, status)
+  if (to.key === 'approved')
     throw new HttpError(
       403,
       'only the human puts a ticket in Approved: a verdict or a move by the human does',
     )
+  if (to.kind === 'done' && !hasGitSide(getProject(projectId).kinds))
+    throw new HttpError(403, 'only the human closes work in a project with no software kind: by approving it')
 }
 
 type Patch = Parameters<typeof features.updateTicket>[1]

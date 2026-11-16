@@ -212,3 +212,32 @@ test('a ticket with no repo, and a lane under it, stay without a repo in a proje
   )
   expect(lane.repoId).toBeNull()
 })
+
+test('an agent cannot close a hand-off, and approving a ticket that names a repo is only a call', async ({
+  human,
+  agent,
+}) => {
+  const music = await createProject(human, `Close ${Date.now()}`, ['music'])
+  const repo = await ok<{ id: number }>(
+    human.post('/api/repos', { data: { projectId: music.id, repoPath: e2eEnv().repoPath, name: 'named' } }),
+  )
+  const t = await ok<{ id: number }>(
+    human.post(`/api/projects/${music.id}/tickets`, {
+      data: { title: 'Closed by a call', status: 'review' },
+    }),
+  )
+  // An agent cannot move it to done, whatever its stage.
+  const doneKey = 'done'
+  const agentMove = await agent.patch(`/api/tickets/${t.id}`, { data: { status: doneKey } })
+  expect(agentMove.status()).toBe(403)
+  // A ticket that names a repo: its approval is recorded but does not close it.
+  const named = await ok<{ id: number }>(
+    human.post(`/api/projects/${music.id}/tickets`, {
+      data: { title: 'Named repo', status: 'review', repoId: repo.id },
+    }),
+  )
+  await ok(human.put(`/api/tickets/${named.id}/approval`, { data: { verdict: 'approved' } }))
+  expect((await ok<{ stage: { kind: string } }>(human.get(`/api/tickets/${named.id}`))).stage.kind).toBe(
+    'review',
+  )
+})

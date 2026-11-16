@@ -60,7 +60,7 @@ export const FILES_OMITTED_KEYS: Readonly<Record<string, readonly string[]>> = {
 /** The descriptions of parameters shared by many tools, where the software text names code. */
 export const FILES_KEY_TEXT: Readonly<Record<string, string>> = {
   tasks:
-    "Each item is a task, or {text, subtasks} for a task with the subtasks that go under it. Two levels and no more: the top level is the ticket's phases (a new ticket starts with its project's default phases: Implementation, then Summary), and the concrete steps go under a phase as its subtasks. A task given as a plain text is a step of the first phase.",
+    "Each item is a task, or {text, subtasks} for a task with the subtasks that go under it. Two levels and no more: the top level is the ticket's phases (a new ticket starts with its project's default phases: Implementation, then Summary), and the concrete steps go under a phase as its subtasks.",
   parentId:
     'make this a lane of that ticket: a parallel piece of it, with its own assignee, tasks and posts. A lane starts without phases unless defaultPhases is true.',
   position:

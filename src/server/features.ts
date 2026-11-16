@@ -1070,11 +1070,15 @@ export const verdictOf = (t: Pick<schema.Ticket, 'approvedAt' | 'disapprovedAt'>
  * is the review.
  */
 export function approvalCloses(
-  t: Pick<schema.Ticket, 'projectId' | 'status' | 'tags'>,
+  t: Pick<schema.Ticket, 'projectId' | 'status' | 'tags' | 'repoId'>,
   stages: ReturnType<typeof listStages>,
 ) {
   if (t.tags.some((tag) => tag.toLowerCase() === 'pr')) return true
-  return !hasGitSide(getProject(t.projectId).kinds) && kindOf(stages, t.status) === 'review'
+  // A hand-off is a ticket with no repo in a project with no software kind. A ticket that names a repo
+  // keeps its approval as the human's call only, so taking it back never has to reopen it.
+  return (
+    t.repoId === null && !hasGitSide(getProject(t.projectId).kinds) && kindOf(stages, t.status) === 'review'
+  )
 }
 
 /**
