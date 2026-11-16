@@ -317,24 +317,21 @@ describe('release artwork: tear', () => {
     expect(existsSync(join(dir, 'manifest.json'))).toBe(false)
   })
 
-  it(
-    'gives a version typed with stray whitespace the same bytes as the clean one',
-    { timeout: TIMEOUT },
-    () => {
-      const clean = mkdtempSync(join(tmpdir(), 'tear-clean-'))
-      const padded = mkdtempSync(join(tmpdir(), 'tear-padded-'))
-      const notes = join(clean, 'v9.9.9.md')
-      writeFileSync(notes, `## What's Changed\n${NOTES.wayfinding}`)
+  it('gives every spelling of a version the same bytes as the canonical one', { timeout: TIMEOUT }, () => {
+    const clean = mkdtempSync(join(tmpdir(), 'tear-clean-'))
+    const notes = join(clean, 'v9.9.9.md')
+    writeFileSync(notes, `## What's Changed\n${NOTES.wayfinding}`)
+    generate(clean, ['--version', 'v9.9.9', '--notes', notes])
 
-      generate(clean, ['--version', 'v9.9.9', '--notes', notes])
-      generate(padded, ['--version', 'v9.9.9 ', '--notes', notes])
-
-      expect(pieceFiles(padded)).toEqual(pieceFiles(clean))
+    for (const spelling of ['v9.9.9 ', '9.9.9', 'v9.9.9+build.5']) {
+      const other = mkdtempSync(join(tmpdir(), 'tear-spelling-'))
+      generate(other, ['--version', spelling, '--notes', notes])
+      expect(pieceFiles(other)).toEqual(pieceFiles(clean))
       for (const name of pieceFiles(clean)) {
-        expect(readFileSync(join(padded, name))).toEqual(readFileSync(join(clean, name)))
+        expect(readFileSync(join(other, name))).toEqual(readFileSync(join(clean, name)))
       }
-    },
-  )
+    }
+  })
 
   it('refuses notes with no theme lines, empty or prose only, instead of drawing a piece', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tear-empty-'))

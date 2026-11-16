@@ -1229,8 +1229,10 @@ function main() {
   const args = parseArgs(process.argv.slice(2))
   const single = Boolean(args.version)
   if (single) {
-    parseVersion(args.version)
-    args.version = args.version.trim()
+    // One spelling per version: the seed and the file name come from the canonical form, so
+    // `0.3.0`, ` v0.3.0 ` and `v0.3.0+build.5` all write the committed `v0.3.0` pieces.
+    const { major, minor, patch, pre } = parseVersion(args.version)
+    args.version = `v${major}.${minor}.${patch}${pre ? `-${pre}` : ''}`
   }
   const releases = single ? [{ version: args.version, notes: resolve(args.notes) }] : committedReleases()
   const out = resolve(args.out ?? ASSET_DIR)
