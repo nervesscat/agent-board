@@ -327,3 +327,33 @@ test('deleting a software ticket repo does not reopen it when its approval is ta
   // Done stays done: a software ticket reopens only as a pull request review does.
   expect((await ok<{ stage: { kind: string } }>(human.get(`/api/tickets/${t.id}`))).stage.kind).toBe('done')
 })
+
+test('the kind picker offers all ten kinds, and a professional kind hides the git pages', async ({
+  page,
+  human,
+}) => {
+  const lawyer = await createProject(human, `Firm ${Date.now()}`, ['lawyer'])
+  expect(lawyer.kinds).toEqual(['lawyer'])
+  await page.goto(`/projects/${lawyer.id}`)
+  const nav = page.getByRole('navigation')
+  await expect(nav.getByRole('link', { name: 'PR queue' })).toHaveCount(0)
+  await expect(nav.getByRole('link', { name: 'Cleanup' })).toHaveCount(0)
+
+  await page.goto(`/projects/${lawyer.id}/settings`)
+  for (const label of [
+    'Software',
+    'Music',
+    'Art',
+    'Writing',
+    'Video',
+    'Research',
+    'Lawyer',
+    'Accountant',
+    'Cybersecurity',
+    'Life',
+  ]) {
+    await expect(page.getByRole('checkbox', { name: label, exact: true })).toHaveCount(1)
+  }
+  await expect(page.getByRole('checkbox', { name: 'Lawyer', exact: true })).toBeChecked()
+  await expect(page.getByRole('checkbox', { name: 'Accountant', exact: true })).not.toBeChecked()
+})

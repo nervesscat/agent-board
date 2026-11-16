@@ -4,6 +4,8 @@ import path from 'node:path'
 
 import { beforeAll, describe, expect, it } from 'vitest'
 
+import { KIND_WORK } from './kindText'
+
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
 // Test mode: who calls is X-Test-Actor, as Playwright and CI drive it (human, worker, orchestrator).
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-kind-text-'))
@@ -147,5 +149,62 @@ describe('the default agents depend on the kinds', () => {
     const madeSoft = await call('POST', `/api/projects/${soft}/agents/defaults`)
     expect(madeSoft.body.added).toContain('spec')
     expect(madeSoft.body.added).not.toContain('maker')
+  })
+})
+
+describe('the professional kinds have their own text and maker', () => {
+  const PROFESSIONAL = ['lawyer', 'accountant', 'cybersecurity', 'life'] as const
+
+  it('each one names its own work in its instructions, and only code words are left out where the kind has none', async () => {
+    for (const kind of PROFESSIONAL) {
+      const id = (await call('POST', '/api/projects', { name: `Kind text ${kind}`, kinds: [kind] })).body.id
+      const init = await rpc(`/api/mcp?project=${id}`, 'initialize', {
+        protocolVersion: '2025-03-26',
+        capabilities: {},
+        clientInfo: { name: 'test', version: '1' },
+      })
+      expect(init.instructions).toContain(KIND_WORK[kind])
+      expect(init.instructions).toContain('workFolder')
+      // Never the git words: a professional project has no branches to talk about.
+      expect(init.instructions.match(new RegExp(CODE_WORDS, 'gi')) ?? []).toEqual([])
+    }
+  })
+
+  it('names only the kinds the project lists: a mixed project reads both kinds of work', async () => {
+    const id = (await call('POST', '/api/projects', { name: 'Mixed text', kinds: ['lawyer', 'music'] })).body
+      .id
+    const init = await rpc(`/api/mcp?project=${id}`, 'initialize', {
+      protocolVersion: '2025-03-26',
+      capabilities: {},
+      clientInfo: { name: 'test', version: '1' },
+    })
+    expect(init.instructions).toContain(KIND_WORK.lawyer)
+    expect(init.instructions).toContain(KIND_WORK.music)
+    expect(init.instructions).not.toContain(KIND_WORK.cybersecurity)
+  })
+
+  it('a cybersecurity project keeps no git side, and says that code comes with the software kind', async () => {
+    const id = (await call('POST', '/api/projects', { name: 'Security text', kinds: ['cybersecurity'] })).body
+      .id
+    const project = (await call('GET', `/api/projects/${id}`)).body
+    expect(project.kinds).toEqual(['cybersecurity'])
+    const init = await rpc(`/api/mcp?project=${id}`, 'initialize', {
+      protocolVersion: '2025-03-26',
+      capabilities: {},
+      clientInfo: { name: 'test', version: '1' },
+    })
+    expect(init.instructions).toContain('the Software kind')
+  })
+
+  it('a lawyer project gets a maker whose instructions name the lawyer work', async () => {
+    const id = (await call('POST', '/api/projects', { name: 'Lawyer maker', kinds: ['lawyer'] })).body.id
+    expect((await call('POST', `/api/projects/${id}/agents/defaults`)).body.added).toEqual(['maker'])
+    const agents = (await call('GET', `/api/projects/${id}`)).body.agents as {
+      name: string
+      instructions: string
+    }[]
+    const maker = agents.find((a) => a.name === 'maker')
+    expect(maker?.instructions).toContain(KIND_WORK.lawyer)
+    expect(maker?.instructions).not.toContain(KIND_WORK.music)
   })
 })

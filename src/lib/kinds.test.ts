@@ -14,11 +14,23 @@ import {
 } from './kinds'
 
 describe('isKind', () => {
-  it('accepts the six kinds and nothing else', () => {
-    expect(KINDS).toEqual(['software', 'music', 'art', 'writing', 'video', 'research'])
+  it('accepts the ten kinds and nothing else', () => {
+    expect(KINDS).toEqual([
+      'software',
+      'music',
+      'art',
+      'writing',
+      'video',
+      'research',
+      'lawyer',
+      'accountant',
+      'cybersecurity',
+      'life',
+    ])
     for (const k of KINDS) expect(isKind(k)).toBe(true)
     expect(isKind('Music')).toBe(false)
     expect(isKind('game')).toBe(false)
+    expect(isKind('Lawyer')).toBe(false)
     expect(isKind(undefined)).toBe(false)
   })
 })
@@ -39,6 +51,9 @@ describe('hasGitSide', () => {
     expect(hasGitSide(['music', 'software'])).toBe(true)
     expect(hasGitSide(['music'])).toBe(false)
     expect(hasGitSide(['art', 'video'])).toBe(false)
+    // The professional kinds keep no git side either; a team whose work includes code adds software.
+    expect(hasGitSide(['lawyer', 'accountant', 'cybersecurity', 'life'])).toBe(false)
+    expect(hasGitSide(['cybersecurity', 'software'])).toBe(true)
   })
   it('treats a project with no kinds given as software', () => {
     expect(hasGitSide(undefined)).toBe(true)

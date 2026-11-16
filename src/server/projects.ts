@@ -4,7 +4,7 @@ import { asc, count, eq, isNull, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db, schema } from '#/db'
-import { cleanKinds, DEFAULT_KINDS, hasGitSide, type Kind, presetPhases } from '#/lib/kinds'
+import { cleanKinds, DEFAULT_KINDS, hasGitSide, KINDS, type Kind, presetPhases } from '#/lib/kinds'
 import { LAYOUT_AREAS, LAYOUT_ELEMENTS, mergeLayout } from '#/lib/layout'
 import { MAX_TAG_LENGTH, cleanSuggestions, matchTags, tagChoices, usedTags } from '#/lib/tags'
 import { logActivity } from './activity'
@@ -217,8 +217,7 @@ export function createProject(
 /** A project's kinds, each once and in KINDS order; a list with no kind in it is a 400. */
 function kindsOf(kinds: readonly string[]): Kind[] {
   const clean = cleanKinds(kinds)
-  if (!clean)
-    throw new HttpError(400, 'kinds: give one or more of software, music, art, writing, video, research')
+  if (!clean) throw new HttpError(400, `kinds: give one or more of ${KINDS.join(', ')}`)
   return clean
 }
 

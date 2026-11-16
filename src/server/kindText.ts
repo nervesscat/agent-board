@@ -6,8 +6,42 @@
  * software text, as before. A test keeps the words of code out of what this text offers.
  */
 
-/** The server instructions for a project with no software kind. */
-export const FILES_INSTRUCTIONS = `The board is where the human and every agent coordinate work: tickets, their stages, their posts and the files attached to them. This project is not software. Its work is files (audio, images, documents, text) and the ticket's own words, and none of it is code: nothing is under version control. Read get_project first: its instructions override your defaults, its kinds say what the work is, and its workFolder is the plain folder where work in progress lives.
+import type { Kind } from '#/lib/kinds'
+
+/**
+ * What the work of each non-software kind is, in a sentence or two: what its files are and how the
+ * human checks them. The text an agent reads names only the kinds its project lists.
+ */
+export const KIND_WORK: Readonly<Record<Exclude<Kind, 'software'>, string>> = {
+  music:
+    'Its work is music and audio: sketches, demos, stems, masters and the notes that go with them, each as an audio file.',
+  art: 'Its work is visual art: sketches, studies, finished images and the notes on them, each as an image file.',
+  writing:
+    'Its work is writing: drafts, chapters, articles and their edits, each as a document or text file.',
+  video:
+    'Its work is video: cuts, rough edits, stills, scripts and the notes on them, each as a video, image or document file.',
+  research:
+    'Its work is research: notes, reading lists, datasets, reports and write-ups, as documents, tables and files.',
+  lawyer:
+    'Its work is legal work product: drafts of letters, memos, briefs and contracts, and the notes on them, as documents. Nothing here is advice given to a client: a lawyer reviews and signs off every document before it leaves the project.',
+  accountant:
+    'Its work is accounting work product: workpapers, reconciliations, schedules, memos and reports, as spreadsheets and documents. The figures in the files are checked by the human before anything is filed or sent.',
+  cybersecurity:
+    'Its work is security work: findings, threat notes, reports and runbooks, and the scripts or configuration snippets that go with them, as files. Its files are kept without version control. A team whose work includes code adds the Software kind to the same project, and the tools for that work appear there. Keep sensitive material (credentials, exploit details, customer data) in the files the ticket names, never in a post.',
+  life: 'Its work is a personal life project: plans, checklists, notes, budgets, letters and records of what was done, as documents and files, for the person whose project it is.',
+}
+
+/** The sentence about the work of the project's non-software kinds, one per kind it lists. */
+export function kindWork(kinds: readonly string[] | null | undefined): string {
+  const work = (Object.keys(KIND_WORK) as (keyof typeof KIND_WORK)[])
+    .filter((k) => (kinds ?? []).includes(k))
+    .map((k) => KIND_WORK[k])
+  return work.length > 0 ? work.join(' ') : KIND_WORK.research
+}
+
+/** The server instructions for a project with no software kind, for the kinds it lists. */
+export function filesInstructions(kinds: readonly string[] | null | undefined): string {
+  return `The board is where the human and every agent coordinate work: tickets, their stages, their posts and the files attached to them. This project is not software, so nothing is under version control. ${kindWork(kinds)} Its files are kept in the project's work folder (get_project's workFolder). Read get_project first: its instructions override your defaults, its kinds say what the work is, and its workFolder is the plain folder where work in progress lives.
 
 1. get_project before touching the project. Its stages are the board's columns, in order, each with a key, a name and a kind (open, active, blocked, review, done, cancelled). A ticket's status is a stage key; wherever status is asked for you can also give a stage's name or a kind (a kind means the project's stage of that kind). Below, todo, in_progress, blocked, review, done and cancelled mean the stage of that kind.
 2. Read a ticket before you work on it: its summary first (where the last session left off), then its posts, every reply the human wrote under them, its attachments and its tasks. Claim it with claim_ticket.
@@ -20,6 +54,7 @@ export const FILES_INSTRUCTIONS = `The board is where the human and every agent 
 9. Only the human and an orchestrator change a project's instructions (set_project_instructions); a worker asks its orchestrator. Add a note (add_note) for any fact a future session must not rediscover about the project.
 
 Who is who: every caller has a name and a role (whoami). The human is the human. A subagent passes agentName "<its orchestrator's name>/<its own name>" on every board call, so its posts and claims show under its own name.`
+}
 
 /** The tools a connection to a project with no software kind is not offered: they only act on code. */
 export const FILES_HIDDEN_TOOLS: ReadonlySet<string> = new Set([

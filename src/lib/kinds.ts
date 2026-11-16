@@ -4,7 +4,18 @@
  * kinds keep their work out of git, so the git side is hidden for a project none of whose kinds is
  * software, and the rest of the board (tickets, stages, agents, the gallery) works as before.
  */
-export const KINDS = ['software', 'music', 'art', 'writing', 'video', 'research'] as const
+export const KINDS = [
+  'software',
+  'music',
+  'art',
+  'writing',
+  'video',
+  'research',
+  'lawyer',
+  'accountant',
+  'cybersecurity',
+  'life',
+] as const
 
 export type Kind = (typeof KINDS)[number]
 
@@ -15,6 +26,10 @@ export const KIND_LABELS: Record<Kind, string> = {
   writing: 'Writing',
   video: 'Video',
   research: 'Research',
+  lawyer: 'Lawyer',
+  accountant: 'Accountant',
+  cybersecurity: 'Cybersecurity',
+  life: 'Life',
 }
 
 /** Every project starts as software: that is what all existing projects are. */

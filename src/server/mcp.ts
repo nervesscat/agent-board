@@ -21,7 +21,7 @@ import { setInstructions } from './instructionsHistory'
 import {
   FILES_DESCRIPTIONS,
   FILES_HIDDEN_TOOLS,
-  FILES_INSTRUCTIONS,
+  filesInstructions,
   FILES_KEY_TEXT,
   FILES_OMITTED_KEYS,
 } from './kindText'
@@ -160,13 +160,14 @@ const AGENT_NAME = z
  * Whether this connection works on a project with no software kind: named by `?project=<id>` on the
  * MCP URL, and only then. Its tools and their text are the files ones (kindText.ts).
  */
-export function filesConnection(request: Request): boolean {
+export function filesConnection(request: Request): readonly string[] | null {
   const raw = new URL(request.url).searchParams.get('project')
-  if (!raw || !/^\d+$/.test(raw)) return false
+  if (!raw || !/^\d+$/.test(raw)) return null
   try {
-    return !hasGitSide(projects.getProject(Number(raw)).kinds)
+    const { kinds } = projects.getProject(Number(raw))
+    return hasGitSide(kinds) ? null : kinds
   } catch (err) {
-    if (err instanceof HttpError) return false
+    if (err instanceof HttpError) return null
     throw err
   }
 }
@@ -174,10 +175,11 @@ export function filesConnection(request: Request): boolean {
 function buildServer(caller: Caller, refused: HttpError | null, request: Request) {
   const actor = caller.name
   const agent = caller.kind === 'agent'
-  const files = filesConnection(request)
+  const filesKinds = filesConnection(request)
+  const files = filesKinds !== null
   const server = new McpServer(
     { name: 'agent-board', version: '0.1.0' },
-    { instructions: files ? FILES_INSTRUCTIONS : INSTRUCTIONS },
+    { instructions: filesKinds ? filesInstructions(filesKinds) : INSTRUCTIONS },
   )
   const tool = <S extends z.ZodRawShape>(
     name: string,

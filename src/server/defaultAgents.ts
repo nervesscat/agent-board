@@ -1,4 +1,5 @@
 import { hasGitSide } from '#/lib/kinds'
+import { kindWork } from './kindText'
 import { getProject } from './projects'
 import { createAgent, listAgents } from './projectAgents'
 
@@ -281,9 +282,14 @@ approves it or sends it back.`,
   },
 ]
 
-/** The default agents of the project's kinds: the review cycle for software, the maker for the rest. */
+/**
+ * The default agents of the project's kinds: the review cycle for software, the maker for the rest. The
+ * maker's instructions say what the work of the project's kinds is (`kindWork`), so each kind gets its own.
+ */
 export function defaultAgentsFor(kinds: readonly string[]) {
-  return hasGitSide(kinds) ? DEFAULT_AGENTS : FILES_AGENTS
+  if (hasGitSide(kinds)) return DEFAULT_AGENTS
+  const work = `## This project's work\n\n${kindWork(kinds)}`
+  return FILES_AGENTS.map((a) => ({ ...a, instructions: `${a.instructions}\n\n${work}` }))
 }
 
 /** Adds each default agent the project does not have yet (by name, any casing); keeps the rest. */
