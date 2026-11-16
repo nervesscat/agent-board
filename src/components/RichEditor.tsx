@@ -250,18 +250,22 @@ export function narrowBlocks(tr: Transaction, keep: Keep = {}): { converted: boo
   })
   if (!blocks.length) return { converted: false }
   const listType = keep.list ? tr.doc.type.schema.nodes[keep.list] : undefined
-  let converted = false
+  let converted: { from: number; to: number } | null = null
   // From the first block on. A block's lift leaves the blocks before it where they are, and the blocks
   // after it are found again by mapping their positions through every step since `mark`.
   for (let i = 0; i < blocks.length; i++) {
     const { size } = blocks[i]
     let pos = tr.mapping.slice(mark).map(blocks[i].pos, 1)
     const $pos = tr.doc.resolve(pos)
-    if (listType && !keep.once && isWholeItemOf(tr, $pos, size, keep.list)) {
+    // Only a selection of one block is converted: converting an item replaces its list (positions move), and
+    // the toggle that styles the other blocks would then skip them (see toggleBlock). A selection over several
+    // blocks takes the lifting path below.
+    if (blocks.length === 1 && listType && !keep.once && isWholeItemOf(tr, $pos, size, keep.list)) {
       // The item is only this block and nested lists: the item itself moves into a list of the style's
-      // type, its nested lists stay inside it.
+      // type, its nested lists stay inside it. The block keeps its position (the item's start and the
+      // block's start do not move), so the selection is the block's text.
       convertItemTo(tr, $pos.before(), listType)
-      converted = true
+      converted = { from: pos + 1, to: pos + size - 1 }
       continue
     }
     // Out of the list items it sits in, the innermost first, so a block of a nested list ends up outside the lists.
@@ -276,14 +280,12 @@ export function narrowBlocks(tr: Transaction, keep: Keep = {}): { converted: boo
     }
   }
   const map = tr.mapping.slice(mark)
-  tr.setSelection(
-    TextSelection.create(
-      tr.doc,
-      map.map(blocks[0].pos + 1, 1),
-      map.map(blocks[blocks.length - 1].contentEnd, -1),
-    ),
-  )
-  return { converted }
+  // A converted last block keeps its own positions (its item's replacement does not move them), and the
+  // blocks before it are mapped as usual.
+  const textEnd = converted ? converted.to : map.map(blocks[blocks.length - 1].contentEnd, -1)
+  const textStart = converted && blocks.length === 1 ? converted.from : map.map(blocks[0].pos + 1, 1)
+  tr.setSelection(TextSelection.create(tr.doc, textStart, textEnd))
+  return { converted: converted !== null }
 }
 
 /**

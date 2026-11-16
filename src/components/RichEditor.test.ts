@@ -275,6 +275,19 @@ describe('RichEditor styles on a partial selection', () => {
     ).toBe('## one two\n\nthree')
   })
 
+  it('turns the selected items of a bullet list into numbered items, and keeps the nested item in its list', () => {
+    // "- a / - x / - bb" with all of it selected: "x" is nested under "a" and is selected too.
+    expect(
+      after('- a\n  - x\n- bb', 3, 17, (e) => toggleBlock(e, (c) => c.toggleOrderedList(), 'orderedList')),
+    ).toBe('1. a\n2. x\n3. bb')
+  })
+
+  it('makes the selected text of a nested list item a checklist item, leaving the item above it as it is', () => {
+    expect(
+      after('- x\n  1. a\n     - b', 8, 14, (e) => toggleBlock(e, (c) => c.toggleTaskList(), 'taskList')),
+    ).toBe('- x\n\n- [ ] a\n- [ ] b')
+  })
+
   it('leaves a collapsed caret on its whole paragraph, as before', () => {
     expect(after(sentence, 7, 7, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 })))).toBe(
       '## Hello brave world',
