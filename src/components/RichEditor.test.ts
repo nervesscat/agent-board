@@ -1,9 +1,9 @@
-import { getSchema } from '@tiptap/core'
+import { Editor, getSchema } from '@tiptap/core'
 import { MarkdownManager } from '@tiptap/markdown'
 import { Node } from '@tiptap/pm/model'
 import { describe, expect, it } from 'vitest'
 
-import { richExtensions, tidy } from './RichEditor'
+import { richExtensions, tidy, toggleBlock } from './RichEditor'
 
 const extensions = richExtensions()
 const schema = getSchema(extensions)
@@ -91,5 +91,84 @@ describe('RichEditor markdown', () => {
 
   it('collapses blank lines outside code blocks only', () => {
     expect(tidy('a\n\n\n\nb\n```\nc\n\n\n\nd\n```\n\n')).toBe('a\n\nb\n```\nc\n\n\n\nd\n```')
+  })
+})
+
+/** An editor with `md` loaded and the text from `from` to `to` selected (positions as the editor counts them). */
+function editorWith(md: string, from: number, to: number): Editor {
+  const editor = new Editor({ extensions, content: md, contentType: 'markdown' })
+  editor.commands.setTextSelection({ from, to })
+  return editor
+}
+
+/** The markdown the editor holds after `apply` ran on it. */
+function after(md: string, from: number, to: number, apply: (e: Editor) => void): string {
+  const editor = editorWith(md, from, to)
+  try {
+    apply(editor)
+    return editor.getMarkdown()
+  } finally {
+    editor.destroy()
+  }
+}
+
+// "Hello brave world": positions 7 to 12 select "brave".
+const sentence = 'Hello brave world'
+
+describe('RichEditor styles on a partial selection', () => {
+  it('applies inline marks to the selected word only', () => {
+    expect(after(sentence, 7, 12, (e) => e.chain().toggleBold().run())).toBe('Hello **brave** world')
+    expect(after(sentence, 7, 12, (e) => e.chain().toggleItalic().run())).toBe('Hello *brave* world')
+    expect(after(sentence, 7, 12, (e) => e.chain().toggleStrike().run())).toBe('Hello ~~brave~~ world')
+    expect(after(sentence, 7, 12, (e) => e.chain().toggleCode().run())).toBe('Hello `brave` world')
+  })
+
+  it('applies a link to the selected word only', () => {
+    const md = after(sentence, 7, 12, (e) =>
+      e.chain().extendMarkRange('link').setLink({ href: 'https://example.com' }).run(),
+    )
+    expect(md).toBe('Hello [brave](https://example.com) world')
+  })
+
+  it('applies a heading to the selected words only', () => {
+    expect(after(sentence, 7, 12, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 })))).toBe(
+      'Hello \n\n## brave\n\n world',
+    )
+  })
+
+  it('applies a bullet, numbered or checklist item to the selected words only', () => {
+    expect(after(sentence, 7, 12, (e) => toggleBlock(e, (c) => c.toggleBulletList()))).toBe(
+      'Hello \n\n- brave\n\n world',
+    )
+    expect(after(sentence, 7, 12, (e) => toggleBlock(e, (c) => c.toggleOrderedList()))).toBe(
+      'Hello \n\n1. brave\n\n world',
+    )
+    expect(after(sentence, 7, 12, (e) => toggleBlock(e, (c) => c.toggleTaskList()))).toBe(
+      'Hello \n\n- [ ] brave\n\n world',
+    )
+  })
+
+  it('applies a quote to the selected words only', () => {
+    expect(after(sentence, 7, 12, (e) => toggleBlock(e, (c) => c.toggleBlockquote()))).toBe(
+      'Hello \n\n> brave\n\n world',
+    )
+  })
+
+  it('applies a code block to the selected words only', () => {
+    expect(after(sentence, 7, 12, (e) => toggleBlock(e, (c) => c.toggleCodeBlock()))).toBe(
+      'Hello \n\n```\nbrave\n```\n\n world',
+    )
+  })
+
+  it('leaves a collapsed caret on its whole paragraph, as before', () => {
+    expect(after(sentence, 7, 7, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 })))).toBe(
+      '## Hello brave world',
+    )
+  })
+
+  it('applies a block style across two paragraphs to the blocks the selection touches only', () => {
+    expect(
+      after('one two\n\nthree four', 5, 12, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 }))),
+    ).toBe('one \n\n## two\n\n## th\n\nree four')
   })
 })

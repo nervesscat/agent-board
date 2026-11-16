@@ -1,9 +1,11 @@
+import { type ChainedCommands, type Command, type Editor } from '@tiptap/core'
 import Image from '@tiptap/extension-image'
 import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { TableKit } from '@tiptap/extension-table'
 import { Placeholder } from '@tiptap/extensions'
 import { Markdown } from '@tiptap/markdown'
-import { type Editor, EditorContent, useEditor, useEditorState } from '@tiptap/react'
+import { TextSelection } from '@tiptap/pm/state'
+import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import {
   Bold,
@@ -178,6 +180,36 @@ export function RichEditor({
   )
 }
 
+/**
+ * A block style (heading, list, quote, code block) changes every block its selection touches, so a
+ * selection inside one paragraph would change the whole paragraph. This splits the paragraph at the
+ * selection's ends first, and moves the selection to the blocks between them: the style then covers the
+ * selected text only. A collapsed caret is left alone, and so is a selection that is not text.
+ */
+export const narrowToSelection: Command = ({ tr }) => {
+  if (!(tr.selection instanceof TextSelection) || tr.selection.empty) return true
+  const { from, to } = tr.selection
+  // Both checks read the document before either split, so they are about the same paragraphs.
+  const inside = (pos: number) => {
+    const $pos = tr.doc.resolve(pos)
+    return $pos.parent.isTextblock && $pos.parentOffset > 0 && $pos.parentOffset < $pos.parent.content.size
+  }
+  const splitTo = inside(to)
+  const splitFrom = inside(from)
+  // The end first: the start is before it, so its position does not move.
+  if (splitTo) tr.split(to)
+  if (splitFrom) tr.split(from)
+  // Mapped through the splits: a start that was split lands in the new paragraph, an end that was
+  // split lands at the end of the old one.
+  tr.setSelection(TextSelection.create(tr.doc, tr.mapping.map(from, 1), tr.mapping.map(to, -1)))
+  return true
+}
+
+/** Runs a block style on the selected text only (see `narrowToSelection`). Inline marks do not need it. */
+export function toggleBlock(editor: Editor, toggle: (chain: ChainedCommands) => ChainedCommands) {
+  toggle(editor.chain().command(narrowToSelection).focus()).run()
+}
+
 function Toolbar({
   editor,
   onAttach,
@@ -223,22 +255,37 @@ function Toolbar({
       label: 'Heading',
       icon: Heading2,
       on: state.heading,
-      run: () => chain().toggleHeading({ level: 2 }).run(),
+      run: () => toggleBlock(editor, (c) => c.toggleHeading({ level: 2 })),
     },
-    { label: 'Bullet list', icon: List, on: state.bullet, run: () => chain().toggleBulletList().run() },
+    {
+      label: 'Bullet list',
+      icon: List,
+      on: state.bullet,
+      run: () => toggleBlock(editor, (c) => c.toggleBulletList()),
+    },
     {
       label: 'Numbered list',
       icon: ListOrdered,
       on: state.ordered,
-      run: () => chain().toggleOrderedList().run(),
+      run: () => toggleBlock(editor, (c) => c.toggleOrderedList()),
     },
-    { label: 'Checklist', icon: ListChecks, on: state.task, run: () => chain().toggleTaskList().run() },
-    { label: 'Quote', icon: Quote, on: state.quote, run: () => chain().toggleBlockquote().run() },
+    {
+      label: 'Checklist',
+      icon: ListChecks,
+      on: state.task,
+      run: () => toggleBlock(editor, (c) => c.toggleTaskList()),
+    },
+    {
+      label: 'Quote',
+      icon: Quote,
+      on: state.quote,
+      run: () => toggleBlock(editor, (c) => c.toggleBlockquote()),
+    },
     {
       label: 'Code block',
       icon: SquareCode,
       on: state.codeBlock,
-      run: () => chain().toggleCodeBlock().run(),
+      run: () => toggleBlock(editor, (c) => c.toggleCodeBlock()),
     },
     { label: 'Link', icon: Link2, on: state.link, run: link },
   ]
