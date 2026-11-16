@@ -5,6 +5,7 @@ import { useEffect } from 'react'
 import { LAYOUT_ICONS } from '#/components/layoutIcons'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
+import { visibleNavPages } from '#/lib/kinds'
 import { type AreaId, defaultLayout, layoutElement, shownIn } from '#/lib/layout'
 import { rememberCurrentProject, useProject } from '#/lib/project'
 import { useHydrated } from '#/lib/useHydrated'
@@ -42,7 +43,8 @@ function ProjectLayout() {
   const project = hydrated ? data : undefined
   // A link that names no project (the old `/daily`) opens this one.
   useEffect(() => rememberCurrentProject(id), [id])
-  const pages = shownIn(project?.layout ?? defaultLayout(), 'nav')
+  // A project with no software kind has no git side: its git pages are hidden whatever its layout says.
+  const pages = visibleNavPages(shownIn(project?.layout ?? defaultLayout(), 'nav'), project?.kinds)
   // The page the URL is on, for the phone-sized picker. The Overview's URL starts every other page's.
   const current =
     pages.find((page) => {
