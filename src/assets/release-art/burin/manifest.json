@@ -1,0 +1,415 @@
+{
+  "direction": "burin",
+  "madeBy": "Claude Fable 5.2",
+  "generator": "scripts/release-art/burin.mjs",
+  "canvas": {
+    "width": 1600,
+    "height": 900
+  },
+  "palette": {
+    "light": {
+      "ground": "#ECE5D6",
+      "ink": "#23262B",
+      "first": "#B4462B",
+      "second": "#1F5A63"
+    },
+    "dark": {
+      "ground": "#16181B",
+      "ink": "#E3DBC9",
+      "first": "#E2694A",
+      "second": "#5FA7AC"
+    }
+  },
+  "pieces": [
+    {
+      "version": "v0.2.2",
+      "seed": 278409127,
+      "themes": {
+        "lines": 160,
+        "hands": 0.454,
+        "precision": 0.176,
+        "wayfinding": 0.37,
+        "volume": 1
+      },
+      "plan": {
+        "version": "v0.2.2",
+        "seed": 278409127,
+        "count": 3,
+        "wobble": 0.22,
+        "drift": 1.6,
+        "taper": 36,
+        "stroke": {
+          "low": 240,
+          "high": 820
+        },
+        "passes": [
+          {
+            "ink": "ink",
+            "angle": 6.688,
+            "pitch": 17.318,
+            "weight": 1.35,
+            "lobe": {
+              "x": 746.6,
+              "y": 918,
+              "rx": 670.3,
+              "ry": 364.5,
+              "turn": -5.797
+            },
+            "grainSeed": 2292510436
+          },
+          {
+            "ink": "second",
+            "angle": 74.058,
+            "pitch": 19.467,
+            "weight": 1.5,
+            "lobe": {
+              "x": -21.6,
+              "y": 347,
+              "rx": 794.3,
+              "ry": 357.9,
+              "turn": 27.478
+            },
+            "grainSeed": 3517102833
+          },
+          {
+            "ink": "first",
+            "angle": 125.693,
+            "pitch": 21.014,
+            "weight": 1.5,
+            "lobe": {
+              "x": 838.1,
+              "y": 56.3,
+              "rx": 857.9,
+              "ry": 381.6,
+              "turn": 35.44
+            },
+            "grainSeed": 533633069
+          }
+        ],
+        "edge": {
+          "strength": 0,
+          "x": 549.2,
+          "y": 443.7,
+          "angle": 96.688,
+          "side": -1,
+          "band": 97.3
+        },
+        "path": {
+          "strength": 0.48,
+          "width": 17.6,
+          "widen": 1.879,
+          "points": [
+            {
+              "x": -80,
+              "y": 745.4
+            },
+            {
+              "x": 1050.9,
+              "y": 980
+            }
+          ],
+          "flank": -1
+        }
+      },
+      "files": {
+        "light": {
+          "name": "v0.2.2-light.svg",
+          "bytes": 14795
+        },
+        "dark": {
+          "name": "v0.2.2-dark.svg",
+          "bytes": 14788
+        }
+      }
+    },
+    {
+      "version": "v0.2.3",
+      "seed": 261631508,
+      "themes": {
+        "lines": 16,
+        "hands": 0.067,
+        "precision": 0.8,
+        "wayfinding": 0.133,
+        "volume": 0.546
+      },
+      "plan": {
+        "version": "v0.2.3",
+        "seed": 261631508,
+        "count": 2,
+        "wobble": 0.04,
+        "drift": 0.25,
+        "taper": 7,
+        "stroke": {
+          "low": 420,
+          "high": 1200
+        },
+        "passes": [
+          {
+            "ink": "ink",
+            "angle": 36.758,
+            "pitch": 10.081,
+            "weight": 1.35,
+            "lobe": {
+              "x": 1408.6,
+              "y": 746.6,
+              "rx": 730.5,
+              "ry": 320.8,
+              "turn": 17.947
+            },
+            "grainSeed": 3982674910
+          },
+          {
+            "ink": "second",
+            "angle": 126.758,
+            "pitch": 11.595,
+            "weight": 1.5,
+            "lobe": {
+              "x": 432,
+              "y": 55.7,
+              "rx": 637.2,
+              "ry": 320.9,
+              "turn": 15.015
+            },
+            "grainSeed": 62387225
+          }
+        ],
+        "edge": {
+          "strength": 1,
+          "x": 820.9,
+          "y": 436.1,
+          "angle": 126.758,
+          "side": -1,
+          "band": 91.5
+        },
+        "path": {
+          "strength": 0,
+          "width": 16,
+          "widen": 1.722,
+          "points": [
+            {
+              "x": 264.9,
+              "y": -80
+            },
+            {
+              "x": 810.5,
+              "y": 980
+            }
+          ],
+          "flank": -1
+        }
+      },
+      "files": {
+        "light": {
+          "name": "v0.2.3-light.svg",
+          "bytes": 10208
+        },
+        "dark": {
+          "name": "v0.2.3-dark.svg",
+          "bytes": 10203
+        }
+      }
+    },
+    {
+      "version": "v0.2.4",
+      "seed": 244853889,
+      "themes": {
+        "lines": 14,
+        "hands": 0.313,
+        "precision": 0.125,
+        "wayfinding": 0.563,
+        "volume": 0.52
+      },
+      "plan": {
+        "version": "v0.2.4",
+        "seed": 244853889,
+        "count": 3,
+        "wobble": 0.22,
+        "drift": 1.6,
+        "taper": 36,
+        "stroke": {
+          "low": 240,
+          "high": 820
+        },
+        "passes": [
+          {
+            "ink": "ink",
+            "angle": 17.119,
+            "pitch": 17.034,
+            "weight": 1.35,
+            "lobe": {
+              "x": 1163.6,
+              "y": 646.9,
+              "rx": 843.5,
+              "ry": 323.5,
+              "turn": -24.458
+            },
+            "grainSeed": 4154040913
+          },
+          {
+            "ink": "first",
+            "angle": 71.975,
+            "pitch": 18.323,
+            "weight": 1.5,
+            "lobe": {
+              "x": 63,
+              "y": 693.6,
+              "rx": 752.9,
+              "ry": 297.7,
+              "turn": -38.794
+            },
+            "grainSeed": 2607281404
+          },
+          {
+            "ink": "second",
+            "angle": 120.885,
+            "pitch": 21.242,
+            "weight": 1.5,
+            "lobe": {
+              "x": 480.1,
+              "y": -55.5,
+              "rx": 681,
+              "ry": 313.9,
+              "turn": -0.856
+            },
+            "grainSeed": 2097799409
+          }
+        ],
+        "edge": {
+          "strength": 0,
+          "x": 537.4,
+          "y": 436,
+          "angle": 107.119,
+          "side": -1,
+          "band": 91.4
+        },
+        "path": {
+          "strength": 1,
+          "width": 19.3,
+          "widen": 2.227,
+          "points": [
+            {
+              "x": 283.4,
+              "y": -80
+            },
+            {
+              "x": 868.9,
+              "y": 980
+            }
+          ],
+          "flank": 1
+        }
+      },
+      "files": {
+        "light": {
+          "name": "v0.2.4-light.svg",
+          "bytes": 17994
+        },
+        "dark": {
+          "name": "v0.2.4-dark.svg",
+          "bytes": 17987
+        }
+      }
+    },
+    {
+      "version": "v0.2.5",
+      "seed": 228076270,
+      "themes": {
+        "lines": 36,
+        "hands": 0.478,
+        "precision": 0.304,
+        "wayfinding": 0.217,
+        "volume": 0.706
+      },
+      "plan": {
+        "version": "v0.2.5",
+        "seed": 228076270,
+        "count": 3,
+        "wobble": 0.173,
+        "drift": 1.249,
+        "taper": 28.5,
+        "stroke": {
+          "low": 286.8,
+          "high": 918.8
+        },
+        "passes": [
+          {
+            "ink": "ink",
+            "angle": -11.208,
+            "pitch": 15.426,
+            "weight": 1.35,
+            "lobe": {
+              "x": 0.5,
+              "y": 530.3,
+              "rx": 658,
+              "ry": 360.4,
+              "turn": -13.81
+            },
+            "grainSeed": 2877094965
+          },
+          {
+            "ink": "first",
+            "angle": 54.546,
+            "pitch": 18.113,
+            "weight": 1.5,
+            "lobe": {
+              "x": 1238.3,
+              "y": 396.7,
+              "rx": 877.2,
+              "ry": 272.7,
+              "turn": 39.314
+            },
+            "grainSeed": 2063265821
+          },
+          {
+            "ink": "second",
+            "angle": 124.515,
+            "pitch": 19.292,
+            "weight": 1.5,
+            "lobe": {
+              "x": 570,
+              "y": 1000.1,
+              "rx": 722.6,
+              "ry": 325.6,
+              "turn": 26.343
+            },
+            "grainSeed": 1667260796
+          }
+        ],
+        "edge": {
+          "strength": 0.3,
+          "x": 630.4,
+          "y": 573.9,
+          "angle": 78.792,
+          "side": 1,
+          "band": 96.8
+        },
+        "path": {
+          "strength": 0,
+          "width": 20.8,
+          "widen": 1.675,
+          "points": [
+            {
+              "x": 571.7,
+              "y": -80
+            },
+            {
+              "x": 1417.9,
+              "y": 980
+            }
+          ],
+          "flank": 1
+        }
+      },
+      "files": {
+        "light": {
+          "name": "v0.2.5-light.svg",
+          "bytes": 9772
+        },
+        "dark": {
+          "name": "v0.2.5-dark.svg",
+          "bytes": 9765
+        }
+      }
+    }
+  ]
+}
