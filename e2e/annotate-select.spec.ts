@@ -707,6 +707,53 @@ test('a drag along a vertical line from its middle moves it along its length', a
   expect(Math.max(...ys)).toBeCloseTo(160, 0)
 })
 
+test('a press in the middle of a near-vertical line moves it sideways, and does not resize it by its west side', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Thin line middle')
+  // Ten pixels across: its west and east sides are five pixels from its middle, too near for a side handle there.
+  await draw(page, canvas, 'Pencil', [100, 60], [110, 240])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [105, 150])
+
+  // Dragged 40 right: every point shifts by 40, so the line runs from 140 to 150 and keeps its length.
+  await drag(page, canvas, [105, 150], [145, 150])
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [line] = storedItems(attached)
+  const xs = line!.points!.map(([x]) => x)
+  expect(Math.min(...xs)).toBeCloseTo(140, 0)
+  expect(Math.max(...xs)).toBeCloseTo(150, 0)
+  const ys = line!.points!.map(([, y]) => y)
+  expect(Math.min(...ys)).toBeCloseTo(60, 0)
+  expect(Math.max(...ys)).toBeCloseTo(240, 0)
+})
+
+test('a press on the rotate tip of a box drawn with a 20 pixel stroke turns the box and does not move it', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Thick box turn')
+  await canvas.getByLabel('Stroke width').fill('20')
+  await draw(page, canvas, 'Box', [100, 100], [200, 200])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [150, 150])
+
+  // The rotate tip sits 26 above the top middle, (150, 74), inside the reach of the box's own 20 pixel stroke.
+  // Turned from above the centre to its right: a quarter turn clockwise, with the box's centre where it was.
+  await drag(page, canvas, [150, 74], [226, 150])
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [box] = storedItems(attached)
+  expect(box!.rotation).toBeCloseTo(Math.PI / 2, 2)
+  expect(box!.rect!.x).toBeCloseTo(100, 0)
+  expect(box!.rect!.y).toBeCloseTo(100, 0)
+  expect(box!.rect!.w).toBeCloseTo(100, 0)
+})
+
 test('the cursor shows the resize arrow on each side and corner, grab on the rotate tip, move inside, and default elsewhere', async ({
   page,
   project,

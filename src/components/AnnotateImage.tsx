@@ -463,8 +463,9 @@ export function AnnotateImage({
       }
     }
     // The rotate handle of the selection sits above its box, in a band that can hold a mark: a mark under the
-    // pointer is picked first, and the handle takes only a press that lands on no mark.
-    if (box && !hit) {
+    // pointer is picked first, and the handle takes a press that lands on no mark or on one of the selected
+    // marks (a selected mark's reach can cover the handle).
+    if (box && (!hit || picked.some((a) => a.id === hit.id))) {
       const handle = handleAt(box, HANDLE_GAP * k, bitmap ?? { width: 0, height: 0 })
       if (within(point, handle, TIP_REACH * k)) {
         gesture.current = {
@@ -589,7 +590,7 @@ export function AnnotateImage({
     const onX = box !== null && within(point, deleteXAt(box, k), X_REACH * k)
     setTipHover(nearTip(box, point, k))
     // Set on the element, not through state: a move over the canvas does not re-render the dialog.
-    e.currentTarget.style.cursor = onX ? 'grab' : cursorOf(partAt(box, items, point, layoutAt(k)))
+    e.currentTarget.style.cursor = onX ? 'grab' : cursorOf(partAt(box, items, point, layoutAt(k), selected))
   }
 
   const onPointerLeave = (e: PointerEvent<HTMLCanvasElement>) => {

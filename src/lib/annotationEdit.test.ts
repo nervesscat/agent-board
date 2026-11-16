@@ -647,6 +647,30 @@ describe('resizeHandleAt', () => {
     expect(resizeHandleAt(line, [70, 60], 8)).toBeNull()
     expect(resizeHandleAt(line, [20, 100], 8)).not.toBeNull()
   })
+
+  it('is no side handle in the middle of a box 10 px across, so a press there moves it', () => {
+    const narrow = { x: 100, y: 100, w: 10, h: 100 }
+    expect(resizeHandleAt(narrow, [105, 150], 8)).toBeNull()
+    // Its corners keep the full reach, so they still resize it.
+    expect(resizeHandleAt(narrow, [100, 100], 8)).toBe('nw')
+  })
+
+  it('keeps a side handle on a wide box, at its full reach from the edge', () => {
+    const wide = { x: 100, y: 100, w: 300, h: 300 }
+    expect(resizeHandleAt(wide, [104, 250], 8)).toBe('w')
+    expect(resizeHandleAt(wide, [250, 104], 8)).toBe('n')
+  })
+
+  it("takes a thin line's side handle at its edge, and not in its middle, so a press in the middle moves it", () => {
+    const line = { x: 100, y: 60, w: 10, h: 180 }
+    expect(resizeHandleAt(line, [105, 150], 8)).toBeNull()
+    expect(resizeHandleAt(line, [101, 150], 8)).toBe('w')
+  })
+
+  it('has no handles on a box with no size at all, so a press on a dot moves it', () => {
+    expect(resizeHandleAt({ x: 100, y: 100, w: 0, h: 0 }, [100, 100], 8)).toBeNull()
+    expect(resizeHandleAt({ x: 100, y: 100, w: 0, h: 0 }, [102, 101], 8)).toBeNull()
+  })
 })
 
 describe('partAt', () => {
@@ -667,6 +691,26 @@ describe('partAt', () => {
     expect(partAt(box, [rect('m', 140, 60, 20, 20)], [150, 74], layout)).toBe('move')
   })
 
+  it('is a move in the middle of a box 10 px across, where its side handle would have been', () => {
+    const narrow = { x: 100, y: 100, w: 10, h: 100 }
+    expect(partAt(narrow, [], [105, 150], layout)).toBe('move')
+  })
+
+  it('is the rotate tip on a selected mark under it, whose own reach covers the tip', () => {
+    const thick = { ...rect('m', 100, 100, 100, 100), width: 20 }
+    expect(partAt(box, [thick], [150, 74], layout, new Set(['m']))).toBe('rotate')
+  })
+
+  it('is a move on an unselected mark under the rotate tip, even one whose reach covers the tip', () => {
+    const thick = { ...rect('m', 100, 100, 100, 100), width: 20 }
+    expect(partAt(box, [thick], [150, 74], layout, new Set())).toBe('move')
+  })
+
+  it('is a move on a selected mark away from the tip, and inside the box', () => {
+    const thick = { ...rect('m', 100, 100, 100, 100), width: 20 }
+    expect(partAt(box, [thick], [150, 150], layout, new Set(['m']))).toBe('move')
+  })
+
   it('is a move inside the box, and on a mark outside it', () => {
     expect(partAt(box, [], [150, 150], layout)).toBe('move')
     expect(partAt(box, [rect('m', 20, 20, 20, 20)], [30, 30], layout)).toBe('move')
@@ -675,6 +719,24 @@ describe('partAt', () => {
   it('is a move on the middle of a zero-width line, where a side handle would have been', () => {
     const line = { x: 100, y: 20, w: 0, h: 100 }
     expect(partAt(line, [], [100, 70], layout)).toBe('move')
+  })
+
+  it('is a move on a pen stroke whose points all coincide, and a drag moves it from its point', () => {
+    const dot: Annotation = {
+      id: 'dot',
+      kind: 'pen',
+      color: '#000',
+      width: 4,
+      points: [
+        [100, 100],
+        [100, 100],
+      ],
+    }
+    expect(partAt(markBounds(dot), [dot], [100, 100], layout)).toBe('move')
+    expect(translateMark(dot, 40, 0).points).toEqual([
+      [140, 100],
+      [140, 100],
+    ])
   })
 
   it('is null elsewhere, and the tip only exists with a selection', () => {

@@ -225,18 +225,22 @@ export function handlePoint({ x, y, w, h }: Box, part: ResizePart): Point {
 }
 
 /**
- * The handle under a point, the nearest one within `reach` picture pixels, or null. A side handle on an axis of
- * zero size is no handle: a vertical line's east and west handles would sit on its stroke, and a press there moves it.
+ * The handle under a point, the nearest one within reach, or null. A box with no size at all has no handles, so a
+ * press on a dot moves it. A side handle on an axis of zero size is no handle: a vertical line's east and west
+ * handles would sit on its stroke, and a press there moves it. A side handle's reach is at most a third of the box
+ * on its axis, so in the middle of a thin line or box a press moves it; the corners keep `reach`.
  */
 export function resizeHandleAt(box: Box, point: Point, reach: number): ResizePart | null {
+  if (!box.w && !box.h) return null
   let best: ResizePart | null = null
-  let bestDistance = reach
+  let bestDistance = Infinity
   for (const part of RESIZE_PARTS) {
     const [dx, dy] = GRIP[part]
     if ((dx && !dy && !box.w) || (dy && !dx && !box.h)) continue
+    const partReach = dx && dy ? reach : Math.min(reach, (dx ? box.w : box.h) / 3)
     const [hx, hy] = handlePoint(box, part)
     const distance = Math.hypot(point[0] - hx, point[1] - hy)
-    if (distance <= bestDistance) {
+    if (distance <= partReach && distance <= bestDistance) {
       best = part
       bestDistance = distance
     }
@@ -363,16 +367,23 @@ export function insideBox(box: Box, [x, y]: Point): boolean {
 
 /**
  * The part of the selection a pointer is over, in the order a press takes it: a resize handle; the rotate tip,
- * unless a mark lies under the pointer (the mark wins); a mark, or the inside of the selection's box. Null
- * elsewhere. With no selection (`box` null) only the marks count.
+ * unless a mark lies under the pointer that is not selected (an unselected mark wins; a selected one, whose own
+ * reach may cover the tip, does not); a mark, or the inside of the selection's box. Null elsewhere. With no
+ * selection (`box` null) only the marks count.
  */
-export function partAt(box: Box | null, items: Annotation[], point: Point, layout: Layout): Part | null {
+export function partAt(
+  box: Box | null,
+  items: Annotation[],
+  point: Point,
+  layout: Layout,
+  selected: ReadonlySet<string> = new Set(),
+): Part | null {
   if (box) {
     const handle = resizeHandleAt(box, point, layout.handleReach)
     if (handle) return handle
   }
   const mark = markAt(items, point[0], point[1])
-  if (box && !mark) {
+  if (box && (!mark || selected.has(mark.id))) {
     const [tx, ty] = handleAt(box, layout.gap, layout.picture)
     if (Math.hypot(point[0] - tx, point[1] - ty) <= layout.tipReach) return 'rotate'
   }
