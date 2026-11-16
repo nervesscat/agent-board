@@ -22,8 +22,8 @@ test('an open decision on an Ongoing features card shows the waiting-on-you stat
 
   await page.goto(`/projects/${project.id}/features`)
   const card = page.getByRole('link', { name: new RegExp(`#${t.id} Pick a cache`) })
-  // The hand icon's state stays on the card; the decision badge is gone.
-  await expect(card).toContainText('Waiting on you')
+  // The hand icon's state stays on the card (icon only, no text); the decision badge is gone.
+  await expect(card.getByTestId('work-line')).toHaveAttribute('data-state', 'waiting')
   await expect(card).not.toContainText('decision needed')
   await expect(card).not.toContainText('decisions needed')
 })
