@@ -654,7 +654,7 @@ allow it:
    or conflicts, that comes first. It is the ticket's own work, done by an agent on its branch: merge the
    base in, resolve the conflicts, push, and wait for CI green on the new head.
 4. **Merge the PR**, then **move the ticket to the project's first done stage** (the first stage of kind
-   done in `get_project`; Release here) and post on the ticket, naming the PR and the merge commit.
+   done in `get_project`; Done in the default layout) and post on the ticket, naming the PR and the merge commit.
 
 When something keeps it from merging (red checks, a conflict that needs a product call), say exactly
 what on the ticket, and leave it in Approved. It does not merge around it, and it does not ask whether
