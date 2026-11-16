@@ -1,7 +1,8 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, or } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
-import { gist, listTickets, nextTask } from './features'
+import { nextTask } from '#/lib/tasks'
+import { gist, listTickets } from './features'
 import { listRepos } from './repos'
 import { getProject } from './projects'
 import { listStages, type Stage } from './stages'
@@ -60,7 +61,7 @@ export interface LiveNowEntry {
   silentMinutes: number
   /** The open wait it is on, the earliest started; null when it runs without one. */
   waitingFor: { reason: string; note: string; agent: string; on: string | null; since: string } | null
-  /** Always false here: a stalled ticket is reported under recentlyActive instead, with the same shape. */
+  /** Always false here: a stalled or lost ticket is reported under recentlyActive instead, with the same shape. */
   stalled: boolean
 }
 
@@ -204,9 +205,10 @@ export function getLiveWork(projectId: number, opts: LiveWorkOptions = {}) {
   }
 
   // --- live now: an open span or wait, or an agent event (a heartbeat too) inside the window ---
-  // A stalled ticket is silence, not work in flight: it goes to recentlyActive whatever is still open.
-  // Finished work is out too: a span an agent left open on a done or cancelled ticket is not work in
-  // flight, and without this it would read as live forever.
+  // A stalled or lost ticket is silence, not work in flight: it goes to recentlyActive whatever is still
+  // open. Lost is an open span whose agent went silent (its lease ran out): the agent is gone, so it is
+  // not live work either. Finished work is out too: a span an agent left open on a done or cancelled
+  // ticket is not work in flight, and without this it would read as live forever.
   const liveNow: LiveNowEntry[] = []
   for (const t of tickets) {
     if (closed(t)) continue
@@ -215,6 +217,7 @@ export function getLiveWork(projectId: number, opts: LiveWorkOptions = {}) {
     const heard = timeline.lastHeard
     const live =
       !timeline.stalled &&
+      timeline.liveness?.state !== 'lost' &&
       (spans.length > 0 || waits.length > 0 || (heard !== null && Date.parse(heard.at) >= windowStart))
     if (!live) continue
     const heardFrom = heardAt(t)
@@ -233,7 +236,7 @@ export function getLiveWork(projectId: number, opts: LiveWorkOptions = {}) {
       waitingFor: wait
         ? { reason: wait.reason, note: wait.note, agent: wait.agent, on: wait.on, since: wait.start }
         : null,
-      // Never true here: a stalled ticket is listed as recently active, not as live (the live test above).
+      // Never true here: a stalled or lost ticket is listed as recently active, not as live (the live test above).
       stalled: false,
     })
   }

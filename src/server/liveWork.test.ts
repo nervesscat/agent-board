@@ -310,7 +310,8 @@ describe('recently active, nothing running', () => {
     expect(one).toMatchObject({
       title: 'Reviewed already',
       lastHeardAt: iso(ago(130)),
-      lastSignalAt: iso(ago(130)),
+      // The lease's clock counts an agent's post too: the summary was written at ago(120).
+      lastSignalAt: iso(ago(120)),
       silentMinutes: 130,
       state: 'Waiting on the parser review',
     })
@@ -706,8 +707,9 @@ describe('silence is reported as silence', () => {
 
     const payload = read(pid)
     expect(payload.liveNow.map((x) => x.ticketId)).not.toContain(t.id)
+    // Its state is lost (the open span's lease ran out), so it is not flagged stalled: it is silence all the same.
     expect(payload.recentlyActive.find((x) => x.ticketId === t.id)).toMatchObject({
-      stalled: true,
+      stalled: false,
       lastHeardAt: iso(ago(200)),
       silentMinutes: 200,
       agents: ['opencode/ticket-846'],
