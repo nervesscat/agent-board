@@ -423,7 +423,7 @@ function logOverride(t: Ticket, unmet: Need[], actor: string) {
  * there. In a project with no software kind the human's approval also closes the work, so an agent
  * never moves a ticket to done there either.
  */
-function refuseAgentApproved(projectId: number, status: string | undefined) {
+function refuseAgentApproved(projectId: number, status: string | undefined, from?: string) {
   if (status === undefined) return
   const to = resolveStage(listStages(projectId), status)
   if (to.key === 'approved')
@@ -431,14 +431,18 @@ function refuseAgentApproved(projectId: number, status: string | undefined) {
       403,
       'only the human puts a ticket in Approved: a verdict or a move by the human does',
     )
-  refuseAgentDone(projectId, status)
+  refuseAgentDone(projectId, status, from)
 }
 
-/** An agent never closes the work of a project with no software kind: the human's approval does. */
-function refuseAgentDone(projectId: number, status: string | undefined) {
+/**
+ * An agent never closes the work of a project with no software kind: the human's approval does. A
+ * ticket already in that done stage (`from`) is not closed by it again, so an agent's other edits to
+ * it still go through.
+ */
+function refuseAgentDone(projectId: number, status: string | undefined, from?: string) {
   if (status === undefined) return
   const to = resolveStage(listStages(projectId), status)
-  if (to.kind === 'done' && !hasGitSide(getProject(projectId).kinds))
+  if (to.kind === 'done' && to.key !== from && !hasGitSide(getProject(projectId).kinds))
     throw new HttpError(403, 'only the human closes work in a project with no software kind: by approving it')
 }
 
@@ -461,9 +465,10 @@ export async function changeTicket(
   const before = features.getTicket(id)
   if (position !== undefined) features.checkPlacement(before, position)
   // An agent never puts a ticket in Approved: the orchestrator reads that stage as the human's go-ahead.
-  if (opts.agent && before.status !== 'approved') refuseAgentApproved(before.projectId, patch.status)
+  if (opts.agent && before.status !== 'approved')
+    refuseAgentApproved(before.projectId, patch.status, before.status)
   // From Approved an agent may still not close the work of a project with no software kind.
-  if (opts.agent) refuseAgentDone(before.projectId, patch.status)
+  if (opts.agent) refuseAgentDone(before.projectId, patch.status, before.status)
   const ids = needs !== undefined ? checkNeeds(before, needs) : needIds(id)
   // Judged against the primary the write produces: a swap or a reordered list brings that repo's base.
   const { repos, ...fields } = patch
@@ -560,8 +565,10 @@ export async function judgeTicket(
       : verdict === null && opts.reopenTo
         ? resolveStage(stages, opts.reopenTo, projectWorkStage(t.projectId, stages)).key
         : undefined
+  // A ticket still open or in review is moved to done by a second approval even when its verdict is
+  // already approved, so its needs are checked then too.
   const unmet =
-    to && features.verdictOf(t) !== verdict
+    to && (features.verdictOf(t) !== verdict || kindOf(stages, t.status) !== 'done')
       ? await guardDone({ ...t, from: t.status }, to, needIds(id), { force: opts.force, agent: false })
       : []
   const row = features.setVerdict(id, verdict, actor, { reopenTo: opts.reopenTo })

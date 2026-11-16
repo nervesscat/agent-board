@@ -177,6 +177,45 @@ test('approval closes a hand-off only from its review stage, and needs still hol
   )
 })
 
+test('a second approval closes a hand-off only when its needs are done', async ({ human, agent }) => {
+  const music = await createProject(human, `Second ${Date.now()}`, ['music'])
+  const base = await ok<{ id: number }>(
+    human.post(`/api/projects/${music.id}/tickets`, { data: { title: 'Needed first' } }),
+  )
+  const held = await ok<{ id: number }>(
+    human.post(`/api/projects/${music.id}/tickets`, { data: { title: 'Approved too early' } }),
+  )
+  // Approved while still open: recorded, the ticket does not close.
+  await ok(human.put(`/api/tickets/${held.id}/approval`, { data: { verdict: 'approved' } }))
+  // An agent moves it to review, and the human then gives it a need that is not done.
+  await ok(agent.patch(`/api/tickets/${held.id}`, { data: { status: 'review' } }))
+  await ok(human.patch(`/api/tickets/${held.id}`, { data: { needs: [base.id] } }))
+  // A second approval closes it the way a first one from review would: the need holds it.
+  const again = await human.put(`/api/tickets/${held.id}/approval`, { data: { verdict: 'approved' } })
+  expect(again.status()).toBe(409)
+  expect((await ok<{ status: string }>(human.get(`/api/tickets/${held.id}`))).status).toBe('review')
+})
+
+test('an agent may repeat the done stage of a ticket already done, without closing it again', async ({
+  human,
+  agent,
+}) => {
+  const music = await createProject(human, `Repeat ${Date.now()}`, ['music'])
+  const t = await ok<{ id: number }>(
+    human.post(`/api/projects/${music.id}/tickets`, {
+      data: { title: 'Closed by approval', status: 'review' },
+    }),
+  )
+  await ok(human.put(`/api/tickets/${t.id}/approval`, { data: { verdict: 'approved' } }))
+  const closed = await ok<{ status: string }>(human.get(`/api/tickets/${t.id}`))
+  // The same stage again, with an edit: not a close, so it goes through.
+  await ok(
+    agent.patch(`/api/tickets/${t.id}`, { data: { title: 'Edited by the agent', status: closed.status } }),
+  )
+  const after = await ok<{ title: string; status: string }>(human.get(`/api/tickets/${t.id}`))
+  expect(after).toMatchObject({ title: 'Edited by the agent', status: closed.status })
+})
+
 test('taking back an approval reopens a hand-off even after the project gains software', async ({
   human,
 }) => {
