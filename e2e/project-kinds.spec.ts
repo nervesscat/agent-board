@@ -73,3 +73,27 @@ test('a software project keeps its git pages in the menu', async ({ page, projec
   await expect(nav.getByRole('link', { name: 'PR queue' })).toBeVisible()
   await expect(nav.getByRole('link', { name: 'Previews' })).toBeVisible()
 })
+
+test('a ticket of a project with no software kind shows no git panels, and software brings them back', async ({
+  page,
+  human,
+}) => {
+  const music = await createProject(human, `Mixing ${Date.now()}`, ['music'])
+  const t = await ok<{ id: number }>(
+    human.post(`/api/projects/${music.id}/tickets`, { data: { title: 'Mix the intro' } }),
+  )
+  await page.goto(`/projects/${music.id}/features/${t.id}`)
+  const details = page.getByRole('region', { name: 'Details' })
+  await expect(details).toBeVisible()
+  await expect(details.getByText('Base branch', { exact: true })).toHaveCount(0)
+  await expect(details.getByText('Needs', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('region', { name: /^Branch in / })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Runs' })).toHaveCount(0)
+
+  // Software added: the git panels come back on the same ticket.
+  await ok(human.patch(`/api/projects/${music.id}`, { data: { kinds: ['music', 'software'] } }))
+  await page.reload()
+  await expect(details.getByText('Base branch', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible()
+})

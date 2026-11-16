@@ -49,6 +49,7 @@ import { Empty } from '#/components/Empty'
 import { Markdown } from '#/components/Markdown'
 import { NeedsField, NeedsStatus, toastRefusal } from '#/components/Needs'
 import { NewTicket } from '#/components/NewTicket'
+import { hasGitSide } from '#/lib/kinds'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { RunsCard, useTicketRuns } from '#/components/RunsCard'
@@ -143,6 +144,8 @@ function TicketPage() {
   // land on where it was). A layout saved while the ticket is open applies on the next one shown or the
   // next visit: a section that changed column would be drawn afresh, losing what is typed in it.
   const project = useProject(id)
+  // A project with no software kind has no git side: no branch, workspace, repository or run panels.
+  const gitSide = hasGitSide(project.data?.kinds)
   const live = project.data?.layout ?? (project.isError ? defaultLayout() : undefined)
   const [kept, setKept] = useState<{ ticketId: string; layout: Layout } | null>(null)
   const layout = kept?.ticketId === ticketId ? kept.layout : live
@@ -338,10 +341,12 @@ function TicketPage() {
         </ShownAnchor>
       </div>
     ),
-    'ticket.runs': runs.shown ? <RunsCard t={t} git={git} onChange={invalidate} /> : null,
-    'ticket.details': <Details key={t.id} t={t} includes={git?.includes} onSave={(p) => update.mutate(p)} />,
-    'ticket.branch': <BranchPanel t={t} git={git} />,
-    'ticket.workspaces': <WorkspacesPanel t={t} git={git} onChange={invalidate} />,
+    'ticket.runs': gitSide && runs.shown ? <RunsCard t={t} git={git} onChange={invalidate} /> : null,
+    'ticket.details': (
+      <Details key={t.id} t={t} git={gitSide} includes={git?.includes} onSave={(p) => update.mutate(p)} />
+    ),
+    'ticket.branch': gitSide ? <BranchPanel t={t} git={git} /> : null,
+    'ticket.workspaces': gitSide ? <WorkspacesPanel t={t} git={git} onChange={invalidate} /> : null,
   }
   const main = layout ? shownIn(layout, 'ticket.main').filter((s) => sections[s] != null) : []
   const side = layout ? shownIn(layout, 'ticket.side').filter((s) => sections[s] != null) : []
@@ -979,10 +984,13 @@ function OtherRepos({
 /** Who, where, and what it needs merged first: each field saves as soon as it changes. */
 function Details({
   t,
+  git = true,
   includes,
   onSave,
 }: {
   t: TicketFull
+  /** Whether the project has a git side: its repository, branch, base branch and needs show only then. */
+  git?: boolean
   includes?: number[]
   onSave: (p: Record<string, unknown>) => void
 }) {
@@ -1015,7 +1023,7 @@ function Details({
         </Label>
         <AssigneeSelect id="assignee" value={t.assignee} onChange={(assignee) => onSave({ assignee })} />
       </div>
-      {repos.length > 1 && (
+      {git && repos.length > 1 && (
         <div className="space-y-1">
           <Label htmlFor="repo" className="text-xs text-muted-foreground">
             Repository
@@ -1047,63 +1055,69 @@ function Details({
           </Select>
         </div>
       )}
-      <div className="space-y-1">
-        <Label htmlFor="branch" className="text-xs text-muted-foreground">
-          Branch
-        </Label>
-        <BranchSelect
-          id="branch"
-          value={branch}
-          repoId={repoId}
-          optional
-          onChange={(v) => {
-            setBranch(v)
-            if (v !== t.branch) later('branch', v)
-          }}
-        />
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="base" className="text-xs text-muted-foreground">
-          Base branch
-        </Label>
-        <BranchSelect
-          id="base"
-          value={baseBranch}
-          repoId={repoId}
-          onChange={(v) => {
-            setBaseBranch(v)
-            if (v && v !== t.baseBranch) later('baseBranch', v)
-          }}
-        />
-      </div>
-      {repos.length > 1 && !t.prId && <OtherRepos t={t} repos={repos} onSave={onSave} />}
-      <div className="space-y-1">
-        <Tip content="Tickets whose branches must be merged into this one's base before it can be done">
-          <Label htmlFor="needs" className="text-xs text-muted-foreground">
-            Needs
-            {t.neededBy.length > 0 && (
-              <span className="ml-auto font-normal">
-                needed by{' '}
-                {t.neededBy.map((n, i) => (
-                  <span key={n.id}>
-                    {i > 0 && ', '}
-                    <Tip content={n.title}>
-                      <Link
-                        to="/projects/$id/features/$ticketId"
-                        params={{ id: String(t.projectId), ticketId: String(n.id) }}
-                        className="hover:text-foreground hover:underline"
-                      >
-                        #{n.id}
-                      </Link>
-                    </Tip>
-                  </span>
-                ))}
-              </span>
-            )}
+      {git && (
+        <div className="space-y-1">
+          <Label htmlFor="branch" className="text-xs text-muted-foreground">
+            Branch
           </Label>
-        </Tip>
-        <NeedsField t={t} includes={includes} onSave={(needs) => onSave({ needs })} />
-      </div>
+          <BranchSelect
+            id="branch"
+            value={branch}
+            repoId={repoId}
+            optional
+            onChange={(v) => {
+              setBranch(v)
+              if (v !== t.branch) later('branch', v)
+            }}
+          />
+        </div>
+      )}
+      {git && (
+        <div className="space-y-1">
+          <Label htmlFor="base" className="text-xs text-muted-foreground">
+            Base branch
+          </Label>
+          <BranchSelect
+            id="base"
+            value={baseBranch}
+            repoId={repoId}
+            onChange={(v) => {
+              setBaseBranch(v)
+              if (v && v !== t.baseBranch) later('baseBranch', v)
+            }}
+          />
+        </div>
+      )}
+      {git && repos.length > 1 && !t.prId && <OtherRepos t={t} repos={repos} onSave={onSave} />}
+      {git && (
+        <div className="space-y-1">
+          <Tip content="Tickets whose branches must be merged into this one's base before it can be done">
+            <Label htmlFor="needs" className="text-xs text-muted-foreground">
+              Needs
+              {t.neededBy.length > 0 && (
+                <span className="ml-auto font-normal">
+                  needed by{' '}
+                  {t.neededBy.map((n, i) => (
+                    <span key={n.id}>
+                      {i > 0 && ', '}
+                      <Tip content={n.title}>
+                        <Link
+                          to="/projects/$id/features/$ticketId"
+                          params={{ id: String(t.projectId), ticketId: String(n.id) }}
+                          className="hover:text-foreground hover:underline"
+                        >
+                          #{n.id}
+                        </Link>
+                      </Tip>
+                    </span>
+                  ))}
+                </span>
+              )}
+            </Label>
+          </Tip>
+          <NeedsField t={t} includes={includes} onSave={(needs) => onSave({ needs })} />
+        </div>
+      )}
     </section>
   )
 }

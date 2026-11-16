@@ -3,6 +3,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { db, schema } from '#/db'
 import { retryWhileLocked } from '#/db/busy'
 import { COMMENT_PARENTS, type Complexity, DEFAULT_COMPLEXITY, type FeedTab } from '#/lib/constants'
+import { hasGitSide } from '#/lib/kinds'
 import { AUTO_PHASE_RULE, autoPhaseOf } from '#/lib/autoPhases'
 import { columnOrder, isClosed, placeInColumn, stageColumn } from '#/lib/stages'
 import { nextTask, treeTasks } from '#/lib/tasks'
@@ -509,14 +510,17 @@ export function placement(
   projectId: number,
   input: { repoId?: number | null; parentId?: number | null; baseBranch?: string },
 ) {
-  getProject(projectId)
+  const project = getProject(projectId)
   const parent = input.parentId ? getTicket(input.parentId) : null
   if (parent && parent.projectId !== projectId)
     throw new HttpError(400, `ticket ${parent.id} is not in project ${projectId}`)
-  const repo = resolveRepo(projectId, input.repoId ?? parent?.repoId ?? (parent && ticketRepo(parent)?.id))
+  const given = input.repoId ?? parent?.repoId ?? (parent && ticketRepo(parent)?.id)
+  // A project with no software kind has no git side: its tickets need no repo, and the repos it may
+  // still hold stay out of it unless one is named.
+  const repo = !given && !hasGitSide(project.kinds) ? null : resolveRepo(projectId, given)
   // A lane branches off its parent's branch when they share a repo, so its PR goes back into it.
-  const parentBase = parent && ticketRepo(parent)?.id === repo.id ? parent.branch || parent.baseBranch : ''
-  return { parent, repo, baseBranch: input.baseBranch || parentBase || repo.baseBranch }
+  const parentBase = parent && ticketRepo(parent)?.id === repo?.id ? parent.branch || parent.baseBranch : ''
+  return { parent, repo, baseBranch: input.baseBranch || parentBase || repo?.baseBranch || '' }
 }
 
 /**
@@ -605,7 +609,7 @@ export function createTicket(
   // Checked before the ticket exists: a bad repo does not leave a ticket behind without them.
   if (input.repos)
     resolveTicketRepos(
-      { id: 0, projectId, repoId: repo.id, branch: '', baseBranch, prNumber: null },
+      { id: 0, projectId, repoId: repo?.id ?? null, branch: '', baseBranch, prNumber: null },
       input.repos,
     )
   if (parent?.prId) throw new HttpError(400, `ticket ${parent.id} is a PR's: it has no lanes`)
@@ -632,7 +636,7 @@ export function createTicket(
           .insert(schema.tickets)
           .values({
             projectId,
-            repoId: repo.id,
+            repoId: repo?.id ?? null,
             parentId: parent?.id ?? null,
             title: input.title,
             body: input.body ?? '',

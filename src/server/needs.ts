@@ -498,7 +498,7 @@ export async function newTicket(
     const { repo, baseBranch } = features.placement(projectId, features.newTicketPrimary(rest))
     const stages = listStages(projectId)
     const to = resolveStage(stages, rest.status, projectWorkStage(projectId, stages)).key
-    await guardDone({ id: null, projectId, repoId: repo.id, baseBranch }, to, ids, opts)
+    await guardDone({ id: null, projectId, repoId: repo?.id ?? null, baseBranch }, to, ids, opts)
   }
   const seeded = defaultPhases ?? !rest.parentId
   const tasks = seeded ? phasedTasks(getProject(projectId).defaultPhases, rest.tasks ?? []) : rest.tasks
