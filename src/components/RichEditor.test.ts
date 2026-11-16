@@ -255,6 +255,12 @@ describe('RichEditor styles on a partial selection', () => {
     ).toBe('- a\n  - b')
   })
 
+  it('makes a bullet item with a nested list a checklist item, and keeps the nested list in it', () => {
+    expect(
+      after('- one\n  - nested', 3, 6, (e) => toggleBlock(e, (c) => c.toggleTaskList(), 'taskList')),
+    ).toBe('- [ ] one\n  - nested')
+  })
+
   it('takes the block of a toggle-off out of the item and no further, when the selection runs into the nested item', () => {
     expect(
       after('- one two\n  - nested three\n- last', 3, 22, (e) =>

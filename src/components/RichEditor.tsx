@@ -301,7 +301,19 @@ function convertItemTo(tr: Transaction, itemPos: number, listType: NodeType): vo
     p += 2 // the split put a closing and an opening token of the list in front of the item
   }
   if (index < list.childCount - 1) tr.split(p + size, 1)
-  tr.setNodeMarkup(tr.doc.resolve(p).before(), listType)
+  const listPos = tr.doc.resolve(p).before()
+  if (listType.name !== 'taskList') {
+    tr.setNodeMarkup(listPos, listType)
+    return
+  }
+  // A task list holds task items: the one-item list is replaced by a task list whose item is unchecked and
+  // keeps the item's content (its nested lists included). One step, so the intermediate document stays valid.
+  const piece = tr.doc.nodeAt(listPos)
+  if (!piece) return
+  const item = piece.firstChild
+  if (!item) return
+  const taskItem = listType.schema.nodes.taskItem.create({ checked: false }, item.content)
+  tr.replaceWith(listPos, listPos + piece.nodeSize, listType.create(piece.attrs, taskItem))
 }
 
 /**
@@ -310,11 +322,12 @@ function convertItemTo(tr: Transaction, itemPos: number, listType: NodeType): vo
  */
 function isWholeItemOf(tr: Transaction, $pos: ResolvedPos, size: number, list: string | undefined): boolean {
   const item = $pos.parent
-  if (item.type.name !== 'listItem' || $pos.index() !== 0 || !list) return false
+  if (list !== 'bulletList' && list !== 'orderedList' && list !== 'taskList') return false
+  if (item.type.name !== 'listItem' || $pos.index() !== 0) return false
   if (item.childCount < 2 || item.child(0).nodeSize !== size || !item.child(0).isTextblock) return false
   for (let i = 1; i < item.childCount; i++) {
     const name = item.child(i).type.name
-    if (name !== 'bulletList' && name !== 'orderedList') return false
+    if (name !== 'bulletList' && name !== 'orderedList' && name !== 'taskList') return false
   }
   return $pos.node($pos.depth - 1).type.name !== list && tr.doc.type.schema.nodes[list] !== undefined
 }
