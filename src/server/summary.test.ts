@@ -293,6 +293,17 @@ describe('done today', () => {
   })
 })
 
+describe('approved, to merge', () => {
+  it('lists the tickets in Approved, labelled, for an orchestrator to merge without asking again', () => {
+    const pid = project('approved-summary')
+    const ready = ticket(pid, 'Ready to merge', { status: 'approved', prNumber: 9 })
+    ticket(pid, 'Still in review', { status: 'review', prNumber: 10 })
+    expect(take(pid).approvedToMerge).toEqual([
+      { ticketId: ready.id, title: 'Ready to merge', prNumber: 9, label: 'approved, to merge' },
+    ])
+  })
+})
+
 describe('next', () => {
   it('lists the head of the first open stage that is not a backlog, in board order, with the counts', () => {
     const pid = project('next')
@@ -984,5 +995,14 @@ describe('the stalled rows of the Overview: the span that ended last', () => {
     expect(
       summary.getSummary(pid, { now: NOW, humans: [HUMAN] }).projects[0]!.needsYou.stalled,
     ).toContainEqual(expect.objectContaining({ ticketId: t.id, lastSignalAt: iso(at(7, 9, 30)) }))
+  })
+})
+
+describe('approved, to merge: lanes and the review kind', () => {
+  it('lists an approved lane too, and not a stage of another kind that is keyed approved', () => {
+    const pid = project('approved-lanes')
+    const parent = ticket(pid, 'Parent', { status: 'review' })
+    const lane = ticket(pid, 'Lane', { status: 'approved', parentId: parent.id })
+    expect(take(pid).approvedToMerge.map((x) => x.ticketId)).toEqual([lane.id])
   })
 })
