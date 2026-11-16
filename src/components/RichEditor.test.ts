@@ -935,7 +935,29 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string, rel
     'heading',
     'Hello brave\nworld',
   ],
+  [
+    'quote on a middle item of a numbered list nested in a bullet item reads back with the same items',
+    '- x\n  1. a\n  2. «b»\n  3. c',
+    'quote',
+    '- x\n  1. a\n  \n  > b\n  \n  3. c',
+    true,
+  ],
 ]
+
+/**
+ * A paragraph after a numbered list in a bullet item, starting with a space: the space is written as an entity, and
+ * the reader must read the entity back as the space (not as the literal text).
+ */
+describe('RichEditor markdown after a numbered list in a bullet item', () => {
+  it('keeps the leading space of the paragraph after the list', () => {
+    const md = '- x\n  1. a\n\n  &#32;y'
+    expect(roundTrip(md)).toBe(md)
+    const parsed = markdown.parse(md)
+    const item = parsed.content?.[0]?.content?.[0]
+    const paragraph = item?.content?.[2]
+    expect(paragraph?.content?.[0]?.text).toBe(' y')
+  })
+})
 
 /** The editor with `md` loaded, the «» markers taken out, and the text between them selected. */
 function setup(md: string): Editor {

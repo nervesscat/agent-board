@@ -1,4 +1,5 @@
 import { type ChainedCommands, type Editor, type JSONContent, Node as EditorNode } from '@tiptap/core'
+import Blockquote from '@tiptap/extension-blockquote'
 import Image from '@tiptap/extension-image'
 import { ListItem, OrderedList, TaskItem, TaskList } from '@tiptap/extension-list'
 import { TableKit } from '@tiptap/extension-table'
@@ -105,7 +106,14 @@ const looseInline = ['text', 'hardBreak']
  */
 const ListItemWithParagraphs = ListItem.extend({
   parseMarkdown(token, helpers) {
-    const parsed = this.parent?.(token, helpers)
+    // A paragraph after a numbered list in the item comes as loose text whose `&#32;` the reader leaves as text. The
+    // serializer writes a leading space that way, so it reads back as the space. (A typed `&amp;#32;` is not changed.)
+    const tokens = token.tokens?.map((t) =>
+      t.type === 'text' && t.raw?.startsWith('&#32;') && t.text?.startsWith('&#32;')
+        ? { ...t, text: ` ${t.text.slice('&#32;'.length)}` }
+        : t,
+    )
+    const parsed = this.parent?.({ ...token, tokens }, helpers)
     if (!parsed || Array.isArray(parsed) || !parsed.content) return parsed ?? []
     const content: JSONContent[] = []
     let run: JSONContent[] = []
@@ -137,6 +145,18 @@ const OrderedListWithBlankLine = OrderedList.extend({
   },
 })
 
+/**
+ * A quote in a list item that follows a numbered list reads back into the list's last item unless a blank line comes
+ * before it, so it gets one.
+ */
+const BlockquoteWithBlankLine = Blockquote.extend({
+  renderMarkdown(node, h, ctx) {
+    const quote = this.parent?.(node, h, ctx) ?? ''
+    const inItem = ctx?.parentType === 'listItem' || ctx?.parentType === 'taskItem'
+    return inItem && ctx.previousNode?.type === 'orderedList' ? `\n${quote}` : quote
+  },
+})
+
 /** What the editor understands; each one reads and writes its own markdown. */
 export function richExtensions(placeholder = '') {
   return [
@@ -145,9 +165,11 @@ export function richExtensions(placeholder = '') {
       paragraph: false,
       listItem: false,
       orderedList: false,
+      blockquote: false,
     }),
     ListItemWithParagraphs,
     OrderedListWithBlankLine,
+    BlockquoteWithBlankLine,
     Paragraph,
     Markdown,
     Image,
