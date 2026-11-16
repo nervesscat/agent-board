@@ -5,6 +5,7 @@ import { TableKit } from '@tiptap/extension-table'
 import { Placeholder } from '@tiptap/extensions'
 import { Markdown } from '@tiptap/markdown'
 import { TextSelection } from '@tiptap/pm/state'
+import { liftTarget } from '@tiptap/pm/transform'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import {
@@ -180,11 +181,16 @@ export function RichEditor({
   )
 }
 
+/** The list items a block can sit in: the lift takes a block out of one of these. */
+const listItemTypes = ['listItem', 'taskItem']
+
 /**
  * A block style (heading, list, quote, code block) changes every block its selection touches, so a
  * selection inside one paragraph would change the whole paragraph. This splits the paragraph at the
- * selection's ends first, and moves the selection to the blocks between them: the style then covers the
- * selected text only. A collapsed caret is left alone, and so is a selection that is not text.
+ * selection's ends, and lifts the selected blocks out of the list items they sit in, so the style covers
+ * the selected text only and the unselected text stays in its list. A block the selection only touches
+ * at its edge (one that starts where the selection ends) is left alone. A collapsed caret is left alone,
+ * and so is a selection that is not text.
  */
 export const narrowToSelection: Command = ({ tr }) => {
   if (!(tr.selection instanceof TextSelection) || tr.selection.empty) return true
@@ -201,13 +207,55 @@ export const narrowToSelection: Command = ({ tr }) => {
   if (splitFrom) tr.split(from)
   // Mapped through the splits: a start that was split lands in the new paragraph, an end that was
   // split lands at the end of the old one.
-  tr.setSelection(TextSelection.create(tr.doc, tr.mapping.map(from, 1), tr.mapping.map(to, -1)))
+  const start = tr.mapping.map(from, 1)
+  const end = tr.mapping.map(to, -1)
+  const mark = tr.mapping.maps.length
+  const blocks: { pos: number; size: number; contentEnd: number }[] = []
+  tr.doc.nodesBetween(start, end, (node, pos) => {
+    if (!node.isTextblock) return true
+    const contentStart = pos + 1
+    const contentEnd = contentStart + node.content.size
+    if (contentStart < end && contentEnd > start) blocks.push({ pos, size: node.nodeSize, contentEnd })
+    return false
+  })
+  if (!blocks.length) return true
+  // From the last block back, so each lift leaves the positions of the blocks before it as they are.
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const { pos, size } = blocks[i]
+    const $from = tr.doc.resolve(pos)
+    if (!listItemTypes.includes($from.parent.type.name)) continue
+    const range = $from.blockRange(tr.doc.resolve(pos + size))
+    const target = range && liftTarget(range)
+    if (range && target != null) tr.lift(range, target)
+  }
+  const map = tr.mapping.slice(mark)
+  tr.setSelection(
+    TextSelection.create(
+      tr.doc,
+      map.map(blocks[0].pos + 1, 1),
+      map.map(blocks[blocks.length - 1].contentEnd, -1),
+    ),
+  )
   return true
 }
 
-/** Runs a block style on the selected text only (see `narrowToSelection`). Inline marks do not need it. */
-export function toggleBlock(editor: Editor, toggle: (chain: ChainedCommands) => ChainedCommands) {
-  toggle(editor.chain().command(narrowToSelection).focus()).run()
+/**
+ * Runs a block style on the selected text only (see `narrowToSelection`). `list` names the list the style
+ * is: a selection already in that list is taken out of it and nothing more. Inline marks do not need it.
+ */
+export function toggleBlock(
+  editor: Editor,
+  toggle: (chain: ChainedCommands) => ChainedCommands,
+  list?: 'bulletList' | 'orderedList' | 'taskList',
+) {
+  if (editor.state.selection.empty) {
+    toggle(editor.chain().focus()).run()
+    return
+  }
+  // The narrowing is a transaction of its own: the commands of one chain read the state from before it.
+  const wasOn = list !== undefined && editor.isActive(list)
+  editor.chain().focus().command(narrowToSelection).run()
+  if (!wasOn) toggle(editor.chain().focus()).run()
 }
 
 function Toolbar({
@@ -261,19 +309,19 @@ function Toolbar({
       label: 'Bullet list',
       icon: List,
       on: state.bullet,
-      run: () => toggleBlock(editor, (c) => c.toggleBulletList()),
+      run: () => toggleBlock(editor, (c) => c.toggleBulletList(), 'bulletList'),
     },
     {
       label: 'Numbered list',
       icon: ListOrdered,
       on: state.ordered,
-      run: () => toggleBlock(editor, (c) => c.toggleOrderedList()),
+      run: () => toggleBlock(editor, (c) => c.toggleOrderedList(), 'orderedList'),
     },
     {
       label: 'Checklist',
       icon: ListChecks,
       on: state.task,
-      run: () => toggleBlock(editor, (c) => c.toggleTaskList()),
+      run: () => toggleBlock(editor, (c) => c.toggleTaskList(), 'taskList'),
     },
     {
       label: 'Quote',

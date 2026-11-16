@@ -160,6 +160,45 @@ describe('RichEditor styles on a partial selection', () => {
     )
   })
 
+  it('does not take a selection that only touches the start of the next paragraph into the style', () => {
+    expect(
+      after('one two\n\nthree four', 5, 10, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 }))),
+    ).toBe('one \n\n## two\n\nthree four')
+  })
+
+  it('applies a heading to a selection inside a list item, and keeps the rest of the item in its list', () => {
+    // "three" is the selected word of the second item; " four" stays a list item.
+    expect(
+      after('- one two\n- three four', 14, 19, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 }))),
+    ).toBe('- one two\n\n## three\n\n-  four')
+  })
+
+  it('applies a heading across two list items to the selected text of both', () => {
+    expect(
+      after('- one two\n- three four', 5, 17, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 }))),
+    ).toBe('- on\n\n## e two\n\n## thr\n\n- ee four')
+  })
+
+  it('takes a selected word out of its bullet list, and leaves the rest of the item in the list', () => {
+    expect(
+      after('- Hello brave world', 9, 14, (e) => toggleBlock(e, (c) => c.toggleBulletList(), 'bulletList')),
+    ).toBe('- Hello \n\nbrave\n\n-  world')
+  })
+
+  it('takes a selected word out of its checklist, and leaves the rest of the item in the list', () => {
+    expect(
+      after('- [ ] Hello brave world', 9, 14, (e) => toggleBlock(e, (c) => c.toggleTaskList(), 'taskList')),
+    ).toBe('- [ ] Hello \n\nbrave\n\n- [ ]  world')
+  })
+
+  it('turns a selected word of a bullet item into a numbered item, and leaves the rest as bullets', () => {
+    expect(
+      after('- a\n- Hello brave world\n- c', 14, 19, (e) =>
+        toggleBlock(e, (c) => c.toggleOrderedList(), 'orderedList'),
+      ),
+    ).toBe('- a\n- Hello \n\n1. brave\n\n-  world\n- c')
+  })
+
   it('leaves a collapsed caret on its whole paragraph, as before', () => {
     expect(after(sentence, 7, 7, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 })))).toBe(
       '## Hello brave world',
