@@ -186,6 +186,8 @@ export function RichEditor({
 const listItemTypes = ['listItem', 'taskItem']
 /** The lists a list item can hold, in any kind. */
 const listTypes = ['bulletList', 'orderedList', 'taskList']
+/** What can follow a paragraph in a list item and go with it when it moves: the lists, a quote, a code block. */
+const restTypes = [...listTypes, 'blockquote', 'codeBlock']
 
 /**
  * The block styles of the toolbar. The list kinds are lists: a selection in a list of the kind is toggled off, otherwise
@@ -266,9 +268,15 @@ function splitSelection(tr: Transaction): number[] {
   const splitTo = splittable(to)
   const splitFrom = splittable(from)
   const breakFrom = !splitFrom && afterBreak(from)
-  const breakTo = !splitTo && beforeBreak(to)
+  // A selection that ends right after a break: the same split as at a start after one, and the break goes.
+  const breakEnd = !splitTo && afterBreak(to)
+  const breakTo = !splitTo && !breakEnd && beforeBreak(to)
   // The end first: the start is before it, so its position does not move.
   if (splitTo) tr.split(to)
+  if (breakEnd) {
+    tr.split(to)
+    tr.delete(to - 1, to) // the break ends the block before the split
+  }
   if (breakTo) {
     tr.split(to)
     tr.delete(to + 2, to + 3) // the break now starts the block after the split
@@ -291,14 +299,17 @@ function splitSelection(tr: Transaction): number[] {
   return found
 }
 
-/** The size of the nested lists that follow the block at `pos` in its list item: they go with the block when it moves. */
+/**
+ * The size of the rest of the list item that follows the block at `pos`: its nested lists, quotes and code blocks, which
+ * go with the block when it moves (a list item cannot start with them, so they cannot stay behind it without a paragraph).
+ */
 function nestedSize(doc: Node, pos: number): number {
   const $pos = doc.resolve(pos)
   if (!listItemTypes.includes($pos.parent.type.name)) return 0
   let size = 0
   for (
     let i = $pos.index() + 1;
-    i < $pos.parent.childCount && listTypes.includes($pos.parent.child(i).type.name);
+    i < $pos.parent.childCount && restTypes.includes($pos.parent.child(i).type.name);
     i++
   ) {
     size += $pos.parent.child(i).nodeSize
@@ -343,18 +354,13 @@ function makeListItem(tr: Transaction, pos: number, list: ListKind) {
   const wrapping = range && findWrapping(range, schema.nodes[list])
   if (!range || !wrapping) return
   tr.wrap(range, wrapping)
-  // A new list next to a list of its kind is the same list: they join.
+  // A new list next to a list of its kind is the same list: they join. Two ordered lists written next to each other read
+  // back as one list, so the joined list numbers on from the item before it (keepNumbers keeps the first item's number).
   const made = tr.doc.nodeAt(at)!
   const before = tr.doc.resolve(at).nodeBefore
   const after = tr.doc.resolve(at + made.nodeSize).nodeAfter
-  const joinsBefore = before?.type === schema.nodes[list]
-  // The number the new item shows: an ordered list before it counts on from that list.
-  const number =
-    list === 'orderedList' && joinsBefore ? before.attrs.start + before.childCount : made.attrs.start
-  // An ordered list after it joins only where its numbers go on from this item, so none of its items is renumbered.
-  const continues = list !== 'orderedList' || after?.attrs.start === number + 1
-  if (after?.type === schema.nodes[list] && continues) tr.join(at + made.nodeSize)
-  if (joinsBefore) tr.join(at)
+  if (after?.type === schema.nodes[list]) tr.join(at + made.nodeSize)
+  if (before?.type === schema.nodes[list]) tr.join(at)
 }
 
 /**
@@ -382,17 +388,31 @@ function keepNumbers(tr: Transaction, numbers: Map<Node, number>) {
   tr.doc.descendants((node, pos) => {
     if (node.type.name !== 'orderedList') return true
     let start: number | undefined
+    // A list whose first item is new keeps the number its list was made with (the item it was joined on).
+    let newFirst = false
     node.forEach((item, _offset, index) => {
-      if (start !== undefined) return
+      if (start !== undefined || newFirst) return
       // The item's number is that of any block of it that had one (a new paragraph in front of the rest has none).
       let number: number | undefined
       item.forEach((block) => (number ??= numbers.get(block)))
       if (number !== undefined) start = number - index
+      else if (index === 0) newFirst = true
     })
     if (start !== undefined && start !== node.attrs.start) starts.push({ pos, node, start })
     return true
   })
   for (const { pos, node, start } of starts) tr.setNodeMarkup(pos, undefined, { ...node.attrs, start })
+}
+
+/**
+ * Whether the block at `pos` is the first paragraph of a list item and is followed by a list, quote or code block there:
+ * such a block keeps its place when it is restyled in place (see `applyBlockStyle`).
+ */
+function leadsItemWithRest(doc: Node, pos: number): boolean {
+  const $pos = doc.resolve(pos)
+  if (!listItemTypes.includes($pos.parent.type.name) || $pos.index() !== 0) return false
+  const next = $pos.parent.maybeChild(1)
+  return !!next && next.type.name !== 'paragraph'
 }
 
 /**
@@ -418,16 +438,14 @@ export function applyBlockStyle(tr: Transaction, style: BlockStyle, active: bool
     const kind = style === 'code' ? 'codeBlock' : 'heading'
     const ofKind = (block: number) =>
       style === 'quote' ? inQuote(tr.doc.resolve(block)) : tr.doc.nodeAt(block)?.type.name === kind
-    const changed = blocks.filter((block) => !active || ofKind(block))
-    // A list item starts with its paragraph, so a block that starts its item cannot take a heading, a code block or a
-    // quote in its place: it leaves its list first. The rest of the item stays in it, its first paragraph an empty one.
+    const changed = blocks.filter((block) => (!active || ofKind(block)) && !leadsItemWithRest(tr.doc, block))
+    // A list item starts with its paragraph, so a first paragraph that is followed by another paragraph leaves its list
+    // and the next paragraph becomes the first of the item. (A first paragraph followed by a list, quote or code block
+    // is left as it is above: no paragraph can stand in front of that rest, and markdown cannot write an empty one.)
     for (const block of changed) {
       const pos = at(block)
       const $pos = tr.doc.resolve(pos)
       if (!listItemTypes.includes($pos.parent.type.name) || $pos.index() !== 0) continue
-      // The rest of the item, if any, starts with an empty paragraph once the block is out: the item keeps its paragraph.
-      if ($pos.parent.childCount > 1)
-        tr.insert(pos + tr.doc.nodeAt(pos)!.nodeSize, schema.nodes.paragraph.create())
       liftBlock(tr, pos, false)
     }
     if (style === 'quote') applyQuote(tr, changed, active, at)
@@ -455,7 +473,12 @@ export function applyBlockStyle(tr: Transaction, style: BlockStyle, active: bool
       const quotedInItem = $pos.parent.type.name === 'blockquote' && listOf(tr.doc, $pos.before()) === style
       if (active && inList) liftBlock(tr, pos)
       else if (active && quotedInItem) leaveListQuoted(tr, pos)
-      else if (!active && !inList) makeListItem(tr, pos, style)
+      else if (!active && !inList) {
+        // A list item holds paragraphs, so a heading or code block becomes a paragraph before it is listed.
+        if (node.type.name !== 'paragraph')
+          tr.setBlockType(pos + 1, pos + node.nodeSize - 1, schema.nodes.paragraph)
+        makeListItem(tr, pos, style)
+      }
     }
   }
   keepNumbers(tr, numbers)
@@ -535,11 +558,13 @@ function leaveListQuoted(tr: Transaction, pos: number) {
  */
 export function toggleBlock(editor: Editor, style: BlockStyle) {
   const { from, to, empty } = editor.state.selection
-  if (empty || editor.state.doc.textBetween(from, to).length === 0) {
+  if (empty) {
     editor.chain().focus().setTextSelection(from).run()
     caretToggle(style)(editor.chain().focus()).run()
     return
   }
+  // A selection of line breaks alone has no text to restyle.
+  if (editor.state.doc.textBetween(from, to).replace(/\n/g, '').length === 0) return
   const active = styleActive(editor, style)
   editor
     .chain()

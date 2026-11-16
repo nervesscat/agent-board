@@ -100,13 +100,18 @@ describe('RichEditor markdown', () => {
  * - a caret keeps the editor's own toggle of the whole paragraph or item (the first rows);
  * - the selected text is what changes: it is split off from the text around it, which keeps its block and its list;
  * - a list style on a block that is in that list toggles it off (the block leaves the list, in the item it was in); any
- *   other selected block becomes an item of the list at its own level, its nested lists going with it;
- * - a heading, code block or quote changes its block in place; a block that starts a list item leaves the list first, and
- *   the rest of the item stays in it, its first paragraph empty;
+ *   other selected block becomes an item of the list at its own level, with the nested lists, quotes and code blocks
+ *   that follow it in its item;
+ * - a heading, code block or quote changes its block in place; a first paragraph of a list item leaves the list, and
+ *   the paragraph after it becomes the first of the item. A first paragraph followed by a list, quote or code block
+ *   stays as it is: markdown cannot write an empty paragraph in front of that rest, so the item would not read back;
  * - a toggle (the selection starts in the style) takes off only the selected blocks of that style;
- * - an ordered item that the style does not touch keeps its number.
+ * - an ordered item that the style does not touch keeps its number; two ordered lists written next to each other read
+ *   back as one, so a list that a paragraph joins numbers on from it;
+ * - a selection that covers only line breaks changes nothing.
+ * The rows marked `true` also check that the saved markdown reads back to itself.
  */
-const CASES: [name: string, md: string, style: BlockStyle, expected: string][] = [
+const CASES: [name: string, md: string, style: BlockStyle, expected: string, reload?: true][] = [
   ['caret | heading', 'Hello «»brave world', 'heading', '## Hello brave world'],
   ['caret | bulletList', 'Hello «»brave world', 'bulletList', '- Hello brave world'],
   ['caret | orderedList', 'Hello «»brave world', 'orderedList', '1. Hello brave world'],
@@ -221,7 +226,7 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string][] =
     'across items | heading',
     '- one «two\n- three» four',
     'heading',
-    '- one \n  ## two\n\n## three\n\n- \n\n   four',
+    '- one \n  ## two\n\n## three\n\n-  four',
   ],
   [
     'across items | bulletList',
@@ -241,23 +246,18 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string][] =
     'taskList',
     '- one \n\n- [ ] two\n- [ ] three\n\n-  four',
   ],
-  [
-    'across items | quote',
-    '- one «two\n- three» four',
-    'quote',
-    '- one \n  > two\n\n> three\n\n- \n\n   four',
-  ],
+  ['across items | quote', '- one «two\n- three» four', 'quote', '- one \n  > two\n\n> three\n\n-  four'],
   [
     'across items | code',
     '- one «two\n- three» four',
     'code',
-    '- one \n  ```\n  two\n  ```\n\n```\nthree\n```\n\n- \n\n   four',
+    '- one \n  ```\n  two\n  ```\n\n```\nthree\n```\n\n-  four',
   ],
   [
     'across numbered items | heading',
     '1. one «two\n2. three» four',
     'heading',
-    '1. one \n   ## two\n\n## three\n\n2. \n\n    four',
+    '1. one \n   ## two\n\n## three\n\n2.  four',
   ],
   [
     'across numbered items | bulletList',
@@ -281,13 +281,13 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string][] =
     'across numbered items | quote',
     '1. one «two\n2. three» four',
     'quote',
-    '1. one \n   > two\n\n> three\n\n2. \n\n    four',
+    '1. one \n   > two\n\n> three\n\n2.  four',
   ],
   [
     'across numbered items | code',
     '1. one «two\n2. three» four',
     'code',
-    '1. one \n   ```\n   two\n   ```\n\n```\nthree\n```\n\n2. \n\n    four',
+    '1. one \n   ```\n   two\n   ```\n\n```\nthree\n```\n\n2.  four',
   ],
   [
     'inside nested item | heading',
@@ -365,7 +365,7 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string][] =
     'across levels | heading',
     '- one\n  - tw«o\n- th»ree',
     'heading',
-    '- one\n  - tw\n    ## o\n\n## th\n\n- \n\n  ree',
+    '- one\n  - tw\n    ## o\n\n## th\n\n- ree',
   ],
   [
     'across levels | bulletList',
@@ -385,23 +385,18 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string][] =
     'taskList',
     '- one\n  - tw\n  - [ ] o\n\n- [ ] th\n\n- ree',
   ],
-  [
-    'across levels | quote',
-    '- one\n  - tw«o\n- th»ree',
-    'quote',
-    '- one\n  - tw\n    > o\n\n> th\n\n- \n\n  ree',
-  ],
+  ['across levels | quote', '- one\n  - tw«o\n- th»ree', 'quote', '- one\n  - tw\n    > o\n\n> th\n\n- ree'],
   [
     'across levels | code',
     '- one\n  - tw«o\n- th»ree',
     'code',
-    '- one\n  - tw\n    ```\n    o\n    ```\n\n```\nth\n```\n\n- \n\n  ree',
+    '- one\n  - tw\n    ```\n    o\n    ```\n\n```\nth\n```\n\n- ree',
   ],
   [
     'across numbered levels | heading',
     '1. one\n   - tw«o\n2. th»ree',
     'heading',
-    '1. one\n   - tw\n     ## o\n\n## th\n\n2. \n\n   ree',
+    '1. one\n   - tw\n     ## o\n\n## th\n\n2. ree',
   ],
   [
     'across numbered levels | bulletList',
@@ -425,7 +420,7 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string][] =
     'across numbered levels | quote',
     '1. one\n   - tw«o\n2. th»ree',
     'quote',
-    '1. one\n   - tw\n     > o\n\n> th\n\n2. \n\n   ree',
+    '1. one\n   - tw\n     > o\n\n> th\n\n2. ree',
   ],
   [
     'quote over a whole list item and the item after it',
@@ -437,7 +432,7 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string][] =
     'quote from the middle of a list, not running past the selection',
     '- one\n- \u00abtwo\n- three\n- four\u00bb five',
     'quote',
-    '- one\n\n> two\n>\n> three\n>\n> four\n\n- \n\n   five',
+    '- one\n\n> two\n>\n> three\n>\n> four\n\n-  five',
   ],
   [
     'quote across the last two items of a list',
@@ -449,7 +444,7 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string][] =
     'across numbered levels | code',
     '1. one\n   - tw«o\n2. th»ree',
     'code',
-    '1. one\n   - tw\n     ```\n     o\n     ```\n\n```\nth\n```\n\n2. \n\n   ree',
+    '1. one\n   - tw\n     ```\n     o\n     ```\n\n```\nth\n```\n\n2. ree',
   ],
   [
     'heading on a selection inside a list item (it threw before)',
@@ -485,7 +480,7 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string][] =
     'heading across a numbered item and its nested item',
     '1. «a\n   - Hello brave» world',
     'heading',
-    '## a\n\n1. \n   ## Hello brave\n   - \n   \n      world',
+    '1. a\n   ## Hello brave\n   -  world',
   ],
   [
     'heading across a nested item to its end keeps its sibling',
@@ -533,7 +528,7 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string][] =
     'quote on the text before the rest of a two-level item keeps the rest in its item',
     '- a\n  - «bc» d',
     'quote',
-    '- a\n  > bc\n  - \n  \n     d',
+    '- a\n  > bc\n  -  d',
   ],
   [
     'heading before a hard break keeps the break and the text after it in the item',
@@ -545,7 +540,7 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string][] =
     'heading on a numbered item with a nested list keeps the next numbers',
     '1. «a»\n   - n\n2. b\n3. c',
     'heading',
-    '## a\n\n1. \n   - n\n2. b\n3. c',
+    '1. a\n   - n\n2. b\n3. c',
   ],
   [
     'a selection after a hard break does not restyle the text before it',
@@ -638,16 +633,16 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string][] =
     'Hello \n\n## brave\n\nworld',
   ],
   [
-    'numbered over a paragraph between two numbered lists keeps the numbers of the list after it',
+    'numbered over a paragraph between two numbered lists joins the list after it, so it reads back the same',
     '1. a\n2. b\n\n«X»\n\n5. c\n6. d',
     'orderedList',
-    '1. a\n2. b\n3. X\n\n5. c\n6. d',
+    '1. a\n2. b\n3. X\n4. c\n5. d',
   ],
   [
-    'numbered over a paragraph after a list that ends at 4 keeps the number of the list after it',
+    'numbered over a paragraph after a list that ends at 4 joins the list after it, so it reads back the same',
     '3. a\n4. b\n\n«X»\n\n9. c',
     'orderedList',
-    '3. a\n4. b\n5. X\n\n9. c',
+    '3. a\n4. b\n5. X\n6. c',
   ],
   [
     'bullet on a quoted paragraph inside a list item takes it off the list and keeps its quote',
@@ -668,10 +663,10 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string][] =
     '1. X\n2. c\n3. d',
   ],
   [
-    "numbered over a paragraph before a list that does not go on from it keeps that list's numbers",
+    'numbered over a paragraph before a list that does not go on from it joins it, so it reads back the same',
     '«X»\n\n1. c\n2. d',
     'orderedList',
-    '1. X\n\n1. c\n2. d',
+    '1. X\n2. c\n3. d',
   ],
   [
     'quote on a paragraph of a list item inside a quote takes it out of the quote',
@@ -683,19 +678,135 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string][] =
     'heading on the first paragraph of an item keeps its nested list in the item',
     '- «a»\n  - b\n- c',
     'heading',
-    '## a\n\n- \n  - b\n- c',
+    '- a\n  - b\n- c',
   ],
   [
     'quote on the first paragraph of an item keeps the nested list of the next item in that item',
     '- «a\n- b»\n  - x\n- c',
     'quote',
-    '> a\n>\n> b\n\n- \n  - x\n- c',
+    '> a\n\n- b\n  - x\n- c',
   ],
   [
     'heading on the first paragraph of an item keeps the paragraph after it in the item',
     '- «a»\n\n  b\n- c',
     'heading',
-    '## a\n\n- \n\n  b\n- c',
+    '## a\n\n- b\n- c',
+  ],
+  [
+    'bullet on the first paragraph of an item followed by a quote takes it out with the quote',
+    '- «a»\n  > b',
+    'bulletList',
+    'a\n\n> b',
+  ],
+  [
+    'checklist on the first paragraph of a numbered item followed by a quote makes it an item with the quote',
+    '1. «a»\n   > b',
+    'taskList',
+    '- [ ] a\n  > b',
+  ],
+  [
+    'bullet on the first paragraph of an item followed by a code block takes it out with the code',
+    '- «a»\n  ```\n  code\n  ```\n- c',
+    'bulletList',
+    'a\n\n```\ncode\n```\n\n- c',
+  ],
+  [
+    'numbered on a quoted paragraph of a bullet item numbers the item with it',
+    '- «a\n\n  > b»\n- c',
+    'orderedList',
+    '1. a\n   > 1. b\n\n- c',
+  ],
+  [
+    'a selection ending right after a soft break restyles only the text before it | quote',
+    'Hello «brave\n»world',
+    'quote',
+    'Hello \n\n> brave\n\nworld',
+  ],
+  [
+    'a selection ending right after a soft break restyles only the text before it | heading',
+    'Hello «brave\n»world',
+    'heading',
+    'Hello \n\n## brave\n\nworld',
+  ],
+  [
+    'numbered over a paragraph between a bullet list and a numbered list reads back with the same numbers',
+    '- a\n\n«X»\n\n1. c\n2. d',
+    'orderedList',
+    '- a\n\n1. X\n2. c\n3. d',
+    true,
+  ],
+  [
+    'numbered over a paragraph between two numbered lists reads back with the same numbers',
+    '1. a\n2. b\n\n«X»\n\n5. c\n6. d',
+    'orderedList',
+    '1. a\n2. b\n3. X\n4. c\n5. d',
+    true,
+  ],
+  [
+    'numbered over a paragraph before a numbered list reads back with the same numbers',
+    '«X»\n\n1. c\n2. d',
+    'orderedList',
+    '1. X\n2. c\n3. d',
+    true,
+  ],
+  [
+    'heading on the first paragraph of an item with a quote after it leaves the item as it is and reads back',
+    '- «a»\n  > b\n- c',
+    'heading',
+    '- a\n  > b\n- c',
+    true,
+  ],
+  [
+    'heading on the first paragraph of a numbered item with a nested list reads back with the item and its nested list',
+    '1. «a»\n   - n\n2. b\n3. c',
+    'heading',
+    '1. a\n   - n\n2. b\n3. c',
+    true,
+  ],
+  [
+    'quote on the first paragraph of an item with a nested list leaves the item as it is and reads back',
+    '- «a»\n  - b\n- c',
+    'quote',
+    '- a\n  - b\n- c',
+    true,
+  ],
+  [
+    'heading on the first paragraph of an item followed by a code block keeps the code in the item',
+    '- «a»\n  ```\n  code\n  ```\n- c',
+    'heading',
+    '- a\n  ```\n  code\n  ```\n- c',
+    true,
+  ],
+  [
+    'quote on the first paragraph of an item followed by a code block keeps the code in the item',
+    '- «a»\n  ```\n  code\n  ```\n- c',
+    'quote',
+    '- a\n  ```\n  code\n  ```\n- c',
+    true,
+  ],
+  [
+    'bullet on a whole code block that is not in a list converts it',
+    '```\n«abc»\n```',
+    'bulletList',
+    '- abc',
+  ],
+  [
+    'numbered on a whole code block that is not in a list converts it',
+    '```\n«abc»\n```',
+    'orderedList',
+    '1. abc',
+  ],
+  [
+    'checklist on a whole code block in a quote converts it',
+    '> ```\n> «abc»\n> ```',
+    'taskList',
+    '> - [ ] abc',
+  ],
+  [
+    'a selection of only a soft break changes nothing',
+    'Hello brave«\n»world',
+    'heading',
+    'Hello brave\nworld',
   ],
 ]
 
@@ -718,11 +829,14 @@ function setup(md: string): Editor {
 }
 
 describe('RichEditor block styles on the selected text', () => {
-  it.each(CASES)('%s', (_name, md, style, expected) => {
+  it.each(CASES)('%s', (_name, md, style, expected, reload) => {
     const editor = setup(md)
     try {
       toggleBlock(editor, style)
-      expect(tidy(editor.getMarkdown())).toBe(expected)
+      const out = tidy(editor.getMarkdown())
+      expect(out).toBe(expected)
+      // The saved markdown reads back to itself: what the editor shows is what a reload shows.
+      if (reload) expect(roundTrip(out)).toBe(out)
     } finally {
       editor.destroy()
     }
