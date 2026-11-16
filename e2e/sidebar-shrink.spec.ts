@@ -70,6 +70,26 @@ test('a hidden sidebar shows while the mouse is on the left border, and closes o
   await expect(aside).toBeHidden()
 })
 
+test('a peeked hidden sidebar that closes after a click keeps focus on the toggle, not the page body', async ({
+  page,
+  project,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto(`/projects/${project.id}/prs`)
+  await page.getByRole('button', { name: 'Shrink sidebar' }).click()
+  await page.getByRole('button', { name: 'Hide sidebar' }).click()
+  const aside = sidebar(page)
+  await expect(aside).toBeHidden()
+
+  await page.mouse.move(640, 400)
+  await page.mouse.move(2, 400)
+  await aside.getByRole('link', { name: 'Roadmap' }).click()
+  await page.mouse.move(640, 400)
+  await expect(aside).toBeHidden()
+  // The link the click focused is gone with the sidebar: focus goes to the toggle that shows it again.
+  await expect(page.getByRole('button', { name: 'Show sidebar' })).toBeFocused()
+})
+
 test('the chosen mode is remembered per browser across a reload', async ({ page, project }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto(`/projects/${project.id}/prs`)

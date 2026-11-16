@@ -58,6 +58,8 @@ function ProjectLayout() {
   // A hidden sidebar shown over the page while the mouse is on its edge (desktop only).
   const [peeking, setPeeking] = useState(false)
   const closeTimer = useRef<number | undefined>(undefined)
+  const asideRef = useRef<HTMLElement>(null)
+  const toggleRef = useRef<HTMLButtonElement>(null)
   useEffect(() => () => window.clearTimeout(closeTimer.current), [])
   const openPeek = () => {
     window.clearTimeout(closeTimer.current)
@@ -65,7 +67,12 @@ function ProjectLayout() {
   }
   const closePeekSoon = () => {
     window.clearTimeout(closeTimer.current)
-    closeTimer.current = window.setTimeout(() => setPeeking(false), PEEK_CLOSE_MS)
+    closeTimer.current = window.setTimeout(() => {
+      // A link clicked in the peeked sidebar holds focus; hiding the sidebar would drop it to the page body,
+      // so the toggle that shows the sidebar again takes it first.
+      if (asideRef.current?.contains(document.activeElement)) toggleRef.current?.focus()
+      setPeeking(false)
+    }, PEEK_CLOSE_MS)
   }
   const hiddenNow = mode === 'hidden'
   const shrunk = mode === 'shrunk'
@@ -91,6 +98,7 @@ function ProjectLayout() {
       >
         <Tip content={SIDEBAR_TOGGLE_LABEL[mode]}>
           <Button
+            ref={toggleRef}
             type="button"
             variant="ghost"
             size="icon-sm"
@@ -109,6 +117,7 @@ function ProjectLayout() {
           keeps scrolling (not the content pane), so the header, other sticky bars and the
           browser's scroll restoration keep working as on every other page. */}
       <aside
+        ref={asideRef}
         onMouseEnter={hiddenNow ? openPeek : undefined}
         onMouseLeave={hiddenNow ? closePeekSoon : undefined}
         className={cn(
