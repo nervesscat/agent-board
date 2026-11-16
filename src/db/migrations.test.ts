@@ -52,11 +52,11 @@ const withoutDropped = ({
 }: Record<string, unknown>) => rest
 
 /**
- * Tickets gained closed_by_approval in 0055: no ticket that existed had closed on an approval, so the
+ * Tickets gained closed_by_approval in 0056: no ticket that existed had closed on an approval, so the
  * column is 0 on every one, and the other columns are compared as they were.
  */
 function ticketsWithClosedFlag(rows: Record<string, unknown>[]) {
-  // Before 0055 the table has no such column: the rows are compared as they are.
+  // Before 0056 the table has no such column: the rows are compared as they are.
   if (!rows.length || !('closed_by_approval' in rows[0]!)) return rows
   expect(rows.map((r) => r.closed_by_approval)).toEqual(rows.map(() => 0))
   return rows.map(({ closed_by_approval: _c, ...rest }) => rest)
@@ -1569,7 +1569,7 @@ describe('0051_agent_cards', () => {
 
     migrate(drizzle(sqlite), { migrationsFolder: folder })
 
-    // The existing tables are exactly what they were. Projects gained a column later (0054 kinds): every
+    // The existing tables are exactly what they were. Projects gained a column later (0055 kinds): every
     // project that existed is software now, and every column 0050 had is unchanged.
     expect(before.projects.length).toBeGreaterThan(0)
     const projects = sqlite.prepare('SELECT * FROM projects ORDER BY id').all() as Record<string, unknown>[]

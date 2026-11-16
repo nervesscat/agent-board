@@ -47,6 +47,10 @@ export const FILES_HIDDEN_TOOLS: ReadonlySet<string> = new Set([
   'delete_run',
   'cleanup_report',
   'cleanup_delete',
+  // run reports record a builder's or reviewer's run on a diff: the work only software has
+  'write_run_report',
+  'get_run_report',
+  'list_run_reports',
 ])
 
 /** The parameters of a tool that only a git project uses, left out of the tool's schema for these projects. */
