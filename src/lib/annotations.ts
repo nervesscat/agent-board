@@ -26,6 +26,8 @@ export interface Annotation {
   text?: string
   /** The angle the mark is turned by, in radians, about the centre of its unturned box; absent when never turned. */
   rotation?: number
+  /** A box or an ellipse drawn filled with its colour; absent when it is drawn as an outline. */
+  fill?: boolean
   /** What the human wrote about this shape, shown numbered next to it. */
   note?: string
 }
@@ -68,6 +70,7 @@ export const annotationDocSchema = z.object({
         rect: rect.optional(),
         text: z.string().max(ANNOTATION_TEXT_MAX).optional(),
         rotation: z.number().finite().optional(),
+        fill: z.boolean().optional(),
         note: z.string().max(ANNOTATION_TEXT_MAX).optional(),
       }),
     )

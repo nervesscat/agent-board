@@ -37,3 +37,23 @@ describe('annotationDocSchema', () => {
     expect(annotationDocSchema.safeParse({ ...doc({}), version: 2 }).success).toBe(false)
   })
 })
+
+describe('annotationDocSchema fill', () => {
+  it('keeps fill on a box or an ellipse, true or false', () => {
+    expect(annotationDocSchema.parse(doc({ fill: true })).items[0]).toMatchObject({ fill: true })
+    expect(annotationDocSchema.parse(doc({ fill: false })).items[0]).toMatchObject({ fill: false })
+  })
+
+  it('parses a mark with no fill key unchanged, as documents written before fill existed', () => {
+    const old = doc({ note: 'outline' })
+    const parsed = annotationDocSchema.parse(old)
+    expect(parsed).toEqual(old)
+    expect('fill' in parsed.items[0]!).toBe(false)
+  })
+
+  it('rejects a fill that is not a boolean', () => {
+    for (const fill of ['yes', 1, null]) {
+      expect(annotationDocSchema.safeParse(doc({ fill })).success, String(fill)).toBe(false)
+    }
+  })
+})

@@ -4,16 +4,27 @@ import {
   angleAt,
   carryNotes,
   createHistory,
+  cursorOf,
+  deleteAt,
   edit,
+  fillMark,
   handleAt,
+  handlePoint,
+  isFillable,
   isTinyDrag,
+  type Layout,
   markAt,
   markBounds,
   marqueeIds,
+  partAt,
   pivotOf,
+  RESIZE_PARTS,
   redo,
   replace,
+  resizeFactors,
+  resizeHandleAt,
   rotateMark,
+  scaleMark,
   translateMark,
   turn,
   turnBetween,
@@ -446,5 +457,256 @@ describe('carryNotes', () => {
   it('returns the restored marks as they were when no note changed', () => {
     const restored = [rect('a', 0, 0, 1, 1, { note: 'same' })]
     expect(carryNotes(restored, [rect('a', 0, 0, 1, 1, { note: 'same' })])[0]).toBe(restored[0])
+  })
+})
+
+describe('scaleMark', () => {
+  it('scales an unturned box exactly about its anchor, each axis by its own factor', () => {
+    const r = scaleMark(rect('a', 10, 10, 20, 40), [0, 0], 2, 0.5)
+    expect(r.rect).toEqual({ x: 20, y: 5, w: 40, h: 20 })
+    expect(r.rotation).toBeUndefined()
+    expect('rotation' in r).toBe(false)
+  })
+
+  it('keeps the anchor where it is when the anchor is not the origin', () => {
+    expect(scaleMark(rect('a', 20, 20, 10, 10), [10, 10], 2, 2).rect).toEqual({ x: 30, y: 30, w: 20, h: 20 })
+  })
+
+  it('returns the mark itself for factors of one', () => {
+    const a = rect('a', 1, 2, 3, 4)
+    expect(scaleMark(a, [0, 0], 1, 1)).toBe(a)
+  })
+
+  it('scales a stroke point by point, keeping its order, id, colour and width', () => {
+    const a = pen('p', [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+    ])
+    const r = scaleMark(a, [0, 0], 2, 1)
+    expect(r.points).toEqual([
+      [0, 0],
+      [20, 0],
+      [20, 10],
+    ])
+    expect(r.from).toEqual([0, 0])
+    expect(r).toMatchObject({ id: 'p', color: a.color, width: a.width })
+  })
+
+  it('scales both ends of a line or an arrow', () => {
+    const r = scaleMark(line('l', [0, 0], [10, 20], 'arrow'), [0, 0], 0.5, 2)
+    expect(r.from).toEqual([0, 0])
+    expect(r.to).toEqual([5, 40])
+    expect(r.kind).toBe('arrow')
+  })
+
+  it('scales a turned box by the mean of the factors, keeps its angle and moves its centre with the group', () => {
+    const turned = rect('a', 0, 0, 100, 50, { rotation: 0.5 })
+    const r = scaleMark(turned, [0, 0], 2, 1)
+    expect(r.rotation).toBe(0.5)
+    expect(r.rect!.w).toBeCloseTo(150)
+    expect(r.rect!.h).toBeCloseTo(75)
+    // The centre (50, 25) goes to (100, 25) under the group's scale, and the box is centred there.
+    expect(pivotOf(r)[0]).toBeCloseTo(100)
+    expect(pivotOf(r)[1]).toBeCloseTo(25)
+  })
+
+  it('scales a turned line about where its centre goes, and keeps its angle', () => {
+    const turned = line('l', [0, 0], [100, 0])
+    const r = scaleMark({ ...turned, rotation: 1 }, [0, 0], 2, 1)
+    expect(r.rotation).toBe(1)
+    expect(r.from![0]).toBeCloseTo(25)
+    expect(r.from![1]).toBeCloseTo(0)
+    expect(r.to![0]).toBeCloseTo(175)
+    expect(r.to![1]).toBeCloseTo(0)
+  })
+
+  it('scales text through its stroke width by the mean, so its box follows, and leaves its string alone', () => {
+    const t: Annotation = { id: 't', kind: 'text', color: '#000', width: 4, from: [10, 10], text: 'ab' }
+    const r = scaleMark(t, [0, 0], 2, 2)
+    expect(r.width).toBe(8)
+    expect(r.from).toEqual([20, 20])
+    expect(r.text).toBe('ab')
+    const unevenly = scaleMark(t, [0, 0], 2, 1)
+    expect(unevenly.width).toBe(6)
+    expect(unevenly.from).toEqual([20, 10])
+  })
+
+  it('keeps a turned text centred where the group sends its centre', () => {
+    const t: Annotation = {
+      id: 't',
+      kind: 'text',
+      color: '#000',
+      width: 4,
+      from: [10, 10],
+      text: 'ab',
+      rotation: 0.3,
+    }
+    // Its box is 19.2 by 19.2 with its centre at (19.6, 19.6); scaled by 2 about the origin, the centre is (39.2, 39.2).
+    const r = scaleMark(t, [0, 0], 2, 2)
+    expect(r.rotation).toBe(0.3)
+    expect(r.width).toBe(8)
+    expect(r.from![0]).toBeCloseTo(20)
+    expect(r.from![1]).toBeCloseTo(20)
+    expect(pivotOf(r)[0]).toBeCloseTo(39.2)
+    expect(pivotOf(r)[1]).toBeCloseTo(39.2)
+  })
+
+  it('caps the width of text so the document stays one the server takes', () => {
+    const t: Annotation = { id: 't', kind: 'text', color: '#000', width: 150, from: [0, 0], text: 'x' }
+    expect(scaleMark(t, [0, 0], 2, 2).width).toBe(200)
+  })
+})
+
+describe('resizeFactors', () => {
+  const box = { x: 20, y: 20, w: 80, h: 80 }
+
+  it('moves one side and keeps the other: the anchor is the opposite edge and the other axis is untouched', () => {
+    const r = resizeFactors(box, 'e', [130, 50])
+    expect(r.anchor).toEqual([20, 20])
+    expect(r.sx).toBeCloseTo(110 / 80)
+    expect(r.sy).toBe(1)
+  })
+
+  it('moves a corner on both axes, with the opposite corner as the anchor', () => {
+    const r = resizeFactors(box, 'se', [140, 130])
+    expect(r.anchor).toEqual([20, 20])
+    expect(r.sx).toBeCloseTo(120 / 80)
+    expect(r.sy).toBeCloseTo(110 / 80)
+  })
+
+  it('takes the top-left corner as the anchor when it is the far corner that moves', () => {
+    const r = resizeFactors(box, 'nw', [40, 40])
+    expect(r.anchor).toEqual([100, 100])
+    expect(r.sx).toBeCloseTo(0.75)
+    expect(r.sy).toBeCloseTo(0.75)
+  })
+
+  it('keeps a side at least 4 px when the pointer is dragged past the opposite edge, so the box never flips', () => {
+    const west = resizeFactors(box, 'w', [150, 50])
+    expect(west.anchor[0]).toBe(100)
+    expect(west.sx * 80).toBeCloseTo(4)
+    expect(west.sx).toBeGreaterThan(0)
+    const north = resizeFactors(box, 'n', [50, 120])
+    expect(north.sy * 80).toBeCloseTo(4)
+  })
+
+  it('does not resize on an axis of zero width or height', () => {
+    const vertical = { x: 50, y: 0, w: 0, h: 100 }
+    expect(resizeFactors(vertical, 'e', [200, 50]).sx).toBe(1)
+    expect(resizeFactors(vertical, 'w', [0, 50]).sx).toBe(1)
+    const sy = resizeFactors(vertical, 's', [50, 150]).sy
+    expect(sy).toBeCloseTo(1.5)
+  })
+})
+
+describe('resizeHandleAt', () => {
+  const box = { x: 100, y: 100, w: 100, h: 100 }
+
+  it('places the eight handles on the corners and the middles of the sides', () => {
+    expect(RESIZE_PARTS).toHaveLength(8)
+    expect(handlePoint(box, 'nw')).toEqual([100, 100])
+    expect(handlePoint(box, 'n')).toEqual([150, 100])
+    expect(handlePoint(box, 'ne')).toEqual([200, 100])
+    expect(handlePoint(box, 'e')).toEqual([200, 150])
+    expect(handlePoint(box, 'se')).toEqual([200, 200])
+    expect(handlePoint(box, 's')).toEqual([150, 200])
+    expect(handlePoint(box, 'sw')).toEqual([100, 200])
+    expect(handlePoint(box, 'w')).toEqual([100, 150])
+  })
+
+  it('finds each handle at its own point, within the reach', () => {
+    for (const part of RESIZE_PARTS) {
+      const [x, y] = handlePoint(box, part)
+      expect(resizeHandleAt(box, [x + 2, y - 2], 8), part).toBe(part)
+    }
+  })
+
+  it('finds nothing beyond the reach, or away from the box', () => {
+    expect(resizeHandleAt(box, [150, 130], 8)).toBeNull()
+    expect(resizeHandleAt(box, [100, 80], 8)).toBeNull()
+  })
+
+  it('takes the nearest handle when several are within reach', () => {
+    const tiny = { x: 0, y: 0, w: 4, h: 4 }
+    expect(resizeHandleAt(tiny, [0.2, 0.1], 10)).toBe('nw')
+  })
+})
+
+describe('partAt', () => {
+  const box = { x: 100, y: 100, w: 100, h: 100 }
+  // The rotate tip sits 26 above the top middle, at (150, 74).
+  const layout: Layout = { gap: 26, handleReach: 8, tipReach: 21, picture: { width: 300, height: 300 } }
+
+  it('is a resize handle first, wherever the handle is on the box', () => {
+    expect(partAt(box, [], [200, 150], layout)).toBe('e')
+    expect(partAt(box, [], [101, 99], layout)).toBe('nw')
+  })
+
+  it('is the rotate tip when no mark lies under it', () => {
+    expect(partAt(box, [], [150, 74], layout)).toBe('rotate')
+  })
+
+  it('is a move on a mark under the rotate tip, so the mark wins over the tip', () => {
+    expect(partAt(box, [rect('m', 140, 60, 20, 20)], [150, 74], layout)).toBe('move')
+  })
+
+  it('is a move inside the box, and on a mark outside it', () => {
+    expect(partAt(box, [], [150, 150], layout)).toBe('move')
+    expect(partAt(box, [rect('m', 20, 20, 20, 20)], [30, 30], layout)).toBe('move')
+  })
+
+  it('is null elsewhere, and the tip only exists with a selection', () => {
+    expect(partAt(box, [], [20, 20], layout)).toBeNull()
+    expect(partAt(null, [], [150, 74], layout)).toBeNull()
+  })
+})
+
+describe('cursorOf', () => {
+  it('shows the resize arrow of each side and corner, grab on the tip, move inside, default elsewhere', () => {
+    expect(cursorOf('n')).toBe('ns-resize')
+    expect(cursorOf('s')).toBe('ns-resize')
+    expect(cursorOf('e')).toBe('ew-resize')
+    expect(cursorOf('w')).toBe('ew-resize')
+    expect(cursorOf('nw')).toBe('nwse-resize')
+    expect(cursorOf('se')).toBe('nwse-resize')
+    expect(cursorOf('ne')).toBe('nesw-resize')
+    expect(cursorOf('sw')).toBe('nesw-resize')
+    expect(cursorOf('rotate')).toBe('grab')
+    expect(cursorOf('move')).toBe('move')
+    expect(cursorOf(null)).toBe('default')
+  })
+})
+
+describe('deleteAt', () => {
+  it('puts the X to the right of the rotate tip, or to the left at the picture edge', () => {
+    expect(deleteAt([50, 40], 16, { width: 300 })).toEqual([66, 40])
+    expect(deleteAt([290, 40], 16, { width: 300 })).toEqual([274, 40])
+  })
+})
+
+describe('fillMark and isFillable', () => {
+  it('fills a box or an ellipse, and keeps the same mark when it is already filled', () => {
+    const box = rect('a', 1, 2, 3, 4)
+    const filled = fillMark(box, true)
+    expect(filled.fill).toBe(true)
+    expect(box.fill).toBeUndefined()
+    expect(fillMark(filled, true)).toBe(filled)
+  })
+
+  it('takes the fill away with the key, and returns an unfilled mark as it was', () => {
+    const filled = fillMark(rect('a', 1, 2, 3, 4), true)
+    const plain = fillMark(filled, false)
+    expect('fill' in plain).toBe(false)
+    expect(plain.rect).toEqual({ x: 1, y: 2, w: 3, h: 4 })
+    const untouched = rect('b', 1, 2, 3, 4)
+    expect(fillMark(untouched, false)).toBe(untouched)
+  })
+
+  it('is true for a box and an ellipse only', () => {
+    expect(isFillable(rect('a', 0, 0, 1, 1))).toBe(true)
+    expect(isFillable(ellipse('e', 0, 0, 1, 1))).toBe(true)
+    expect(isFillable(pen('p', [[0, 0]]))).toBe(false)
+    expect(isFillable(line('l', [0, 0], [1, 1]))).toBe(false)
   })
 })

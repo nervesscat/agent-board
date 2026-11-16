@@ -195,6 +195,183 @@ export function translateMark(a: Annotation, dx: number, dy: number): Annotation
   }
 }
 
+/** The eight handles of a selection's box: its corners and the middles of its sides. */
+export type ResizePart = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
+
+/** What a pointer over the selection is on: a handle, the rotate tip, or the marks and the box's inside. */
+export type Part = ResizePart | 'rotate' | 'move'
+
+/** A side never goes under this many picture pixels when a handle resizes the box. */
+export const MIN_SIDE = 4
+
+/** Which way each handle moves a box's edges: -1 the left or top edge, 1 the right or bottom edge, 0 neither. */
+const GRIP: Record<ResizePart, [number, number]> = {
+  nw: [-1, -1],
+  n: [0, -1],
+  ne: [1, -1],
+  e: [1, 0],
+  se: [1, 1],
+  s: [0, 1],
+  sw: [-1, 1],
+  w: [-1, 0],
+}
+
+export const RESIZE_PARTS = Object.keys(GRIP) as ResizePart[]
+
+/** Where a handle sits: a corner of the box, or the middle of a side. */
+export function handlePoint({ x, y, w, h }: Box, part: ResizePart): Point {
+  const [dx, dy] = GRIP[part]
+  return [x + ((dx + 1) / 2) * w, y + ((dy + 1) / 2) * h]
+}
+
+/** The handle under a point, the nearest one within `reach` picture pixels, or null. */
+export function resizeHandleAt(box: Box, point: Point, reach: number): ResizePart | null {
+  let best: ResizePart | null = null
+  let bestDistance = reach
+  for (const part of RESIZE_PARTS) {
+    const [hx, hy] = handlePoint(box, part)
+    const distance = Math.hypot(point[0] - hx, point[1] - hy)
+    if (distance <= bestDistance) {
+      best = part
+      bestDistance = distance
+    }
+  }
+  return best
+}
+
+/**
+ * The anchor and the factors a handle resizes a box by when the pointer is at `to`: the edge the handle sits
+ * on follows the pointer and the opposite edge stays where it is. A side never goes under `MIN_SIDE`, so a
+ * pointer dragged past the anchor clamps rather than flipping the box; a zero-width or zero-height box does
+ * not resize on that axis.
+ */
+export function resizeFactors(
+  box: Box,
+  part: ResizePart,
+  to: Point,
+): { anchor: Point; sx: number; sy: number } {
+  const [dx, dy] = GRIP[part]
+  const x = axisResize(box.x, box.w, dx, to[0])
+  const y = axisResize(box.y, box.h, dy, to[1])
+  return { anchor: [x.anchor, y.anchor], sx: x.factor, sy: y.factor }
+}
+
+function axisResize(start: number, size: number, dir: number, pointer: number) {
+  // The anchor is the edge that stays: the left or top one when the handle moves the right or bottom one, else the other.
+  const anchor = dir < 0 ? start + size : start
+  if (!dir || !size) return { anchor, factor: 1 }
+  const raw = dir > 0 ? pointer - start : anchor - pointer
+  const side = Math.max(Math.min(MIN_SIDE, size), raw)
+  return { anchor, factor: side / size }
+}
+
+/** Text's stroke width stays within the range the slider and the server take. */
+const TEXT_WIDTH_MIN = 1
+const TEXT_WIDTH_MAX = 200
+
+/**
+ * A mark scaled about `anchor` by `sx` and `sy`. A mark nobody turned is scaled exactly. A turned mark keeps
+ * its angle and scales by the mean of the two factors, its centre moved as the group's centre is. Text scales
+ * its stroke width by the mean, so its font and its box follow; its string is left alone.
+ */
+export function scaleMark(a: Annotation, anchor: Point, sx: number, sy: number): Annotation {
+  if (sx === 1 && sy === 1) return a
+  const k = (sx + sy) / 2
+  const grow = ([x, y]: Point): Point => [anchor[0] + (x - anchor[0]) * sx, anchor[1] + (y - anchor[1]) * sy]
+  const centre = pivotOf(a)
+  // A turned mark's centre goes where the group sends it; each of its points then scales by k about that centre.
+  const moved = a.rotation ? grow(centre) : null
+  const place = (p: Point): Point =>
+    moved ? [moved[0] + (p[0] - centre[0]) * k, moved[1] + (p[1] - centre[1]) * k] : grow(p)
+  if (a.kind === 'text' && a.from) {
+    const next = { ...a, width: Math.min(TEXT_WIDTH_MAX, Math.max(TEXT_WIDTH_MIN, a.width * k)) }
+    const b = localBox(next)
+    const from: Point = moved ? [moved[0] - b.w / 2, moved[1] - b.h / 2] : grow(a.from)
+    return { ...next, from }
+  }
+  const out: Annotation = { ...a }
+  if (a.rect) {
+    const pts = corners(a.rect).map(place)
+    const xs = pts.map(([x]) => x)
+    const ys = pts.map(([, y]) => y)
+    const x = Math.min(...xs)
+    const y = Math.min(...ys)
+    out.rect = { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }
+  }
+  if (a.points) out.points = a.points.map(place)
+  if (a.from) out.from = place(a.from)
+  if (a.to) out.to = place(a.to)
+  return out
+}
+
+/** A box or an ellipse, the marks a fill can be set on. */
+export const isFillable = (a: Annotation) => a.kind === 'rect' || a.kind === 'ellipse'
+
+/** A mark filled or not: a mark that is not filled keeps no `fill` key at all. */
+export function fillMark(a: Annotation, on: boolean): Annotation {
+  if (on) return a.fill ? a : { ...a, fill: true }
+  if (!('fill' in a)) return a
+  const next = { ...a }
+  delete next.fill
+  return next
+}
+
+/** The CSS cursor each part shows on hover: the resize arrow of its side or corner, grab on the tip, move inside. */
+export const PART_CURSOR: Record<Part, string> = {
+  n: 'ns-resize',
+  s: 'ns-resize',
+  e: 'ew-resize',
+  w: 'ew-resize',
+  nw: 'nwse-resize',
+  se: 'nwse-resize',
+  ne: 'nesw-resize',
+  sw: 'nesw-resize',
+  rotate: 'grab',
+  move: 'move',
+}
+
+export const cursorOf = (part: Part | null) => (part ? PART_CURSOR[part] : 'default')
+
+/**
+ * Where the X that deletes a selection sits: beside its rotate tip, `offset` to the right, or to the left where
+ * there is no room before the picture's edge.
+ */
+export function deleteAt([x, y]: Point, offset: number, picture: { width: number }): Point {
+  return [x + offset <= picture.width ? x + offset : x - offset, y]
+}
+
+/** What the canvas measures a pointer's reach with, in picture pixels, and where the rotate tip sits. */
+export interface Layout {
+  /** The rotate tip's distance above the box (the tip's `handleAt` gap). */
+  gap: number
+  /** How far from a handle's point a press still takes it. */
+  handleReach: number
+  /** How far from the rotate tip a press still turns the selection. */
+  tipReach: number
+  picture: { width: number; height: number }
+}
+
+/**
+ * The part of the selection a pointer is over, in the order a press takes it: a resize handle; the rotate tip,
+ * unless a mark lies under the pointer (the mark wins); a mark, or the inside of the selection's box. Null
+ * elsewhere. With no selection (`box` null) only the marks count.
+ */
+export function partAt(box: Box | null, items: Annotation[], point: Point, layout: Layout): Part | null {
+  if (box) {
+    const handle = resizeHandleAt(box, point, layout.handleReach)
+    if (handle) return handle
+  }
+  const mark = markAt(items, point[0], point[1])
+  if (box && !mark) {
+    const [tx, ty] = handleAt(box, layout.gap, layout.picture)
+    if (Math.hypot(point[0] - tx, point[1] - ty) <= layout.tipReach) return 'rotate'
+  }
+  if (mark) return 'move'
+  if (box && point[0] >= box.x && point[0] <= box.x + box.w && point[1] >= box.y && point[1] <= box.y + box.h)
+    return 'move'
+  return null
+}
+
 /** Notes typed after a snapshot was taken stay when the snapshot comes back by undo or redo. */
 export function carryNotes(restored: Annotation[], current: Annotation[]): Annotation[] {
   return restored.map((a) => {
