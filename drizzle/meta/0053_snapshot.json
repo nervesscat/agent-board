@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "cb1910c8-ef1a-44fa-ab74-7cd407496e54",
+  "id": "0aa937c6-b03a-455f-bfea-2b64466a6419",
   "prevId": "9851266b-370e-456b-bd53-802b0f7e02ce",
   "tables": {
     "account": {
@@ -1364,14 +1364,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "kinds": {
-          "name": "kinds",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[\"software\"]'"
         }
       },
       "indexes": {},

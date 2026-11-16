@@ -148,6 +148,7 @@ describe('one read of what is happening', () => {
     expect(answer.error).toBeUndefined()
     expect(Object.keys(answer).sort()).toEqual(
       [
+        'approvedToMerge',
         'inReview',
         'liveNow',
         'now',
@@ -170,6 +171,7 @@ describe('one read of what is happening', () => {
       recentlyActive: answer.recentlyActive.length,
       waitingOnHuman: answer.waitingOnHuman.length,
       inReview: answer.inReview.length,
+      approvedToMerge: answer.approvedToMerge.length,
       tickets: 1,
     })
   })
@@ -554,6 +556,19 @@ describe('in review', () => {
   })
 })
 
+describe('approved, to merge', () => {
+  it('lists the tickets in Approved, labelled, and no ticket in another stage', () => {
+    const pid = project('approved-live')
+    const ready = ticket(pid, 'Ready to merge', { status: 'approved', prNumber: 9 })
+    ticket(pid, 'Still in review', { status: 'review', prNumber: 10 })
+    const payload = read(pid)
+    expect(payload.approvedToMerge).toEqual([
+      { ticketId: ready.id, title: 'Ready to merge', prNumber: 9, parent: null, label: 'approved, to merge' },
+    ])
+    expect(payload.totals.approvedToMerge).toBe(1)
+  })
+})
+
 describe('recent posts', () => {
   it('lists the newest few across the project, newest first, each as one line', () => {
     const pid = project('posts')
@@ -607,6 +622,7 @@ describe('the clock and the totals', () => {
       recentlyActive: payload.recentlyActive.length,
       waitingOnHuman: payload.waitingOnHuman.length,
       inReview: payload.inReview.length,
+      approvedToMerge: payload.approvedToMerge.length,
       tickets: 2,
     })
   })
@@ -750,5 +766,16 @@ describe('the REST route', () => {
     const missing = await call('GET', '/api/projects/99999999/live-work')
     expect(missing.status).toBe(404)
     expect(await missing.json()).toMatchObject({ error: 'project not found' })
+  })
+})
+
+describe('approved, to merge: only the review stage', () => {
+  it('leaves out a stage keyed approved of another kind', () => {
+    const pid = project('approved-kind')
+    const approved = stagesMod.listStages(pid).find((s) => s.key === 'approved')!
+    stagesMod.deleteStage(pid, approved.id, {}, 'enrique')
+    stagesMod.createStage(pid, { name: 'Approved', kind: 'active' }, 'enrique')
+    ticket(pid, 'Not a go-ahead', { status: 'approved' })
+    expect(read(pid).approvedToMerge).toEqual([])
   })
 })
