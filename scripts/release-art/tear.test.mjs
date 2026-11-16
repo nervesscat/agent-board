@@ -317,6 +317,37 @@ describe('release artwork: tear', () => {
     expect(existsSync(join(dir, 'manifest.json'))).toBe(false)
   })
 
+  it(
+    'gives a version typed with stray whitespace the same bytes as the clean one',
+    { timeout: TIMEOUT },
+    () => {
+      const clean = mkdtempSync(join(tmpdir(), 'tear-clean-'))
+      const padded = mkdtempSync(join(tmpdir(), 'tear-padded-'))
+      const notes = join(clean, 'v9.9.9.md')
+      writeFileSync(notes, `## What's Changed\n${NOTES.wayfinding}`)
+
+      generate(clean, ['--version', 'v9.9.9', '--notes', notes])
+      generate(padded, ['--version', 'v9.9.9 ', '--notes', notes])
+
+      expect(pieceFiles(padded)).toEqual(pieceFiles(clean))
+      for (const name of pieceFiles(clean)) {
+        expect(readFileSync(join(padded, name))).toEqual(readFileSync(join(clean, name)))
+      }
+    },
+  )
+
+  it('refuses notes with no theme lines, empty or prose only, instead of drawing a piece', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tear-empty-'))
+    const empty = join(dir, 'empty.md')
+    const prose = join(dir, 'prose.md')
+    writeFileSync(empty, '')
+    writeFileSync(prose, 'A paragraph of prose with no bullets or headings.\n')
+
+    expect(failure(['--version', 'v9.9.9', '--notes', empty])).toContain('No theme lines')
+    expect(failure(['--version', 'v9.9.9', '--notes', prose])).toContain('No theme lines')
+    expect(() => readThemes('')).toThrow('No theme lines')
+  })
+
   it('refuses flags with no value instead of writing into the series', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tear-flags-'))
 

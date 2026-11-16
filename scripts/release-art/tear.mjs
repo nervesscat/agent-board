@@ -387,7 +387,10 @@ export function readThemes(notes) {
         .toLowerCase(),
     )
     .filter((line) => !/^#+\s+(what's changed|new contributors)/.test(line))
-  const total = Math.max(1, lines.length)
+  // An empty or prose-only body (a failed `gh release view` leaves one) has nothing to read a
+  // release by: refuse it rather than draw a piece as if it were a many-hands release.
+  if (lines.length === 0) throw new Error('No theme lines in the notes: expected bullets or headings')
+  const total = lines.length
   const share = {}
   for (const theme of THEMES) {
     const pattern = new RegExp(`\\b(${THEME_WORDS[theme].join('|')})`)
@@ -1225,7 +1228,10 @@ function committedReleases() {
 function main() {
   const args = parseArgs(process.argv.slice(2))
   const single = Boolean(args.version)
-  if (single) parseVersion(args.version)
+  if (single) {
+    parseVersion(args.version)
+    args.version = args.version.trim()
+  }
   const releases = single ? [{ version: args.version, notes: resolve(args.notes) }] : committedReleases()
   const out = resolve(args.out ?? ASSET_DIR)
   mkdirSync(out, { recursive: true })
