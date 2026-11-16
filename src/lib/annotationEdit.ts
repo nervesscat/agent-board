@@ -224,11 +224,16 @@ export function handlePoint({ x, y, w, h }: Box, part: ResizePart): Point {
   return [x + ((dx + 1) / 2) * w, y + ((dy + 1) / 2) * h]
 }
 
-/** The handle under a point, the nearest one within `reach` picture pixels, or null. */
+/**
+ * The handle under a point, the nearest one within `reach` picture pixels, or null. A side handle on an axis of
+ * zero size is no handle: a vertical line's east and west handles would sit on its stroke, and a press there moves it.
+ */
 export function resizeHandleAt(box: Box, point: Point, reach: number): ResizePart | null {
   let best: ResizePart | null = null
   let bestDistance = reach
   for (const part of RESIZE_PARTS) {
+    const [dx, dy] = GRIP[part]
+    if ((dx && !dy && !box.w) || (dy && !dx && !box.h)) continue
     const [hx, hy] = handlePoint(box, part)
     const distance = Math.hypot(point[0] - hx, point[1] - hy)
     if (distance <= bestDistance) {
@@ -351,6 +356,11 @@ export interface Layout {
   picture: { width: number; height: number }
 }
 
+/** Whether a point is inside a box, its edges included. */
+export function insideBox(box: Box, [x, y]: Point): boolean {
+  return x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h
+}
+
 /**
  * The part of the selection a pointer is over, in the order a press takes it: a resize handle; the rotate tip,
  * unless a mark lies under the pointer (the mark wins); a mark, or the inside of the selection's box. Null
@@ -367,8 +377,7 @@ export function partAt(box: Box | null, items: Annotation[], point: Point, layou
     if (Math.hypot(point[0] - tx, point[1] - ty) <= layout.tipReach) return 'rotate'
   }
   if (mark) return 'move'
-  if (box && point[0] >= box.x && point[0] <= box.x + box.w && point[1] >= box.y && point[1] <= box.y + box.h)
-    return 'move'
+  if (box && insideBox(box, point)) return 'move'
   return null
 }
 

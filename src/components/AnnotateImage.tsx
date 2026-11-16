@@ -41,6 +41,7 @@ import {
   fillMark,
   handleAt,
   handlePoint,
+  insideBox,
   isFillable,
   isTinyDrag,
   markAt,
@@ -337,6 +338,11 @@ export function AnnotateImage({
 
   // The marks selected that are still on the picture (an undo can take one away).
   const picked = useMemo(() => shown.filter((a) => selected.has(a.id)), [shown, selected])
+  // The X and the tip's hover were set by the pointer over the selection they were for: a new selection (Ctrl+A,
+  // a pick, a delete) hides them until the pointer moves near its tip again.
+  useEffect(() => {
+    setTipHover(false)
+  }, [selected])
   const selectedItem = picked.length === 1 ? picked[0] : undefined
   const canUndo = history.past.length > 0 && !busy
   const canRedo = history.future.length > 0 && !busy
@@ -418,15 +424,24 @@ export function AnnotateImage({
   // The X beside the rotate tip of a selection's box, in picture pixels.
   const deleteXAt = (box: Box, k: number): Point =>
     deleteAt(handleAt(box, HANDLE_GAP * k, layoutAt(k).picture), X_OFFSET * k, layoutAt(k).picture)
+  // Whether a point is near the rotate tip or the X beside it: the X shows then, and a press on it deletes.
+  const nearTip = (box: Box | null, point: Point, k: number) =>
+    box !== null &&
+    (within(point, deleteXAt(box, k), X_REACH * k) ||
+      within(point, handleAt(box, HANDLE_GAP * k, bitmap ?? { width: 0, height: 0 }), TIP_REACH * k))
 
   const startSelect = (e: PointerEvent<HTMLCanvasElement>, point: Point) => {
     e.currentTarget.setPointerCapture(e.pointerId)
     const k = scale(e)
     const hit = markAt(items, point[0], point[1])
     const box = unionBounds(picked)
+    // A touch sends no move before its press, so the press itself shows the X when it lands near the tip. The X
+    // is tested only while it shows: a mark under its spot is picked by a tap that did not show it.
+    const shown = tipHover
+    setTipHover(nearTip(box, point, k))
     if (box) {
       // The X beside the rotate tip deletes the selection, as one step.
-      if (within(point, deleteXAt(box, k), X_REACH * k)) {
+      if (shown && within(point, deleteXAt(box, k), X_REACH * k)) {
         deleteSelected()
         return
       }
@@ -475,10 +490,12 @@ export function AnnotateImage({
       })
       return
     }
-    if (hit) {
-      const inGroup = picked.some((a) => a.id === hit.id)
-      const group = inGroup ? picked : [hit]
-      if (!inGroup) setSelected(new Set([hit.id]))
+    // A press on a mark, or on empty picture inside the selection's box, moves the picked marks; a mark outside
+    // the picked group is picked alone first.
+    if (hit || (box && insideBox(box, point))) {
+      const inGroup = !hit || picked.some((a) => a.id === hit.id)
+      const group = hit && !inGroup ? [hit] : picked
+      if (hit && !inGroup) setSelected(new Set([hit.id]))
       gesture.current = {
         mode: 'move',
         pointer: e.pointerId,
@@ -487,7 +504,7 @@ export function AnnotateImage({
         base: items,
         centre: point,
         additive: false,
-        pick: hit.id,
+        pick: hit?.id,
         next: null,
       }
       return
@@ -570,8 +587,7 @@ export function AnnotateImage({
     const box = unionBounds(picked)
     const k = scale(e)
     const onX = box !== null && within(point, deleteXAt(box, k), X_REACH * k)
-    const tip = box ? handleAt(box, HANDLE_GAP * k, bitmap ?? { width: 0, height: 0 }) : null
-    setTipHover(tip !== null && (onX || within(point, tip, TIP_REACH * k)))
+    setTipHover(nearTip(box, point, k))
     // Set on the element, not through state: a move over the canvas does not re-render the dialog.
     e.currentTarget.style.cursor = onX ? 'grab' : cursorOf(partAt(box, items, point, layoutAt(k)))
   }
@@ -579,7 +595,8 @@ export function AnnotateImage({
   const onPointerLeave = (e: PointerEvent<HTMLCanvasElement>) => {
     if (gesture.current) return
     e.currentTarget.style.cursor = ''
-    setTipHover(false)
+    // A touch leaves the picture as it lifts, after the press that showed the X: the X stays until the next press.
+    if (e.pointerType !== 'touch') setTipHover(false)
   }
 
   const onPointerUp = (e: PointerEvent<HTMLCanvasElement>) => {

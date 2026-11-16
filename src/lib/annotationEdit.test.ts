@@ -631,6 +631,22 @@ describe('resizeHandleAt', () => {
     const tiny = { x: 0, y: 0, w: 4, h: 4 }
     expect(resizeHandleAt(tiny, [0.2, 0.1], 10)).toBe('nw')
   })
+
+  it('has no east or west handle on a box of zero width, so the middle of a vertical line is no handle', () => {
+    const line = { x: 100, y: 20, w: 0, h: 100 }
+    expect(resizeHandleAt(line, [100, 70], 8)).toBeNull()
+    expect(resizeHandleAt(line, [140, 70], 8)).toBeNull()
+    // Its ends still take the corner handles, which resize its height.
+    const end = resizeHandleAt(line, [100, 20], 8)
+    expect(end === 'nw' || end === 'n' || end === 'ne').toBe(true)
+  })
+
+  it('has no north or south handle on a box of zero height, so the middle of a horizontal line is no handle', () => {
+    const line = { x: 20, y: 100, w: 100, h: 0 }
+    expect(resizeHandleAt(line, [70, 100], 8)).toBeNull()
+    expect(resizeHandleAt(line, [70, 60], 8)).toBeNull()
+    expect(resizeHandleAt(line, [20, 100], 8)).not.toBeNull()
+  })
 })
 
 describe('partAt', () => {
@@ -654,6 +670,11 @@ describe('partAt', () => {
   it('is a move inside the box, and on a mark outside it', () => {
     expect(partAt(box, [], [150, 150], layout)).toBe('move')
     expect(partAt(box, [rect('m', 20, 20, 20, 20)], [30, 30], layout)).toBe('move')
+  })
+
+  it('is a move on the middle of a zero-width line, where a side handle would have been', () => {
+    const line = { x: 100, y: 20, w: 0, h: 100 }
+    expect(partAt(line, [], [100, 70], layout)).toBe('move')
   })
 
   it('is null elsewhere, and the tip only exists with a selection', () => {
