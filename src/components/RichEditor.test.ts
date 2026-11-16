@@ -232,6 +232,22 @@ describe('RichEditor styles on a partial selection', () => {
     ).toBe('1. a\n   - Hello \n   1. brave\n   -  world')
   })
 
+  it('applies a heading across a list item and its nested list to both texts, outside the lists', () => {
+    // From the start of "one" to the end of "nested".
+    expect(
+      after('- one\n  - nested', 3, 16, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 }))),
+    ).toBe('## one\n\n## nested')
+  })
+
+  it('applies a heading to a selection that runs from a numbered item into its nested bullet item', () => {
+    // From the start of "a" to the end of "brave"; " world" stays a bullet item, outside the numbered one.
+    expect(
+      after('1. a\n   - Hello brave world', 3, 19, (e) =>
+        toggleBlock(e, (c) => c.toggleHeading({ level: 2 })),
+      ),
+    ).toBe('## a\n\n## Hello brave\n\n-  world')
+  })
+
   it('leaves a collapsed caret on its whole paragraph, as before', () => {
     expect(after(sentence, 7, 7, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 })))).toBe(
       '## Hello brave world',

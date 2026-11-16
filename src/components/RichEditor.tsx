@@ -1,4 +1,4 @@
-import { type ChainedCommands, type Command, type Editor } from '@tiptap/core'
+import { type ChainedCommands, type Editor } from '@tiptap/core'
 import Image from '@tiptap/extension-image'
 import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { TableKit } from '@tiptap/extension-table'
@@ -185,11 +185,12 @@ export function RichEditor({
 const listItemTypes = ['listItem', 'taskItem']
 
 /**
- * Lifts the block at `pos` (of `size`) out of the list item it sits in. A list item starts with a
- * paragraph, so a block that a nested list follows cannot be lifted as it is: the nested list goes out
- * first (it becomes a list of its own, after the item), and then the block can.
+ * Lifts the block at `pos` (of `size`) out of the list item it sits in, one level. A list item starts
+ * with a paragraph, so a block that a nested list follows cannot be lifted as it is: the nested list goes
+ * out first (it becomes a list of its own, after the item), and then the block can. Returns the block's
+ * position after the lift, or null when it could not be lifted.
  */
-function liftOutOfItem(tr: Transaction, pos: number, size: number) {
+function liftOutOfItem(tr: Transaction, pos: number, size: number): number | null {
   const liftRange = (from: number, to: number) => {
     const range = tr.doc.resolve(from).blockRange(tr.doc.resolve(to))
     const target = range && liftTarget(range)
@@ -197,20 +198,30 @@ function liftOutOfItem(tr: Transaction, pos: number, size: number) {
     tr.lift(range, target)
     return true
   }
-  if (liftRange(pos, pos + size)) return
-  const itemEnd = tr.doc.resolve(pos).end()
-  if (pos + size < itemEnd && liftRange(pos + size, itemEnd)) liftRange(pos, pos + size)
+  const mark = tr.mapping.maps.length
+  if (!liftRange(pos, pos + size)) {
+    const itemEnd = tr.doc.resolve(pos).end()
+    if (!(pos + size < itemEnd && liftRange(pos + size, itemEnd)) || !liftRange(pos, pos + size)) return null
+  }
+  return tr.mapping.slice(mark).map(pos, 1)
 }
+
+/**
+ * How far the selected blocks are lifted out of their list items. `list` names the list a list style
+ * applies to: a block already in an item of that list stays in it, and the style makes a list of its own
+ * there. `once` lifts a block one level only (a toggle-off takes the block out of its own item, no further).
+ */
+export type Keep = { list?: string; once?: boolean }
 
 /**
  * A block style (heading, list, quote, code block) changes every block its selection touches, so a
  * selection inside one paragraph would change the whole paragraph. This splits the paragraph at the
- * selection's ends, and lifts the selected blocks out of the list items they sit in, so the style covers
- * the selected text only and the unselected text stays in its list. A block the selection only touches
- * at its edge (one that starts where the selection ends) is left alone. A collapsed caret is left alone,
- * and so is a selection that is not text.
+ * selection's ends, and lifts the selected blocks out of the list items they sit in (as `keep` says), so
+ * the style covers the selected text only and the unselected text stays in its list. A block the selection
+ * only touches at its edge (one that starts where the selection ends) is left alone. A collapsed caret is
+ * left alone, and so is a selection that is not text.
  */
-export const narrowToSelection: Command = ({ tr }) => {
+export function narrowBlocks(tr: Transaction, keep: Keep = {}): boolean {
   if (!(tr.selection instanceof TextSelection) || tr.selection.empty) return true
   const { from, to } = tr.selection
   // Both checks read the document before either split, so they are about the same paragraphs.
@@ -239,9 +250,18 @@ export const narrowToSelection: Command = ({ tr }) => {
   if (!blocks.length) return true
   // From the last block back, so each lift leaves the positions of the blocks before it as they are.
   for (let i = blocks.length - 1; i >= 0; i--) {
-    const { pos, size } = blocks[i]
-    if (!listItemTypes.includes(tr.doc.resolve(pos).parent.type.name)) continue
-    liftOutOfItem(tr, pos, size)
+    const { size } = blocks[i]
+    let pos = blocks[i].pos
+    // Out of the list items it sits in, the innermost first, so a block of a nested list ends up outside the lists.
+    for (;;) {
+      const $pos = tr.doc.resolve(pos)
+      if (!listItemTypes.includes($pos.parent.type.name)) break
+      if ($pos.node($pos.depth - 1).type.name === keep.list) break
+      const next = liftOutOfItem(tr, pos, size)
+      if (next === null) break
+      pos = next
+      if (keep.once) break
+    }
   }
   const map = tr.mapping.slice(mark)
   tr.setSelection(
@@ -268,7 +288,7 @@ function innermostList(editor: Editor): string | undefined {
 }
 
 /**
- * Runs a block style on the selected text only (see `narrowToSelection`). `list` names the list the style
+ * Runs a block style on the selected text only (see `narrowBlocks`). `list` names the list the style
  * is: a selection already in that list is taken out of it and nothing more. Inline marks do not need it.
  */
 export function toggleBlock(
@@ -282,7 +302,12 @@ export function toggleBlock(
   }
   // The narrowing is a transaction of its own: the commands of one chain read the state from before it.
   const wasOn = list !== undefined && innermostList(editor) === list
-  editor.chain().focus().command(narrowToSelection).run()
+  const keep: Keep = list === undefined ? {} : wasOn ? { once: true } : { list }
+  editor
+    .chain()
+    .focus()
+    .command(({ tr }) => narrowBlocks(tr, keep))
+    .run()
   if (wasOn) return
   if (list && innermostList(editor)) {
     // The selected text is still inside another list (a bullet item in a numbered one): the list is made
