@@ -4,7 +4,7 @@ import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { TableKit } from '@tiptap/extension-table'
 import { Placeholder } from '@tiptap/extensions'
 import { Markdown } from '@tiptap/markdown'
-import { type Node } from '@tiptap/pm/model'
+import { type Node, type ResolvedPos } from '@tiptap/pm/model'
 import { TextSelection, type Transaction } from '@tiptap/pm/state'
 import { findWrapping, liftTarget } from '@tiptap/pm/transform'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
@@ -213,12 +213,21 @@ function innermostList(editor: Editor): string | undefined {
   return undefined
 }
 
+/** Whether the position is inside a quote, at any depth. */
+function inQuote($pos: ResolvedPos): boolean {
+  for (let depth = $pos.depth; depth > 0; depth--) {
+    if ($pos.node(depth).type.name === 'blockquote') return true
+  }
+  return false
+}
+
 /** Whether the selection, where it starts, is already in `style` (a toggle then turns it off). */
 function styleActive(editor: Editor, style: BlockStyle): boolean {
+  const { $from } = editor.state.selection
   if (isListKind(style)) return innermostList(editor) === style
-  if (style === 'heading') return editor.isActive('heading', { level: 2 })
-  if (style === 'quote') return editor.isActive('blockquote')
-  return editor.isActive('codeBlock')
+  if (style === 'quote') return inQuote($from)
+  if (style === 'code') return $from.parent.type.name === 'codeBlock'
+  return $from.parent.type.name === 'heading' && $from.parent.attrs.level === 2
 }
 
 /**
@@ -246,10 +255,13 @@ function splitSelection(tr: Transaction): number[] {
     if (nodeAfter?.type.name === 'hardBreak') return false
     return nodeBefore?.type.name === 'hardBreak' || !!nodeBefore?.text?.endsWith('\n')
   }
-  // A selection that ends right before a break: the split goes there, and the break goes, as at a start after one.
+  // A selection that ends right before a break (a line break, or a newline inside the text): the split goes there, and
+  // the break goes, as at a start after one.
   const beforeBreak = (pos: number) => {
     const $pos = tr.doc.resolve(pos)
-    return $pos.parent.isTextblock && $pos.parentOffset > 0 && $pos.nodeAfter?.type.name === 'hardBreak'
+    const { nodeAfter } = $pos
+    if (!$pos.parent.isTextblock || $pos.parentOffset <= 0) return false
+    return nodeAfter?.type.name === 'hardBreak' || !!nodeAfter?.text?.startsWith('\n')
   }
   const splitTo = splittable(to)
   const splitFrom = splittable(from)
@@ -295,12 +307,12 @@ function nestedSize(doc: Node, pos: number): number {
 }
 
 /**
- * Lifts the block at `pos`, with the nested lists that follow it in its item, out of the list it sits in, one level (the
- * library's `lift`, which splits the item and its list around the block). Returns where the block is now, and the size
- * of the nested lists that came with it, or null when it cannot be lifted.
+ * Lifts the block at `pos` out of the list it sits in, one level (the library's `lift`, which splits the item and its
+ * list around the block). With `withNested`, the nested lists that follow it in its item go with it. Returns where the
+ * block is now, and the size of the nested lists that came with it, or null when it cannot be lifted.
  */
-function liftBlock(tr: Transaction, pos: number): { pos: number; nested: number } | null {
-  const nested = nestedSize(tr.doc, pos)
+function liftBlock(tr: Transaction, pos: number, withNested = true): { pos: number; nested: number } | null {
+  const nested = withNested ? nestedSize(tr.doc, pos) : 0
   const size = tr.doc.nodeAt(pos)!.nodeSize
   const range = tr.doc.resolve(pos).blockRange(tr.doc.resolve(pos + size + nested))
   const target = range && liftTarget(range)
@@ -333,8 +345,16 @@ function makeListItem(tr: Transaction, pos: number, list: ListKind) {
   tr.wrap(range, wrapping)
   // A new list next to a list of its kind is the same list: they join.
   const made = tr.doc.nodeAt(at)!
-  if (tr.doc.resolve(at + made.nodeSize).nodeAfter?.type === schema.nodes[list]) tr.join(at + made.nodeSize)
-  if (tr.doc.resolve(at).nodeBefore?.type === schema.nodes[list]) tr.join(at)
+  const before = tr.doc.resolve(at).nodeBefore
+  const after = tr.doc.resolve(at + made.nodeSize).nodeAfter
+  const joinsBefore = before?.type === schema.nodes[list]
+  // The number the new item shows: an ordered list before it counts on from that list.
+  const number =
+    list === 'orderedList' && joinsBefore ? before.attrs.start + before.childCount : made.attrs.start
+  // An ordered list after it joins only where its numbers go on from this item, so none of its items is renumbered.
+  const continues = list !== 'orderedList' || after?.attrs.start === number + 1
+  if (after?.type === schema.nodes[list] && continues) tr.join(at + made.nodeSize)
+  if (joinsBefore) tr.join(at)
 }
 
 /**
@@ -364,7 +384,9 @@ function keepNumbers(tr: Transaction, numbers: Map<Node, number>) {
     let start: number | undefined
     node.forEach((item, _offset, index) => {
       if (start !== undefined) return
-      const number = item.firstChild ? numbers.get(item.firstChild) : undefined
+      // The item's number is that of any block of it that had one (a new paragraph in front of the rest has none).
+      let number: number | undefined
+      item.forEach((block) => (number ??= numbers.get(block)))
       if (number !== undefined) start = number - index
     })
     if (start !== undefined && start !== node.attrs.start) starts.push({ pos, node, start })
@@ -376,7 +398,8 @@ function keepNumbers(tr: Transaction, numbers: Map<Node, number>) {
 /**
  * Applies a block style to the selected text only. The selection is split at its ends first, so the selected blocks
  * are whole textblocks. Then:
- * - heading, code block: each block's type changes in place, so a block in a list item stays in its item;
+ * - heading, code block: each block's type changes in place, so a block in a list item stays in its item (the first
+ *   paragraph of an item leaves the list first, see below);
  * - quote: the selected blocks of one parent are wrapped in one quote, or lifted out of their quote when `active`;
  * - a list: when `active` (the selection starts in that list), a selected block of that list is lifted out of it (the
  *   toggle); otherwise each selected block that is not in that list becomes an item of it (see `makeListItem`).
@@ -389,50 +412,30 @@ export function applyBlockStyle(tr: Transaction, style: BlockStyle, active: bool
   const numbers = orderedNumbers(tr.doc)
   const mark = tr.mapping.maps.length
   const at = (block: number) => tr.mapping.slice(mark).map(block, 1)
+  const schema = tr.doc.type.schema
   if (!isListKind(style)) {
+    // A toggle takes off only the blocks of its kind: the others keep their style and their place.
+    const kind = style === 'code' ? 'codeBlock' : 'heading'
+    const ofKind = (block: number) =>
+      style === 'quote' ? inQuote(tr.doc.resolve(block)) : tr.doc.nodeAt(block)?.type.name === kind
+    const changed = blocks.filter((block) => !active || ofKind(block))
     // A list item starts with its paragraph, so a block that starts its item cannot take a heading, a code block or a
-    // quote in its place: it is lifted out of its list first (the rest of the item stays where it was).
-    for (const block of blocks) {
-      const $pos = tr.doc.resolve(at(block))
-      if (listItemTypes.includes($pos.parent.type.name) && $pos.index() === 0) liftBlock(tr, at(block))
-    }
-  }
-  if (style === 'quote') {
-    // The blocks of one parent go into one quote: consecutive ones, from the first to the last.
-    const groups: number[][] = []
-    // The parent of a block is the one its position is in: the document, or the start of its container.
-    const parentOf = (pos: number) => (tr.doc.resolve(pos).depth ? tr.doc.resolve(pos).before() : -1)
-    // The lifts above moved some blocks, so the positions are taken as they are now.
-    for (const block of blocks.map((b) => at(b))) {
-      const last = groups[groups.length - 1]
-      if (last && parentOf(block) === parentOf(last[0])) last.push(block)
-      else groups.push([block])
-    }
-    for (const group of groups.reverse()) {
-      const first = tr.doc.resolve(group[0])
-      const lastBlock = group[group.length - 1]
-      const end = lastBlock + tr.doc.nodeAt(lastBlock)!.nodeSize
-      const range = first.blockRange(tr.doc.resolve(end))
-      if (!range) continue
-      if (active) {
-        const target = first.parent.type.name === 'blockquote' ? liftTarget(range) : null
-        if (target !== null) tr.lift(range, target)
-      } else {
-        const wrapping = findWrapping(range, tr.doc.type.schema.nodes.blockquote)
-        if (wrapping) tr.wrap(range, wrapping)
-      }
-    }
-  } else {
-    for (const block of blocks) {
+    // quote in its place: it leaves its list first. The rest of the item stays in it, its first paragraph an empty one.
+    for (const block of changed) {
       const pos = at(block)
-      const node = tr.doc.nodeAt(pos)
-      if (!node) continue
-      if (isListKind(style)) {
-        const inList = listOf(tr.doc, pos) === style
-        if (active && inList) liftBlock(tr, pos)
-        else if (!active && !inList) makeListItem(tr, pos, style)
-      } else {
-        const schema = tr.doc.type.schema
+      const $pos = tr.doc.resolve(pos)
+      if (!listItemTypes.includes($pos.parent.type.name) || $pos.index() !== 0) continue
+      // The rest of the item, if any, starts with an empty paragraph once the block is out: the item keeps its paragraph.
+      if ($pos.parent.childCount > 1)
+        tr.insert(pos + tr.doc.nodeAt(pos)!.nodeSize, schema.nodes.paragraph.create())
+      liftBlock(tr, pos, false)
+    }
+    if (style === 'quote') applyQuote(tr, changed, active, at)
+    else
+      for (const block of changed) {
+        const pos = at(block)
+        const node = tr.doc.nodeAt(pos)
+        if (!node) continue
         const type = style === 'code' ? schema.nodes.codeBlock : schema.nodes.heading
         const target = active ? schema.nodes.paragraph : type
         tr.setBlockType(
@@ -442,11 +445,88 @@ export function applyBlockStyle(tr: Transaction, style: BlockStyle, active: bool
           target === schema.nodes.heading ? { level: 2 } : undefined,
         )
       }
+  } else {
+    for (const block of blocks) {
+      const pos = at(block)
+      const node = tr.doc.nodeAt(pos)
+      if (!node) continue
+      const inList = listOf(tr.doc, pos) === style
+      const $pos = tr.doc.resolve(pos)
+      const quotedInItem = $pos.parent.type.name === 'blockquote' && listOf(tr.doc, $pos.before()) === style
+      if (active && inList) liftBlock(tr, pos)
+      else if (active && quotedInItem) leaveListQuoted(tr, pos)
+      else if (!active && !inList) makeListItem(tr, pos, style)
     }
   }
   keepNumbers(tr, numbers)
   const map = tr.mapping.slice(mark)
   tr.setSelection(TextSelection.create(tr.doc, map.map(from, 1), map.map(to, -1)))
+}
+
+/**
+ * The quote of the blocks: the selected blocks of one parent go into one quote (consecutive ones, from the first to the
+ * last), or, when `active`, are lifted out of their quote.
+ */
+function applyQuote(tr: Transaction, blocks: number[], active: boolean, at: (block: number) => number) {
+  if (active) {
+    // A quoted block of a list item leaves the list first, so the quote can be lifted from around it.
+    for (const block of blocks) {
+      const pos = at(block)
+      if (listItemTypes.includes(tr.doc.resolve(pos).parent.type.name)) liftBlock(tr, pos)
+    }
+  }
+  const groups: number[][] = []
+  // The parent of a block is the one its position is in: the document, or the start of its container.
+  const parentOf = (pos: number) => (tr.doc.resolve(pos).depth ? tr.doc.resolve(pos).before() : -1)
+  // The lifts above moved some blocks, so the positions are taken as they are now.
+  for (const block of blocks.map((b) => at(b))) {
+    const last = groups[groups.length - 1]
+    if (last && parentOf(block) === parentOf(last[0])) last.push(block)
+    else groups.push([block])
+  }
+  for (const group of groups.reverse()) {
+    const first = tr.doc.resolve(group[0])
+    const lastBlock = group[group.length - 1]
+    const end = lastBlock + tr.doc.nodeAt(lastBlock)!.nodeSize
+    const range = first.blockRange(tr.doc.resolve(end))
+    if (!range) continue
+    if (active) {
+      const target = first.parent.type.name === 'blockquote' ? liftTarget(range) : null
+      if (target !== null) tr.lift(range, target)
+    } else {
+      const wrapping = findWrapping(range, tr.doc.type.schema.nodes.blockquote)
+      if (wrapping) tr.wrap(range, wrapping)
+    }
+  }
+}
+
+/** Wraps the block at `pos` in a quote of its own. */
+function wrapInQuote(tr: Transaction, pos: number) {
+  const node = tr.doc.nodeAt(pos)!
+  const range = tr.doc.resolve(pos).blockRange(tr.doc.resolve(pos + node.nodeSize))
+  const wrapping = range && findWrapping(range, tr.doc.type.schema.nodes.blockquote)
+  if (range && wrapping) tr.wrap(range, wrapping)
+}
+
+/**
+ * A quoted block of a list item, when its list is toggled off: the block leaves its quote and its list, and goes back
+ * into a quote of its own, so only the list changes.
+ */
+function leaveListQuoted(tr: Transaction, pos: number) {
+  const node = tr.doc.nodeAt(pos)!
+  const range = tr.doc.resolve(pos).blockRange(tr.doc.resolve(pos + node.nodeSize))
+  const target = range && liftTarget(range)
+  if (!range || target == null) return
+  const mark = tr.mapping.maps.length
+  tr.lift(range, target)
+  const block = tr.mapping.slice(mark).map(pos, 1)
+  // A rest of the item that is not a paragraph (another quote) starts with an empty one, so the item stays valid.
+  const $block = tr.doc.resolve(block)
+  const next = $block.parent.maybeChild($block.index() + 1)
+  if (next && next.type.name !== 'paragraph')
+    tr.insert(block + tr.doc.nodeAt(block)!.nodeSize, tr.doc.type.schema.nodes.paragraph.create())
+  const moved = liftBlock(tr, block)
+  wrapInQuote(tr, moved ? moved.pos : block)
 }
 
 /**
