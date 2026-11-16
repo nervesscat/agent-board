@@ -1,0 +1,257 @@
+{
+  "direction": "loom",
+  "madeBy": "Claude Opus 5.5 (medium effort)",
+  "generator": "scripts/release-art/loom.mjs",
+  "canvas": {
+    "width": 1600,
+    "height": 900
+  },
+  "palette": {
+    "hexes": [
+      "#E3DBCA",
+      "#ECE6DA",
+      "#E1D9C8",
+      "#DBD3C2",
+      "#5B5242",
+      "#2F3E66",
+      "#B04A30",
+      "#C59A3E",
+      "#15171C",
+      "#2C2F37",
+      "#23262D",
+      "#1E2026",
+      "#C9C1B0",
+      "#6A7FB6",
+      "#C65F40",
+      "#C6A04C"
+    ],
+    "light": {
+      "ground": "#E3DBCA",
+      "warp": "#ECE6DA",
+      "warpShade": "#E1D9C8",
+      "weft": "#DBD3C2",
+      "dyes": ["#2F3E66", "#B04A30", "#C59A3E"],
+      "fibre": "#5B5242"
+    },
+    "dark": {
+      "ground": "#15171C",
+      "warp": "#2C2F37",
+      "warpShade": "#23262D",
+      "weft": "#1E2026",
+      "dyes": ["#6A7FB6", "#C65F40", "#C6A04C"],
+      "fibre": "#C9C1B0"
+    }
+  },
+  "thread": {
+    "warpPitch": 16,
+    "warpWidth": 9.6,
+    "weftWidth": 0.8
+  },
+  "releases": [
+    {
+      "version": "v0.2.2",
+      "seed": 1818969844,
+      "themes": {
+        "items": 153,
+        "counts": {
+          "agency": 44,
+          "precision": 19,
+          "wayfinding": 23,
+          "signal": 8
+        },
+        "other": 59,
+        "agency": 0.468,
+        "precision": 0.202,
+        "wayfinding": 0.245,
+        "signal": 0.085
+      },
+      "lead": "agency",
+      "shares": {
+        "agency": 8,
+        "precision": 3,
+        "wayfinding": 4,
+        "signal": 0
+      },
+      "cloth": {
+        "ground": "plain",
+        "beat": 12.99,
+        "unevenness": 0.168,
+        "picks": 71,
+        "warps": 100,
+        "blocks": {
+          "precision": 2,
+          "hairline": 1,
+          "ghost": 1,
+          "agency": 16
+        },
+        "pulses": 0,
+        "brokenWarps": 3,
+        "floats": 6,
+        "abrash": 0.13,
+        "wobble": 5.29,
+        "wobbleFrequency": [0.004, 0.009]
+      },
+      "files": {
+        "light": "v0.2.2-light.svg",
+        "dark": "v0.2.2-dark.svg"
+      },
+      "bytes": {
+        "light": 24996,
+        "dark": 24993
+      }
+    },
+    {
+      "version": "v0.2.3",
+      "seed": 1835747463,
+      "themes": {
+        "items": 15,
+        "counts": {
+          "agency": 1,
+          "precision": 10,
+          "wayfinding": 0,
+          "signal": 0
+        },
+        "other": 4,
+        "agency": 0.091,
+        "precision": 0.909,
+        "wayfinding": 0,
+        "signal": 0
+      },
+      "lead": "precision",
+      "shares": {
+        "agency": 0,
+        "precision": 11,
+        "wayfinding": 0,
+        "signal": 0
+      },
+      "cloth": {
+        "ground": "plain",
+        "beat": 11.23,
+        "unevenness": 0.055,
+        "picks": 82,
+        "warps": 100,
+        "blocks": {
+          "precision": 5,
+          "hairline": 1
+        },
+        "pulses": 0,
+        "brokenWarps": 1,
+        "floats": 2,
+        "abrash": 0.059,
+        "wobble": 2.82,
+        "wobbleFrequency": [0.004, 0.009]
+      },
+      "files": {
+        "light": "v0.2.3-light.svg",
+        "dark": "v0.2.3-dark.svg"
+      },
+      "bytes": {
+        "light": 11523,
+        "dark": 11520
+      }
+    },
+    {
+      "version": "v0.2.4",
+      "seed": 1785414606,
+      "themes": {
+        "items": 13,
+        "counts": {
+          "agency": 5,
+          "precision": 0,
+          "wayfinding": 7,
+          "signal": 0
+        },
+        "other": 1,
+        "agency": 0.417,
+        "precision": 0,
+        "wayfinding": 0.583,
+        "signal": 0
+      },
+      "lead": "wayfinding",
+      "shares": {
+        "agency": 3,
+        "precision": 0,
+        "wayfinding": 5,
+        "signal": 0
+      },
+      "cloth": {
+        "ground": "twill",
+        "beat": 13.5,
+        "unevenness": 0.2,
+        "picks": 67,
+        "warps": 100,
+        "blocks": {
+          "wayfinding": 3,
+          "ghost": 1,
+          "agency": 6
+        },
+        "pulses": 0,
+        "brokenWarps": 2,
+        "floats": 4,
+        "abrash": 0.15,
+        "wobble": 6,
+        "wobbleFrequency": [0.004, 0.009]
+      },
+      "files": {
+        "light": "v0.2.4-light.svg",
+        "dark": "v0.2.4-dark.svg"
+      },
+      "bytes": {
+        "light": 28091,
+        "dark": 28088
+      }
+    },
+    {
+      "version": "v0.2.5",
+      "seed": 1802192225,
+      "themes": {
+        "items": 35,
+        "counts": {
+          "agency": 6,
+          "precision": 5,
+          "wayfinding": 2,
+          "signal": 12
+        },
+        "other": 10,
+        "agency": 0.24,
+        "precision": 0.2,
+        "wayfinding": 0.08,
+        "signal": 0.48
+      },
+      "lead": "signal",
+      "shares": {
+        "agency": 3,
+        "precision": 3,
+        "wayfinding": 0,
+        "signal": 7
+      },
+      "cloth": {
+        "ground": "satin",
+        "beat": 13,
+        "unevenness": 0.168,
+        "picks": 70,
+        "warps": 100,
+        "blocks": {
+          "precision": 2,
+          "hairline": 1,
+          "agency": 6,
+          "signal": 8
+        },
+        "pulses": 8,
+        "brokenWarps": 2,
+        "floats": 4,
+        "abrash": 0.13,
+        "wobble": 5.3,
+        "wobbleFrequency": [0.004, 0.009]
+      },
+      "files": {
+        "light": "v0.2.5-light.svg",
+        "dark": "v0.2.5-dark.svg"
+      },
+      "bytes": {
+        "light": 21189,
+        "dark": 21186
+      }
+    }
+  ]
+}
