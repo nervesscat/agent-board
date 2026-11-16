@@ -257,8 +257,8 @@ function splitSelection(tr: Transaction): number[] {
     if (nodeAfter?.type.name === 'hardBreak') return false
     return nodeBefore?.type.name === 'hardBreak' || !!nodeBefore?.text?.endsWith('\n')
   }
-  // A selection that ends right before a break (a line break, or a newline inside the text): the split goes there, and
-  // the break goes, as at a start after one.
+  // A selection that starts or ends right before a break (a line break, or a newline inside the text): the split goes
+  // there, and the break goes, as at a start after one.
   const beforeBreak = (pos: number) => {
     const $pos = tr.doc.resolve(pos)
     const { nodeAfter } = $pos
@@ -268,6 +268,7 @@ function splitSelection(tr: Transaction): number[] {
   const splitTo = splittable(to)
   const splitFrom = splittable(from)
   const breakFrom = !splitFrom && afterBreak(from)
+  const breakBeforeFrom = !splitFrom && !breakFrom && beforeBreak(from)
   // A selection that ends right after a break: the same split as at a start after one, and the break goes.
   const breakEnd = !splitTo && afterBreak(to)
   const breakTo = !splitTo && !breakEnd && beforeBreak(to)
@@ -285,6 +286,10 @@ function splitSelection(tr: Transaction): number[] {
   if (breakFrom) {
     tr.split(from)
     tr.delete(from - 1, from)
+  }
+  if (breakBeforeFrom) {
+    tr.split(from)
+    tr.delete(from + 2, from + 3) // the break now starts the block after the split
   }
   const start = tr.mapping.map(from, 1)
   const end = tr.mapping.map(to, -1)
@@ -554,7 +559,8 @@ function leaveListQuoted(tr: Transaction, pos: number) {
 
 /**
  * Runs a block style on the selected text only (see `applyBlockStyle`). With no text selected (a caret, or a selection
- * that covers no character), the editor's own toggle takes the whole paragraph or item, as before.
+ * that covers no character), the editor's own toggle takes the whole paragraph or item, as before; a selection of
+ * empty lines takes it over the lines themselves.
  */
 export function toggleBlock(editor: Editor, style: BlockStyle) {
   const { from, to, empty } = editor.state.selection
@@ -563,8 +569,13 @@ export function toggleBlock(editor: Editor, style: BlockStyle) {
     caretToggle(style)(editor.chain().focus()).run()
     return
   }
-  // A selection of line breaks alone has no text to restyle.
-  if (editor.state.doc.textBetween(from, to).replace(/\n/g, '').length === 0) return
+  const { doc } = editor.state
+  if (doc.textBetween(from, to).replace(/\n/g, '').length === 0) {
+    // A selection of line breaks alone has no text to restyle; one of empty lines has no break either.
+    if (doc.textBetween(from, to, undefined, '\n')) return
+    caretToggle(style)(editor.chain().focus()).run()
+    return
+  }
   const active = styleActive(editor, style)
   editor
     .chain()

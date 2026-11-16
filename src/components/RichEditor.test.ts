@@ -108,7 +108,8 @@ describe('RichEditor markdown', () => {
  * - a toggle (the selection starts in the style) takes off only the selected blocks of that style;
  * - an ordered item that the style does not touch keeps its number; two ordered lists written next to each other read
  *   back as one, so a list that a paragraph joins numbers on from it;
- * - a selection that covers only line breaks changes nothing.
+ * - a selection that covers only line breaks changes nothing; one that covers only empty lines takes the editor's
+ *   whole-block toggle, as a caret does (`EMPTY_LINE_CASES`).
  * The rows marked `true` also check that the saved markdown reads back to itself.
  */
 const CASES: [name: string, md: string, style: BlockStyle, expected: string, reload?: true][] = [
@@ -729,6 +730,41 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string, rel
     'Hello \n\n## brave\n\nworld',
   ],
   [
+    'a selection starting right before a hard break restyles only the text after it | heading',
+    'Hello«  \nbrave» there',
+    'heading',
+    'Hello\n\n## brave\n\n there',
+    true,
+  ],
+  [
+    'a selection starting right before a hard break restyles only the text after it | bulletList',
+    'Hello«  \nbrave» there',
+    'bulletList',
+    'Hello\n\n- brave\n\n there',
+    true,
+  ],
+  [
+    'a selection starting right before a hard break restyles only the text after it | quote',
+    'Hello«  \nbrave» there',
+    'quote',
+    'Hello\n\n> brave\n\n there',
+    true,
+  ],
+  [
+    'a selection starting right before a soft break restyles only the text after it | heading',
+    'Hello«\nbrave» there',
+    'heading',
+    'Hello\n\n## brave\n\n there',
+    true,
+  ],
+  [
+    'a selection starting right before a soft break restyles only the text after it | quote',
+    'Hello«\nbrave» there',
+    'quote',
+    'Hello\n\n> brave\n\n there',
+    true,
+  ],
+  [
     'numbered over a paragraph between a bullet list and a numbered list reads back with the same numbers',
     '- a\n\n«X»\n\n1. c\n2. d',
     'orderedList',
@@ -836,6 +872,49 @@ describe('RichEditor block styles on the selected text', () => {
       const out = tidy(editor.getMarkdown())
       expect(out).toBe(expected)
       // The saved markdown reads back to itself: what the editor shows is what a reload shows.
+      if (reload) expect(roundTrip(out)).toBe(out)
+    } finally {
+      editor.destroy()
+    }
+  })
+})
+
+/**
+ * A selection of empty lines only (no character, no break): the editor's whole-block toggle takes the lines, as it does
+ * for a caret. The document is `a`, two empty paragraphs, `b`, and the selection covers the two empty ones.
+ */
+const EMPTY_LINE_CASES: [name: string, style: BlockStyle, expected: string, reload?: true][] = [
+  ['two empty lines | heading', 'heading', 'a\n\nb', true],
+  // Saved as two items of one list, which reloads as two lists: the editor's own toggle does the same (not a selection case).
+  ['two empty lines | bulletList', 'bulletList', 'a\n\n- \n- \n\nb'],
+  ['two empty lines | quote', 'quote', 'a\n\n>\n>\n> &nbsp;\n\nb', true],
+]
+
+/** The document of `EMPTY_LINE_CASES`, with the two empty paragraphs selected (positions 4 to 6). */
+function setupEmptyLines(): Editor {
+  const editor = new Editor({
+    extensions,
+    content: {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'a' }] },
+        { type: 'paragraph' },
+        { type: 'paragraph' },
+        { type: 'paragraph', content: [{ type: 'text', text: 'b' }] },
+      ],
+    },
+  })
+  editor.commands.setTextSelection({ from: 4, to: 6 })
+  return editor
+}
+
+describe('RichEditor block styles on a selection of empty lines', () => {
+  it.each(EMPTY_LINE_CASES)('%s', (_name, style, expected, reload) => {
+    const editor = setupEmptyLines()
+    try {
+      toggleBlock(editor, style)
+      const out = tidy(editor.getMarkdown())
+      expect(out).toBe(expected)
       if (reload) expect(roundTrip(out)).toBe(out)
     } finally {
       editor.destroy()
