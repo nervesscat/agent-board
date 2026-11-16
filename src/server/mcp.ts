@@ -3,6 +3,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { z } from 'zod'
 
 import { COMMENT_PARENTS, COMPLEXITIES, FEED_TABS, STALL_MINUTES } from '#/lib/constants'
+import { hasGitSide } from '#/lib/kinds'
 import type { RunConfigInput } from '#/lib/runs'
 import { listActors, noteActor } from './actors'
 import * as agentCards from './agentCards'
@@ -17,6 +18,13 @@ import { findProject } from './findProject'
 import { galleryShape, listGallery } from './gallery'
 import { HttpError } from './http'
 import { setInstructions } from './instructionsHistory'
+import {
+  FILES_DESCRIPTIONS,
+  FILES_HIDDEN_TOOLS,
+  FILES_INSTRUCTIONS,
+  FILES_KEY_TEXT,
+  FILES_OMITTED_KEYS,
+} from './kindText'
 import { getLiveWork } from './liveWork'
 import * as needs from './needs'
 import * as notes from './notes'
@@ -147,16 +155,49 @@ const AGENT_NAME = z
     'who makes this call, when you are a subagent (a worker) on your orchestrator\'s connection: "<the orchestrator\'s whoami name>/<your name>", e.g. orch/builder-1 (each name a letter or digit, then letters, digits, ".", "_" or "-"; up to 4 names, 80 characters). Your posts, claims and comments then carry that name, and you are a worker whatever the token is. Leave it out when you are the orchestrator itself or work on your own token; with an X-Agent-Name header it must name the same.',
   )
 
+/**
+ * Whether this connection works on a project with no software kind: named by `?project=<id>` on the
+ * MCP URL, and only then. Its tools and their text are the files ones (kindText.ts).
+ */
+export function filesConnection(request: Request): boolean {
+  const raw = new URL(request.url).searchParams.get('project')
+  if (!raw || !/^\d+$/.test(raw)) return false
+  try {
+    return !hasGitSide(projects.getProject(Number(raw)).kinds)
+  } catch (err) {
+    if (err instanceof HttpError) return false
+    throw err
+  }
+}
+
 function buildServer(caller: Caller, refused: HttpError | null, request: Request) {
   const actor = caller.name
   const agent = caller.kind === 'agent'
-  const server = new McpServer({ name: 'agent-board', version: '0.1.0' }, { instructions: INSTRUCTIONS })
+  const files = filesConnection(request)
+  const server = new McpServer(
+    { name: 'agent-board', version: '0.1.0' },
+    { instructions: files ? FILES_INSTRUCTIONS : INSTRUCTIONS },
+  )
   const tool = <S extends z.ZodRawShape>(
     name: string,
     description: string,
     shape: S,
     run: (args: z.infer<z.ZodObject<S>>) => unknown,
   ) => {
+    // A connection to a project with no software kind is not offered the tools that only act on code,
+    // and not the parameters of the others that only a git project uses.
+    if (files && FILES_HIDDEN_TOOLS.has(name)) return
+    const omit = files ? (FILES_OMITTED_KEYS[name] ?? []) : []
+    const inputShape = Object.fromEntries(Object.entries(shape).filter(([key]) => !omit.includes(key))) as S
+    const shownDescription = files ? (FILES_DESCRIPTIONS[name] ?? description) : description
+    const shownShape = files
+      ? (Object.fromEntries(
+          Object.entries(inputShape).map(([key, schema]) => [
+            key,
+            FILES_KEY_TEXT[key] ? (schema as z.ZodTypeAny).describe(FILES_KEY_TEXT[key]) : schema,
+          ]),
+        ) as S)
+      : inputShape
     const cb = (async ({ agentName: _agentName, ...args }: { agentName?: string }) => {
       try {
         // The request's agentName was refused before the server was built: no tool runs under it.
@@ -168,7 +209,11 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
         return fail(err)
       }
     }) as unknown as ToolCallback<S & { agentName: typeof AGENT_NAME }>
-    server.registerTool(name, { description, inputSchema: { ...shape, agentName: AGENT_NAME } }, cb)
+    server.registerTool(
+      name,
+      { description: shownDescription, inputSchema: { ...shownShape, agentName: AGENT_NAME } },
+      cb,
+    )
   }
 
   tool(

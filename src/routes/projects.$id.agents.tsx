@@ -25,7 +25,8 @@ import { Label } from '#/components/ui/label'
 import { Tip } from '#/components/ui/tooltip'
 import { RichEditor } from '#/components/RichEditor'
 import { del, errorMessage, patch, post, type ProjectAgent, type TicketRow, upload } from '#/lib/api'
-import { DEFAULT_AGENT_NAMES } from '#/lib/constants'
+import { DEFAULT_AGENT_NAMES, FILES_AGENT_NAMES } from '#/lib/constants'
+import { hasGitSide } from '#/lib/kinds'
 import { useProject } from '#/lib/project'
 import { ticketsKey, ticketsQuery } from '#/lib/tickets'
 
@@ -57,7 +58,7 @@ function Agents() {
           </Button>
         )}
       </div>
-      <DefaultAgents projectId={id} agents={project.agents} />
+      <DefaultAgents projectId={id} agents={project.agents} kinds={project.kinds} />
       {adding && <AgentForm projectId={id} onDone={() => setAdding(false)} />}
       {project.agents.length === 0 && !adding ? (
         <Empty>No agents yet. Every ticket is shared by the connected agents.</Empty>
@@ -73,10 +74,21 @@ function Agents() {
 }
 
 /** The build and review cycle as agents, one click away, and where the skills that run it install. */
-function DefaultAgents({ projectId, agents }: { projectId: string; agents: ProjectAgent[] }) {
+function DefaultAgents({
+  projectId,
+  agents,
+  kinds,
+}: {
+  projectId: string
+  agents: ProjectAgent[]
+  kinds: readonly string[]
+}) {
   const qc = useQueryClient()
   const have = new Set(agents.map((a) => a.name.toLowerCase()))
-  const missing = DEFAULT_AGENT_NAMES.filter((n) => !have.has(n))
+  // A project with no software kind has its maker, not the review cycle.
+  const software = hasGitSide(kinds)
+  const names: readonly string[] = software ? DEFAULT_AGENT_NAMES : FILES_AGENT_NAMES
+  const missing = names.filter((n) => !have.has(n))
   const add = useMutation({
     mutationFn: () =>
       post<{ added: string[]; kept: string[] }>(`/api/projects/${projectId}/agents/defaults`, {}),
@@ -91,14 +103,24 @@ function DefaultAgents({ projectId, agents }: { projectId: string; agents: Proje
       <div className="flex items-start gap-4">
         <div className="flex-1 space-y-1">
           <h2 className="text-sm font-medium">Default agents</h2>
-          <p className="text-xs text-muted-foreground">
-            The build and review cycle: <strong>spec</strong> writes the acceptance criteria,{' '}
-            <strong>builder</strong> writes the code, <strong>runner</strong> reviews it, and the
-            review&apos;s phases (<strong>env</strong>, <strong>verify</strong>, <strong>hunt</strong>,{' '}
-            <strong>refute</strong>, <strong>merge</strong>) try to break it; findings go back to the builder.
-            Each comes with its instructions and the notes the orchestrator delegates by. Edit any of them
-            after.
-          </p>
+          {!software ? (
+            <p className="text-xs text-muted-foreground">
+              The maker makes the work&apos;s files in the project&apos;s folder and attaches them to the
+              ticket; the human approves them or sends the ticket back. Edit it after. An agent that works
+              this project connects to <code className="font-mono">{`/api/mcp?project=${projectId}`}</code> on
+              the board&apos;s address (the same MCP as the Connect an agent page, with this project&apos;s
+              text and tools).
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              The build and review cycle: <strong>spec</strong> writes the acceptance criteria,{' '}
+              <strong>builder</strong> writes the code, <strong>runner</strong> reviews it, and the
+              review&apos;s phases (<strong>env</strong>, <strong>verify</strong>, <strong>hunt</strong>,{' '}
+              <strong>refute</strong>, <strong>merge</strong>) try to break it; findings go back to the
+              builder. Each comes with its instructions and the notes the orchestrator delegates by. Edit any
+              of them after.
+            </p>
+          )}
         </div>
         {missing.length > 0 ? (
           <Button
@@ -108,9 +130,7 @@ function DefaultAgents({ projectId, agents }: { projectId: string; agents: Proje
             onClick={() => add.mutate()}
           >
             <Sparkles data-icon="inline-start" />
-            {missing.length === DEFAULT_AGENT_NAMES.length
-              ? 'Add the default agents'
-              : `Add ${missing.join(', ')}`}
+            {missing.length === names.length ? 'Add the default agents' : `Add ${missing.join(', ')}`}
           </Button>
         ) : (
           <span className="shrink-0 text-xs text-muted-foreground">All added</span>

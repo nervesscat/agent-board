@@ -135,3 +135,17 @@ test('the human approves a ticket of a project with no software kind, and taking
   const back = await ok<{ stage: { kind: string } }>(human.get(`/api/tickets/${t.id}`))
   expect(back.stage.kind).toBe('review')
 })
+
+test('a project with no software kind has a maker, not the review cycle, on its Team page', async ({
+  page,
+  human,
+}) => {
+  const music = await createProject(human, `Team ${Date.now()}`, ['music'])
+  await page.goto(`/projects/${music.id}/agents`)
+  const defaults = page.getByRole('region', { name: 'Default agents' })
+  await expect(defaults.getByText('The maker makes the work', { exact: false })).toBeVisible()
+  await expect(defaults.getByText('spec', { exact: true })).toHaveCount(0)
+  await expect(defaults.getByRole('button', { name: 'Add the default agents' })).toBeVisible()
+  await defaults.getByRole('button', { name: 'Add the default agents' }).click()
+  await expect(page.getByText('Added maker')).toBeVisible()
+})

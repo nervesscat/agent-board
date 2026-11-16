@@ -83,6 +83,9 @@ export type AgentClient = (typeof AGENT_CLIENTS)[number]
 export const SKILLS_TRACKING = ['global', 'repo'] as const
 export type SkillsTracking = (typeof SKILLS_TRACKING)[number]
 
+/** The default agents of a project with no software kind: its maker (the server's FILES_AGENTS). */
+export const FILES_AGENT_NAMES = ['maker'] as const
+
 /**
  * The default agents (the build and review cycle of the feature-review, review-queue and todo-review skills), in
  * the order the cycle uses them. Their texts live on the server (defaultAgents.ts).
