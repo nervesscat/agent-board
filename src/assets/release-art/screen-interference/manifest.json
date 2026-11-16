@@ -1,0 +1,120 @@
+{
+  "direction": "screen-interference",
+  "generator": "scripts/release-art/screen-interference.mjs",
+  "madeBy": "Claude Opus 5.5 (medium effort)",
+  "canvas": { "width": 1600, "height": 900 },
+  "palette": {
+    "light": {
+      "ground": "#F0EBE1",
+      "inks": ["#2C467C", "#D9553B", "#C99A2E"],
+      "blend": "multiply",
+      "grain": "#3A332A",
+      "grainOpacity": 0.16
+    },
+    "dark": {
+      "ground": "#14161C",
+      "inks": ["#6F93D8", "#E8694D", "#D8B24E"],
+      "blend": "screen",
+      "grain": "#F0EBE1",
+      "grainOpacity": 0.09
+    }
+  },
+  "screen": {
+    "pitch": 17,
+    "maxTone": 0.82,
+    "minRadius": 0.7,
+    "thirdScalePitch": 5.667
+  },
+  "releases": [
+    {
+      "version": "v0.2.2",
+      "seed": 2945759071,
+      "notes": "scripts/release-art/notes/v0.2.2.md",
+      "themes": {
+        "items": 159,
+        "volume": 0.999,
+        "hands": 0.979,
+        "precision": 0.728,
+        "wayfinding": 0.87,
+        "signals": 0.678
+      },
+      "speaks": ["hands", "wayfinding"],
+      "screens": [
+        { "ink": 1, "angle": 17.41, "pitch": 17, "warp": 0 },
+        { "ink": 0, "angle": 20.13, "pitch": 16.916, "warp": 2.48 },
+        { "ink": 2, "angle": 23.94, "pitch": 16.861, "warp": 1.73 }
+      ],
+      "edge": null,
+      "lane": { "at": 0.575, "slope": -0.015, "width": 83.494, "shift": 8.5 },
+      "ramp": null,
+      "files": { "dark": "v0.2.2-dark.svg", "light": "v0.2.2-light.svg" }
+    },
+    {
+      "version": "v0.2.3",
+      "seed": 2928981452,
+      "notes": "scripts/release-art/notes/v0.2.3.md",
+      "themes": {
+        "items": 15,
+        "volume": 0.534,
+        "hands": 0.149,
+        "precision": 0.924,
+        "wayfinding": 0.168,
+        "signals": 0.308
+      },
+      "speaks": ["precision"],
+      "screens": [
+        { "ink": 2, "angle": 27.93, "pitch": 17, "warp": 0 },
+        { "ink": 0, "angle": 29.32, "pitch": 16.962, "warp": 0.65 }
+      ],
+      "edge": { "screen": 0, "vertical": true, "at": 0.503, "keep": "after" },
+      "lane": null,
+      "ramp": null,
+      "files": { "dark": "v0.2.3-dark.svg", "light": "v0.2.3-light.svg" }
+    },
+    {
+      "version": "v0.2.4",
+      "seed": 2912203833,
+      "notes": "scripts/release-art/notes/v0.2.4.md",
+      "themes": {
+        "items": 13,
+        "volume": 0.505,
+        "hands": 0.823,
+        "precision": 0,
+        "wayfinding": 0.907,
+        "signals": 0.327
+      },
+      "speaks": ["hands", "wayfinding"],
+      "screens": [
+        { "ink": 1, "angle": 11.83, "pitch": 17, "warp": 0 },
+        { "ink": 0, "angle": 17.41, "pitch": 16.901, "warp": 4.48 }
+      ],
+      "edge": null,
+      "lane": { "at": 0.387, "slope": 0.247, "width": 85.36, "shift": 8.5 },
+      "ramp": null,
+      "files": { "dark": "v0.2.4-dark.svg", "light": "v0.2.4-light.svg" }
+    },
+    {
+      "version": "v0.2.5",
+      "seed": 2895426214,
+      "notes": "scripts/release-art/notes/v0.2.5.md",
+      "themes": {
+        "items": 31,
+        "volume": 0.677,
+        "hands": 0.867,
+        "precision": 0.685,
+        "wayfinding": 0.401,
+        "signals": 0.954
+      },
+      "speaks": ["hands", "signals"],
+      "screens": [
+        { "ink": 0, "angle": 30.77, "pitch": 17, "warp": 0 },
+        { "ink": 1, "angle": 33.35, "pitch": 16.863, "warp": 2.24 },
+        { "ink": 2, "angle": 36.97, "pitch": 16.917, "warp": 1.57 }
+      ],
+      "edge": null,
+      "lane": null,
+      "ramp": { "screen": 2, "from": "left", "floor": 0.059 },
+      "files": { "dark": "v0.2.5-dark.svg", "light": "v0.2.5-light.svg" }
+    }
+  ]
+}
