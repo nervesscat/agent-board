@@ -302,6 +302,7 @@ describe('the summary', () => {
   it('is new activity on every write: the ticket bumps, the Daily view logs it, the inboxes get it', async () => {
     // The human opened the ticket; an agent works it.
     const t = newTicket('watched')
+    features.updateTicket(t.id, { status: 'in_progress' }, 'enrique')
     const { getSummary } = await import('./summary')
     const needsYou = () => getSummary(projectId, { humans: ['enrique'] }).projects[0]!.needsYou
     const updatedAt = () => features.getTicket(t.id).updatedAt
@@ -414,6 +415,8 @@ describe('Needs you from either tab', () => {
         .projects[0]!.needsYou.threads.filter((x) => x.parentType === 'update')
         .map((x) => x.parentId)
     const t = newTicket('either')
+    // Needs you shows a ticket's threads while it is being worked, not while it is still lined up.
+    features.updateTicket(t.id, { status: 'in_progress' }, 'enrique')
     const inMain = (
       await call('POST', `/api/tickets/${t.id}/updates`, HUMAN, { body: 'main?', progress: false })
     ).body

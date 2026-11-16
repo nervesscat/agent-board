@@ -5,6 +5,7 @@ import path from 'node:path'
 import { eq } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
+import { annotationDocSchema, type AnnotationDoc } from '#/lib/annotations'
 import { HttpError, notFound } from './http'
 import { fileStore } from './storage'
 
@@ -32,19 +33,46 @@ export function mimeFor(name: string, fallback = 'application/octet-stream') {
 }
 
 /** The bytes go to the file store first: if it cannot take them, no attachment row is left behind. */
-async function store(name: string, mime: string, bytes: Buffer, actor: string) {
+async function store(
+  name: string,
+  mime: string,
+  bytes: Buffer,
+  actor: string,
+  annotations: AnnotationDoc | null = null,
+) {
   if (bytes.length > MAX_BYTES) throw new HttpError(413, `file exceeds ${MAX_BYTES / 1024 / 1024} MB`)
   const storedAs = `${crypto.randomUUID()}${path.extname(name).toLowerCase()}`
   await fileStore.put(storedAs, bytes, mime)
   return db
     .insert(schema.attachments)
-    .values({ name: path.basename(name), mime, size: bytes.length, storedAs, uploadedBy: actor })
+    .values({ name: path.basename(name), mime, size: bytes.length, storedAs, uploadedBy: actor, annotations })
     .returning()
     .get()
 }
 
-export async function saveUpload(file: File, actor: string) {
-  return store(file.name, file.type || mimeFor(file.name), Buffer.from(await file.arrayBuffer()), actor)
+/**
+ * The annotation document a browser sent with a picture it drew on: the shapes and their notes, the
+ * file itself being the flattened picture. A 400 naming the field when it is not one.
+ */
+export function parseAnnotations(value: unknown): AnnotationDoc {
+  const parsed = annotationDocSchema.safeParse(value)
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0]
+    const where = issue?.path.length ? `annotations.${issue.path.join('.')}` : 'annotations'
+    throw new HttpError(400, `${where} is not an annotation document: ${issue?.message ?? 'invalid'}`)
+  }
+  return parsed.data
+}
+
+/** A picked file, with the annotations drawn on it when it came from the canvas (null otherwise). */
+export async function saveUpload(file: File, actor: string, annotations?: unknown) {
+  return store(
+    file.name,
+    file.type || mimeFor(file.name),
+    Buffer.from(await file.arrayBuffer()),
+    actor,
+    annotations === undefined || annotations === null ? null : parseAnnotations(annotations),
+  )
 }
 
 /**
@@ -86,7 +114,8 @@ export const attachmentUrl = (a: Pick<schema.Attachment, 'id'>) => `/api/uploads
 /**
  * An attachment as the board hands it out: the URL for the browser and the file on this machine for
  * agents, which cannot fetch the URL without signing in. A board inside WSL also gives the path a
- * Windows agent can open.
+ * Windows agent can open. `annotations` comes with it: the shapes drawn on the picture and their
+ * numbered notes, the same document the upload carried (null for a file with none).
  */
 export function attachmentView(a: schema.Attachment, distro = process.env.WSL_DISTRO_NAME) {
   const file = attachmentPath(a)

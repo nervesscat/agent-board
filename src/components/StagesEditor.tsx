@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { TrashIcon } from '#/components/TrashIcon'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -343,7 +344,7 @@ function DeleteStage({
           />
         }
       >
-        <Trash2 />
+        <TrashIcon />
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>

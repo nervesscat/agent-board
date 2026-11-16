@@ -119,6 +119,7 @@ describe("a project's layout", () => {
       'overview.inProgress',
       'overview.next',
       'overview.carryingOver',
+      'overview.notes',
     ])
   })
 

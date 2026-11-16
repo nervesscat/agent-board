@@ -1,7 +1,7 @@
 import type { Locator } from '@playwright/test'
 
 import type { TicketFull, TicketRow } from '#/lib/api'
-import { png, sendFile } from './files'
+import { attachOriginal, png, sendFile } from './files'
 import { expect, ok, test } from './fixtures'
 
 /** Whether an <img> decoded: a broken one (a revoked or wrong URL) has no natural width. */
@@ -26,10 +26,11 @@ test('attaches files in the New ticket dialog by button, paste and drop, and the
   await dialog.getByLabel('Title').fill('With pictures')
   const create = dialog.getByRole('button', { name: /^(Create|Uploading…)$/ })
 
-  // The attach button opens the file picker.
+  // The attach button opens the file picker; the picture then goes through the canvas.
   const chooser = page.waitForEvent('filechooser')
   await dialog.getByRole('button', { name: 'attach' }).click()
   await (await chooser).setFiles({ name: 'picked.png', mimeType: 'image/png', buffer: png(8, [200, 30, 30]) })
+  await attachOriginal(page)
   const picked = dialog.getByRole('img', { name: 'picked.png' })
   await expect(picked).toBeVisible()
   await expect.poll(() => decoded(picked)).toBe(true)
@@ -43,6 +44,7 @@ test('attaches files in the New ticket dialog by button, paste and drop, and the
     mime: 'image/png',
     data: png(8, [30, 200, 30]),
   })
+  await attachOriginal(page)
   const pasted = dialog.getByRole('img', { name: /^pasted-.*\.png$/ })
   await expect(pasted).toBeVisible()
   await expect.poll(() => decoded(pasted)).toBe(true)
@@ -55,6 +57,7 @@ test('attaches files in the New ticket dialog by button, paste and drop, and the
     mime: 'image/png',
     data: png(8, [30, 30, 200]),
   })
+  await attachOriginal(page)
   const dropped = dialog.getByRole('img', { name: 'dropped.png' })
   await expect(dropped).toBeVisible()
   await expect.poll(() => decoded(dropped)).toBe(true)
@@ -112,6 +115,7 @@ test('a file that fails to upload is dropped with a toast, and Create works with
   const chooser = page.waitForEvent('filechooser')
   await dialog.getByRole('button', { name: 'attach' }).click()
   await (await chooser).setFiles({ name: 'huge.png', mimeType: 'image/png', buffer: png() })
+  await attachOriginal(page)
   await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'huge.png' })).toBeVisible()
   await expect(dialog.getByRole('img', { name: 'huge.png' })).toHaveCount(0)
   const create = dialog.getByRole('button', { name: 'Create' })

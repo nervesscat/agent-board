@@ -251,6 +251,10 @@ export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {
     missingRunReports: inReview && !full.prId ? missingReports(full.id) : [],
     stalled: timeline.stalled,
     lastSignalAt: timeline.lastSignalAt,
+    liveness: timeline.liveness,
+    stage: timeline.stage,
+    progressAt: timeline.progressAt,
+    waitingOnHuman: timeline.waitingOnHuman,
     work: workOf(timeline),
   }
 }
@@ -271,6 +275,10 @@ export async function ticketRows(projectId: number, filter: features.TicketFilte
       needs: needs.get(t.id) ?? [],
       stalled: timeline.stalled,
       lastSignalAt: timeline.lastSignalAt,
+      liveness: timeline.liveness,
+      stage: timeline.stage,
+      progressAt: timeline.progressAt,
+      waitingOnHuman: timeline.waitingOnHuman,
       activity: activityOf(timeline),
     }
   })

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import type { ProjectSummary } from '#/lib/api'
+import type { StageKind } from './constants'
 
 /**
  * The Needs you entries this browser has already opened, so what the human has seen stops asking for
@@ -22,6 +23,31 @@ type HumanWait = NeedsYou['humanWaits'][number]
 type BlockedTask = NeedsYou['blockedTasks'][number]
 type InstructionChange = NeedsYou['instructionChanges'][number]
 type Stalled = NeedsYou['stalled'][number]
+
+/**
+ * The stage kinds whose tickets can ask the human for something: work going on, handed off for a look,
+ * or stopped on them. A ticket still lined up (`open`), finished or dropped asks nothing.
+ */
+export const ASKING_KINDS: readonly StageKind[] = ['active', 'review', 'blocked']
+
+/** Whether a ticket in a stage of this kind asks the human; a status no stage has (no kind) does not. */
+export const asksHuman = (kind: StageKind | undefined) => kind !== undefined && ASKING_KINDS.includes(kind)
+
+/**
+ * The entries of a Needs you list bound to a ticket asking the human: the stage's kind says so, read by
+ * `kindOf`, the caller's own stage lookup, so a stage's name never matters. An entry bound to no ticket
+ * (a review thread) has no stage to judge and stays. `keep` takes an entry whatever its ticket's stage:
+ * an archive request, posted on a ticket already done, must stay answerable.
+ */
+export function askingHuman<T extends { ticketId: number | null }>(
+  entries: T[],
+  kindOf: (ticketId: number) => StageKind | undefined,
+  keep: (entry: T) => boolean = () => false,
+): T[] {
+  return entries.filter(
+    (entry) => entry.ticketId === null || keep(entry) || asksHuman(kindOf(entry.ticketId)),
+  )
+}
 
 /**
  * One key per entry: what it is, plus the fact it shows where the fact can change on its own. A review

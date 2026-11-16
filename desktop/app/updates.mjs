@@ -10,15 +10,19 @@
 //   - nsis (Windows, per user) and appimage: the board's server is stopped, then electron-updater's
 //     install runs the installer silently, or moves the new AppImage into the old one's folder, and
 //     starts the new version as this one quits;
-//   - deb, rpm, pacman: electron-updater's Linux package updaters run the package manager through
-//     polkit's pkexec while the board still runs; once it installed, the server is stopped and the
-//     app relaunches as the new version. With no pkexec, or polkit declining, the board keeps running
-//     and the state carries the command to run instead (manualCommand), with the downloaded file's
-//     path. No password goes through the app.
+//   - deb, rpm, pacman: the board's server is stopped and awaited before the package manager runs,
+//     so nothing of it is left on its port; electron-updater's Linux package updaters then install
+//     with polkit's pkexec. Once it installed, the app gives up the single-instance lock, starts the
+//     installed binary itself and polls /api/health until it answers (a minute at most), then ends.
+//     A start that does not come back is an error line naming the binary to start by hand. With no
+//     pkexec, or polkit declining, nothing is stopped: the board keeps running and the state carries
+//     the command to run instead (manualCommand), with the downloaded file's path. An install that
+//     fails after the server was stopped starts it again. No password goes through the app.
 // The data folder and config.env are never touched: only the install location changes.
 //
 // Everything here takes its edges (the updater, spawnSync, the timers, the server's stop and start,
-// the app's quit) as arguments, so desktop/updates.test.mjs runs it without Electron.
+// starting the installed binary and probing its board, the app's quit) as arguments, so
+// desktop/updates.test.mjs runs it without Electron.
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -30,6 +34,13 @@ export const BRIDGE = 'agent-board:updates'
 export const UPDATES_FILE = 'updates.json'
 /** How often the automatic check runs once the board is up (and once as it starts). */
 export const CHECK_EVERY_MS = 6 * 60 * 60_000
+/**
+ * How long the version installed from a package gets to answer on its port before the app says it did
+ * not come back: the minute READY_MS gives the app's own start (main.mjs).
+ */
+export const RELAUNCH_READY_MS = 60_000
+/** How often the install's check asks the new version's board while it starts. */
+const RELAUNCH_PROBE_MS = 500
 /** @typedef {{ autoCheck: boolean, prereleases: boolean }} UpdateSettings */
 /** @type {UpdateSettings} */
 export const DEFAULT_UPDATE_SETTINGS = { autoCheck: true, prereleases: false }
@@ -243,12 +254,16 @@ export function updateError(err) {
  *   saveSettings: (settings: UpdateSettings) => void,
  *   has?: (cmd: string) => string | null,
  *   spawnSync: SpawnSync,
+ *   binary: string,
+ *   health: string,
+ *   launch: (binary: string) => void,
+ *   probe: () => Promise<boolean>,
  *   stopServer: () => Promise<void>,
  *   startServer: () => Promise<void>,
  *   releaseLock: () => void,
  *   takeLock: () => void,
- *   relaunch: () => void,
  *   quit: () => void,
+ *   wait?: (ms: number) => Promise<void>,
  *   timers?: { setInterval: (fn: () => void, ms: number) => unknown, clearInterval: (t: any) => void },
  *   now?: () => Date,
  *   log?: Logger,
@@ -262,12 +277,16 @@ export function createUpdates({
   saveSettings,
   has = (cmd) => findCommand(cmd, process.env.PATH),
   spawnSync,
+  binary,
+  health,
+  launch,
+  probe,
   stopServer,
   startServer,
   releaseLock,
   takeLock,
-  relaunch,
   quit,
+  wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   timers = { setInterval, clearInterval },
   now = () => new Date(),
   log = console,
@@ -419,8 +438,25 @@ export function createUpdates({
       })
       return
     }
-    const result = installPackage(type, file)
+    // deb, rpm and pacman: the server goes first. The package manager replaces the files this board
+    // runs from, and once it succeeded nothing may leave the old board on its port: with the server
+    // already stopped and its exit awaited, a successful install hands the port to the new version.
+    // The pkexec check comes before that, so an install that cannot run leaves the board as it was.
+    const pkexec = has('pkexec')
+    if (!pkexec) {
+      set({
+        status: 'manual',
+        error: 'pkexec (polkit) is not installed, so the app cannot install the package itself.',
+        manual: { command: manualCommand(type, file, hasCommand), file },
+      })
+      return
+    }
+    await stopServer()
+    const result = installPackage(type, file, pkexec)
     if (!result.ok) {
+      // The package manager failed (or polkit declined): nothing is left of the install to come back
+      // as, so the board starts again, and the Updates section has the command to finish by hand.
+      await startServer()
       set({
         status: 'manual',
         error: result.error,
@@ -428,9 +464,34 @@ export function createUpdates({
       })
       return
     }
-    await stopServer()
-    relaunch()
+    // Installed: this instance starts the new version itself, so it can see it answer before it ends.
+    // The lock goes first, or the copy below is refused as a second instance.
+    releaseLock()
+    log.info(`updates: ${offer.version} installed; starting ${binary}`)
+    launch(binary)
+    if (!(await waitForRelaunch()))
+      log.error(
+        `updates: the new version did not answer on ${health} within ${RELAUNCH_READY_MS / 1000} s; ` +
+          `start ${binary} by hand to use it.`,
+      )
     quit()
+  }
+
+  /**
+   * Whether the installed version answered on `health` before RELAUNCH_READY_MS passed, asking every
+   * RELAUNCH_PROBE_MS. An answer can only be the new instance's: the old server was stopped and its
+   * exit awaited before the install, so nothing of it was left listening on that port.
+   */
+  async function waitForRelaunch() {
+    for (const until = now().getTime() + RELAUNCH_READY_MS; now().getTime() < until; ) {
+      try {
+        if (await probe()) return true
+      } catch {
+        // not listening yet
+      }
+      await wait(RELAUNCH_PROBE_MS)
+    }
+    return false
   }
 
   /**
@@ -441,15 +502,10 @@ export function createUpdates({
    * asking polkit again; the human gets the manual command instead.
    * @param {'deb' | 'rpm' | 'pacman'} type
    * @param {string} file
+   * @param {string} pkexec The absolute pkexec the caller found: nothing is stopped without one.
    * @returns {{ ok: true } | { ok: false, error: string }}
    */
-  function installPackage(type, file) {
-    const pkexec = has('pkexec')
-    if (!pkexec)
-      return {
-        ok: false,
-        error: 'pkexec (polkit) is not installed, so the app cannot install the package itself.',
-      }
+  function installPackage(type, file, pkexec) {
     /** Why the first command failed: the commands after it are refused unrun. @type {string | null} */
     let failed = null
     /** @param {string[]} argv */

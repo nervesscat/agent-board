@@ -81,6 +81,7 @@ const tool = (name: HostTool['name'], ok = true): HostTool => ({
   version: '1.0.0',
   ...(name === 'gh' && { signedIn: ok }),
   ok,
+  optional: name === 'claude',
   breaks: 'things',
   problem: ok ? null : 'gh is not signed in',
   fix: ok ? null : 'run gh auth login on this machine, then Check again',

@@ -23,10 +23,10 @@ test('Home and Overview sum up the work: what needs you, in progress, done today
       data: { body: 'Where should uploads live?', options: [{ label: 'Disk' }, { label: 'MinIO' }] },
     }),
   )
-  // An agent asks the human something on a ticket the human wrote.
+  // An agent asks the human something on a ticket the human wrote, while it is worked.
   await ok(
     agent.post('/api/comments', {
-      data: { parentType: 'ticket', parentId: next.id, body: 'Should the parser keep comments?' },
+      data: { parentType: 'ticket', parentId: today.id, body: 'Should the parser keep comments?' },
     }),
   )
   // Another project's work, which this project's Overview leaves out.
@@ -47,7 +47,7 @@ test('Home and Overview sum up the work: what needs you, in progress, done today
   await expect(link(needsYou, review)).toBeVisible()
   await expect(needsYou).toContainText('In review')
   const thread = needsYou.getByRole('listitem').filter({ hasText: 'Should the parser keep comments?' })
-  await expect(thread.getByRole('link', { name: `#${next.id} Next up` })).toBeVisible()
+  await expect(thread.getByRole('link', { name: `#${today.id} Started today` })).toBeVisible()
   await expect(thread).toContainText('claude: Should the parser keep comments?')
   await expect(needsYou.locator('[data-slot="card-title"]')).toContainText('3')
 
@@ -80,7 +80,7 @@ test('Home and Overview sum up the work: what needs you, in progress, done today
   await expect(carried).toContainText('1 day in progress')
 
   // Once the human answers, it no longer waits on them.
-  await ok(human.post('/api/comments', { data: { parentType: 'ticket', parentId: next.id, body: 'Yes.' } }))
+  await ok(human.post('/api/comments', { data: { parentType: 'ticket', parentId: today.id, body: 'Yes.' } }))
   await page.reload()
   await expect(needsYou.getByRole('link', { name: 'Decide: Where should uploads live?' })).toBeVisible()
   await expect(thread).toHaveCount(0)

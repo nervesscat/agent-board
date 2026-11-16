@@ -20,7 +20,15 @@ from it.
 
 Everything you execute runs from the worktree using the interpreter, test command, and
 base URLs in `00-env.md`. Run only targeted tests: the focus file's tests, or a probe for one
-candidate; never the full suite (CI runs it). Never start a server or container, and never
+candidate; never the full suite (CI runs it). Targeted unit tests and probe tests are light and
+take no test slot: never wait on one. A
+targeted end-to-end spec is heavy like any end-to-end run and takes a test slot (the exact
+`Test slots:` folders in `00-env.md`, or the `SLOTS` folder and repo id the prompt gives): take
+the first free one with a plain `mkdir` of its exact path (never `mkdir -p`), write `holder.txt`
+with `#<TICKET> hunt <ISO time>`, and release it with `rm -r` right after the run. A scoped run
+that finds the `-full` folder releases its slot and waits for the full suite, as the gate does;
+never delete a folder whose `holder.txt` names someone else. Never start a server or
+container, and never
 call a port that `00-env.md` does not list. Use the browser only when the flag is `yes`. Data
 you create through the app carries your prefix in its name.
 
@@ -112,3 +120,12 @@ suggestions) and what this agent adds. Fill it in with `write_run_report` (`agen
 ticket, the round, times, steps, counts and sections) before you return; a run that hands back
 without one has not finished, and the orchestrator checks for it as it checks your result. The
 ticket's Agents side shows it, and `list_run_reports` reads this agent's across tickets.
+
+## Keeping the board current
+
+The board is part of the work: post your progress, tick the tasks you finished, close your spans
+and waits, and update the ticket's summary when you stop or hand off; you are not finished while
+the board is behind what you did. If you stop before the end, record on the ticket that it was
+stopped and why, so the next reader can tell a stop from a failure. When the work ends, clean up
+what you started (processes, temporary files, locks, and any scratch worktree of your own), and
+leave the ticket's worktrees and origin branches to the human, listed, never deleted.

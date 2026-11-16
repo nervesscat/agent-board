@@ -23,6 +23,7 @@ import {
   ScrollText,
   Settings,
   SquareCheckBig,
+  StickyNote,
 } from 'lucide-react'
 
 import type { LayoutId } from '#/lib/layout'
@@ -47,6 +48,7 @@ export const LAYOUT_ICONS: Record<LayoutId, typeof Home> = {
   'overview.doneToday': CheckCircle2,
   'overview.next': ListTodo,
   'overview.carryingOver': Clock,
+  'overview.notes': StickyNote,
   'ticket.instructions': ScrollText,
   'ticket.tasks': SquareCheckBig,
   'ticket.timeline': History,

@@ -391,10 +391,14 @@ test.describe('on a phone', () => {
       await ok(
         worker.post(`/api/projects/${project.id}/tickets/${t.id}/events`, { data: { kind: 'heartbeat' } }),
       )
-      // Silent for 40 minutes: it is in progress and stalled on the Overview.
+      // Silent for 40 minutes (its posts too: a post is a lease signal): it is in progress and stalled
+      // on the Overview.
       inDatabase((db) => {
         db.prepare(
           "update ticket_events set at = strftime('%Y-%m-%dT%H:%M:%fZ', at, '-40 minutes') where ticket_id = ?",
+        ).run(t.id)
+        db.prepare(
+          "update updates set createdAt = strftime('%Y-%m-%dT%H:%M:%fZ', createdAt, '-40 minutes') where ticket_id = ?",
         ).run(t.id)
         db.prepare(
           `update tickets set "createdAt" = strftime('%Y-%m-%dT%H:%M:%fZ', "createdAt", '-40 minutes'), started_at = strftime('%Y-%m-%dT%H:%M:%fZ', started_at, '-40 minutes') where id = ?`,
@@ -428,9 +432,9 @@ test.describe('on a phone', () => {
 
       await page.goto(`/projects/${project.id}`)
       const needsYou = section(page, 'Needs you')
-      const stalled = needsYou
-        .getByRole('listitem')
-        .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Narrow names` }) })
+      const stalled = needsYou.getByRole('listitem').filter({
+        has: page.getByRole('link', { name: new RegExp(`No word \\d+m: #${t.id} Narrow names`) }),
+      })
       const working = section(page, 'In progress')
         .getByRole('listitem')
         .filter({ has: page.getByRole('link', { name: /Narrow names/ }) })

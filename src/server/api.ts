@@ -14,6 +14,7 @@ import {
 } from '#/lib/constants'
 import { AGENT_TOKEN_NAME } from '#/lib/agents'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
+import * as agentCards from './agentCards'
 import * as agents from './agents'
 import { roadmap } from './roadmap'
 import * as runConfig from './runConfig'
@@ -33,7 +34,7 @@ import { callerInfo, isAgent } from './auth'
 import { authRoutes } from './authApi'
 import { previewBranch } from './branchPreview'
 import { cleanupReport } from './cleanup'
-import { DeleteItems, deleteLeftovers } from './cleanupActions'
+import { DeleteItems, startCleanupDelete } from './cleanupActions'
 import { authMode, servedEntrance } from './config'
 import { dailyReport, today } from './daily'
 import * as features from './features'
@@ -56,7 +57,9 @@ import {
 import { handleMcp } from './mcp'
 import { linkFor } from './previewProxy'
 import * as needs from './needs'
+import { getLiveWork } from './liveWork'
 import { checkOpencodeConfig } from './opencodeConfig'
+import * as notes from './notes'
 import * as projectAgents from './projectAgents'
 import * as prs from './prs'
 import { projectPush, refreshProjectPush } from './push'
@@ -116,7 +119,7 @@ const TicketPatch = z.object({
   title: z.string().min(1).max(200).optional(),
   body: z.string().max(50_000).optional(),
   status: Status.optional(),
-  // Exactly low, mid or high; a lane created without one copies its parent's (features.ts createTicket).
+  // Exactly low, mid, high or max; a lane created without one copies its parent's (features.ts createTicket).
   complexity: z.enum(COMPLEXITIES).optional(),
   assignee: z.string().max(80).optional(),
   branch: z.string().max(200).optional(),
@@ -239,12 +242,28 @@ api.get('/api/agent-setup/skill', ({ request, url }) => {
     headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' },
   })
 })
+// The session skill (`/session`): the same text for every client, served as it is, no parameters.
+api.get('/api/agent-setup/session-skill', () => {
+  return new Response(agents.sessionSkill(), {
+    headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' },
+  })
+})
 // The stdio MCP bridge (scripts/board-mcp.mjs) a cloud session saves as board-mcp.mjs and runs with node.
 api.get('/api/agent-setup/board-mcp', () => {
   return new Response(agents.boardMcpBridge(), {
     headers: {
       'content-type': 'text/javascript; charset=utf-8',
       'content-disposition': 'attachment; filename="board-mcp.mjs"',
+      'cache-control': 'no-store',
+    },
+  })
+})
+// The runtime beater (scripts/board-beat.mjs) a session saves as board-beat.mjs and wraps a long tool with.
+api.get('/api/agent-setup/board-beat', () => {
+  return new Response(agents.boardBeat(), {
+    headers: {
+      'content-type': 'text/javascript; charset=utf-8',
+      'content-disposition': 'attachment; filename="board-beat.mjs"',
       'cache-control': 'no-store',
     },
   })
@@ -274,8 +293,8 @@ api.get('/api/agent-setup/review-skills/diff', async ({ url }) => {
   const diff = await agents.reviewSkillDiff(file, repo === null ? undefined : intParam(repo, 'repoId'))
   return Response.json(diff, { headers: { 'cache-control': 'no-store' } })
 })
-// A short-lived credential for the install lines, minted when one is copied: it downloads the board skill
-// and the review bundle, and reaches no other route (auth.ts admit). The human's alone.
+// A short-lived credential for the install lines, minted when one is copied: it downloads the board skill,
+// the session skill and the review bundle, and reaches no other route (auth.ts admit). The human's alone.
 api.post('/api/agent-setup/skill-token', ({ request }) => {
   if (isAgent(request)) throw new HttpError(403, 'only the human makes a skill download token')
   return json(skillTokens.mintSkillToken(), 201)
@@ -501,6 +520,34 @@ api.patch('/api/agents/:id', async ({ request, params, actor }) => {
 api.delete('/api/agents/:id', ({ request, params, actor }) => {
   humanAgents(request)
   projectAgents.deleteAgent(id(params), actor)
+  return json({ ok: true })
+})
+
+// --- the project's notes: short facts the human and its agents must not rediscover ---
+// The human and any agent add one; a note's author, an orchestrator or the human changes or removes it.
+const NoteBody = z.object({ label: z.string(), body: z.string() })
+const NotePatch = z.object({
+  label: z.string().optional(),
+  body: z.string().optional(),
+  // Above the unpinned notes (true) or back after them (false); the board keeps the position.
+  pinned: z.boolean().optional(),
+})
+api.get('/api/projects/:id/notes', ({ params }) => json(notes.listNotes(id(params))))
+api.post('/api/projects/:id/notes', async ({ request, params }) =>
+  json(notes.createNote(id(params), await readJson(request, NoteBody), callerInfo(request)), 201),
+)
+api.patch('/api/projects/:id/notes/:noteId', async ({ request, params }) =>
+  json(
+    notes.updateNote(
+      id(params),
+      id(params, 'noteId'),
+      await readJson(request, NotePatch),
+      callerInfo(request),
+    ),
+  ),
+)
+api.delete('/api/projects/:id/notes/:noteId', ({ request, params }) => {
+  notes.deleteNote(id(params), id(params, 'noteId'), callerInfo(request))
   return json({ ok: true })
 })
 
@@ -797,10 +844,12 @@ api.get('/api/projects/:id/cleanup', async ({ params, url }) =>
 // Deletes closed tickets' worked branches, here or on origin, or with their worktrees: the human's,
 // once confirmed on the Cleanup page, and an agent's (also MCP `cleanup_delete`) for local branches
 // alone: a request of theirs with a worktree or an origin branch in it gets 403 whole. Each item is
-// checked again first.
+// checked again first. Answers the job the work runs under at once (202): it reports each item as it
+// lands and ends with the items' outcomes as its result; `GET /api/projects/:id/jobs` follows it.
 api.post('/api/projects/:id/cleanup/delete', async ({ request, params, actor }) => {
   const body = await readJson(request, z.object({ items: DeleteItems }))
-  return json(await deleteLeftovers(id(params), body.items, actor, { agent: isAgent(request) }))
+  const { job } = startCleanupDelete(id(params), body.items, actor, { agent: isAgent(request) })
+  return json(job, 202)
 })
 
 // --- jobs: long operations reporting their progress, for the top bar to poll (jobs.ts) ---
@@ -857,6 +906,79 @@ api.post('/api/test/jobs', async ({ request, actor }) => {
   timer = setTimeout(tick, body.ms)
   timer.unref()
   return json(job, 202)
+})
+
+// --- agent cards: tracked requests and important notices an agent opens for the human (agentCards.ts) ---
+// The project's cards the caller may see, newest first: the human every one, an agent only its own and
+// its sub-identities'. Not the board's in-memory jobs (above); the top bar merges both.
+api.get('/api/projects/:id/agent-cards', ({ request, params, actor }) =>
+  json(agentCards.listCards(id(params), { agent: isAgent(request) ? actor : null })),
+)
+// Opens a tracked card: the human's request (request) is the guard, and an agent opens it only. 403 for
+// the human, 400 without the request.
+api.post('/api/projects/:id/agent-cards', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({
+      title: z.string().max(200).optional(),
+      request: z.string().max(500).optional(),
+      total: z.number().int().min(0).max(1_000_000).optional(),
+      href: z.string().max(2_000).optional(),
+    }),
+  )
+  return json(agentCards.startTracked({ name: actor, agent: isAgent(request) }, id(params), body), 201)
+})
+// Posts one notice: its reason it cannot wait is the guard.
+api.post('/api/projects/:id/agent-cards/notices', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({
+      title: z.string().max(200).optional(),
+      body: z.string().max(2_000).optional(),
+      reason: z.string().max(500).optional(),
+      href: z.string().max(2_000).optional(),
+    }),
+  )
+  return json(agentCards.postNotice({ name: actor, agent: isAgent(request) }, id(params), body), 201)
+})
+// Moves a running tracked card; 404 for another agent's or another project's, 409 once it ended.
+api.post('/api/projects/:id/agent-cards/:cardId/progress', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({ done: z.number().int().optional(), step: z.string().max(500).nullable().optional() }),
+  )
+  return json(
+    agentCards.progressTracked(
+      { name: actor, agent: isAgent(request) },
+      id(params),
+      id(params, 'cardId'),
+      body,
+    ),
+  )
+})
+// Ends a running tracked card succeeded with a result or failed with a reason.
+api.post('/api/projects/:id/agent-cards/:cardId/finish', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({
+      state: z.enum(['succeeded', 'failed']),
+      result: z.string().max(500).optional(),
+      reason: z.string().max(500).optional(),
+    }),
+  )
+  return json(
+    agentCards.finishTracked(
+      { name: actor, agent: isAgent(request) },
+      id(params),
+      id(params, 'cardId'),
+      body,
+    ),
+  )
+})
+// Dismisses a card for everybody; the human only (an agent gets 403).
+api.delete('/api/projects/:id/agent-cards/:cardId', ({ request, params, actor }) => {
+  agentCards.dismissCard({ name: actor, agent: isAgent(request) }, id(params), id(params, 'cardId'))
+  return json({ ok: true })
 })
 
 // Every preview of the project's tickets, running or not, running first, and the board-wide use of the
@@ -1160,7 +1282,19 @@ api.post('/api/uploads', async ({ request, actor }) => {
     const form = await request.formData()
     const file = form.get('file')
     if (!(file instanceof File)) throw new HttpError(400, 'multipart field "file" is required')
-    const a = await uploads.saveUpload(file, actor)
+    // Beside the file: what the canvas drew on it, as JSON. Absent for a file that was not drawn on.
+    const annotations = form.get('annotations')
+    if (annotations !== null && typeof annotations !== 'string')
+      throw new HttpError(400, 'multipart field "annotations" must be JSON text')
+    let document: unknown
+    if (typeof annotations === 'string') {
+      try {
+        document = JSON.parse(annotations)
+      } catch {
+        throw new HttpError(400, 'multipart field "annotations" is not JSON')
+      }
+    }
+    const a = await uploads.saveUpload(file, actor, document)
     return json({ ...a, url: uploads.attachmentUrl(a) }, 201)
   }
   const body = await readJson(
@@ -1309,6 +1443,16 @@ api.get('/api/summary', ({ url, actor }) => {
     ...getSummary(project ? intParam(project, 'projectId') : undefined, { refreshPrs: true }),
     actor,
   })
+})
+
+// What is happening on one project right now, for a session that is starting: live now, recently
+// active, what waits on the human, what is in review, the last posts, and the clock it measured
+// against. `?windowMinutes=` widens or narrows the live window (the project's stallMinutes by default).
+api.get('/api/projects/:id/live-work', ({ params, url }) => {
+  const window = url.searchParams.get('windowMinutes')
+  return json(
+    getLiveWork(id(params), { windowMinutes: window ? intParam(window, 'windowMinutes') : undefined }),
+  )
 })
 
 // --- daily ---

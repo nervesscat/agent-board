@@ -1,7 +1,7 @@
 import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
 import type { CommentRow, TicketFull, TicketRow } from '#/lib/api'
-import { png, sendFile } from './files'
+import { attachOriginal, png, sendFile } from './files'
 import { expect, expectTooltip, ok, test } from './fixtures'
 
 const FORMATS = [
@@ -215,6 +215,8 @@ test('the toolbar attach spins while its files upload, with no text, and is a pa
   const chooser = page.waitForEvent('filechooser')
   await attach.click()
   await (await chooser).setFiles({ name: 'slow.png', mimeType: 'image/png', buffer: png() })
+  // The picture goes through the canvas first, here as it was picked.
+  await attachOriginal(page)
   await expect(attach).toHaveAttribute('aria-busy', 'true')
   await expect(attach).toHaveAccessibleName('Attaching files…')
   await expectTooltip(attach, 'Attaching files…')
@@ -240,6 +242,7 @@ test('with a file pending, Tab goes from Link to the file, and Shift+Tab back', 
   const chooser = page.waitForEvent('filechooser')
   await d.attach.click()
   await (await chooser).setFiles({ name: 'picked.png', mimeType: 'image/png', buffer: png() })
+  await attachOriginal(page)
   const preview = d.dialog.getByRole('button', { name: 'Preview picked.png' })
   const remove = d.dialog.getByRole('button', { name: 'Remove picked.png' })
   await expect(preview).toBeVisible()
@@ -289,6 +292,9 @@ test('the toolbar attach opens the file picker with Enter and Space without crea
     const chooser = page.waitForEvent('filechooser')
     await page.keyboard.press(key)
     await (await chooser).setFiles({ name, mimeType: 'image/png', buffer: png() })
+    await attachOriginal(page)
+    // The canvas gives the focus back to the button that opened it, so the next key lands there.
+    await expect(d.attach).toBeFocused()
     await expect(d.dialog.getByRole('img', { name })).toBeVisible()
   }
   await expect(d.dialog).toBeVisible()
@@ -300,6 +306,7 @@ test('the toolbar attach opens the file picker with Enter and Space without crea
   const chooser = page.waitForEvent('filechooser')
   await d.attach.click()
   await (await chooser).setFiles({ name: 'by-enter.png', mimeType: 'image/png', buffer: png() })
+  await attachOriginal(page)
   await expect(d.dialog.getByRole('img', { name: 'by-enter.png' })).toBeVisible()
   await expect(d.dialog.getByLabel('uploading')).toHaveCount(0)
 
@@ -420,6 +427,7 @@ test('the ticket instructions have attach in the editor toolbar while editing, a
   let chooser = page.waitForEvent('filechooser')
   await attach.click()
   await (await chooser).setFiles({ name: 'from-header.png', mimeType: 'image/png', buffer: png() })
+  await attachOriginal(page)
   await expect(listed('from-header.png')).toBeVisible()
   await expect.poll(attached).toEqual(['from-header.png'])
 
@@ -457,6 +465,7 @@ test('the ticket instructions have attach in the editor toolbar while editing, a
   chooser = page.waitForEvent('filechooser')
   await page.keyboard.press('Enter')
   await (await chooser).setFiles({ name: 'from-toolbar.png', mimeType: 'image/png', buffer: png() })
+  await attachOriginal(page)
   await expect(listed('from-toolbar.png')).toBeVisible()
   await expect.poll(attached).toEqual(['from-header.png', 'from-toolbar.png'])
   await expect(editor).toBeVisible()
@@ -499,6 +508,7 @@ test('editors without an attach of their own have none in the toolbar; posts and
     const chooser = page.waitForEvent('filechooser')
     await attach.click()
     await (await chooser).setFiles({ name: file, mimeType: 'image/png', buffer: png() })
+    await attachOriginal(page)
     await expect(form.getByRole('button', { name: `Remove ${file}` })).toBeVisible()
   }
 
@@ -533,6 +543,7 @@ async function pick(page: Page, text: Locator, name: string) {
   const chooser = page.waitForEvent('filechooser')
   await toolbarOf(text).getByRole('button', { name: 'Attach files', exact: true }).click()
   await (await chooser).setFiles({ name, mimeType: 'image/png', buffer: png() })
+  await attachOriginal(page)
   await expect(formOf(page, text).getByRole('button', { name: `Remove ${name}` })).toBeVisible()
 }
 
@@ -668,6 +679,9 @@ test('from the New post text, Tab reaches attach, the formatting buttons, its fi
     const chooser = page.waitForEvent('filechooser')
     await page.keyboard.press(key)
     await (await chooser).setFiles({ name, mimeType: 'image/png', buffer: png() })
+    await attachOriginal(page)
+    // The canvas gives the focus back to the button that opened it, so the next key lands there.
+    await expect(attach).toBeFocused()
     await expect(form.getByRole('button', { name: `Remove ${name}` })).toBeVisible()
   }
   await expect(text).toHaveText('hello')
@@ -713,6 +727,7 @@ test('files pasted in or dropped on the New post and Reply composers are listed 
       mime: 'image/png',
       data: png(),
     })
+    await attachOriginal(page)
     await expect(form.getByRole('button', { name: 'Remove pasted.png' })).toBeVisible()
     await expect(text).toHaveText('')
     // Dropped on the form, outside the text.
@@ -721,6 +736,7 @@ test('files pasted in or dropped on the New post and Reply composers are listed 
       mime: 'image/png',
       data: png(),
     })
+    await attachOriginal(page)
     await expect(form.getByRole('button', { name: 'Remove dropped.png' })).toBeVisible()
     await expect(text).toHaveText('')
   }

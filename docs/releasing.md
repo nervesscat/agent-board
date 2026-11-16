@@ -56,6 +56,24 @@ and start an installed app with `AGENT_BOARD_UPDATE_FEED=http://127.0.0.1:8120/`
 it then checks that folder instead of GitHub. `desktop/updates.test.mjs` does the same against a feed it
 serves itself on `127.0.0.1`, for each kind of install, the refusal of a wrong sha512 among them.
 
+**Checking the pacman install by hand.** The suite stands in at the package manager and the relaunch;
+the real `pacman -U` is checked here, on a machine where replacing the installed app is fine (it installs
+a real package, with a polkit prompt):
+
+1. In a worktree, set a version higher than the installed one in `desktop/app/package.json` and run
+   `pnpm desktop:package`. Serve what it built to the app:
+   `python3 -m http.server 8120 --bind 127.0.0.1 --directory desktop/dist`.
+2. Start the installed app with `AGENT_BOARD_UPDATE_FEED=http://127.0.0.1:8120/` in its environment.
+3. Settings, Updates: **Check now** finds the higher version; **Download and install** asks polkit for
+   authorization. The board's server stops before pacman runs, the app goes away for a moment, and the
+   new version comes back by itself with its window open.
+4. `curl -s http://127.0.0.1:<PORT>/api/health` answers `{"ok":true}` (`<PORT>` is the board's, 47100
+   by default), and Settings, Updates shows the new installed version. One board server runs, not the
+   old one beside it.
+5. If the app does not come back, `~/.local/share/agent-board/data/logs/board.err.log` has an error line
+   naming the binary to start by hand (`/opt/CrossBoard/agent-board`); running it brings the new version
+   up, and the old board is not left on the port.
+
 ## 1. Prepare
 
 1. Set the new version in `desktop/app/package.json` (`0.2.0`, say) and merge it like any other change.

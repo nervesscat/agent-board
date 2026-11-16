@@ -14,8 +14,10 @@ intent is unclear you record a question instead of guessing.
 ## Input
 
 1. Repo root.
-2. Working dir containing `00-diff.patch` (the change) and `00-context.md` (PR body,
-   commit messages, ticket text, project rule files).
+2. Working dir containing `00-diff.patch` (the change) and `00-context.md`, the context pack:
+   PR title, body and URL, the commits, the project rule files, the ticket's context, the changed
+   files and their tests and callers, the decisions and their answers, and the runbook. Read it
+   first, and extend it as you work: every later phase reads that one file.
 3. `00-focus.md`: the changed files, their tests, their direct callers. Start from it; read
    outside it only to follow a reference from it.
 4. Output path.
@@ -96,3 +98,17 @@ suggestions) and what this agent adds. Fill it in with `write_run_report` (`agen
 ticket, the round, times, steps, counts and sections) before you return; a run that hands back
 without one has not finished, and the orchestrator checks for it as it checks your result. The
 ticket's Agents side shows it, and `list_run_reports` reads this agent's across tickets.
+
+Before you finish, write into `00-context.md` what you established and the later phases need: the
+changed files, their tests, their direct callers, each decision and its answer, and the runbook,
+each under its own heading. It is the pack the review started in Setup and the one every phase
+reads; never write a second context file.
+
+## Keeping the board current
+
+The board is part of the work: post your progress, tick the tasks you finished, close your spans
+and waits, and update the ticket's summary when you stop or hand off; you are not finished while
+the board is behind what you did. If you stop before the end, record on the ticket that it was
+stopped and why, so the next reader can tell a stop from a failure. When the work ends, clean up
+what you started (processes, temporary files, locks, and any scratch worktree of your own), and
+leave the ticket's worktrees and origin branches to the human, listed, never deleted.

@@ -4,7 +4,7 @@ import { ChevronDown } from 'lucide-react'
 
 import { ClaimedActor } from '#/components/Actor'
 import { WorkTimelineBar, hasWork } from '#/components/WorkTimeline'
-import { LastHeard, NowLine, StallNotice, WorkSummary } from '#/components/WorkStatus'
+import { LastHeard, WorkLine, WorkSummary } from '#/components/WorkStatus'
 import { Button } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
 import {
@@ -52,8 +52,7 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
       ) : (
         <div className="space-y-3">
           <div className="space-y-1 text-sm">
-            <NowLine timeline={data.timeline} />
-            <StallNotice timeline={data.timeline} stage={stallStage(stages, t.status)} variant="inline" />
+            <WorkLine timeline={data.timeline} stage={stallStage(stages, t.status)} detail />
             <LastHeard timeline={data.timeline} />
           </div>
           <WorkTimelineBar timeline={data.timeline} />

@@ -1,6 +1,7 @@
-import { Pencil, Trash2 } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 import { useState } from 'react'
 
+import { TrashIcon } from '#/components/TrashIcon'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -120,10 +121,8 @@ export function PostActions({
         <Pencil />
       </ActionButton>
       <AlertDialog>
-        <AlertDialogTrigger
-          render={<ActionButton label="delete" tip="Delete" className="hover:text-destructive" />}
-        >
-          <Trash2 />
+        <AlertDialogTrigger render={<ActionButton label="delete" tip="Delete" />}>
+          <TrashIcon />
         </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>

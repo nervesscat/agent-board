@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 
-import type { HostTool, HostTools } from './hostTools'
+import type { HostTool, HostTools, Probe } from './hostTools'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
 // claude is the tests' stand-in (e2e/fake-claude.mjs), run through node, as the e2e board runs it.
@@ -47,9 +47,13 @@ function shims(tools: Record<string, string>, opts: { authFails?: boolean; dirNa
   return dir
 }
 
-/** The server's env with only `PATH` as given (whatever case the platform keeps it in). */
-function envWith(PATH: string): NodeJS.ProcessEnv {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.toUpperCase() !== 'PATH'))
+/** The server's env with only `PATH` as given (whatever case the platform keeps it in), minus `drop`. */
+function envWith(PATH: string, drop: string[] = []): NodeJS.ProcessEnv {
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([k]) => k.toUpperCase() !== 'PATH' && !drop.includes(k.toUpperCase()),
+    ),
+  )
   return { ...env, PATH }
 }
 
@@ -65,19 +69,20 @@ const shPrint = (lines: string[], to = '') =>
 
 /**
  * A fake gh whose `gh auth status` exits with `exit` and prints `said` to stderr, after the request log
- * `debug` when it runs with GH_DEBUG=api (as gh does).
+ * `debug` when it runs with GH_DEBUG=api (as gh does); `gh --version` prints `version`.
  */
-function fakeGh(auth: { exit: number; said: string[]; debug?: string[] }) {
+function fakeGh(auth: { exit: number; said: string[]; debug?: string[]; version?: string }) {
   const dir = path.join(tmp, `gh-${++dirs}`)
   fs.mkdirSync(dir, { recursive: true })
   const debug = auth.debug ?? []
+  const version = auth.version ?? '2.98.0'
   if (WIN)
     fs.writeFileSync(
       path.join(dir, 'gh.cmd'),
       [
         '@echo off',
         'if "%1"=="auth" goto auth',
-        'echo gh version 2.98.0',
+        `echo gh version ${version}`,
         'exit /b 0',
         ':auth',
         'if not "%GH_DEBUG%"=="api" goto said',
@@ -94,7 +99,7 @@ function fakeGh(auth: { exit: number; said: string[]; debug?: string[] }) {
       file,
       [
         '#!/bin/sh',
-        'if [ "$1" != "auth" ]; then echo "gh version 2.98.0"; exit 0; fi',
+        `if [ "$1" != "auth" ]; then echo "gh version ${version}"; exit 0; fi`,
         `if [ "$GH_DEBUG" = "api" ]; then ${shPrint(debug, ' >&2')}; fi`,
         shPrint(auth.said, ' >&2'),
         `exit ${auth.exit}`,
@@ -181,6 +186,45 @@ describe('the check', () => {
     }
   })
 
+  it('says gh is too old for the check when it does not know --active, naming its version', async () => {
+    // Ubuntu 24.04 ships gh 2.45, which has no `gh auth status --active`.
+    const old = fakeGh({ exit: 1, version: '2.45.0', said: ['unknown flag: --active'] })
+    const r = await host.probeHostTools({ env: envWith(old), claudeBin: 'claude', claudeArgs: [] })
+    const gh = byName(r).gh!
+    expect(gh).toMatchObject({
+      found: true,
+      version: '2.45.0',
+      signedIn: null,
+      ok: false,
+      optional: false,
+      breaks: "the board's check that gh is signed in",
+      problem: 'gh 2.45.0 is too old for this check: it does not know --active',
+    })
+    // The queue, CI and PR tickets use calls this gh has: only the sign-in check fails.
+    expect(gh.breaks).not.toMatch(/PR queue/)
+    expect(gh.fix).toMatch(/upgrade the GitHub CLI .*sudo apt install --only-upgrade gh/)
+  })
+
+  it('says gh cannot find its config when the environment gives it no home, naming the path', async () => {
+    // gh prints "not logged into any GitHub hosts" for a missing config too: only the env tells them apart.
+    const dir = fakeGh({
+      exit: 1,
+      said: ['You are not logged into any GitHub hosts. To log in, run: gh auth login'],
+    })
+    const r = await host.probeHostTools({
+      env: envWith(dir, ['HOME', 'GH_CONFIG_DIR', 'XDG_CONFIG_HOME', 'APPDATA']),
+      claudeBin: 'claude',
+      claudeArgs: [],
+    })
+    const gh = byName(r).gh!
+    const needs = WIN ? 'APPDATA' : 'HOME'
+    const file = WIN ? '%AppData%\\GitHub CLI\\hosts.yml' : '$HOME/.config/gh/hosts.yml'
+    expect(gh).toMatchObject({ found: true, signedIn: null, ok: false, optional: false })
+    expect(gh.problem).toBe(`gh cannot find its config: no ${needs}, so it looked for ${file}`)
+    expect(gh.fix).toContain('GH_CONFIG_DIR')
+    if (!WIN) expect(gh.fix).toContain('HOME')
+  })
+
   it('checks only the active github.com account: a failing second account or host is not signed out', async () => {
     // gh 2.98 with a working active account on github.com, a second github.com account with an expired
     // token and another host: a bare `gh auth status` fails for the others; the active one alone passes.
@@ -265,6 +309,22 @@ describe('the check', () => {
     expect(host.ghSignedIn(1, '* Request to https://api.github.com/\r\n* i/o timeout\r\n')).toBeNull()
   })
 
+  it('names why the gh check failed: too old, no config, signed out, or unknown', () => {
+    const home = path.join(tmp, 'a-home')
+    fs.mkdirSync(home, { recursive: true })
+    const said = 'You are not logged into any GitHub hosts. To log in, run: gh auth login'
+    const state = (probe: Pick<Probe, 'signedIn' | 'authOutput'>, env: NodeJS.ProcessEnv = { HOME: home }) =>
+      host.ghAuthState({ path: '/usr/bin/gh', ...probe }, { env, platform: 'linux' })
+    expect(state({ signedIn: true })).toBe('signed-in')
+    expect(state({ signedIn: false, authOutput: said })).toBe('signed-out')
+    // gh has the config it needs from GH_CONFIG_DIR, wherever HOME points.
+    expect(state({ signedIn: false, authOutput: said }, { GH_CONFIG_DIR: tmp })).toBe('signed-out')
+    expect(state({ signedIn: false, authOutput: 'unknown flag: --active' })).toBe('too-old')
+    // HOME that is not there, and no GH_CONFIG_DIR or XDG_CONFIG_HOME: no config to read.
+    expect(state({ signedIn: false, authOutput: said }, {})).toBe('no-config')
+    expect(state({ signedIn: null, authOutput: said })).toBe('unknown')
+  })
+
   it('finds a Windows tool by its PATHEXT extension: pnpm.cmd is pnpm', () => {
     const dir = path.join(tmp, 'pathext')
     fs.mkdirSync(dir)
@@ -330,30 +390,39 @@ describe('the check', () => {
 describe('what each tool breaks and how to fix it', () => {
   it('says it for a missing tool of each kind, and for gh signed out', () => {
     const missing = (name: Parameters<typeof host.toolEntry>[0]) =>
-      host.toolEntry(name, { path: null }, '/opt/claude')
+      host.toolEntry(name, { path: null }, { claudeBin: '/opt/claude' })
+    expect(host.TOOL_NAMES).toEqual(['git', 'gh', 'claude', 'node', 'pnpm'])
     expect(missing('git')).toMatchObject({
       breaks: 'ticket branch and commit status, merged checks and cleanup',
+      optional: false,
       problem: "git was not found on the board's PATH",
       fix: expect.stringContaining('install git (https://git-scm.com/downloads)'),
     })
     expect(missing('gh')).toMatchObject({
       breaks: 'the PR queue, CI status and PR tickets',
+      optional: false,
       signedIn: null,
       fix: expect.stringMatching(
         /install the GitHub CLI \(https:\/\/cli\.github\.com\) and run gh auth login/,
       ),
     })
-    expect(missing('claude')).toMatchObject({
-      breaks: 'generated reports and agents',
+    const claude = missing('claude')
+    expect(claude).toMatchObject({
+      breaks: "the board's own report generation (Reports → Generate)",
+      optional: true,
       problem: 'claude was not found: CLAUDE_BIN is /opt/claude',
       fix: expect.stringMatching(/install Claude Code \(https:.*\), or set CLAUDE_BIN/),
     })
+    // claude writes only the board's reports: ticket and project agents never need it.
+    expect(claude.breaks).not.toMatch(/agents/)
     expect(missing('node')).toMatchObject({
       breaks: 'managed previews',
+      optional: false,
       fix: expect.stringContaining('install Node.js (https://nodejs.org)'),
     })
     expect(missing('pnpm')).toMatchObject({
       breaks: 'managed previews',
+      optional: false,
       fix: expect.stringContaining('corepack enable pnpm'),
     })
     expect(host.toolEntry('gh', { path: '/usr/bin/gh', version: '2.0.0', signedIn: false })).toMatchObject({
@@ -366,6 +435,56 @@ describe('what each tool breaks and how to fix it', () => {
       ok: true,
       problem: null,
       fix: null,
+    })
+  })
+
+  it('tells a gh too old for the check and one with no config apart from a real sign-out', () => {
+    const tooOld = host.toolEntry('gh', {
+      path: '/usr/bin/gh',
+      version: '2.45.0',
+      signedIn: false,
+      authOutput: 'unknown flag: --active',
+    })
+    expect(tooOld).toMatchObject({
+      found: true,
+      signedIn: null,
+      ok: false,
+      optional: false,
+      breaks: "the board's check that gh is signed in",
+      problem: 'gh 2.45.0 is too old for this check: it does not know --active',
+    })
+    expect(tooOld.breaks).not.toMatch(/PR queue/)
+    expect(tooOld.fix).toMatch(/upgrade the GitHub CLI .*sudo apt install --only-upgrade gh/)
+
+    const home = path.join(tmp, 'no-such-home')
+    const noConfig = host.toolEntry(
+      'gh',
+      {
+        path: '/usr/bin/gh',
+        version: '2.103.3',
+        signedIn: false,
+        authOutput: 'You are not logged into any GitHub hosts. To log in, run: gh auth login',
+      },
+      { env: { HOME: home }, platform: 'linux' },
+    )
+    expect(noConfig).toMatchObject({ signedIn: null, ok: false })
+    expect(noConfig.problem).toBe(
+      `gh cannot find its config: no HOME, so it looked for ${path.posix.join(home, '.config', 'gh', 'hosts.yml')}`,
+    )
+    expect(noConfig.fix).toMatch(/HOME/)
+    expect(noConfig.fix).toMatch(/GH_CONFIG_DIR/)
+
+    const signedOut = host.toolEntry('gh', {
+      path: '/usr/bin/gh',
+      version: '2.103.3',
+      signedIn: false,
+      authOutput: 'You are not logged into any GitHub hosts. To log in, run: gh auth login',
+    })
+    expect(signedOut).toMatchObject({
+      signedIn: false,
+      ok: false,
+      problem: 'gh is not signed in',
+      fix: 'run gh auth login on this machine, then Check again',
     })
   })
 
@@ -459,6 +578,7 @@ describe('over REST and MCP', () => {
       version: null,
       signedIn: null,
       ok: false,
+      optional: false,
       breaks: 'the PR queue, CI status and PR tickets',
       problem: "gh was not found on the board's PATH",
       fix: expect.stringContaining('https://cli.github.com'),
@@ -468,6 +588,12 @@ describe('over REST and MCP', () => {
       found: true,
       version: '1.0.0',
       ok: true,
+      optional: false,
+    })
+    expect(project.hostTools.tools.find((t) => t.name === 'claude')).toMatchObject({
+      name: 'claude',
+      ok: true,
+      optional: true,
     })
     // The tool says what it holds.
     const list = await call('POST', '/api/mcp', { jsonrpc: '2.0', id: 2, method: 'tools/list' }, 'agent')

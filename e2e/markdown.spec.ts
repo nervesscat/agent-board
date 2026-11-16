@@ -250,6 +250,9 @@ test('a wide table keeps readable columns and scrolls sideways; the page does no
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
   const box = page.getByRole('region', { name: 'Instructions' }).locator('[data-md-table-scroll]')
   await expect(box).toHaveCount(1)
+  // Measured only once the box has a size: until the page lays it out, it reads 0 wide, and nothing is
+  // said about the table until it is.
+  await expect(box).toBeVisible()
 
   const m = await box.evaluate((el) => {
     const notes = [...el.querySelectorAll('tbody tr')].map((tr) =>
