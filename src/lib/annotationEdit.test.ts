@@ -338,12 +338,17 @@ describe('isTinyDrag', () => {
 
 describe('handleAt and turnBetween', () => {
   it('puts the rotate handle above the top edge, at its middle', () => {
-    expect(handleAt({ x: 0, y: 100, w: 100, h: 40 }, 20)).toEqual([50, 80])
+    expect(handleAt({ x: 0, y: 100, w: 100, h: 40 }, 20, 300)).toEqual([50, 80])
   })
 
   it('keeps the rotate handle on the picture when there is no room above the box', () => {
     // Above the box would be y = -20, off the picture: the handle goes below the bottom edge instead.
-    expect(handleAt({ x: 0, y: 0, w: 100, h: 40 }, 20)).toEqual([50, 60])
+    expect(handleAt({ x: 0, y: 0, w: 100, h: 40 }, 20, 300)).toEqual([50, 60])
+  })
+
+  it('keeps the rotate handle on the picture when a box is as tall as the picture allows', () => {
+    // Above (y = -16) and below (y = 416 on a 400 px picture) both miss the picture: the handle sits on its top edge.
+    expect(handleAt({ x: 0, y: 10, w: 100, h: 380 }, 26, 400)).toEqual([50, 0])
   })
 
   it('reads the angle a pointer turns through, seen from the centre', () => {

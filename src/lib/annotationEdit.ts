@@ -145,12 +145,16 @@ export function marqueeIds(items: Annotation[], from: Point, to: Point): string[
 }
 
 /**
- * The rotate handle: above the top edge of the box, at its middle, `gap` away. Near the top edge of the
- * picture there is no room above, so the handle goes below the box instead, where it stays on the picture.
+ * The rotate handle: above the top edge of the box, at its middle, `gap` away. Where there is no room above
+ * (the box is near the picture's top edge), it goes below the bottom edge; where there is none below either
+ * (a box as tall as the picture), it sits on the picture's top edge. It always stays on the picture.
  */
-export function handleAt(box: Box, gap: number): Point {
+export function handleAt(box: Box, gap: number, pictureHeight: number): Point {
+  const centre = box.x + box.w / 2
   const above = box.y - gap
-  return [box.x + box.w / 2, above >= 0 ? above : box.y + box.h + gap]
+  if (above >= 0) return [centre, above]
+  const below = box.y + box.h + gap
+  return [centre, below <= pictureHeight ? below : 0]
 }
 
 /** The angle a point sits at, seen from `centre`. */

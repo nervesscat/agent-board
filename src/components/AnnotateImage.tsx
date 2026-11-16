@@ -96,6 +96,8 @@ interface Overlay {
  */
 interface Gesture {
   mode: 'move' | 'turn' | 'marquee'
+  /** The pointer that began the gesture: a second pointer's moves and release do not drive it. */
+  pointer: number
   start: Point
   /** The marks the gesture moves or turns. */
   ids: Set<string>
@@ -223,7 +225,7 @@ function paint(canvas: HTMLCanvasElement, bitmap: ImageBitmap, items: Annotation
   const box = unionBounds(overlay.picked)
   if (box) {
     ctx.strokeRect(box.x - 6 * k, box.y - 6 * k, box.w + 12 * k, box.h + 12 * k)
-    const [hx, hy] = handleAt(box, HANDLE_GAP * k)
+    const [hx, hy] = handleAt(box, HANDLE_GAP * k, bitmap.height)
     ctx.setLineDash([])
     ctx.beginPath()
     ctx.moveTo(box.x + box.w / 2, box.y - 6 * k)
@@ -354,11 +356,12 @@ export function AnnotateImage({
     // The rotate handle of the selection, first: it sits above the box, outside the marks.
     const box = unionBounds(picked)
     if (box) {
-      const handle = handleAt(box, HANDLE_GAP * scale(e))
+      const handle = handleAt(box, HANDLE_GAP * scale(e), bitmap?.height ?? 0)
       const reach = HANDLE_RADIUS * 3 * scale(e)
       if (Math.hypot(point[0] - handle[0], point[1] - handle[1]) <= reach) {
         gesture.current = {
           mode: 'turn',
+          pointer: e.pointerId,
           start: point,
           ids: new Set(picked.map((a) => a.id)),
           base: items,
@@ -386,6 +389,7 @@ export function AnnotateImage({
       if (!inGroup) setSelected(new Set([hit.id]))
       gesture.current = {
         mode: 'move',
+        pointer: e.pointerId,
         start: point,
         ids: new Set(group.map((a) => a.id)),
         base: items,
@@ -398,6 +402,7 @@ export function AnnotateImage({
     }
     gesture.current = {
       mode: 'marquee',
+      pointer: e.pointerId,
       start: point,
       ids: new Set(),
       base: items,
@@ -426,6 +431,7 @@ export function AnnotateImage({
 
   const onPointerMove = (e: PointerEvent<HTMLCanvasElement>) => {
     const g = gesture.current
+    if (g && e.pointerId !== g.pointer) return
     if (g) {
       const p = at(e)
       if (g.mode === 'marquee') {
@@ -464,6 +470,7 @@ export function AnnotateImage({
 
   const onPointerUp = (e: PointerEvent<HTMLCanvasElement>) => {
     const g = gesture.current
+    if (g && e.pointerId !== g.pointer) return
     if (g) {
       gesture.current = null
       if (g.mode === 'marquee') {
@@ -505,7 +512,8 @@ export function AnnotateImage({
   }
 
   const setNote = (note: string) => {
-    if (!selectedItem) return
+    // A pointer gesture in progress owns the picture until it is released: the note waits for it.
+    if (!selectedItem || gesture.current) return
     const id = selectedItem.id
     // A note is written into the picture as it stands, without a step of its own.
     setHistory((h) =>
@@ -517,7 +525,7 @@ export function AnnotateImage({
   }
 
   const deleteSelected = () => {
-    if (!picked.length || busy) return
+    if (!picked.length || busy || gesture.current) return
     const gone = new Set(picked.map((a) => a.id))
     setHistory((h) =>
       edit(
@@ -529,7 +537,7 @@ export function AnnotateImage({
   }
 
   const travel = (step: 'undo' | 'redo') => {
-    if (busy) return
+    if (busy || gesture.current) return
     setHistory((h) => {
       const moved = step === 'undo' ? undo(h) : redo(h)
       return moved === h ? h : { ...moved, present: carryNotes(moved.present, h.present) }
@@ -735,6 +743,7 @@ export function AnnotateImage({
               size="sm"
               variant="ghost"
               onClick={() => {
+                if (gesture.current) return
                 setHistory((h) => edit(h, []))
                 setSelected(new Set())
               }}
