@@ -8,6 +8,14 @@
 // sheet as it came from the mill) stays straight, so every piece sets ruled edges against torn
 // ones. Each sheet casts a thin shadow, loose fibres lie on top, and a coarse grain sits over all.
 //
+// The version says what the piece means, on three levels below the style (which never changes):
+//   major -> the thematic: a grammar for laying the sheets and a pair of dyes
+//              0.x  Loose:   sheets lie at any angle, from any side, the table shows between them
+//              1.x  Coursed: every sheet follows one axis, in parallel courses, the ground covered
+//   minor -> the variation: the pale dye is dyed one bath deeper, and the lay turns one step
+//   patch -> the piece: the release's notes pick the lay and the seed sets the rest
+// A later major takes the next grammar and the next pair of dyes from two lists (thematicFor).
+//
 // The release's notes are read for four themes and the strongest one picks how the sheets are laid:
 //   many hands  -> gather: slabs come in from every side and pile up off-centre
 //   precision   -> hold:   three sheets fitted along even seams, a small tab across the joint
@@ -35,6 +43,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const NOTES_DIR = join(ROOT, 'scripts/release-art/notes')
 const ASSET_DIR = join(ROOT, 'src/assets/release-art/tear')
 
+const clamp = (value, low, high) => Math.min(high, Math.max(low, value))
+
 const WIDTH = 1600
 const HEIGHT = 900
 const STEP = 6 // distance between two points of a torn edge
@@ -53,15 +63,169 @@ export const PALETTE = {
   celadonDeep: '#638A79',
   saffron: '#E0A132',
   core: '#FCF9F1',
+  madder: '#7B2D34',
+  madderLit: '#A5494E',
+  slate: '#9FB2C8',
+  slateDeep: '#5F7A9A',
+  indigo: '#2B3A67',
+  indigoLit: '#5468A6',
+  shell: '#D8AFA3',
+  shellDeep: '#A87868',
 }
-export const PALETTE_HEXES = Object.values(PALETTE)
+
+// ---------------------------------------------------------------- the version's meaning
+
+// The grammars, in order: how a thematic lays its sheets. `ground` is how much of the table it
+// leaves bare, `axis` whether the sheets share one direction, `step` how far one minor turns it.
+export const GRAMMARS = [
+  { key: 'loose', axis: 'free', ground: 'open', bearing: 0, step: 7 },
+  { key: 'coursed', axis: 'one', ground: 'covered', bearing: 26, step: 7 },
+]
+
+// The dye shelf, in order: a deep dye that anchors the thematic and a pale one that the minor
+// re-dyes. Each is given for the light piece and for the dark piece.
+export const DYES = [
+  {
+    key: 'plum and celadon',
+    deep: { light: PALETTE.plum, dark: PALETTE.plumLit },
+    pale: { light: PALETTE.celadon, dark: PALETTE.celadonDeep },
+  },
+  {
+    key: 'madder and slate',
+    deep: { light: PALETTE.madder, dark: PALETTE.madderLit },
+    pale: { light: PALETTE.slate, dark: PALETTE.slateDeep },
+  },
+  {
+    key: 'indigo and shell',
+    deep: { light: PALETTE.indigo, dark: PALETTE.indigoLit },
+    pale: { light: PALETTE.shell, dark: PALETTE.shellDeep },
+  },
+]
+
+// What a major means, in words. A major with no entry still gets its form from the two lists.
+const MEANINGS = {
+  0: {
+    name: 'Loose',
+    meaning:
+      'Before 1.0 the product is still finding its shape. Nothing is fixed: the sheets lie loose on the table, at any angle, and the table shows between them.',
+  },
+  1: {
+    name: 'Coursed',
+    meaning:
+      'The first version people rely on. The sheets have found their places: all follow one axis and lie in courses, edge over edge, and the ground is covered.',
+  },
+}
+
+// The bath ladder: how far the pale dye's lightness moves from its reference shade, in points of
+// HSL lightness, for the light piece and the dark piece. Rung 2 is the reference.
+const BATHS = { light: [17, 10, 0, -12, -22, -30], dark: [14, 8, 0, -8, -14, -19] }
+const BATH_CYCLE = [0, 1, 2, 3, 4, 5, 4, 3, 2, 1]
+const TURN_CYCLE = [-2, -1, 0, 1, 2]
+
+export function parseVersion(text) {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(String(text).trim())
+  if (!match) throw new Error(`Not a version: ${text} (expected vMAJOR.MINOR.PATCH)`)
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+    pre: match[4] ?? '',
+  }
+}
+
+function shade(hex, points) {
+  if (points === 0) return hex
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const span = max - min
+  let l = (max + min) / 2
+  const sat = span === 0 ? 0 : span / (1 - Math.abs(2 * l - 1))
+  let hue = 0
+  if (span !== 0) {
+    if (max === r) hue = ((g - b) / span + 6) % 6
+    else if (max === g) hue = (b - r) / span + 2
+    else hue = (r - g) / span + 4
+  }
+  l = clamp(l + points / 100, 0.08, 0.92)
+  const chroma = (1 - Math.abs(2 * l - 1)) * sat
+  const x = chroma * (1 - Math.abs((hue % 2) - 1))
+  const [r1, g1, b1] = [
+    [chroma, x, 0],
+    [x, chroma, 0],
+    [0, chroma, x],
+    [0, x, chroma],
+    [x, 0, chroma],
+    [chroma, 0, x],
+  ][Math.floor(hue) % 6]
+  const m = l - chroma / 2
+  return `#${[r1, g1, b1]
+    .map((v) =>
+      Math.round((v + m) * 255)
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')
+    .toUpperCase()}`
+}
+
+// The thematic of a major: its grammar, its dyes and what it means.
+export function thematicFor(major) {
+  const grammar = GRAMMARS[major % GRAMMARS.length]
+  const dyes = DYES[major % DYES.length]
+  const words = MEANINGS[major] ?? {
+    name: `${grammar.key[0].toUpperCase()}${grammar.key.slice(1)}, ${dyes.key}`,
+    meaning: '',
+  }
+  return {
+    major,
+    name: words.name,
+    meaning: words.meaning,
+    grammar: grammar.key,
+    axis: grammar.axis,
+    ground: grammar.ground,
+    dyes: dyes.key,
+    deep: dyes.deep,
+    pale: dyes.pale,
+    accent: PALETTE.saffron,
+  }
+}
+
+// The variation of a minor inside its major: which bath the pale dye is in and where the lay
+// points. Ten minors pass before one pair of the two comes back.
+export function variationFor(major, minor) {
+  const grammar = GRAMMARS[major % GRAMMARS.length]
+  const dyes = DYES[major % DYES.length]
+  const bath = BATH_CYCLE[minor % BATH_CYCLE.length]
+  const turn = TURN_CYCLE[minor % TURN_CYCLE.length]
+  return {
+    minor,
+    bath,
+    turn,
+    bearing: grammar.bearing + turn * grammar.step,
+    pale: {
+      light: shade(dyes.pale.light, BATHS.light[bath]),
+      dark: shade(dyes.pale.dark, BATHS.dark[bath]),
+    },
+  }
+}
+
+// Every colour a piece may hold: the palette and each rung of each pale dye's ladder.
+export const PALETTE_HEXES = [
+  ...new Set([
+    ...Object.values(PALETTE),
+    ...DYES.flatMap((dyes) =>
+      BATHS.light.flatMap((_, bath) => [
+        shade(dyes.pale.light, BATHS.light[bath]),
+        shade(dyes.pale.dark, BATHS.dark[bath]),
+      ]),
+    ),
+  ]),
+]
 
 const VARIANTS = {
   light: {
     ground: PALETTE.bone,
-    a: PALETTE.plum,
-    b: PALETTE.celadon,
-    accent: PALETTE.saffron,
     core: PALETTE.core,
     shadowOpacity: 0.3,
     grainBlend: 'multiply',
@@ -72,9 +236,6 @@ const VARIANTS = {
   },
   dark: {
     ground: PALETTE.ink,
-    a: PALETTE.plumLit,
-    b: PALETTE.celadonDeep,
-    accent: PALETTE.saffron,
     core: PALETTE.core,
     shadowOpacity: 0.6,
     grainBlend: 'multiply',
@@ -160,6 +321,7 @@ const THEME_WORDS = {
   ],
 }
 const THEMES = Object.keys(THEME_WORDS)
+const STAND_IN = /^<!--\s*stand-in\b/i
 const LAYS = { hands: 'gather', precision: 'hold', wayfinding: 'clear', pulse: 'run' }
 
 // ---------------------------------------------------------------- deterministic randomness
@@ -204,7 +366,6 @@ function noise(key, x) {
   return lattice(key, i) * (1 - u) + lattice(key, i + 1) * u
 }
 
-const clamp = (value, low, high) => Math.min(high, Math.max(low, value))
 const smoothstep = (a, b, x) => {
   const t = clamp((x - a) / (b - a), 0, 1)
   return t * t * (3 - 2 * t)
@@ -556,14 +717,287 @@ function layRun(plan, rng) {
   return sheets
 }
 
-const LAY = { gather: layGather, hold: layHold, clear: layClear, run: layRun }
+// ---------------------------------------------------------------- the coursed grammar
+
+// Every sheet follows one axis, which leans from the vertical by the variation's bearing. A point
+// is given as (c, s): c across the axis from the canvas's centre, s along it.
+function coursedFrame(plan, rng) {
+  const lean = radians(plan.variation.bearing + (rng() - 0.5) * 3)
+  const along = [Math.sin(lean), -Math.cos(lean)]
+  const across = [Math.cos(lean), Math.sin(lean)]
+  const half = (WIDTH / 2) * Math.cos(lean) + (HEIGHT / 2) * Math.abs(Math.sin(lean))
+  const reach = (HEIGHT / 2) * Math.cos(lean) + (WIDTH / 2) * Math.abs(Math.sin(lean))
+  const at = (c, s) => [WIDTH / 2 + across[0] * c + along[0] * s, HEIGHT / 2 + across[1] * c + along[1] * s]
+  const far = half + FAR
+  const end = reach + FAR
+  // A course from c0 to c1, running the whole length unless s0 or s1 says where it ends.
+  const band = (role, c0, c1, key, sides = {}) => {
+    const {
+      left = 'cut',
+      right = 'cut',
+      top = 'cut',
+      bottom = 'cut',
+      s0 = -end,
+      s1 = end,
+      skew = 0,
+      ...options
+    } = sides
+    const sheet = quad(
+      role,
+      [
+        at(c0, s1 + (top === 'torn' ? skew : 0)),
+        at(c1, s1 - (top === 'torn' ? skew : 0)),
+        at(c1, s0 + (bottom === 'torn' ? skew : 0)),
+        at(c0, s0 - (bottom === 'torn' ? skew : 0)),
+      ],
+      [top, right, bottom, left],
+      key,
+      options,
+    )
+    sheet.crossing = true
+    return sheet
+  }
+  // The stretch of the line at c that lies on the canvas, as [from, to] along the axis.
+  const span = (c) => {
+    let low = 0
+    let high = 0
+    for (let s = -end; s <= end; s += 4) {
+      const [x, y] = at(c, s)
+      if (x < 0 || x > WIDTH || y < 0 || y > HEIGHT) continue
+      low = Math.min(low, s)
+      high = Math.max(high, s)
+    }
+    return [low, high]
+  }
+  const within = (c, t) => {
+    const [low, high] = span(c)
+    return at(c, low + (high - low) * t)
+  }
+  return { lean, half, reach, far, end, at, band, span, within }
+}
+
+const leanOf = (frame) => round((frame.lean * 180) / Math.PI, 2)
+
+function coursedGather(plan, rng) {
+  const { themes } = plan
+  const frame = coursedFrame(plan, rng)
+  const { half, reach, far, band } = frame
+  const key = plan.seed
+  const count = clamp(Math.round(4 + themes.density * 2.4 + themes.pulse * 1.2 - themes.precision), 5, 7)
+  const flip = rng() < 0.5 ? -1 : 1
+  const x1 = half * (-0.36 + rng() * 0.16)
+  const x2 = half * (0.3 + rng() * 0.16)
+  const seam = 46 + rng() * 40
+  // Three courses under everything; the ground shows in the one seam between two of them.
+  const sheets = [
+    band('b', flip * -far, flip * x1, key, {}),
+    band('a', flip * (x1 - 70), flip * x2, key + 977, { left: 'torn', right: 'cut' }),
+    band('b', flip * (x2 + seam), flip * far, key + 1931, { left: 'torn' }),
+  ]
+  // The others come in over them from the two ends in turn and stop where they were torn off.
+  const over = count - 3
+  const slots = [-0.62, 0.52, -0.08, 0.86].slice(0, over).sort((a, b) => a - b)
+  slots.forEach((slot, i) => {
+    const width = 150 + rng() * 110
+    const centre = half * (slot + (rng() - 0.5) * 0.12)
+    const fromTop = (i + (flip > 0 ? 0 : 1)) % 2 === 0
+    const tip = reach * (0.08 + rng() * 0.5) * (fromTop ? -1 : 1)
+    const cutLeft = rng() < 0.5
+    const sides = {
+      left: cutLeft ? 'cut' : 'torn',
+      right: cutLeft ? 'torn' : 'cut',
+      skew: (rng() < 0.5 ? -1 : 1) * width * (0.12 + rng() * 0.2),
+    }
+    if (fromTop) Object.assign(sides, { s0: tip, bottom: 'torn' })
+    else Object.assign(sides, { s1: tip, top: 'torn' })
+    // Each takes the dye that the course under its middle does not have.
+    const under = flip * centre < x1 - 70 || flip * centre > x2 ? 'b' : 'a'
+    sheets.push(
+      band(under === 'a' ? 'b' : 'a', centre - width / 2, centre + width / 2, key + 7919 * (i + 1), sides),
+    )
+  })
+  const accentAt = frame.within(flip * half * (0.04 + rng() * 0.14), 0.3 + rng() * 0.4)
+  sheets.push(scrap('accent', accentAt, frame.lean + radians((rng() - 0.5) * 5), 150, 84, key + 31))
+  plan.lay = { name: 'gather', grammar: 'coursed', sheets: count, lean: leanOf(frame), seam: round(seam, 1) }
+  plan.accent = accentAt.map((v) => round(v, 1))
+  return sheets
+}
+
+function coursedHold(plan, rng) {
+  const frame = coursedFrame(plan, rng)
+  const { half, reach, far, band } = frame
+  const key = plan.seed
+  const flip = rng() < 0.5 ? -1 : 1
+  const seam = 15 + rng() * 5
+  const j1 = half * (-0.36 + rng() * 0.14)
+  const j2 = half * (0.34 + rng() * 0.16)
+  const shelf = reach * (0.3 + rng() * 0.22)
+  const calm = { amp: 0.42, core: 0.8 }
+  // Three courses fitted along two even seams; the narrow one stops at a cut end, and a fourth
+  // lies under that end, so the ground shows only in the seams.
+  const sheets = [
+    band('a', flip * -far, flip * j1, key, { right: 'torn', ...calm }),
+    band('b', flip * (j1 + seam), flip * j2, key + 977, { left: 'cut', right: 'torn', ...calm }),
+    band('a', flip * (j2 + seam), flip * far, key + 1931, { left: 'torn', s1: shelf, top: 'cut', ...calm }),
+    band('b', flip * (j2 + seam), flip * far, key + 2903, {
+      left: 'cut',
+      s0: shelf + seam,
+      bottom: 'torn',
+      ...calm,
+    }),
+  ]
+  const accentAt = frame.within(flip * (j1 + seam / 2), 0.28 + rng() * 0.44)
+  sheets.push(
+    scrap('accent', accentAt, frame.lean + radians((rng() - 0.5) * 3), 128, 56, key + 31, { amp: 0.3 }),
+  )
+  plan.lay = { name: 'hold', grammar: 'coursed', sheets: 4, lean: leanOf(frame), seam: round(seam, 1) }
+  plan.accent = accentAt.map((v) => round(v, 1))
+  return sheets
+}
+
+function coursedClear(plan, rng) {
+  const frame = coursedFrame(plan, rng)
+  const { half, far, end, at, band } = frame
+  const key = plan.seed
+  const flip = rng() < 0.5 ? -1 : 1
+  // One course has been lifted out: its bay is the only bare ground, and the accent lies in it.
+  const bay = half * (0.3 + rng() * 0.08 + plan.themes.wayfinding * 0.04)
+  const g0 = half * (0.02 + rng() * 0.2) - bay / 2
+  const g1 = g0 + bay
+  const bend = (rng() - 0.5) * 60
+  const line = (c) => {
+    const points = []
+    for (let i = 0; i <= 32; i++) {
+      const s = -end + (2 * end * i) / 32
+      points.push(at(flip * (c + bend * Math.sin((Math.PI * s) / end)), s))
+    }
+    return points
+  }
+  const closed = (points, c, torn) => ({
+    edges: [
+      torn,
+      edge([points.at(-1), at(flip * c, end)], 'cut', key + 1),
+      edge([at(flip * c, end), at(flip * c, -end)], 'cut', key + 2),
+      edge([at(flip * c, -end), points[0]], 'cut', key + 3),
+    ],
+  })
+  const near = line(g0)
+  const beyond = line(g1)
+  const under = line(g1 - (26 + rng() * 16))
+  const outer = half * (-0.5 + rng() * 0.14)
+  const sheets = [
+    { role: 'a', ...closed(under, far, edge(under, 'torn', key + 555, { sway: 1.6, core: 0.7 })) },
+    band('a', flip * -far, flip * (outer + 60), key + 4001, {}),
+    { role: 'b', ...closed(near, outer, edge(near, 'torn', key + 777, { sway: 2.2, core: 1.25 })) },
+    { role: 'b', ...closed(beyond, far, edge(beyond, 'torn', key + 777, { sway: 2.2, core: 0.25 })) },
+  ]
+  // The near half's outer side is torn too, and lies over the course beside it.
+  sheets[2].edges[2] = edge([at(flip * outer, end), at(flip * outer, -end)], 'torn', key + 888, { amp: 0.8 })
+  const accentAt = frame.within(flip * (g0 + bay * (0.36 + rng() * 0.12)), 0.25 + rng() * 0.5)
+  sheets.push(scrap('accent', accentAt, frame.lean + radians(90 + (rng() - 0.5) * 16), 132, 62, key + 31))
+  plan.lay = { name: 'clear', grammar: 'coursed', sheets: 4, lean: leanOf(frame), bay: round(bay, 1) }
+  plan.accent = accentAt.map((v) => round(v, 1))
+  return sheets
+}
+
+function coursedRun(plan, rng) {
+  const { themes } = plan
+  const frame = coursedFrame(plan, rng)
+  const { half, far, at, band } = frame
+  const key = plan.seed
+  const flip = rng() < 0.5 ? -1 : 1
+  const x0 = half * (-0.58 + rng() * 0.12)
+  const x1 = half * (0.2 + rng() * 0.16)
+  const sheets = [
+    band('a', flip * -far, flip * (x0 + 60), key + 4001, {}),
+    band('b', flip * x0, flip * x1, key + 4507, { left: 'torn', right: 'torn' }),
+  ]
+  // The ground shows in the one bay beside the wide course: narrower when the release is crowded.
+  const crowded = themes.density > 0.6
+  const bay = (crowded ? 130 : 190) + rng() * 50
+  sheets.push(band('a', flip * (x1 + bay), flip * far, key + 5003, { left: 'torn' }))
+
+  // One narrow course torn across into pieces: each is shorter than the last and lies further on.
+  const pieces = clamp(Math.round(4 + themes.density * 1.4 + themes.pulse * 0.8), 5, 6)
+  const width = 124 + rng() * 20
+  const centre = flip * (x1 - width * (0.2 + rng() * 0.5))
+  // The run is fitted to the stretch of its own line that lies on the canvas.
+  const [low, high] = frame.span(centre)
+  const start = low + 34
+  const lengths = []
+  const gaps = [0]
+  for (let i = 0; i < pieces; i++) lengths.push((300 + rng() * 40) * 0.84 ** i)
+  for (let i = 1; i < pieces; i++) gaps.push(10 + i * i * 5 + rng() * 8)
+  const fit =
+    (high - low - 34 - 78) / (lengths.reduce((sum, v) => sum + v, 0) + gaps.reduce((sum, v) => sum + v, 0))
+  const cuts = [0]
+  for (const length of lengths) cuts.push(cuts.at(-1) + length * fit)
+  const lean = cuts.map((_, i) => (rng() - 0.5) * 56 * 0.8 ** i)
+  const tearAt = (i) => [
+    [cuts[i] + lean[i], -width / 2],
+    [cuts[i] - lean[i], width / 2],
+  ]
+  let travelled = 0
+  let accentAt = at(centre, start)
+  for (let i = 0; i < pieces; i++) {
+    const left = tearAt(i)
+    const right = tearAt(i + 1)
+    travelled += gaps[i] * fit
+    const drift = travelled
+    const lift = flip * i * i * 1.6 * (0.6 + rng() * 0.8)
+    const spin = radians((rng() - 0.5) * 1.4)
+    const middle = [(cuts[i] + cuts[i + 1]) / 2, 0]
+    const place = (point) => {
+      const turned = rotateAbout(point, middle, spin)
+      return at(centre + turned[1] + lift, start + turned[0] + drift)
+    }
+    const last = i === pieces - 1
+    sheets.push({
+      role: last ? 'accent' : 'a',
+      place,
+      edges: [
+        edge([left[0], right[0]], 'cut', key + 9000 + i),
+        edge(right, 'torn', key + 6000 + (i + 1) * 211, { amp: 0.8, core: 1.1 }),
+        edge([right[1], left[1]], 'cut', key + 9100 + i),
+        edge(left, 'torn', key + 6000 + i * 211, { amp: 0.8, core: 0.2, reverse: true }),
+      ],
+    })
+    if (last) accentAt = place(middle)
+  }
+  plan.lay = {
+    name: 'run',
+    grammar: 'coursed',
+    sheets: sheets.length - pieces,
+    pieces,
+    lean: leanOf(frame),
+    crowded,
+  }
+  plan.accent = accentAt.map((v) => round(v, 1))
+  return sheets
+}
+
+const LAY = {
+  loose: { gather: layGather, hold: layHold, clear: layClear, run: layRun },
+  coursed: { gather: coursedGather, hold: coursedHold, clear: coursedClear, run: coursedRun },
+}
 
 export function planPiece(version, themes, seed) {
+  const { major, minor } = parseVersion(version)
+  const thematic = thematicFor(major)
+  const variation = variationFor(major, minor)
   const rng = mulberry32(seed)
   const plan = {
     version,
     seed,
     themes,
+    thematic,
+    variation,
+    inks: Object.fromEntries(
+      ['light', 'dark'].map((name) => [
+        name,
+        { a: thematic.deep[name], b: variation.pale[name], accent: thematic.accent },
+      ]),
+    ),
     // A precise release tears cleanly; a release of many hands tears rough.
     tear: {
       amp: round(8 + themes.hands * 5 - themes.precision * 3.5, 2),
@@ -572,7 +1006,20 @@ export function planPiece(version, themes, seed) {
     fibres: Math.round(150 + themes.density * 90 + rng() * 20),
     grainSeed: seed % 997,
   }
-  plan.sheets = LAY[LAYS[themes.lead]](plan, rng)
+  plan.sheets = LAY[thematic.grammar][LAYS[themes.lead]](plan, rng)
+  if (thematic.grammar === 'loose') {
+    plan.lay.grammar = 'loose'
+    // The loose lay turns as a whole about the canvas's centre, by the variation's bearing.
+    if (variation.bearing !== 0) {
+      const centre = [WIDTH / 2, HEIGHT / 2]
+      const turn = radians(variation.bearing)
+      for (const sheet of plan.sheets) {
+        const inner = sheet.place ?? ((point) => point)
+        sheet.place = (point) => rotateAbout(inner(point), centre, turn)
+      }
+      plan.accent = rotateAbout(plan.accent, centre, turn).map((v) => round(v, 1))
+    }
+  }
   return plan
 }
 
@@ -671,9 +1118,11 @@ function trim(points) {
   )
 }
 
-function pathData(points) {
+// A sheet none of whose points lies on the canvas is dropped, unless it is a course: a course's
+// corners are all outside while it still crosses the canvas.
+function pathData(points, crossing = false) {
   const kept = points
-  if (kept.length < 3 || !kept.some(inside)) return ''
+  if (kept.length < 3 || !(crossing || kept.some(inside))) return ''
   let x = Math.round(kept[0][0] * 10)
   let y = Math.round(kept[0][1] * 10)
   let data = `M${x / 10} ${y / 10}`
@@ -711,15 +1160,15 @@ function fibres(plan, rng) {
 }
 
 export function renderPiece(plan, variantName) {
-  const variant = VARIANTS[variantName]
+  const variant = { ...VARIANTS[variantName], ...plan.inks[variantName] }
   const rng = mulberry32(plan.seed ^ 0x5bd1e995)
   const strands = fibres(plan, rng)
   const body = plan.sheets
     .map((sheet) => {
       const { top, core } = outline(sheet, plan.tear)
-      const topData = pathData(top)
+      const topData = pathData(top, sheet.crossing)
       if (!topData) return ''
-      return `<g filter="url(#lift)"><path fill="${variant.core}" d="${pathData(core)}"/><path fill="${variant[sheet.role]}" d="${topData}"/></g>`
+      return `<g filter="url(#lift)"><path fill="${variant.core}" d="${pathData(core, sheet.crossing)}"/><path fill="${variant[sheet.role]}" d="${topData}"/></g>`
     })
     .filter(Boolean)
     .join('\n')
@@ -770,18 +1219,21 @@ function committedReleases() {
     .filter((file) => file.endsWith('.md'))
     .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
     .map((file) => ({ version: file.replace(/\.md$/, ''), notes: join(NOTES_DIR, file) }))
+    .filter(({ version }) => parseVersion(version))
 }
 
 function main() {
   const args = parseArgs(process.argv.slice(2))
   const single = Boolean(args.version)
+  if (single) parseVersion(args.version)
   const releases = single ? [{ version: args.version, notes: resolve(args.notes) }] : committedReleases()
   const out = resolve(args.out ?? ASSET_DIR)
   mkdirSync(out, { recursive: true })
 
   const entries = []
   for (const { version, notes } of releases) {
-    const themes = readThemes(readFileSync(notes, 'utf8'))
+    const text = readFileSync(notes, 'utf8')
+    const themes = readThemes(text)
     const seed = seedFor(version)
     const plan = planPiece(version, themes, seed)
     const files = {}
@@ -790,12 +1242,23 @@ function main() {
       const file = `${version}-${variantName}.svg`
       writeFileSync(join(out, file), svg)
       files[variantName] = { file, bytes: Buffer.byteLength(svg) }
-      console.log(`${file}  ${(Buffer.byteLength(svg) / 1024).toFixed(1)} KB  ${plan.lay.name}`)
+      console.log(
+        `${file}  ${(Buffer.byteLength(svg) / 1024).toFixed(1)} KB  ${plan.thematic.name} ${plan.variation.minor}  ${plan.lay.name}`,
+      )
     }
     entries.push({
       version,
       seed,
       notes: `scripts/release-art/notes/${version}.md`,
+      // A stand-in is not a release: its notes were written to show a version that has none yet.
+      standIn: STAND_IN.test(text),
+      thematic: plan.thematic.name,
+      variation: {
+        minor: plan.variation.minor,
+        bath: plan.variation.bath,
+        bearing: plan.variation.bearing,
+        pale: plan.variation.pale,
+      },
       themes: {
         lines: themes.lines,
         lead: themes.lead,
@@ -822,16 +1285,24 @@ function main() {
       canvas: { width: WIDTH, height: HEIGHT },
       palette: {
         hexes: PALETTE_HEXES,
-        light: Object.fromEntries(['ground', 'a', 'b', 'accent', 'core'].map((k) => [k, VARIANTS.light[k]])),
-        dark: Object.fromEntries(['ground', 'a', 'b', 'accent', 'core'].map((k) => [k, VARIANTS.dark[k]])),
+        light: { ground: VARIANTS.light.ground, core: VARIANTS.light.core, accent: PALETTE.saffron },
+        dark: { ground: VARIANTS.dark.ground, core: VARIANTS.dark.core, accent: PALETTE.saffron },
       },
       lays: LAYS,
+      thematics: [...new Set(entries.map((entry) => parseVersion(entry.version).major))].map((major) => {
+        const { deep, pale, ...thematic } = thematicFor(major)
+        return { ...thematic, deep, pale }
+      }),
       releases: entries,
     }
     // Short lists stay on one line, the way the repo's formatter writes them.
-    const json = JSON.stringify(manifest, null, 2).replace(/\[\n\s+([^[\]{}]*?)\n\s+\]/g, (_, items) => {
-      return `[${items.split(/,\n\s+/).join(', ')}]`
-    })
+    const json = JSON.stringify(manifest, null, 2).replace(
+      /^(.*)\[\n\s+([^[\]{}]*?)\n\s+\](,?)$/gm,
+      (whole, before, items, comma) => {
+        const line = `${before}[${items.split(/,\n\s+/).join(', ')}]${comma}`
+        return line.length <= 110 ? line : whole
+      },
+    )
     writeFileSync(join(out, 'manifest.json'), `${json}\n`)
   }
 }
