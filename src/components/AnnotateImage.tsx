@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 
 import { TrashIcon } from '#/components/TrashIcon'
 import { Button } from '#/components/ui/button'
+import { Checkbox } from '#/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -28,19 +29,31 @@ import { Tip } from '#/components/ui/tooltip'
 import {
   type Box,
   type History,
+  type Layout,
   type Point,
+  type ResizePart,
+  RESIZE_PARTS,
   carryNotes,
   createHistory,
+  cursorOf,
+  deleteAt,
   edit,
+  fillMark,
   handleAt,
+  handlePoint,
+  isFillable,
   isTinyDrag,
   markAt,
   markBounds,
   marqueeIds,
+  partAt,
   pivotOf,
   redo,
   replace,
+  resizeFactors,
+  resizeHandleAt,
   rotateMark,
+  scaleMark,
   textSize,
   translateMark,
   turnBetween,
@@ -83,19 +96,33 @@ const DEFAULT_WIDTH = 4
 /** The rotate handle sits this far above the selection's box, and is this big, in css pixels. */
 const HANDLE_GAP = 26
 const HANDLE_RADIUS = 7
+/** How far a press may be from the rotate tip and still turn the selection, in css pixels. */
+const TIP_REACH = HANDLE_RADIUS * 3
+/** The resize handles are squares this wide, and a press within this many css pixels of one takes it. */
+const HANDLE_SIZE = 8
+const HANDLE_REACH = 8
+/** The X that deletes the selection sits this far right of the rotate tip, with a radius of this many css pixels. */
+const X_OFFSET = 16
+const X_RADIUS = 6
+const X_REACH = 9
 
-/** What the canvas paints over the picture while marks are selected: the group box and its handle. */
+/** What the canvas paints over the picture while marks are selected: the group box, its handles and its tip. */
 interface Overlay {
   picked: Annotation[]
   marquee: Box | null
+  /** The pointer is near the rotate tip, so the X that deletes the selection is shown beside it. */
+  hover: boolean
 }
+
+/** How far a point is from another, in picture pixels, and whether it is within `reach` of it. */
+const within = (p: Point, q: Point, reach: number) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= reach
 
 /**
  * A pointer gesture on the picture in Select mode. `next` is the picture the gesture would leave,
  * painted as a preview and committed as one history step when the pointer lets go.
  */
 interface Gesture {
-  mode: 'move' | 'turn' | 'marquee'
+  mode: 'move' | 'turn' | 'marquee' | 'resize'
   /** The pointer that began the gesture: a second pointer's moves and release do not drive it. */
   pointer: number
   start: Point
@@ -109,6 +136,8 @@ interface Gesture {
   additive: boolean
   /** A press on a mark that was part of several: a click without a drag picks it alone. */
   pick?: string
+  /** A resize: the selection's box when the gesture began, and the handle it grabbed. */
+  grip?: { box: Box; part: ResizePart }
   next: Annotation[] | null
 }
 
@@ -155,6 +184,7 @@ function drawMark(ctx: CanvasRenderingContext2D, a: Annotation) {
       }
     }
   } else if (a.kind === 'rect' && a.rect) {
+    if (a.fill) ctx.fillRect(a.rect.x, a.rect.y, a.rect.w, a.rect.h)
     ctx.strokeRect(a.rect.x, a.rect.y, a.rect.w, a.rect.h)
   } else if (a.kind === 'ellipse' && a.rect) {
     ctx.beginPath()
@@ -167,6 +197,7 @@ function drawMark(ctx: CanvasRenderingContext2D, a: Annotation) {
       0,
       Math.PI * 2,
     )
+    if (a.fill) ctx.fill()
     ctx.stroke()
   } else if (a.kind === 'text' && a.from) {
     const size = textSize(a)
@@ -235,6 +266,28 @@ function paint(canvas: HTMLCanvasElement, bitmap: ImageBitmap, items: Annotation
     ctx.arc(hx, hy, HANDLE_RADIUS * k, 0, Math.PI * 2)
     ctx.fill()
     ctx.stroke()
+    // The eight resize handles: squares on the box's corners and the middles of its sides.
+    const size = HANDLE_SIZE * k
+    for (const part of RESIZE_PARTS) {
+      const [px, py] = handlePoint(box, part)
+      ctx.fillRect(px - size / 2, py - size / 2, size, size)
+      ctx.strokeRect(px - size / 2, py - size / 2, size, size)
+    }
+    // The X beside the rotate tip, only while the pointer is near the tip.
+    if (overlay.hover) {
+      const [cx, cy] = deleteAt([hx, hy], X_OFFSET * k, bitmap)
+      const r = X_RADIUS * k
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(cx - r / 2, cy - r / 2)
+      ctx.lineTo(cx + r / 2, cy + r / 2)
+      ctx.moveTo(cx + r / 2, cy - r / 2)
+      ctx.lineTo(cx - r / 2, cy + r / 2)
+      ctx.stroke()
+    }
   }
   ctx.restore()
 }
@@ -272,6 +325,9 @@ export function AnnotateImage({
   const [tool, setTool] = useState<Tool>('pen')
   const [color, setColor] = useState(DEFAULT_COLOR)
   const [width, setWidth] = useState(DEFAULT_WIDTH)
+  // Whether new boxes and ellipses are drawn filled (the Fill checkbox), and whether the pointer is near the rotate tip.
+  const [fill, setFill] = useState(false)
+  const [tipHover, setTipHover] = useState(false)
   const [text, setText] = useState('')
   const [draft, setDraft] = useState<Annotation | null>(null)
   const [busy, setBusy] = useState(false)
@@ -323,8 +379,8 @@ export function AnnotateImage({
       w: Math.abs(marquee[1][0] - marquee[0][0]),
       h: Math.abs(marquee[1][1] - marquee[0][1]),
     }
-    paint(canvas, bitmap, drawn, { picked, marquee: box || null })
-  }, [bitmap, shown, draft, picked, marquee])
+    paint(canvas, bitmap, drawn, { picked, marquee: box || null, hover: tipHover })
+  }, [bitmap, shown, draft, picked, marquee, tipHover])
 
   // Image pixels for a css pixel of the canvas as it is shown, and where a pointer is in the picture.
   const scale = (e: PointerEvent<HTMLCanvasElement>) => {
@@ -349,18 +405,53 @@ export function AnnotateImage({
           ...(kind === 'pen' ? { points: [[x, y] as Point] } : {}),
         }),
     ...(kind === 'text' ? { text } : {}),
+    ...(fill && (kind === 'rect' || kind === 'ellipse') ? { fill: true } : {}),
   })
+
+  // The layout the pointer is measured with: css pixels turned into picture pixels by `k`.
+  const layoutAt = (k: number): Layout => ({
+    gap: HANDLE_GAP * k,
+    handleReach: HANDLE_REACH * k,
+    tipReach: TIP_REACH * k,
+    picture: bitmap ?? { width: 0, height: 0 },
+  })
+  // The X beside the rotate tip of a selection's box, in picture pixels.
+  const deleteXAt = (box: Box, k: number): Point =>
+    deleteAt(handleAt(box, HANDLE_GAP * k, layoutAt(k).picture), X_OFFSET * k, layoutAt(k).picture)
 
   const startSelect = (e: PointerEvent<HTMLCanvasElement>, point: Point) => {
     e.currentTarget.setPointerCapture(e.pointerId)
+    const k = scale(e)
     const hit = markAt(items, point[0], point[1])
+    const box = unionBounds(picked)
+    if (box) {
+      // The X beside the rotate tip deletes the selection, as one step.
+      if (within(point, deleteXAt(box, k), X_REACH * k)) {
+        deleteSelected()
+        return
+      }
+      // A handle on the box's sides or corners resizes it, even where a mark lies under the edge.
+      const handle = resizeHandleAt(box, point, HANDLE_REACH * k)
+      if (handle) {
+        gesture.current = {
+          mode: 'resize',
+          pointer: e.pointerId,
+          start: point,
+          ids: new Set(picked.map((a) => a.id)),
+          base: items,
+          centre: point,
+          additive: false,
+          grip: { box, part: handle },
+          next: null,
+        }
+        return
+      }
+    }
     // The rotate handle of the selection sits above its box, in a band that can hold a mark: a mark under the
     // pointer is picked first, and the handle takes only a press that lands on no mark.
-    const box = unionBounds(picked)
     if (box && !hit) {
-      const handle = handleAt(box, HANDLE_GAP * scale(e), bitmap ?? { width: 0, height: 0 })
-      const reach = HANDLE_RADIUS * 3 * scale(e)
-      if (Math.hypot(point[0] - handle[0], point[1] - handle[1]) <= reach) {
+      const handle = handleAt(box, HANDLE_GAP * k, bitmap ?? { width: 0, height: 0 })
+      if (within(point, handle, TIP_REACH * k)) {
         gesture.current = {
           mode: 'turn',
           pointer: e.pointerId,
@@ -445,6 +536,10 @@ export function AnnotateImage({
         const dx = p[0] - g.start[0]
         const dy = p[1] - g.start[1]
         g.next = g.base.map((a) => (g.ids.has(a.id) ? translateMark(a, dx, dy) : a))
+      } else if (g.mode === 'resize' && g.grip) {
+        // The handle's edge follows the pointer from the box as it was when the gesture began.
+        const f = resizeFactors(g.grip.box, g.grip.part, p)
+        g.next = g.base.map((a) => (g.ids.has(a.id) ? scaleMark(a, f.anchor, f.sx, f.sy) : a))
       } else {
         const angle = turnBetween(g.centre, g.start, p)
         g.next = g.base.map((a) => (g.ids.has(a.id) ? rotateMark(a, g.centre, angle) : a))
@@ -452,6 +547,8 @@ export function AnnotateImage({
       setPreview(g.next)
       return
     }
+    // With no gesture and the Select tool, the pointer's position sets the cursor and whether the X shows.
+    if (tool === 'select') return hover(e, at(e))
     if (!draft || !origin.current) return
     const [x, y] = at(e)
     const [x0, y0] = origin.current
@@ -467,6 +564,22 @@ export function AnnotateImage({
             ? { ...draft, to: [x, y] }
             : draft,
     )
+  }
+
+  const hover = (e: PointerEvent<HTMLCanvasElement>, point: Point) => {
+    const box = unionBounds(picked)
+    const k = scale(e)
+    const onX = box !== null && within(point, deleteXAt(box, k), X_REACH * k)
+    const tip = box ? handleAt(box, HANDLE_GAP * k, bitmap ?? { width: 0, height: 0 }) : null
+    setTipHover(tip !== null && (onX || within(point, tip, TIP_REACH * k)))
+    // Set on the element, not through state: a move over the canvas does not re-render the dialog.
+    e.currentTarget.style.cursor = onX ? 'grab' : cursorOf(partAt(box, items, point, layoutAt(k)))
+  }
+
+  const onPointerLeave = (e: PointerEvent<HTMLCanvasElement>) => {
+    if (gesture.current) return
+    e.currentTarget.style.cursor = ''
+    setTipHover(false)
   }
 
   const onPointerUp = (e: PointerEvent<HTMLCanvasElement>) => {
@@ -512,6 +625,29 @@ export function AnnotateImage({
     origin.current = null
   }
 
+  // Changing tool drops the cursor the Select tool set on the canvas, and the X.
+  const pickTool = (next: Tool) => {
+    setTool(next)
+    setTipHover(false)
+    if (canvasRef.current) canvasRef.current.style.cursor = ''
+  }
+
+  // The Fill checkbox shows the fill of a single selected box or ellipse, and otherwise the fill the next one gets.
+  const fillShown = selectedItem && isFillable(selectedItem) ? Boolean(selectedItem.fill) : fill
+  // Fill is set for the next box or ellipse drawn, and on the selected boxes and ellipses as one step.
+  const chooseFill = (on: boolean) => {
+    setFill(on)
+    if (busy || gesture.current) return
+    const ids = new Set(picked.filter((a) => isFillable(a) && Boolean(a.fill) !== on).map((a) => a.id))
+    if (!ids.size) return
+    setHistory((h) =>
+      edit(
+        h,
+        h.present.map((a) => (ids.has(a.id) ? fillMark(a, on) : a)),
+      ),
+    )
+  }
+
   const setNote = (note: string) => {
     // A pointer gesture in progress owns the picture until it is released: the note waits for it.
     if (!selectedItem || gesture.current) return
@@ -525,6 +661,7 @@ export function AnnotateImage({
     )
   }
 
+  // Deletes the selection: the Delete key and the X beside the rotate tip.
   const deleteSelected = () => {
     if (!picked.length || busy || gesture.current) return
     const gone = new Set(picked.map((a) => a.id))
@@ -682,7 +819,7 @@ export function AnnotateImage({
                   size="sm"
                   variant={tool === name ? 'secondary' : 'ghost'}
                   aria-pressed={tool === name}
-                  onClick={() => setTool(name)}
+                  onClick={() => pickTool(name)}
                   disabled={busy}
                 >
                   <Icon data-icon="inline-start" /> {label}
@@ -713,6 +850,10 @@ export function AnnotateImage({
                 className="w-24 accent-primary"
               />
             </Tip>
+            <label className="flex items-center gap-1.5 text-xs">
+              <Checkbox checked={fillShown} onCheckedChange={chooseFill} disabled={busy} />
+              Fill
+            </label>
             {tool === 'text' && (
               <Input
                 aria-label="Text"
@@ -742,15 +883,6 @@ export function AnnotateImage({
               disabled={!canRedo}
             >
               <Redo2 data-icon="inline-start" /> Redo
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={deleteSelected}
-              disabled={!picked.length || busy}
-            >
-              <TrashIcon data-icon="inline-start" /> Delete
             </Button>
             <Button
               type="button"
@@ -796,6 +928,7 @@ export function AnnotateImage({
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
                 onPointerCancel={onPointerUp}
+                onPointerLeave={onPointerLeave}
               />
             ) : (
               <p className="p-6 text-sm text-muted-foreground">{failed || 'Opening the picture…'}</p>

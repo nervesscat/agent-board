@@ -118,12 +118,10 @@ test('the Select tool picks one mark, adds and takes away with Shift, and a drag
   // A click on a mark picks it: its note is editable and the Delete button follows the selection.
   await click(page, canvas, [60, 60])
   await expect(noteField(canvas)).toHaveValue('first')
-  await expect(control(canvas, 'Delete')).toBeEnabled()
 
   // A click on empty picture clears it.
   await click(page, canvas, [285, 20])
   await expect(noteField(canvas)).toBeDisabled()
-  await expect(control(canvas, 'Delete')).toBeDisabled()
 
   // Shift-click adds the second mark: two selected, so the note field is off.
   await click(page, canvas, [60, 60])
@@ -136,13 +134,12 @@ test('the Select tool picks one mark, adds and takes away with Shift, and a drag
   // A drag from empty picture selects every mark its box meets, and draws nothing.
   await drag(page, canvas, [285, 285], [5, 5])
   await expect(noteField(canvas)).toBeDisabled()
-  await expect(control(canvas, 'Delete')).toBeEnabled()
   await expect(canvas.getByRole('listitem')).toHaveCount(2)
 
   // Escape clears the selection and leaves the canvas open.
   await page.keyboard.press('Escape')
   await expect(canvas).toBeVisible()
-  await expect(control(canvas, 'Delete')).toBeDisabled()
+  await expect(noteField(canvas)).toBeDisabled()
 
   // The select tool drew nothing: the stored document holds the two boxes as they were drawn.
   const attached = await attachAndCreate(human, project.id, dialog, canvas)
@@ -289,9 +286,9 @@ test('Delete removes the selection, and undo and redo bring it back and take it 
   await page.keyboard.press('Control+y')
   await expect(canvas.getByRole('listitem')).toHaveText(['1. kept'])
 
-  // The Delete button removes the one left; undo brings it back with its note.
+  // The Delete key removes the one left; undo brings it back with its note.
   await click(page, canvas, [210, 210])
-  await control(canvas, 'Delete').click()
+  await page.keyboard.press('Delete')
   await expect(canvas.getByRole('listitem')).toHaveCount(0)
   await control(canvas, 'Undo').click()
   await expect(canvas.getByRole('listitem')).toHaveText(['1. kept'])
@@ -318,17 +315,16 @@ test('the selection works from the keyboard alone once the marks are drawn', asy
   await draw(page, canvas, 'Box', [160, 160], [260, 260])
   await noteField(canvas).fill('b')
 
-  // Tab reaches the Delete button from Undo (Redo is skipped while there is nothing to redo).
+  // Tab reaches Clear from Undo (Redo is skipped while there is nothing to redo, and there is no Delete button).
   await control(canvas, 'Select').click()
   await click(page, canvas, [60, 60])
   await control(canvas, 'Undo').focus()
   await page.keyboard.press('Tab')
-  await expect(control(canvas, 'Delete')).toBeFocused()
+  await expect(control(canvas, 'Clear')).toBeFocused()
 
   // Keyboard only from here: Select is focused, and Ctrl+A selects every mark.
   await control(canvas, 'Select').focus()
   await page.keyboard.press('Control+a')
-  await expect(control(canvas, 'Delete')).toBeEnabled()
   await expect(noteField(canvas)).toBeDisabled()
   await page.keyboard.press('Delete')
   await expect(canvas.getByRole('listitem')).toHaveCount(0)
@@ -343,10 +339,9 @@ test('the selection works from the keyboard alone once the marks are drawn', asy
 
   // Escape clears a selection without closing the canvas.
   await page.keyboard.press('Control+a')
-  await expect(control(canvas, 'Delete')).toBeEnabled()
   await page.keyboard.press('Escape')
   await expect(canvas).toBeVisible()
-  await expect(control(canvas, 'Delete')).toBeDisabled()
+  await expect(noteField(canvas)).toBeDisabled()
 
   // Backspace removes a selection too.
   await page.keyboard.press('Control+a')
@@ -501,7 +496,7 @@ test('the select controls lock while the picture attaches', async ({ page, proje
   await canvas.getByRole('button', { name: 'Attach', exact: true }).click()
   await expect(canvas.getByRole('button', { name: 'Attaching…' })).toBeVisible()
 
-  for (const name of ['Select', 'Pencil', 'Undo', 'Redo', 'Delete', 'Clear'])
+  for (const name of ['Select', 'Pencil', 'Undo', 'Redo', 'Clear'])
     await expect(control(canvas, name)).toBeDisabled()
   // A pointer on the picture does nothing while it attaches: no move, no new mark.
   await drag(page, canvas, [60, 60], [200, 200])
@@ -513,4 +508,181 @@ test('the select controls lock while the picture attaches', async ({ page, proje
   expect(items).toHaveLength(1)
   expect(items[0]!.rect!.x).toBeCloseTo(20, 0)
   expect('rotation' in items[0]!).toBe(false)
+})
+
+/** The cursor the canvas shows once the pointer is at `point` (a picture pixel), read from the element's style. */
+async function cursorAt(page: Page, canvas: Locator, point: [number, number]) {
+  const p = await at(canvas, point)
+  await page.mouse.move(p.x, p.y)
+  return pictureOf(canvas).evaluate((c: HTMLCanvasElement) => c.style.cursor)
+}
+
+/** The colour of one pixel of a stored picture, read the way the flattened-picture test reads it. */
+async function pixelOf(page: Page, attached: Stored, [x, y]: [number, number]) {
+  const res = await page.request.get(attached.url)
+  expect(res.ok()).toBe(true)
+  return page.evaluate(
+    async ({ base64, x, y }) => {
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+      const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }))
+      const c = document.createElement('canvas')
+      c.width = bitmap.width
+      c.height = bitmap.height
+      const ctx = c.getContext('2d')!
+      ctx.drawImage(bitmap, 0, 0)
+      const [r, g, b] = ctx.getImageData(x, y, 1, 1).data
+      return { r: r!, g: g!, b: b! }
+    },
+    { base64: Buffer.from(await res.body()).toString('base64'), x, y },
+  )
+}
+
+test('dragging a corner handle resizes both sides, and a side handle one side, from the opposite edge', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Resize corner and side')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+
+  // The south-east corner handle sits on the box's corner (100, 100): dragged to (140, 130), the top-left stays put.
+  await drag(page, canvas, [100, 100], [140, 130])
+  // The box is now 20..140 by 20..130; its east side handle sits at (140, 75). Dragged to 150, only the width changes.
+  await drag(page, canvas, [140, 75], [150, 75])
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [mark] = storedItems(attached)
+  expect(mark!.rect!.x).toBeCloseTo(20, 0)
+  expect(mark!.rect!.y).toBeCloseTo(20, 0)
+  expect(mark!.rect!.w).toBeCloseTo(130, 0)
+  expect(mark!.rect!.h).toBeCloseTo(110, 0)
+  expect('rotation' in mark!).toBe(false)
+})
+
+test('each resize is one undo step, and redo brings back only the step that was undone', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Resize undo and redo')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+  await drag(page, canvas, [100, 100], [140, 130])
+  await drag(page, canvas, [140, 75], [150, 75])
+
+  // Two undo steps take both resizes back; the box drawn before them stays, so Undo is still there.
+  await control(canvas, 'Undo').click()
+  await control(canvas, 'Undo').click()
+  await expect(control(canvas, 'Undo')).toBeEnabled()
+  // One redo puts back only the corner resize.
+  await control(canvas, 'Redo').click()
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [mark] = storedItems(attached)
+  expect(mark!.rect!.x).toBeCloseTo(20, 0)
+  expect(mark!.rect!.y).toBeCloseTo(20, 0)
+  expect(mark!.rect!.w).toBeCloseTo(120, 0)
+  expect(mark!.rect!.h).toBeCloseTo(110, 0)
+})
+
+test('the side handles of a vertical line do nothing on its zero width', async ({ page, project, human }) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Zero width')
+  await draw(page, canvas, 'Pencil', [100, 20], [100, 120])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [100, 70])
+
+  // The line's east and west handles both sit on its one vertical edge: a drag sideways changes nothing.
+  await drag(page, canvas, [100, 70], [140, 70])
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [line] = storedItems(attached)
+  expect(line!.kind).toBe('pen')
+  for (const [x] of line!.points!) expect(x).toBeCloseTo(100, 0)
+})
+
+test('the cursor shows the resize arrow on each side and corner, grab on the rotate tip, move inside, and default elsewhere', async ({
+  page,
+  project,
+}) => {
+  const { canvas } = await openCanvas(page, project.id, 'Cursor by part')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+
+  expect(await cursorAt(page, canvas, [100, 60])).toBe('ew-resize')
+  expect(await cursorAt(page, canvas, [60, 20])).toBe('ns-resize')
+  expect(await cursorAt(page, canvas, [100, 100])).toBe('nwse-resize')
+  expect(await cursorAt(page, canvas, [20, 100])).toBe('nesw-resize')
+  // The rotate tip sits below the box here, since there is no room above it.
+  expect(await cursorAt(page, canvas, [60, 126])).toBe('grab')
+  expect(await cursorAt(page, canvas, [60, 60])).toBe('move')
+  expect(await cursorAt(page, canvas, [285, 285])).toBe('default')
+})
+
+test('the X beside the rotate tip deletes the selection as one step, and undo brings it back', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Delete with the X')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await noteField(canvas).fill('gone')
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+
+  // Hovering the rotate tip shows the X beside it; the X is 16 css pixels to the right of the tip.
+  await cursorAt(page, canvas, [60, 126])
+  const tip = await at(canvas, [60, 126])
+  await page.mouse.click(tip.x + 16, tip.y)
+  await expect(canvas.getByRole('listitem')).toHaveCount(0)
+
+  await control(canvas, 'Undo').click()
+  await expect(canvas.getByRole('listitem')).toHaveText(['1. gone'])
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  expect(storedItems(attached)).toHaveLength(1)
+})
+
+test('Fill is unchecked by default, fills the next box, shows the fill of a selected box, and undo and redo set it on the selection', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Fill')
+  const fillBox = canvas.getByRole('checkbox', { name: 'Fill' })
+  await expect(fillBox).not.toBeChecked()
+
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  // A drawn mark is selected: Escape clears it, so the Fill click below is for the next box, not this one.
+  await page.keyboard.press('Escape')
+  await fillBox.click()
+  await expect(fillBox).toBeChecked()
+  await draw(page, canvas, 'Box', [160, 160], [260, 260])
+
+  // A single selected filled box shows Fill checked; the unfilled one shows it unchecked.
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [210, 210])
+  await expect(fillBox).toBeChecked()
+  await click(page, canvas, [60, 60])
+  await expect(fillBox).not.toBeChecked()
+
+  // Fill on for the selected unfilled box is one step: undo takes it off, redo puts it on.
+  await fillBox.click()
+  await expect(fillBox).toBeChecked()
+  await control(canvas, 'Undo').click()
+  await expect(fillBox).not.toBeChecked()
+  await control(canvas, 'Redo').click()
+  await expect(fillBox).toBeChecked()
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [first, second] = storedItems(attached)
+  expect(first).toMatchObject({ kind: 'rect', fill: true })
+  expect(second).toMatchObject({ kind: 'rect', fill: true })
+  // The flattened picture paints both boxes filled in the mark's colour, at their middles.
+  const rose = ({ r, g, b }: { r: number; g: number; b: number }) => r > 180 && g < 90 && b < 120
+  expect(rose(await pixelOf(page, attached, [60, 60]))).toBe(true)
+  expect(rose(await pixelOf(page, attached, [210, 210]))).toBe(true)
 })
