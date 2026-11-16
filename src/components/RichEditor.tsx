@@ -4,9 +4,9 @@ import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { TableKit } from '@tiptap/extension-table'
 import { Placeholder } from '@tiptap/extensions'
 import { Markdown } from '@tiptap/markdown'
-import { type NodeType, type ResolvedPos } from '@tiptap/pm/model'
+import { type Node } from '@tiptap/pm/model'
 import { TextSelection, type Transaction } from '@tiptap/pm/state'
-import { liftTarget } from '@tiptap/pm/transform'
+import { findWrapping, liftTarget } from '@tiptap/pm/transform'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import {
@@ -182,273 +182,28 @@ export function RichEditor({
   )
 }
 
-/** The list items a block can sit in: the lift takes a block out of one of these. */
+/** The list items a block can sit in. */
 const listItemTypes = ['listItem', 'taskItem']
 /** The lists a list item can hold, in any kind. */
 const listTypes = ['bulletList', 'orderedList', 'taskList']
 
 /**
- * Lifts the block at `pos` (of `size`) out of the list item it sits in, one level. A list item starts
- * with a paragraph, so a block that a nested list follows cannot be lifted as it is: the nested list goes
- * out first (it becomes a list of its own, after the item), and then the block can. Returns the block's
- * position after the lift, or null when it could not be lifted.
+ * The block styles of the toolbar. The list kinds are lists: a selection in a list of the kind is toggled off, otherwise
+ * the selected blocks become items of it. The others are blocks of their own.
  */
-function liftOutOfItem(tr: Transaction, pos: number, size: number): number | null {
-  const liftRange = (from: number, to: number) => {
-    const range = tr.doc.resolve(from).blockRange(tr.doc.resolve(to))
-    const target = range && liftTarget(range)
-    if (!range || target == null) return false
-    tr.lift(range, target)
-    return true
-  }
-  const $block = tr.doc.resolve(pos)
-  const list = $block.node($block.depth - 1)
-  const index = $block.index($block.depth - 1)
-  // A nested list after the block goes out first (below), so only text after the block keeps the item in its list.
-  let hasRest = false
-  for (let i = $block.index() + 1; i < $block.parent.childCount; i++) {
-    if (!listTypes.includes($block.parent.child(i).type.name)) hasRest = true
-  }
-  // The item's text before the block stays in the item, so the text after it is a new item of the list.
-  const hasHead = $block.index() > 0
-  const listEnd = $block.after($block.depth - 1)
-  const mark = tr.mapping.maps.length
-  if (!liftRange(pos, pos + size)) {
-    const itemEnd = tr.doc.resolve(pos).end()
-    if (!(pos + size < itemEnd && liftRange(pos + size, itemEnd)) || !liftRange(pos, pos + size)) return null
-  }
-  const next = tr.mapping.slice(mark).map(pos, 1)
-  if (list.type.name === 'orderedList' && index < list.childCount - 1) {
-    // The items after the lifted one go on in a list of their own (the nested lists lifted out with the block sit
-    // before it): it starts at the number of its first item, which is the item's own number only when its text
-    // is what follows the block.
-    restartList(tr, mark, listEnd, next, list.attrs.start + index + (hasRest && !hasHead ? 0 : 1))
-  }
-  return next
+export type BlockStyle = 'heading' | 'quote' | 'code' | 'bulletList' | 'orderedList' | 'taskList'
+type ListKind = 'bulletList' | 'orderedList' | 'taskList'
+
+const isListKind = (style: BlockStyle): style is ListKind => style.endsWith('List')
+
+/** The kind of the list a block sits in, when the block is the text of a list item. */
+function listOf(doc: Node, pos: number): string | undefined {
+  const $pos = doc.resolve(pos)
+  if (!listItemTypes.includes($pos.parent.type.name) || $pos.depth < 1) return undefined
+  return $pos.node($pos.depth - 1).type.name
 }
 
-/**
- * Starts the ordered list that continues a list after a split at `number`. The continuation is the list that
- * ends where `end` (the end of the list before the split, as mapped since `mark`) is, when it starts after `from`.
- */
-function restartList(tr: Transaction, mark: number, end: number, from: number, number: number) {
-  const at = tr.mapping.slice(mark).map(end, -1)
-  const node = tr.doc.resolve(at).nodeBefore
-  if (node?.type.name !== 'orderedList') return
-  const nodePos = at - node.nodeSize
-  if (nodePos < from) return
-  tr.setNodeMarkup(nodePos, undefined, { ...node.attrs, start: number })
-}
-
-/**
- * How far the selected blocks are lifted out of their list items. `list` names the list a list style
- * applies to: a block already in an item of that list stays in it, and the style makes a list of its own
- * there. `once` lifts a block one level only (a toggle-off takes the block out of its own item, no further).
- */
-export type Keep = { list?: string; once?: boolean }
-
-/**
- * A block style (heading, list, quote, code block) changes every block its selection touches, so a
- * selection inside one paragraph would change the whole paragraph. This splits the paragraph at the
- * selection's ends, and lifts the selected blocks out of the list items they sit in (as `keep` says), so
- * the style covers the selected text only and the unselected text stays in its list. A block the selection
- * only touches at its edge (one that starts where the selection ends) is left alone. A collapsed caret is
- * left alone, and so is a selection that is not text.
- */
-export function narrowBlocks(tr: Transaction, keep: Keep = {}): { converted: boolean } {
-  if (!(tr.selection instanceof TextSelection) || tr.selection.empty) return { converted: false }
-  const { from, to } = tr.selection
-  // Both checks read the document before either split, so they are about the same paragraphs.
-  const inside = (pos: number) => {
-    const $pos = tr.doc.resolve(pos)
-    if (!$pos.parent.isTextblock || $pos.parentOffset <= 0 || $pos.parentOffset >= $pos.parent.content.size)
-      return false
-    // A line break is inline content of its paragraph (a hard break, or a newline of a soft break kept in the text). A
-    // split beside one would leave the break in a paragraph of its own, so the whole paragraph is taken instead; a start
-    // right after a break is the one case that splits there (see `afterBreak`).
-    const { nodeBefore, nodeAfter } = $pos
-    if (nodeBefore?.type.name === 'hardBreak' || nodeAfter?.type.name === 'hardBreak') return false
-    return !(nodeBefore?.text?.endsWith('\n') || nodeAfter?.text?.startsWith('\n'))
-  }
-  // A selection that starts right after a line break: the split goes there, and the break itself is dropped, so the
-  // text before the break stays in its own block. Not when the break is the first thing in the paragraph.
-  const afterBreak = (pos: number) => {
-    const $pos = tr.doc.resolve(pos)
-    if (!$pos.parent.isTextblock || $pos.parentOffset <= 1 || $pos.parentOffset >= $pos.parent.content.size)
-      return false
-    const { nodeBefore, nodeAfter } = $pos
-    if (nodeAfter?.type.name === 'hardBreak') return false
-    return nodeBefore?.type.name === 'hardBreak' || !!nodeBefore?.text?.endsWith('\n')
-  }
-  const splitTo = inside(to)
-  const splitFrom = inside(from)
-  const breakFrom = !splitFrom && afterBreak(from)
-  // The end first: the start is before it, so its position does not move.
-  if (splitTo) tr.split(to)
-  if (splitFrom) tr.split(from)
-  if (breakFrom) {
-    tr.split(from)
-    // The break is now the last thing in the paragraph before the split, and it is the separator, so it goes.
-    tr.delete(from - 1, from)
-  }
-  // Mapped through the splits: a start that was split lands in the new paragraph, an end that was
-  // split lands at the end of the old one.
-  const start = tr.mapping.map(from, 1)
-  const end = tr.mapping.map(to, -1)
-  const mark = tr.mapping.maps.length
-  const blocks: { pos: number; size: number; contentEnd: number }[] = []
-  tr.doc.nodesBetween(start, end, (node, pos) => {
-    if (!node.isTextblock) return true
-    const contentStart = pos + 1
-    const contentEnd = contentStart + node.content.size
-    if (contentStart < end && contentEnd > start) blocks.push({ pos, size: node.nodeSize, contentEnd })
-    return false
-  })
-  if (!blocks.length) return { converted: false }
-  const listType = keep.list ? tr.doc.type.schema.nodes[keep.list] : undefined
-  // When the selected blocks cover the end of their nested list, they stay in the item of the style's list they
-  // come out of: the style then makes a list inside that item, and the list's numbers after the item stay as they were.
-  const coversNestedList =
-    blocks.length > 1 &&
-    !keep.once &&
-    keep.list !== undefined &&
-    endsItsLists(tr, blocks[blocks.length - 1].pos, keep.list)
-  let converted: { from: number; to: number } | null = null
-  // From the first block on. A block's lift leaves the blocks before it where they are, and the blocks
-  // after it are found again by mapping their positions through every step since `mark`.
-  for (let i = 0; i < blocks.length; i++) {
-    const { size } = blocks[i]
-    let pos = tr.mapping.slice(mark).map(blocks[i].pos, 1)
-    const $pos = tr.doc.resolve(pos)
-    // Only a selection of one block is converted: converting an item replaces its list (positions move), and
-    // the toggle that styles the other blocks would then skip them (see toggleBlock). A selection over several
-    // blocks takes the lifting path below.
-    if (blocks.length === 1 && listType && !keep.once && isWholeItemOf(tr, $pos, size, keep.list)) {
-      // The item is only this block and nested lists: the item itself moves into a list of the style's
-      // type, its nested lists stay inside it. The block keeps its position (the item's start and the
-      // block's start do not move), so the selection is the block's text.
-      const at = convertItemTo(tr, $pos.before(), listType)
-      converted = { from: at + 1, to: at + size - 1 }
-      continue
-    }
-    // Out of the list items it sits in, the innermost first, so a block of a nested list ends up outside the lists.
-    let lifted = false
-    for (;;) {
-      const $inner = tr.doc.resolve(pos)
-      if (!listItemTypes.includes($inner.parent.type.name)) break
-      // A single block already in an item of the list stays there. Over several blocks every block comes out of
-      // its item: the list is wrapped around them, and an item of that list left in the range would be nested. The
-      // exception is a block lifted out of a nested item into the item of the list (see `coversNestedList`).
-      if (
-        (blocks.length === 1 || (coversNestedList && lifted)) &&
-        $inner.node($inner.depth - 1).type.name === keep.list
-      )
-        break
-      // A single block lifted out of a nested item of another list is made a list item of the style's type in
-      // the item it now sits in, so the rest of the nested item stays in its list, under the outer item.
-      if (lifted && blocks.length === 1 && listType && !keep.once) {
-        const range = tr.doc.resolve(pos).blockRange(tr.doc.resolve(pos + size))
-        if (range) {
-          // A task list holds task items, which the wrap makes unchecked.
-          const item =
-            listType.name === 'taskList' ? listType.schema.nodes.taskItem : listType.schema.nodes.listItem
-          tr.wrap(range, [{ type: listType }, { type: item }])
-          converted = { from: pos + 3, to: pos + 1 + size }
-          break
-        }
-      }
-      const next = liftOutOfItem(tr, pos, size)
-      if (next === null) break
-      pos = next
-      lifted = true
-      if (keep.once) break
-    }
-  }
-  const map = tr.mapping.slice(mark)
-  // A converted last block keeps its own positions (its item's replacement does not move them), and the
-  // blocks before it are mapped as usual.
-  const textEnd = converted ? converted.to : map.map(blocks[blocks.length - 1].contentEnd, -1)
-  const textStart = converted && blocks.length === 1 ? converted.from : map.map(blocks[0].pos + 1, 1)
-  tr.setSelection(TextSelection.create(tr.doc, textStart, textEnd))
-  return { converted: converted !== null }
-}
-
-/**
- * Moves the list item at `itemPos` into a list of `listType` of its own, in its place: its list is split
- * around it, and only that piece changes type. Its nested lists stay inside it. Returns the position of the
- * item's block after the change.
- */
-function convertItemTo(tr: Transaction, itemPos: number, listType: NodeType): number {
-  const $item = tr.doc.resolve(itemPos)
-  const list = $item.parent
-  const index = $item.index()
-  const size = $item.nodeAfter?.nodeSize ?? 0
-  const listEnd = $item.after($item.depth)
-  const mark = tr.mapping.maps.length
-  let p = itemPos
-  if (index > 0) {
-    tr.split(p, 1)
-    p += 2 // the split put a closing and an opening token of the list in front of the item
-  }
-  if (index < list.childCount - 1) tr.split(p + size, 1)
-  const listPos = tr.doc.resolve(p).before()
-  // The list after the converted item starts at the number of the item after it: the converted item's number is gone.
-  if (list.type.name === 'orderedList' && index < list.childCount - 1) {
-    restartList(tr, mark, listEnd, listPos + 1, list.attrs.start + index + 1)
-  }
-  // The item's block starts two tokens into the piece (its list and its item open before it), in either case.
-  const blockPos = listPos + 2
-  if (listType.name !== 'taskList') {
-    tr.setNodeMarkup(listPos, listType)
-    return blockPos
-  }
-  // A task list holds task items: the one-item list is replaced by a task list whose item is unchecked and
-  // keeps the item's content (its nested lists included). One step, so the intermediate document stays valid.
-  const piece = tr.doc.nodeAt(listPos)
-  const item = piece?.firstChild
-  if (piece && item) {
-    const taskItem = listType.schema.nodes.taskItem.create({ checked: false }, item.content)
-    tr.replaceWith(listPos, listPos + piece.nodeSize, listType.create(piece.attrs, taskItem))
-  }
-  return blockPos
-}
-
-/**
- * True when the block at `pos` is the last thing in its item, and that item is the last item of every list between
- * the block and the list named `list` (which holds it). Nothing after the block is left out of the selection in those lists.
- */
-function endsItsLists(tr: Transaction, pos: number, list: string): boolean {
-  const $pos = tr.doc.resolve(pos)
-  if ($pos.index() !== $pos.parent.childCount - 1) return false
-  for (let depth = $pos.depth - 1; depth >= 0; depth--) {
-    const node = $pos.node(depth)
-    if (!listTypes.includes(node.type.name)) continue
-    if (node.type.name === list) return true
-    if ($pos.index(depth) !== node.childCount - 1) return false
-  }
-  return false
-}
-
-/**
- * True when the item at `$pos` (a block of `size` at its start) is that block and nested lists of `list`'s
- * kind and no other text: the whole item is what the style applies to, and the item is `listItem`.
- */
-function isWholeItemOf(tr: Transaction, $pos: ResolvedPos, size: number, list: string | undefined): boolean {
-  const item = $pos.parent
-  if (list !== 'bulletList' && list !== 'orderedList' && list !== 'taskList') return false
-  if (item.type.name !== 'listItem' || $pos.index() !== 0) return false
-  if (item.childCount < 2 || item.child(0).nodeSize !== size || !item.child(0).isTextblock) return false
-  for (let i = 1; i < item.childCount; i++) {
-    const name = item.child(i).type.name
-    if (name !== 'bulletList' && name !== 'orderedList' && name !== 'taskList') return false
-  }
-  return $pos.node($pos.depth - 1).type.name !== list && tr.doc.type.schema.nodes[list] !== undefined
-}
-
-/**
- * The list the selection sits in, innermost first: a bullet item in a numbered item is a bullet item
- * for this purpose, so a numbered style on its word is not taken for a toggle-off of the numbered list.
- */
+/** The list kind the selection starts in, innermost first: a bullet item in a numbered item is a bullet item here. */
 function innermostList(editor: Editor): string | undefined {
   const { $from } = editor.state.selection
   for (let depth = $from.depth; depth > 0; depth--) {
@@ -458,43 +213,279 @@ function innermostList(editor: Editor): string | undefined {
   return undefined
 }
 
+/** Whether the selection, where it starts, is already in `style` (a toggle then turns it off). */
+function styleActive(editor: Editor, style: BlockStyle): boolean {
+  if (isListKind(style)) return innermostList(editor) === style
+  if (style === 'heading') return editor.isActive('heading', { level: 2 })
+  if (style === 'quote') return editor.isActive('blockquote')
+  return editor.isActive('codeBlock')
+}
+
 /**
- * Runs a block style on the selected text only (see `narrowBlocks`). `list` names the list the style
- * is: a selection already in that list is taken out of it and nothing more. Inline marks do not need it.
+ * Splits the textblocks the selection touches at its ends, so the selection covers whole textblocks, and returns the
+ * positions of those blocks (none for a selection that is not text, or covers no character). A split beside a line
+ * break would leave the break in a block of its own, so there the break stays where it is.
  */
-export function toggleBlock(
-  editor: Editor,
-  toggle: (chain: ChainedCommands) => ChainedCommands,
-  list?: 'bulletList' | 'orderedList' | 'taskList',
-) {
-  const { from, to } = editor.state.selection
-  if (editor.state.selection.empty || editor.state.doc.textBetween(from, to).length === 0) {
-    // No character is selected (a caret, or a selection that only crosses a paragraph break): the style
-    // goes on the paragraph the selection starts in, as for a caret.
+function splitSelection(tr: Transaction): number[] {
+  if (!(tr.selection instanceof TextSelection) || tr.selection.empty) return []
+  const { from, to } = tr.selection
+  const splittable = (pos: number) => {
+    const $pos = tr.doc.resolve(pos)
+    if (!$pos.parent.isTextblock || $pos.parentOffset <= 0 || $pos.parentOffset >= $pos.parent.content.size)
+      return false
+    const { nodeBefore, nodeAfter } = $pos
+    if (nodeBefore?.type.name === 'hardBreak' || nodeAfter?.type.name === 'hardBreak') return false
+    return !(nodeBefore?.text?.endsWith('\n') || nodeAfter?.text?.startsWith('\n'))
+  }
+  // A start right after a break splits there, and the break goes: the text before it keeps its own block.
+  const afterBreak = (pos: number) => {
+    const $pos = tr.doc.resolve(pos)
+    if (!$pos.parent.isTextblock || $pos.parentOffset <= 1 || $pos.parentOffset >= $pos.parent.content.size)
+      return false
+    const { nodeBefore, nodeAfter } = $pos
+    if (nodeAfter?.type.name === 'hardBreak') return false
+    return nodeBefore?.type.name === 'hardBreak' || !!nodeBefore?.text?.endsWith('\n')
+  }
+  // A selection that ends right before a break: the split goes there, and the break goes, as at a start after one.
+  const beforeBreak = (pos: number) => {
+    const $pos = tr.doc.resolve(pos)
+    return $pos.parent.isTextblock && $pos.parentOffset > 0 && $pos.nodeAfter?.type.name === 'hardBreak'
+  }
+  const splitTo = splittable(to)
+  const splitFrom = splittable(from)
+  const breakFrom = !splitFrom && afterBreak(from)
+  const breakTo = !splitTo && beforeBreak(to)
+  // The end first: the start is before it, so its position does not move.
+  if (splitTo) tr.split(to)
+  if (breakTo) {
+    tr.split(to)
+    tr.delete(to + 2, to + 3) // the break now starts the block after the split
+  }
+  if (splitFrom) tr.split(from)
+  if (breakFrom) {
+    tr.split(from)
+    tr.delete(from - 1, from)
+  }
+  const start = tr.mapping.map(from, 1)
+  const end = tr.mapping.map(to, -1)
+  const found: number[] = []
+  tr.doc.nodesBetween(start, end, (node, pos) => {
+    if (!node.isTextblock) return true
+    const contentStart = pos + 1
+    const contentEnd = contentStart + node.content.size
+    if (contentStart < end && contentEnd > start) found.push(pos)
+    return false
+  })
+  return found
+}
+
+/** The size of the nested lists that follow the block at `pos` in its list item: they go with the block when it moves. */
+function nestedSize(doc: Node, pos: number): number {
+  const $pos = doc.resolve(pos)
+  if (!listItemTypes.includes($pos.parent.type.name)) return 0
+  let size = 0
+  for (
+    let i = $pos.index() + 1;
+    i < $pos.parent.childCount && listTypes.includes($pos.parent.child(i).type.name);
+    i++
+  ) {
+    size += $pos.parent.child(i).nodeSize
+  }
+  return size
+}
+
+/**
+ * Lifts the block at `pos`, with the nested lists that follow it in its item, out of the list it sits in, one level (the
+ * library's `lift`, which splits the item and its list around the block). Returns where the block is now, and the size
+ * of the nested lists that came with it, or null when it cannot be lifted.
+ */
+function liftBlock(tr: Transaction, pos: number): { pos: number; nested: number } | null {
+  const nested = nestedSize(tr.doc, pos)
+  const size = tr.doc.nodeAt(pos)!.nodeSize
+  const range = tr.doc.resolve(pos).blockRange(tr.doc.resolve(pos + size + nested))
+  const target = range && liftTarget(range)
+  if (!range || target == null) return null
+  const mark = tr.mapping.maps.length
+  tr.lift(range, target)
+  return { pos: tr.mapping.slice(mark).map(pos, 1), nested }
+}
+
+/**
+ * Makes the block at `pos` an item of `list`. A block in a list item first leaves the list it sits in (one lift, so it
+ * stays in the item that list is in, at the same level as its neighbours); the new list is put there. Its nested lists
+ * stay with it, in its new item. The new list joins an adjacent list of its kind.
+ */
+function makeListItem(tr: Transaction, pos: number, list: ListKind) {
+  let at = pos
+  let nested = nestedSize(tr.doc, at)
+  if (listOf(tr.doc, at) !== undefined) {
+    const moved = liftBlock(tr, at)
+    if (moved) {
+      at = moved.pos
+      nested = moved.nested
+    }
+  }
+  const schema = tr.doc.type.schema
+  const size = tr.doc.nodeAt(at)!.nodeSize
+  const range = tr.doc.resolve(at).blockRange(tr.doc.resolve(at + size + nested))
+  const wrapping = range && findWrapping(range, schema.nodes[list])
+  if (!range || !wrapping) return
+  tr.wrap(range, wrapping)
+  // A new list next to a list of its kind is the same list: they join.
+  const made = tr.doc.nodeAt(at)!
+  if (tr.doc.resolve(at + made.nodeSize).nodeAfter?.type === schema.nodes[list]) tr.join(at + made.nodeSize)
+  if (tr.doc.resolve(at).nodeBefore?.type === schema.nodes[list]) tr.join(at)
+}
+
+/**
+ * The number each ordered item shows, keyed by each of its blocks: a split or a lift keeps the blocks as they are, so
+ * the piece of an item that a split leaves in a list of its own still knows the number of its item.
+ */
+function orderedNumbers(doc: Node): Map<Node, number> {
+  const numbers = new Map<Node, number>()
+  doc.descendants((node) => {
+    if (node.type.name !== 'orderedList') return true
+    node.forEach((item, _offset, index) => {
+      item.forEach((block) => numbers.set(block, node.attrs.start + index))
+    })
+    return true
+  })
+  return numbers
+}
+
+/**
+ * After lists were split and joined, each ordered list starts where its items were numbered before (a list with no item
+ * from before keeps its number), so an item the style did not touch keeps its number.
+ */
+function keepNumbers(tr: Transaction, numbers: Map<Node, number>) {
+  const starts: { pos: number; node: Node; start: number }[] = []
+  tr.doc.descendants((node, pos) => {
+    if (node.type.name !== 'orderedList') return true
+    let start: number | undefined
+    node.forEach((item, _offset, index) => {
+      if (start !== undefined) return
+      const number = item.firstChild ? numbers.get(item.firstChild) : undefined
+      if (number !== undefined) start = number - index
+    })
+    if (start !== undefined && start !== node.attrs.start) starts.push({ pos, node, start })
+    return true
+  })
+  for (const { pos, node, start } of starts) tr.setNodeMarkup(pos, undefined, { ...node.attrs, start })
+}
+
+/**
+ * Applies a block style to the selected text only. The selection is split at its ends first, so the selected blocks
+ * are whole textblocks. Then:
+ * - heading, code block: each block's type changes in place, so a block in a list item stays in its item;
+ * - quote: the selected blocks of one parent are wrapped in one quote, or lifted out of their quote when `active`;
+ * - a list: when `active` (the selection starts in that list), a selected block of that list is lifted out of it (the
+ *   toggle); otherwise each selected block that is not in that list becomes an item of it (see `makeListItem`).
+ * Unselected text keeps its list, and each ordered item keeps its number (`keepNumbers`).
+ */
+export function applyBlockStyle(tr: Transaction, style: BlockStyle, active: boolean) {
+  const blocks = splitSelection(tr)
+  if (!blocks.length) return
+  const { from, to } = tr.selection
+  const numbers = orderedNumbers(tr.doc)
+  const mark = tr.mapping.maps.length
+  const at = (block: number) => tr.mapping.slice(mark).map(block, 1)
+  if (!isListKind(style)) {
+    // A list item starts with its paragraph, so a block that starts its item cannot take a heading, a code block or a
+    // quote in its place: it is lifted out of its list first (the rest of the item stays where it was).
+    for (const block of blocks) {
+      const $pos = tr.doc.resolve(at(block))
+      if (listItemTypes.includes($pos.parent.type.name) && $pos.index() === 0) liftBlock(tr, at(block))
+    }
+  }
+  if (style === 'quote') {
+    // The blocks of one parent go into one quote: consecutive ones, from the first to the last.
+    const groups: number[][] = []
+    // The parent of a block is the one its position is in: the document, or the start of its container.
+    const parentOf = (pos: number) => (tr.doc.resolve(pos).depth ? tr.doc.resolve(pos).before() : -1)
+    for (const block of blocks) {
+      const last = groups[groups.length - 1]
+      if (last && parentOf(block) === parentOf(last[0])) last.push(block)
+      else groups.push([block])
+    }
+    for (const group of groups.reverse()) {
+      const first = tr.doc.resolve(group[0])
+      const lastBlock = group[group.length - 1]
+      const end = lastBlock + tr.doc.nodeAt(lastBlock)!.nodeSize
+      const range = first.blockRange(tr.doc.resolve(end))
+      if (!range) continue
+      if (active) {
+        const target = first.parent.type.name === 'blockquote' ? liftTarget(range) : null
+        if (target !== null) tr.lift(range, target)
+      } else {
+        const wrapping = findWrapping(range, tr.doc.type.schema.nodes.blockquote)
+        if (wrapping) tr.wrap(range, wrapping)
+      }
+    }
+  } else {
+    for (const block of blocks) {
+      const pos = at(block)
+      const node = tr.doc.nodeAt(pos)
+      if (!node) continue
+      if (isListKind(style)) {
+        const inList = listOf(tr.doc, pos) === style
+        if (active && inList) liftBlock(tr, pos)
+        else if (!active && !inList) makeListItem(tr, pos, style)
+      } else {
+        const schema = tr.doc.type.schema
+        const type = style === 'code' ? schema.nodes.codeBlock : schema.nodes.heading
+        const target = active ? schema.nodes.paragraph : type
+        tr.setBlockType(
+          pos + 1,
+          pos + node.nodeSize - 1,
+          target,
+          target === schema.nodes.heading ? { level: 2 } : undefined,
+        )
+      }
+    }
+  }
+  keepNumbers(tr, numbers)
+  const map = tr.mapping.slice(mark)
+  tr.setSelection(TextSelection.create(tr.doc, map.map(from, 1), map.map(to, -1)))
+}
+
+/**
+ * Runs a block style on the selected text only (see `applyBlockStyle`). With no text selected (a caret, or a selection
+ * that covers no character), the editor's own toggle takes the whole paragraph or item, as before.
+ */
+export function toggleBlock(editor: Editor, style: BlockStyle) {
+  const { from, to, empty } = editor.state.selection
+  if (empty || editor.state.doc.textBetween(from, to).length === 0) {
     editor.chain().focus().setTextSelection(from).run()
-    toggle(editor.chain().focus()).run()
+    caretToggle(style)(editor.chain().focus()).run()
     return
   }
-  // The narrowing is a transaction of its own: the commands of one chain read the state from before it.
-  const wasOn = list !== undefined && innermostList(editor) === list
-  const keep: Keep = list === undefined ? {} : wasOn ? { once: true } : { list }
-  let converted = false
+  const active = styleActive(editor, style)
   editor
     .chain()
     .focus()
     .command(({ tr }) => {
-      converted = narrowBlocks(tr, keep).converted
+      applyBlockStyle(tr, style, active)
       return true
     })
     .run()
-  if (wasOn || converted) return
-  if (list && innermostList(editor)) {
-    // The selected text is still inside another list (a bullet item in a numbered one): the list is made
-    // around it, nested there. A toggle would take it for the outer list and undo that list instead.
-    editor.chain().focus().wrapInList(list).run()
-    return
+}
+
+/** The editor's own toggle of a style, for a caret. */
+function caretToggle(style: BlockStyle): (chain: ChainedCommands) => ChainedCommands {
+  switch (style) {
+    case 'heading':
+      return (c) => c.toggleHeading({ level: 2 })
+    case 'quote':
+      return (c) => c.toggleBlockquote()
+    case 'code':
+      return (c) => c.toggleCodeBlock()
+    case 'bulletList':
+      return (c) => c.toggleBulletList()
+    case 'orderedList':
+      return (c) => c.toggleOrderedList()
+    case 'taskList':
+      return (c) => c.toggleTaskList()
   }
-  toggle(editor.chain().focus()).run()
 }
 
 function Toolbar({
@@ -542,37 +533,37 @@ function Toolbar({
       label: 'Heading',
       icon: Heading2,
       on: state.heading,
-      run: () => toggleBlock(editor, (c) => c.toggleHeading({ level: 2 })),
+      run: () => toggleBlock(editor, 'heading'),
     },
     {
       label: 'Bullet list',
       icon: List,
       on: state.bullet,
-      run: () => toggleBlock(editor, (c) => c.toggleBulletList(), 'bulletList'),
+      run: () => toggleBlock(editor, 'bulletList'),
     },
     {
       label: 'Numbered list',
       icon: ListOrdered,
       on: state.ordered,
-      run: () => toggleBlock(editor, (c) => c.toggleOrderedList(), 'orderedList'),
+      run: () => toggleBlock(editor, 'orderedList'),
     },
     {
       label: 'Checklist',
       icon: ListChecks,
       on: state.task,
-      run: () => toggleBlock(editor, (c) => c.toggleTaskList(), 'taskList'),
+      run: () => toggleBlock(editor, 'taskList'),
     },
     {
       label: 'Quote',
       icon: Quote,
       on: state.quote,
-      run: () => toggleBlock(editor, (c) => c.toggleBlockquote()),
+      run: () => toggleBlock(editor, 'quote'),
     },
     {
       label: 'Code block',
       icon: SquareCode,
       on: state.codeBlock,
-      run: () => toggleBlock(editor, (c) => c.toggleCodeBlock()),
+      run: () => toggleBlock(editor, 'code'),
     },
     { label: 'Link', icon: Link2, on: state.link, run: link },
   ]
