@@ -585,6 +585,8 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
   const titleRef = useRef<HTMLSpanElement>(null)
   // Enter or Escape closes the field from the keyboard: the focus goes back to the title, not the page.
   const returnFocus = useRef(false)
+  // A Space pressed on the title, so that its keyup opens the field.
+  const spaceDown = useRef(false)
   useEffect(() => {
     if (!editing && returnFocus.current) {
       returnFocus.current = false
@@ -609,6 +611,8 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
         onChange={(e) => setValue(e.target.value)}
         onBlur={() => done(true)}
         onKeyDown={(e) => {
+          // A held Enter that opened the field must not close it again through its repeats.
+          if (e.key === 'Enter' && e.repeat) return
           if (e.key === 'Enter' || e.key === 'Escape') returnFocus.current = true
           if (e.key === 'Enter') done(true)
           if (e.key === 'Escape') done(false)
@@ -629,14 +633,20 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
           tabIndex={0}
           onClick={open}
           onKeyDown={(e) => {
-            if (e.key === ' ') e.preventDefault()
+            if (e.key === ' ') {
+              e.preventDefault()
+              spaceDown.current = true
+            }
             if (e.key === 'Enter' && !e.repeat) {
               e.preventDefault()
               open()
             }
           }}
           onKeyUp={(e) => {
-            if (e.key === ' ') open()
+            // Only a Space that went down on the title opens the field, as a button's does.
+            if (e.key !== ' ' || !spaceDown.current) return
+            spaceDown.current = false
+            open()
           }}
           className="inline cursor-text text-left decoration-muted-foreground/50 decoration-dotted underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
