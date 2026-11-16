@@ -382,7 +382,7 @@ export function missingReports(ticketId: number): MissingRunReport[] {
   }
   if (!groups.size) return []
   const reported = new Map<string, number>()
-  const reportsByKind = new Map<string, string[]>()
+  const reportsByKind = new Map<string, { at: string; round: number | null }[]>()
   for (const r of db
     .select({
       agent: schema.runReports.agent,
@@ -395,7 +395,22 @@ export function missingReports(ticketId: number): MissingRunReport[] {
     const kind = runKindOf(r.agent, known) ?? segment(r.agent)
     const key = `${kind}|${r.round ?? ''}`
     reported.set(key, (reported.get(key) ?? 0) + 1)
-    reportsByKind.set(kind, [...(reportsByKind.get(kind) ?? []), r.createdAt])
+    reportsByKind.set(kind, [...(reportsByKind.get(kind) ?? []), { at: r.createdAt, round: r.round ?? null }])
+  }
+  // One report covers one run: a span group takes the reports of its own round first (earliest written
+  // first), so a hand-off-only run can only be cleared by a report that no span group has counted.
+  for (const g of groups.values()) {
+    if (g.spans === 0) continue
+    const take = Math.min(reported.get(`${g.agent}|${g.round ?? ''}`) ?? 0, g.spans)
+    const pool = reportsByKind.get(g.agent) ?? []
+    const taken = pool
+      .filter((r) => r.round === g.round)
+      .sort((a, b) => a.at.localeCompare(b.at))
+      .slice(0, take)
+    reportsByKind.set(
+      g.agent,
+      pool.filter((r) => !taken.includes(r)),
+    )
   }
   /**
    * How many of the runs a report covers: a group with spans counts its own round's reports; a run only
@@ -405,7 +420,7 @@ export function missingReports(ticketId: number): MissingRunReport[] {
    */
   const covered = (g: Group) => {
     if (g.spans > 0) return reported.get(`${g.agent}|${g.round ?? ''}`) ?? 0
-    const written = [...(reportsByKind.get(g.agent) ?? [])].sort()
+    const written = (reportsByKind.get(g.agent) ?? []).map((r) => r.at).sort()
     const times = unanswered
       .filter((h) => h.agent === g.agent)
       .map((h) => h.at)

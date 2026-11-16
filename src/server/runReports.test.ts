@@ -586,7 +586,7 @@ describe('the hand-off flag', () => {
     expect(cleared.missingRunReports).toEqual([])
     // A normal run has the span and the hand-off that briefed it: one run, one report, nothing flagged.
     const normal = newTicket(pid, 'briefed and worked')
-    work.handoff(pid, normal.id, { to: 'hunt' }, AGENT)
+    handoffAt(pid, normal.id, 'hunt', ago(120))
     closedSpan(pid, normal.id, 'hunt', 1, 60)
     await tool('write_run_report', { projectId: pid, ticketId: normal.id, agent: 'hunt', round: 1 })
     const clean = await needs.changeTicket(normal.id, { status: 'review' }, HUMAN, { agent: false })
@@ -610,6 +610,28 @@ describe('the hand-off flag', () => {
       expect.objectContaining({ agent: 'hunt', round: null, runs: 1, spans: 0, reports: 0 }),
     ])
     // A report written after the hand-off is its evidence, whatever round it names.
+    await tool('write_run_report', { projectId: pid, ticketId: t.id, agent: 'hunt', round: 2 })
+    await needs.changeTicket(t.id, { status: 'in_progress' }, HUMAN, { agent: false })
+    const cleared = await needs.changeTicket(t.id, { status: 'review' }, HUMAN, { agent: false })
+    expect(cleared.missingRunReports).toEqual([])
+  })
+
+  it('one report covers one run: a round-1 report the span already counts does not clear a later hand-off', async () => {
+    const pid = newProject()
+    const t = newTicket(pid, 'one report, two runs')
+    // A round-1 hunt run: its hand-off, the span that briefed it, and no report for it yet.
+    handoffAt(pid, t.id, 'hunt', ago(1000))
+    spanBetween(pid, t.id, 'hunt', 1, ago(900), ago(600))
+    // A later hunt hand-off with no span after it: a run of its own.
+    handoffAt(pid, t.id, 'hunt', ago(300))
+    // One round-1 report, written after that later hand-off: it is the round-1 run's evidence only.
+    const only = await tool('write_run_report', { projectId: pid, ticketId: t.id, agent: 'hunt', round: 1 })
+    reportWrittenAt(only.id, ago(100))
+    const flagged = await needs.changeTicket(t.id, { status: 'review' }, HUMAN, { agent: false })
+    expect(flagged.missingRunReports).toEqual([
+      expect.objectContaining({ agent: 'hunt', round: null, runs: 1, spans: 0, reports: 0 }),
+    ])
+    // A report of its own, written after it, clears that run.
     await tool('write_run_report', { projectId: pid, ticketId: t.id, agent: 'hunt', round: 2 })
     await needs.changeTicket(t.id, { status: 'in_progress' }, HUMAN, { agent: false })
     const cleared = await needs.changeTicket(t.id, { status: 'review' }, HUMAN, { agent: false })
