@@ -11,6 +11,7 @@ const MENU = [
   'Previews',
   'Gallery',
   'Team',
+  'Run reports',
   'Daily',
   'Cleanup',
   'Repositories',
@@ -78,10 +79,10 @@ test('the human hides a page and reorders the menu from the keyboard; both persi
   await page.keyboard.press('Enter')
   await expect(up).toBeFocused()
   const order = [
-    ...MENU.slice(0, 5),
+    ...MENU.slice(0, 6),
     'Daily',
-    'Gallery',
     'Team',
+    'Run reports',
     'Cleanup',
     'Repositories',
     'Instructions',
@@ -164,7 +165,16 @@ test('an edit made while a Save or a Reset is on its way stays, unsaved, and a s
   await expect(saving).toBeDisabled()
   await roadmap.click()
   await layout.getByRole('button', { name: 'Move Daily up in the menu' }).click()
-  const order = [...MENU.slice(0, 6), 'Daily', 'Team', 'Cleanup', 'Repositories', 'Instructions', 'Settings']
+  const order = [
+    ...MENU.slice(0, 6),
+    'Team',
+    'Daily',
+    'Run reports',
+    'Cleanup',
+    'Repositories',
+    'Instructions',
+    'Settings',
+  ]
   await expect(tiles(layout, 'Project menu')).toHaveText(order)
   await expect(status).toHaveText('Unsaved changes. 2 hidden.')
   release()
