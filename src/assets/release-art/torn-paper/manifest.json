@@ -1,0 +1,296 @@
+{
+  "direction": "torn-paper",
+  "madeBy": "Claude Opus 5.5 (medium effort)",
+  "generator": "scripts/release-art/torn-paper.mjs",
+  "canvas": {
+    "width": 1600,
+    "height": 900
+  },
+  "palette": {
+    "hexes": [
+      "#ECE6DA",
+      "#E2DBCD",
+      "#1A1B1D",
+      "#202124",
+      "#243243",
+      "#3D546B",
+      "#A7B8BF",
+      "#8EA2AA",
+      "#D2603D",
+      "#F8F4EC",
+      "#D9D2C4",
+      "#2A221A",
+      "#000000"
+    ],
+    "light": {
+      "ground": "#ECE6DA",
+      "under": "#E2DBCD",
+      "hues": {
+        "ink": "#243243",
+        "fog": "#A7B8BF",
+        "persimmon": "#D2603D"
+      },
+      "core": "#F8F4EC",
+      "shadow": "#2A221A",
+      "shadowOpacity": 0.2,
+      "ghostOpacity": 0.75,
+      "underRim": 0.7,
+      "tissueOpacity": 0.5,
+      "speckDark": 0.05,
+      "speckLight": 0.08,
+      "mottle": 0.025
+    },
+    "dark": {
+      "ground": "#1A1B1D",
+      "under": "#202124",
+      "hues": {
+        "ink": "#3D546B",
+        "fog": "#8EA2AA",
+        "persimmon": "#D2603D"
+      },
+      "core": "#D9D2C4",
+      "shadow": "#000000",
+      "shadowOpacity": 0.55,
+      "ghostOpacity": 0.07,
+      "underRim": 0.14,
+      "tissueOpacity": 0.22,
+      "speckDark": 0.1,
+      "speckLight": 0.045,
+      "mottle": 0.06
+    }
+  },
+  "print": {
+    "tearStep": 11,
+    "fray": {
+      "core": 4.2,
+      "face": 1.4,
+      "frequency": 0.6
+    },
+    "grain": {
+      "fine": 1.15,
+      "mottle": 0.0032
+    },
+    "rim": {
+      "min": 0,
+      "max": 6.5
+    }
+  },
+  "releases": [
+    {
+      "version": "v0.2.2",
+      "seed": 3316566889,
+      "notes": {
+        "items": 159,
+        "carried": 1,
+        "share": {
+          "agency": 0.475,
+          "precision": 0.165,
+          "wayfinding": 0.259,
+          "mending": 0.101
+        }
+      },
+      "lead": "agency",
+      "hues": [
+        "ink",
+        "fog",
+        "persimmon"
+      ],
+      "handling": {
+        "courses": 4,
+        "splits": 3.69,
+        "rotation": 5.11,
+        "shard": 0.75,
+        "cut": 0.21,
+        "coverage": 0.51,
+        "accent": 0.09,
+        "lift": 2,
+        "mends": 0,
+        "under": 1,
+        "sheetAngle": 0.72
+      },
+      "paper": {
+        "pieces": 17,
+        "matchedTears": 0,
+        "laid": 15,
+        "moved": 1,
+        "lifted": 1,
+        "ghosts": 2,
+        "mends": 0,
+        "under": 1,
+        "cutEdges": 8
+      },
+      "files": {
+        "light": {
+          "file": "v0.2.2-light.svg",
+          "bytes": 26497
+        },
+        "dark": {
+          "file": "v0.2.2-dark.svg",
+          "bytes": 26498
+        }
+      }
+    },
+    {
+      "version": "v0.2.3",
+      "seed": 3299789270,
+      "notes": {
+        "items": 16,
+        "carried": 0,
+        "share": {
+          "agency": 0.053,
+          "precision": 0.684,
+          "wayfinding": 0.053,
+          "mending": 0.211
+        }
+      },
+      "lead": "precision",
+      "hues": [
+        "ink",
+        "fog",
+        "persimmon"
+      ],
+      "handling": {
+        "courses": 5,
+        "splits": 1.2,
+        "rotation": 0.44,
+        "shard": 0.05,
+        "cut": 0.95,
+        "coverage": 0.5,
+        "accent": 0.05,
+        "lift": 0,
+        "mends": 0,
+        "under": 0,
+        "sheetAngle": 0.32
+      },
+      "paper": {
+        "pieces": 4,
+        "matchedTears": 2,
+        "laid": 1,
+        "moved": 0,
+        "lifted": 0,
+        "ghosts": 0,
+        "mends": 0,
+        "under": 0,
+        "cutEdges": 0
+      },
+      "files": {
+        "light": {
+          "file": "v0.2.3-light.svg",
+          "bytes": 6049
+        },
+        "dark": {
+          "file": "v0.2.3-dark.svg",
+          "bytes": 6049
+        }
+      }
+    },
+    {
+      "version": "v0.2.4",
+      "seed": 3350122127,
+      "notes": {
+        "items": 14,
+        "carried": 0,
+        "share": {
+          "agency": 0.438,
+          "precision": 0.063,
+          "wayfinding": 0.5,
+          "mending": 0
+        }
+      },
+      "lead": "wayfinding",
+      "hues": [
+        "fog",
+        "ink",
+        "persimmon"
+      ],
+      "handling": {
+        "courses": 3,
+        "splits": 2.01,
+        "rotation": 6.01,
+        "shard": 0.75,
+        "cut": 0,
+        "coverage": 0.44,
+        "accent": 0.08,
+        "lift": 3,
+        "mends": 0,
+        "under": 0,
+        "sheetAngle": -1.93
+      },
+      "paper": {
+        "pieces": 8,
+        "matchedTears": 0,
+        "laid": 5,
+        "moved": 1,
+        "lifted": 2,
+        "ghosts": 3,
+        "mends": 0,
+        "under": 0,
+        "cutEdges": 0
+      },
+      "files": {
+        "light": {
+          "file": "v0.2.4-light.svg",
+          "bytes": 13464
+        },
+        "dark": {
+          "file": "v0.2.4-dark.svg",
+          "bytes": 13464
+        }
+      }
+    },
+    {
+      "version": "v0.2.5",
+      "seed": 3333344508,
+      "notes": {
+        "items": 36,
+        "carried": 4,
+        "share": {
+          "agency": 0.382,
+          "precision": 0.118,
+          "wayfinding": 0.176,
+          "mending": 0.324
+        }
+      },
+      "lead": "agency",
+      "hues": [
+        "fog",
+        "ink",
+        "persimmon"
+      ],
+      "handling": {
+        "courses": 4,
+        "splits": 2.18,
+        "rotation": 4.32,
+        "shard": 0.72,
+        "cut": 0.13,
+        "coverage": 0.51,
+        "accent": 0.08,
+        "lift": 1,
+        "mends": 4,
+        "under": 3,
+        "sheetAngle": -1.6
+      },
+      "paper": {
+        "pieces": 14,
+        "matchedTears": 0,
+        "laid": 13,
+        "moved": 0,
+        "lifted": 1,
+        "ghosts": 1,
+        "mends": 4,
+        "under": 3,
+        "cutEdges": 3
+      },
+      "files": {
+        "light": {
+          "file": "v0.2.5-light.svg",
+          "bytes": 32622
+        },
+        "dark": {
+          "file": "v0.2.5-dark.svg",
+          "bytes": 32623
+        }
+      }
+    }
+  ]
+}
