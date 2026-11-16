@@ -1402,3 +1402,17 @@ describe('the go-ahead, put back and taken back', () => {
     expect(features.setVerdict(t.id, null, 'enrique')).toMatchObject({ status: qa.key, approvedAt: null })
   })
 })
+
+describe('the go-ahead after the stages change', () => {
+  it('a take-back returns a ticket from Approved even when the stage was made another kind', async () => {
+    const { db, schema } = await import('#/db')
+    const stages = await import('./stages')
+    const pid = db.insert(schema.projects).values({ name: 'kind-change' }).returning().get().id
+    db.insert(schema.repos).values({ projectId: pid, name: 'app', repoPath: '/r/kind-change' }).run()
+    const approved = stages.listStages(pid).find((s) => s.key === 'approved')!
+    const t = features.createTicket(pid, { title: 'changed kind', status: 'review' }, 'claude')
+    expect(features.setVerdict(t.id, 'approved', 'enrique').status).toBe('approved')
+    stages.updateStage(pid, approved.id, { kind: 'active' }, 'enrique')
+    expect(features.setVerdict(t.id, null, 'enrique')).toMatchObject({ status: 'review', approvedAt: null })
+  })
+})

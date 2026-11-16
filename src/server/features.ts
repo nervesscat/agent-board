@@ -1098,7 +1098,7 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     (before === 'disapproved' && kind === 'cancelled') ||
     (before === 'approved' && pr && kind === 'done' && verdict === null) ||
     // Taking back an approval returns a ticket in Approved to the review column it came from.
-    (before === 'approved' && verdict === null && !!approved && t.status === approved.key)
+    (before === 'approved' && verdict === null && t.status === 'approved')
   const reopenTo = opts.reopenTo
     ? resolveStage(stages, opts.reopenTo, projectWorkStage(t.projectId, stages))
     : before === 'approved'
