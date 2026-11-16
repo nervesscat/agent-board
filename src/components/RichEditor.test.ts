@@ -957,6 +957,21 @@ describe('RichEditor markdown after a numbered list in a bullet item', () => {
     const paragraph = item?.content?.[2]
     expect(paragraph?.content?.[0]?.text).toBe(' y')
   })
+
+  it('reads the ampersand and underscore of that paragraph as written, and keeps them on each save', () => {
+    const md = '- x\n  1. a\n\n  R&amp;D snake\\_case'
+    expect(roundTrip(md)).toBe(md)
+  })
+
+  it('keeps a typed entity in that paragraph as text', () => {
+    const md = '- x\n  1. a\n\n  &amp;#32;y'
+    expect(roundTrip(md)).toBe(md)
+  })
+
+  it('keeps two quotes in a list item apart', () => {
+    const md = '- x\n  > a\n  \n  > b'
+    expect(roundTrip(md)).toBe(md)
+  })
 })
 
 /** The editor with `md` loaded, the «» markers taken out, and the text between them selected. */

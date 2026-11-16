@@ -2,6 +2,7 @@ import { type ChainedCommands, type Editor, type JSONContent, Node as EditorNode
 import Blockquote from '@tiptap/extension-blockquote'
 import Image from '@tiptap/extension-image'
 import { ListItem, OrderedList, TaskItem, TaskList } from '@tiptap/extension-list'
+import { Lexer } from 'marked'
 import { TableKit } from '@tiptap/extension-table'
 import { Placeholder } from '@tiptap/extensions'
 import { Markdown } from '@tiptap/markdown'
@@ -89,7 +90,10 @@ const Paragraph = EditorNode.create({
     const text = h.renderChildren(content)
     // After a numbered or checklist list, a paragraph that starts with a space reads back inside the item unless the
     // space is written as an entity.
-    const afterList = ctx?.previousNode?.type === 'taskList' || ctx?.previousNode?.type === 'orderedList'
+    // Inside a task item the reader drops the entity's `&` (the nested paragraph reads back as `#32;`), so there the space is written bare.
+    const afterList =
+      ctx?.parentType !== 'taskItem' &&
+      (ctx?.previousNode?.type === 'taskList' || ctx?.previousNode?.type === 'orderedList')
     return afterList && text.startsWith(' ') ? `&#32;${text.slice(1)}` : text
   },
   addKeyboardShortcuts() {
@@ -101,18 +105,27 @@ const Paragraph = EditorNode.create({
 const looseInline = ['text', 'hardBreak']
 
 /**
+ * The text a list item carries outside any paragraph (after a nested list, a checklist or a quote) comes from the markdown
+ * reader as loose text, with its entities and escapes still in it. It is read as a paragraph of its own, its inline text
+ * lexed like any paragraph's, so `&amp;`, `\_` and `&#32;` read back as the text they stand for.
+ */
+function looseTextAsParagraph(token: { type?: string; raw?: string; text?: string }) {
+  if (token.type !== 'text' || !token.raw) return token
+  return {
+    type: 'paragraph',
+    raw: token.raw,
+    text: token.text,
+    tokens: new Lexer().inlineTokens(token.raw.replace(/\n$/, '')),
+  }
+}
+
+/**
  * A list item's text after a block (a heading, say) is read as loose inline content, with no paragraph around it, so
  * the item does not read back as the editor has it. Those runs go in paragraphs of their own.
  */
 const ListItemWithParagraphs = ListItem.extend({
   parseMarkdown(token, helpers) {
-    // A paragraph after a numbered list in the item comes as loose text whose `&#32;` the reader leaves as text. The
-    // serializer writes a leading space that way, so it reads back as the space. (A typed `&amp;#32;` is not changed.)
-    const tokens = token.tokens?.map((t) =>
-      t.type === 'text' && t.raw?.startsWith('&#32;') && t.text?.startsWith('&#32;')
-        ? { ...t, text: ` ${t.text.slice('&#32;'.length)}` }
-        : t,
-    )
+    const tokens = token.tokens?.map(looseTextAsParagraph)
     const parsed = this.parent?.({ ...token, tokens }, helpers)
     if (!parsed || Array.isArray(parsed) || !parsed.content) return parsed ?? []
     const content: JSONContent[] = []
@@ -130,6 +143,14 @@ const ListItemWithParagraphs = ListItem.extend({
     }
     endRun()
     return { ...parsed, content }
+  },
+})
+
+/** A task item's text after a nested list or a paragraph is loose text too: it reads the same way. */
+const TaskItemWithParagraphs = TaskItem.extend({
+  parseMarkdown(token, helpers) {
+    const nestedTokens = token.nestedTokens?.map(looseTextAsParagraph)
+    return this.parent?.({ ...token, nestedTokens }, helpers) ?? []
   },
 })
 
@@ -153,7 +174,8 @@ const BlockquoteWithBlankLine = Blockquote.extend({
   renderMarkdown(node, h, ctx) {
     const quote = this.parent?.(node, h, ctx) ?? ''
     const inItem = ctx?.parentType === 'listItem' || ctx?.parentType === 'taskItem'
-    return inItem && ctx.previousNode?.type === 'orderedList' ? `\n${quote}` : quote
+    const after = ctx.previousNode?.type
+    return inItem && (after === 'orderedList' || after === 'blockquote') ? `\n${quote}` : quote
   },
 })
 
@@ -175,7 +197,7 @@ export function richExtensions(placeholder = '') {
     Image,
     TableKit,
     TaskList,
-    TaskItem.configure({ nested: true }),
+    TaskItemWithParagraphs.configure({ nested: true }),
     Placeholder.configure({ placeholder }),
   ]
 }
