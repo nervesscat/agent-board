@@ -61,6 +61,7 @@ export function TicketBoard({
   onMove,
   onPlace,
   onArchiveAll,
+  scroller,
 }: {
   projectId: string
   items: TicketRow[]
@@ -68,6 +69,8 @@ export function TicketBoard({
   /** Put a card right above or below another card of its column (of the ones shown). */
   onPlace: (ticketId: number, to: Placement) => void
   onArchiveAll?: (status: string) => void
+  /** The scroller of the columns: the page's StageScroll steps it. */
+  scroller: RefObject<HTMLDivElement | null>
 }) {
   const { data: project } = useProject(projectId)
   const stages = project?.stages ?? []
@@ -100,17 +103,8 @@ export function TicketBoard({
     endDrag()
   }
   const frame = useRef<HTMLDivElement>(null)
-  const scroller = useRef<HTMLDivElement>(null)
-  const edges = useScrollEdges(scroller)
   useFillHeight(frame)
   useRememberedScroll(`features.board.${projectId}`, scroller, stages.length > 0)
-  // One column (w-72) plus the gap (gap-3), landing on a column's left edge.
-  const step = (dir: -1 | 1) => {
-    const el = scroller.current
-    if (!el) return
-    const col = 288 + 12
-    el.scrollTo({ left: (Math.round(el.scrollLeft / col) + dir) * col, behavior: 'smooth' })
-  }
   return (
     <div ref={frame} className="flex flex-col md:min-h-80">
       {stages.length > 0 && activeStage && (
@@ -127,28 +121,6 @@ export function TicketBoard({
               ))}
             </SelectContent>
           </Select>
-        </div>
-      )}
-      {(edges.left || edges.right) && (
-        <div className="mb-2 hidden justify-end gap-1 md:flex">
-          <Button
-            variant="outline"
-            size="icon"
-            disabled={!edges.left}
-            onClick={() => step(-1)}
-            aria-label="Previous stage"
-          >
-            <ChevronLeft />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            disabled={!edges.right}
-            onClick={() => step(1)}
-            aria-label="Next stage"
-          >
-            <ChevronRight />
-          </Button>
         </div>
       )}
       {/* Fixed-width columns side by side, scrolling sideways; each one as tall as the board, scrolling its own cards. */}
@@ -537,6 +509,45 @@ function useRememberedPageScroll(key: string) {
       window.removeEventListener('scroll', save)
     }
   }, [key])
+}
+
+/**
+ * The previous and next stage buttons of the board, shown in the page header while the board scrolls
+ * sideways (desktop only; a phone picks the stage in its own select). Each steps the scroller one
+ * column left or right.
+ */
+export function StageScroll({ scroller }: { scroller: RefObject<HTMLDivElement | null> }) {
+  const edges = useScrollEdges(scroller)
+  // One column (w-72) plus the gap (gap-3), landing on a column's left edge.
+  const step = (dir: -1 | 1) => {
+    const el = scroller.current
+    if (!el) return
+    const col = 288 + 12
+    el.scrollTo({ left: (Math.round(el.scrollLeft / col) + dir) * col, behavior: 'smooth' })
+  }
+  if (!edges.left && !edges.right) return null
+  return (
+    <div className="hidden gap-1 md:flex">
+      <Button
+        variant="outline"
+        size="icon"
+        disabled={!edges.left}
+        onClick={() => step(-1)}
+        aria-label="Previous stage"
+      >
+        <ChevronLeft />
+      </Button>
+      <Button
+        variant="outline"
+        size="icon"
+        disabled={!edges.right}
+        onClick={() => step(1)}
+        aria-label="Next stage"
+      >
+        <ChevronRight />
+      </Button>
+    </div>
+  )
 }
 
 /** Whether a sideways scroller has more to show on its left and on its right. */
