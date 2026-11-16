@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 
 import {
+  canonicalVersion,
   DYES,
   GRAMMARS,
   PALETTE_HEXES,
@@ -199,6 +200,14 @@ describe('release artwork: tear', () => {
     }
     expect(() => planPiece('next', readThemes(NOTES.hands), 1)).toThrow(/Not a version/)
     expect(failure(['--version', 'next', '--notes', SCRIPT])).toContain('Not a version: next')
+  })
+
+  it('names every spelling of a version by its canonical form, for files and seeds alike', () => {
+    expect(canonicalVersion('0.3.0')).toBe('v0.3.0')
+    expect(canonicalVersion(' v0.3.0 ')).toBe('v0.3.0')
+    expect(canonicalVersion('v0.3.0+build.5')).toBe('v0.3.0')
+    expect(canonicalVersion('v1.0.0-rc.1')).toBe('v1.0.0-rc.1')
+    expect(() => canonicalVersion('three')).toThrow('Not a version')
   })
 
   it('gives every major its own thematic: two majors differ in grammar or dyes', () => {

@@ -1217,24 +1217,26 @@ function parseArgs(argv) {
   return args
 }
 
+// One spelling per version: the seed and the file name come from this form, so `0.3.0`,
+// `v0.3.0 ` and `v0.3.0+build.5` all name the committed `v0.3.0` pieces.
+export function canonicalVersion(text) {
+  const { major, minor, patch, pre } = parseVersion(text)
+  return `v${major}.${minor}.${patch}${pre ? `-${pre}` : ''}`
+}
+
 function committedReleases() {
   return readdirSync(NOTES_DIR)
     .filter((file) => file.endsWith('.md'))
     .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
-    .map((file) => ({ version: file.replace(/\.md$/, ''), notes: join(NOTES_DIR, file) }))
-    .filter(({ version }) => parseVersion(version))
+    .map((file) => ({ version: canonicalVersion(file.replace(/\.md$/, '')), notes: join(NOTES_DIR, file) }))
 }
 
 function main() {
   const args = parseArgs(process.argv.slice(2))
   const single = Boolean(args.version)
-  if (single) {
-    // One spelling per version: the seed and the file name come from the canonical form, so
-    // `0.3.0`, ` v0.3.0 ` and `v0.3.0+build.5` all write the committed `v0.3.0` pieces.
-    const { major, minor, patch, pre } = parseVersion(args.version)
-    args.version = `v${major}.${minor}.${patch}${pre ? `-${pre}` : ''}`
-  }
-  const releases = single ? [{ version: args.version, notes: resolve(args.notes) }] : committedReleases()
+  const releases = single
+    ? [{ version: canonicalVersion(args.version), notes: resolve(args.notes) }]
+    : committedReleases()
   const out = resolve(args.out ?? ASSET_DIR)
   mkdirSync(out, { recursive: true })
 
