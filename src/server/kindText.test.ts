@@ -64,7 +64,7 @@ async function rpc(pathname: string, method: string, params: Record<string, unkn
 
 /** Words of code: what a project with no software kind must not read about. */
 const CODE_WORDS =
-  /\b(branch(es)?|PRs?|pull requests?|CI|previews?|repos?|repositor(y|ies)|worktrees?|commits?|git|GitHub|merged?|merging|push(ed)?|checkouts?|cleanup|origin|pnpm|gh)\b/i
+  /(?<![a-z])(branch(es)?|PRs?|pull requests?|CI|previews?|repos?|repositor(y|ies)|worktrees?|commits?|git|GitHub|merged?|merging|push(ed)?|checkouts?|cleanup|origin|pnpm|gh)(?![a-z])/i
 
 describe('the text a project with no software kind is offered', () => {
   let music: number

@@ -434,7 +434,7 @@ function TicketPage() {
             </span>
           )}
           {/* Without a git side the human's approval is the hand-off: shown on every ticket, not only lanes. */}
-          {(t.parentId || verdictOf(t) || !gitSide) && (
+          {(t.parentId || verdictOf(t) || (!gitSide && kind === 'review')) && (
             <VerdictButtons t={t} disabled={judge.isPending} onSet={(verdict) => decide(t, verdict)} />
           )}
           <StatusSelect

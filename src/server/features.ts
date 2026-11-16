@@ -514,7 +514,11 @@ export function placement(
   const parent = input.parentId ? getTicket(input.parentId) : null
   if (parent && parent.projectId !== projectId)
     throw new HttpError(400, `ticket ${parent.id} is not in project ${projectId}`)
-  const given = input.repoId ?? parent?.repoId ?? (parent && ticketRepo(parent)?.id)
+  // A lane takes its parent's repo; a parent with none (a project with no software kind) gives it none.
+  const inherited = parent
+    ? (parent.repoId ?? (hasGitSide(project.kinds) ? ticketRepo(parent)?.id : null))
+    : null
+  const given = input.repoId ?? inherited
   // A project with no software kind has no git side: its tickets need no repo, and the repos it may
   // still hold stay out of it unless one is named.
   const repo = !given && !hasGitSide(project.kinds) ? null : resolveRepo(projectId, given)
@@ -1061,6 +1065,19 @@ export const verdictOf = (t: Pick<schema.Ticket, 'approvedAt' | 'disapprovedAt'>
   t.approvedAt ? 'approved' : t.disapprovedAt ? 'disapproved' : null
 
 /**
+ * Whether approving this ticket closes it (to the first done stage): a PR review at any stage, and the
+ * hand-off of work in a project with no software kind from its review stage, where the human's approval
+ * is the review.
+ */
+export function approvalCloses(
+  t: Pick<schema.Ticket, 'projectId' | 'status' | 'tags'>,
+  stages: ReturnType<typeof listStages>,
+) {
+  if (t.tags.some((tag) => tag.toLowerCase() === 'pr')) return true
+  return !hasGitSide(getProject(t.projectId).kinds) && kindOf(stages, t.status) === 'review'
+}
+
+/**
  * The human's call on a ticket or lane: approve it, disapprove it (which moves it to the project's
  * first cancelled stage), or clear the call. Approving a ticket in a review stage moves it to Approved
  * (the review-kind stage the default layout puts after In review), where an orchestrator merges the PR
@@ -1098,14 +1115,14 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
   // of work in a project with no software kind: the files are the deliverable, and the human's approval
   // is its review.
   const pr = t.tags.some((tag) => tag.toLowerCase() === 'pr')
-  const handOff = !hasGitSide(getProject(t.projectId).kinds)
-  const closes = pr || handOff
-  const finish = verdict === 'approved' && closes ? firstOfKind(stages, 'done') : undefined
   const kind = kindOf(stages, t.status)
+  const finish = verdict === 'approved' && approvalCloses(t, stages) ? firstOfKind(stages, 'done') : undefined
   const approve = verdict === 'approved' && kind === 'review' && approved ? approved : undefined
   const reopen =
     (before === 'disapproved' && kind === 'cancelled') ||
-    (before === 'approved' && closes && kind === 'done' && verdict === null) ||
+    // Taking back the approval of a ticket that closed on it: a PR review, or a ticket with no repo (the
+    // hand-off of work with no software kind). Not the project's kinds as they are now.
+    (before === 'approved' && (pr || t.repoId === null) && kind === 'done' && verdict === null) ||
     // Taking back an approval returns a ticket in Approved to the review column it came from.
     (before === 'approved' && verdict === null && t.status === 'approved')
   const reopenTo = opts.reopenTo

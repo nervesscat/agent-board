@@ -533,9 +533,8 @@ export async function judgeTicket(
 ) {
   const t = features.getTicket(id)
   const stages = listStages(t.projectId)
-  const pr = t.tags.some((tag) => tag.toLowerCase() === 'pr')
   const to =
-    verdict === 'approved' && pr
+    verdict === 'approved' && features.approvalCloses(t, stages)
       ? firstOfKind(stages, 'done')?.key
       : verdict === null && opts.reopenTo
         ? resolveStage(stages, opts.reopenTo, projectWorkStage(t.projectId, stages)).key

@@ -149,3 +149,66 @@ test('a project with no software kind has a maker, not the review cycle, on its 
   await defaults.getByRole('button', { name: 'Add the default agents' }).click()
   await expect(page.getByText('Added maker')).toBeVisible()
 })
+
+test('approval closes a hand-off only from its review stage, and needs still hold it', async ({ human }) => {
+  const music = await createProject(human, `Gate ${Date.now()}`, ['music'])
+  const open = await ok<{ id: number }>(
+    human.post(`/api/projects/${music.id}/tickets`, { data: { title: 'Not started' } }),
+  )
+  // Approved before any work: the call is recorded, the ticket does not close.
+  await ok(human.put(`/api/tickets/${open.id}/approval`, { data: { verdict: 'approved' } }))
+  expect((await ok<{ stage: { kind: string } }>(human.get(`/api/tickets/${open.id}`))).stage.kind).not.toBe(
+    'done',
+  )
+  await ok(human.put(`/api/tickets/${open.id}/approval`, { data: { verdict: null } }))
+
+  const base = await ok<{ id: number }>(
+    human.post(`/api/projects/${music.id}/tickets`, { data: { title: 'Base' } }),
+  )
+  const held = await ok<{ id: number }>(
+    human.post(`/api/projects/${music.id}/tickets`, { data: { title: 'Held', status: 'review' } }),
+  )
+  await ok(human.patch(`/api/tickets/${held.id}`, { data: { needs: [base.id] } }))
+  // The same refusal a move to done gets: the need is not done.
+  const refused = await human.put(`/api/tickets/${held.id}/approval`, { data: { verdict: 'approved' } })
+  expect(refused.status()).toBe(409)
+  expect((await ok<{ stage: { kind: string } }>(human.get(`/api/tickets/${held.id}`))).stage.kind).toBe(
+    'review',
+  )
+})
+
+test('taking back an approval reopens a hand-off even after the project gains software', async ({
+  human,
+}) => {
+  const music = await createProject(human, `Reopen ${Date.now()}`, ['music'])
+  const t = await ok<{ id: number }>(
+    human.post(`/api/projects/${music.id}/tickets`, { data: { title: 'Gained software', status: 'review' } }),
+  )
+  await ok(human.put(`/api/tickets/${t.id}/approval`, { data: { verdict: 'approved' } }))
+  expect((await ok<{ stage: { kind: string } }>(human.get(`/api/tickets/${t.id}`))).stage.kind).toBe('done')
+  await ok(human.patch(`/api/projects/${music.id}`, { data: { kinds: ['music', 'software'] } }))
+  await ok(human.put(`/api/tickets/${t.id}/approval`, { data: { verdict: null } }))
+  expect((await ok<{ stage: { kind: string } }>(human.get(`/api/tickets/${t.id}`))).stage.kind).toBe('review')
+})
+
+test('a ticket with no repo, and a lane under it, stay without a repo in a project with no software kind', async ({
+  human,
+}) => {
+  const music = await createProject(human, `Repoless ${Date.now()}`, ['music'])
+  // A repo the project held while it was software: it stays stored, and no ticket of the music project uses it.
+  await ok(
+    human.post('/api/repos', { data: { projectId: music.id, repoPath: e2eEnv().repoPath, name: 'stored' } }),
+  )
+  const parent = await ok<{ id: number; repoId: number | null; repos: unknown[] }>(
+    human.post(`/api/projects/${music.id}/tickets`, { data: { title: 'No repo' } }),
+  )
+  expect(parent.repoId).toBeNull()
+  // Read back: the ticket reports no repo of its own, and none of the project's stored one.
+  const read = await ok<{ repoId: number | null; repos: unknown[] }>(human.get(`/api/tickets/${parent.id}`))
+  expect(read.repoId).toBeNull()
+  expect(read.repos).toEqual([])
+  const lane = await ok<{ repoId: number | null }>(
+    human.post(`/api/projects/${music.id}/tickets`, { data: { title: 'Lane', parentId: parent.id } }),
+  )
+  expect(lane.repoId).toBeNull()
+})

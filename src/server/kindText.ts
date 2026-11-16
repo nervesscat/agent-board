@@ -69,6 +69,8 @@ export const FILES_KEY_TEXT: Readonly<Record<string, string>> = {
 
 /** The descriptions of the tools whose software text names code, for these projects. */
 export const FILES_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  edit_post:
+    'Change a post you made on a ticket (its body, whether it is progress, or its tab of the feed: tab main or agents moves it), or a reply (kind reply: its body). Edits show as edited. A version of the summary is never edited: write a new one with set_ticket_summary. Nor is the body of a request_archive card: ask again instead.',
   get_project:
     "One project with its stages in board order (key, name, kind), its agents (name, instructions, delegation notes, picture; tickets can be reserved for them), notes (the project's short shared facts, each {id, label, body, createdBy, createdAt, updatedAt, position}, a pinned one first: read them before starting and add one for anything a future session must not rediscover), defaultPhases (the top-level phases every new ticket starts with: Implementation, then Summary, unless the project changed them), tagSuggestions, usedTags (the tags its tickets carry, most used first, each in the casing to reuse), kinds (what the work is; a project with no software kind works with files), workFolder (the plain folder where its work in progress and its files are kept), stallMinutes (how many minutes an active ticket may go without a work-timeline event before it reads as stalled), workStage (the key of the active stage claim_ticket goes to), and the instructions agents must follow when working on it (only the human and an orchestrator change them: set_project_instructions). Read this before touching a project.",
   answer_decision:
