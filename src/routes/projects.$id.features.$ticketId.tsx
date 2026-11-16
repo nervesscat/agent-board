@@ -806,12 +806,14 @@ function Instructions({
   return (
     <section
       {...drop.props}
-      className={cn('rounded-lg border p-4', drop.className)}
+      className={cn('group rounded-lg border p-4', drop.className)}
       aria-label="Instructions"
     >
       <div className="mb-2 flex items-center gap-3">
         <h2 className="text-sm font-medium">Instructions</h2>
-        <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+        {/* The attach and edit buttons show while the card is hovered, or when one of them has keyboard focus;
+            their labels are for screen readers only. */}
+        <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           <input
             ref={fileInput}
             type="file"
@@ -826,10 +828,12 @@ function Instructions({
           {!editing && (
             <>
               <Button type="button" variant="ghost" size="xs" onClick={() => fileInput.current?.click()}>
-                <Paperclip data-icon="inline-start" /> {attaching > 0 ? 'attaching…' : 'attach'}
+                <Paperclip />
+                <span className="sr-only">{attaching > 0 ? 'attaching…' : 'attach'}</span>
               </Button>
               <Button type="button" variant="ghost" size="xs" onClick={open}>
-                <Pencil data-icon="inline-start" /> edit
+                <Pencil />
+                <span className="sr-only">edit</span>
               </Button>
             </>
           )}
