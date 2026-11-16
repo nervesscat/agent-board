@@ -1460,8 +1460,14 @@ describe('0051_agent_cards', () => {
 
     migrate(drizzle(sqlite), { migrationsFolder: folder })
 
-    // The existing tables are exactly what they were.
-    expect(sqlite.prepare('SELECT * FROM projects ORDER BY id').all()).toEqual(before.projects)
+    // The existing tables are exactly what they were. Projects gained a column later (0053 kinds), so
+    // its rows are compared without that column: every column 0050 had is unchanged.
+    expect(
+      sqlite
+        .prepare('SELECT * FROM projects ORDER BY id')
+        .all()
+        .map(({ kinds: _kinds, ...kept }) => kept),
+    ).toEqual(before.projects)
     expect(sqlite.prepare('SELECT * FROM tickets ORDER BY id').all()).toEqual(before.tickets)
     expect(sqlite.prepare('SELECT * FROM tasks ORDER BY id').all()).toEqual(before.tasks)
     expect(sqlite.prepare('SELECT * FROM updates ORDER BY id').all()).toEqual(before.updates)

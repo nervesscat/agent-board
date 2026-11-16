@@ -28,6 +28,7 @@ import {
 } from '#/lib/constants'
 import type { AnnotationDoc } from '#/lib/annotations'
 import type { SavedLayout } from '#/lib/layout'
+import type { Kind } from '#/lib/kinds'
 import type { RunType } from '#/lib/runs'
 
 export { COMMENT_PARENTS, STAGE_KINDS, type CommentParent, type StageColor, type StageKind }
@@ -62,6 +63,9 @@ export const projects = sqliteTable('projects', {
   // The key of the active stage claiming a ticket (and a status given as in_progress or active) puts it
   // in. Null, or a stage that is gone or no longer active, is the first active stage.
   workStage: text('work_stage'),
+  // What the project is for (`#/lib/kinds`): one or more kinds. Software is the git side; a project
+  // with none of software hides it. The migration gives every existing project software.
+  kinds: text('kinds', { mode: 'json' }).$type<Kind[]>().notNull().default(['software']),
 })
 
 // The columns of a project's board, in order. A ticket's status is the key of one of them; the key
