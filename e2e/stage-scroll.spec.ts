@@ -30,7 +30,11 @@ test('the stage buttons sit in the header row and step the board one stage', asy
   expect(nextBox.x).toBeLessThan(newTicket.x)
 
   // Previous is off at the first stage; Next steps the board right, then Previous steps back.
-  const scroller = page.locator('[data-column="done"]').locator('xpath=..')
+  // The board's scroller: the sideways-scrolling box the stage columns sit in.
+  const scroller = page
+    .locator('[data-column]')
+    .first()
+    .locator('xpath=ancestor::div[contains(@class,"overflow-x-auto")][1]')
   await expect(prev).toBeDisabled()
   await expect(next).toBeEnabled()
   await next.click()
