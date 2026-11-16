@@ -227,20 +227,14 @@ export function TicketBoard({
                               <span className="text-muted-foreground">#{t.id}</span> {t.title}
                             </div>
                           </div>
-                          {(hasWork(kind) ||
-                            t.decisions > 0 ||
-                            t.blockedNext ||
-                            t.needs.some((n) => !n.merged) ||
-                            after?.has(t.id)) && (
+                          {(hasWork(kind) || t.needs.some((n) => !n.merged) || after?.has(t.id)) && (
                             <div className="mt-1.5 flex flex-wrap items-center gap-1">
                               <WorkLine
                                 timeline={work}
                                 stage={stallStage(stages, t.status)}
                                 variant="badge"
                               />
-                              {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
                               {after?.has(t.id) && <MergeAfterBadge ids={after.get(t.id)!} />}
-                              {t.blockedNext && <BlockedTasksBadge n={t.blockedTasks} />}
                               <NeedsBadge needs={t.needs} />
                             </div>
                           )}
@@ -647,8 +641,6 @@ export function TicketList({ projectId, items }: { projectId: string; items: Tic
                   <span className={stage.kind === 'cancelled' ? 'text-muted-foreground line-through' : ''}>
                     {t.title}
                   </span>
-                  {t.decisions > 0 && <DecisionBadge n={t.decisions} className="ml-2 align-[1px]" />}
-                  {t.blockedNext && <BlockedTasksBadge n={t.blockedTasks} className="ml-2 align-[1px]" />}
                   <WorkLine
                     timeline={work}
                     stage={stallStage(stages, t.status)}
