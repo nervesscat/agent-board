@@ -88,6 +88,17 @@ Write to the output path, starting directly with the heading:
 - Q: ... Assume: ...
 ```
 
+## Run report
+
+One report per subagent run, written before the hand-off: it is part of finishing, not a step
+after it. The orchestrator writes none. Its template is
+`run-reports/spec.md` in the review bundle, beside `agents/` where this file is installed: it carries
+the common part (identity, time, brief, what you read and ran, steps, ratings, problems, gaps,
+suggestions) and what this agent adds. Fill it in with `write_run_report` (`agent: "spec"`, the
+ticket, the round, times, steps, counts and sections) before you return; a run that hands back
+without one has not finished, and the orchestrator checks for it as it checks your result. The
+ticket's Agents side shows it, and `list_run_reports` reads this agent's across tickets.
+
 Before you finish, write into `00-context.md` what you established and the later phases need: the
 changed files, their tests, their direct callers, each decision and its answer, and the runbook,
 each under its own heading. It is the pack the review started in Setup and the one every phase

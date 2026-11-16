@@ -30,6 +30,7 @@ What you do with it:
 
 - **Before anything else, call it.** It is your first read of the project, and it is cheaper than
   learning the same thing from five tickets.
+- **approved, to merge** (`approvedToMerge`): the tickets in Approved are the human's go-ahead to merge; an orchestrator merges them without asking again. Name them; they are not waiting on the human.
 - **Do not take or duplicate a ticket a live entry names.** Another session's agent is on it: wait,
   ask in its thread, or work something else, and never claim it behind its back.
 - **Pick up what nobody holds**: the first ticket with no live entry, no open span and no wait.
@@ -56,6 +57,7 @@ then read `get_summary` with its `projectId`, and answer in a handful of lines:
 - **what waits on the human** (reviews, decisions, threads), as counts, with the one or two that
   matter most named;
 - **what is next** to work on today.
+- **approved, to merge**: the tickets in Approved, each one the human's go-ahead to merge. An orchestrator merges its PR(s) without asking again once the facts allow it (the board skill's Approved section); name them, and do not take a ticket out from under the agent that is merging it.
 
 `get_project` carries the project's `notes`: read them before the brief, and name the ones that matter.
 Read them before starting any work, too. Add a note (`add_note`) for a command, path, rule or reminder a

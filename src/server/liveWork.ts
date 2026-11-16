@@ -119,6 +119,15 @@ export interface InReviewEntry {
   preview: string | null
 }
 
+/** A ticket in Approved: the human's go-ahead to merge, which an orchestrator merges without asking again. */
+export interface ApprovedToMergeEntry {
+  ticketId: number
+  title: string
+  prNumber: number | null
+  parent: { id: number; title: string } | null
+  label: 'approved, to merge'
+}
+
 /** A post across the project, as one line. */
 export interface RecentPost {
   ticketId: number
@@ -444,6 +453,17 @@ export function getLiveWork(projectId: number, opts: LiveWorkOptions = {}) {
     preview: previewOf(t.id),
   }))
 
+  // --- approved, to merge: the human's go-ahead is in; an orchestrator merges the PR without asking again ---
+  const approvedToMerge: ApprovedToMergeEntry[] = tickets
+    .filter((t) => t.status === 'approved' && kindOf(t.status) === 'review')
+    .map((t) => ({
+      ticketId: t.id,
+      title: t.title,
+      prNumber: t.prNumber,
+      parent: parentOf(t),
+      label: 'approved, to merge' as const,
+    }))
+
   // --- the last few posts across the project: the thread the last session left ---
   // A PR's own ticket is a ticket of the project too, so its review findings are part of the thread.
   const posting = [...ids, ...prTickets.map((t) => t.id)]
@@ -480,12 +500,14 @@ export function getLiveWork(projectId: number, opts: LiveWorkOptions = {}) {
     recentlyActive,
     waitingOnHuman,
     inReview,
+    approvedToMerge,
     recentPosts,
     totals: {
       liveNow: liveNow.length,
       recentlyActive: recentlyActive.length,
       waitingOnHuman: waitingOnHuman.length,
       inReview: inReview.length,
+      approvedToMerge: approvedToMerge.length,
       tickets: tickets.length,
     },
   }

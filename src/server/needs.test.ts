@@ -373,3 +373,30 @@ describe('PR tickets', () => {
     expect(needs.needIds(feature.id)).toEqual([])
   })
 })
+
+describe("Approved is the human's to put a ticket in", () => {
+  it('refuses an agent that moves a ticket there, and lets the human do it', async () => {
+    const t = ticket('go-ahead', 'feat/go-ahead', { status: 'review' })
+    await expect(needs.changeTicket(t.id, { status: 'approved' }, 'orch', agent)).rejects.toThrow(
+      'only the human puts a ticket in Approved',
+    )
+    expect(features.getTicket(t.id).status).toBe('review')
+    await needs.changeTicket(t.id, { status: 'approved' }, 'enrique', { agent: false })
+    expect(features.getTicket(t.id).status).toBe('approved')
+  })
+})
+
+describe("Approved, on create and in the PR sync: the human's alone", () => {
+  it('refuses an agent that creates a ticket in Approved', async () => {
+    await expect(
+      needs.newTicket(projectId, { title: 'born approved', status: 'approved' }, 'orch', agent),
+    ).rejects.toThrow('only the human puts a ticket in Approved')
+    const made = await needs.newTicket(
+      projectId,
+      { title: 'born in review', status: 'review' },
+      'orch',
+      agent,
+    )
+    expect(made.status).toBe('review')
+  })
+})
