@@ -199,6 +199,39 @@ describe('RichEditor styles on a partial selection', () => {
     ).toBe('- a\n- Hello \n\n1. brave\n\n-  world\n- c')
   })
 
+  it('takes the whole text of a bullet item that has a nested list out of its list, and keeps the nested list', () => {
+    expect(
+      after('- one\n  - nested', 3, 6, (e) => toggleBlock(e, (c) => c.toggleBulletList(), 'bulletList')),
+    ).toBe('one\n\n- nested')
+  })
+
+  it('takes the whole text of a checklist item that has a nested list out of its list, and keeps the nested list', () => {
+    expect(
+      after('- [ ] one\n  - nested', 3, 6, (e) => toggleBlock(e, (c) => c.toggleTaskList(), 'taskList')),
+    ).toBe('one\n\n- nested')
+  })
+
+  it('applies a heading to a selected word of a bullet item that has a nested list, outside the item', () => {
+    // "two" is selected; the nested list stays a list of its own.
+    expect(
+      after('- one two\n  - nested', 7, 10, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 }))),
+    ).toBe('- one \n\n## two\n\n- nested')
+  })
+
+  it('takes a selected word of a bullet item that has a nested list out of its list', () => {
+    expect(
+      after('- one two\n  - nested', 7, 10, (e) => toggleBlock(e, (c) => c.toggleBulletList(), 'bulletList')),
+    ).toBe('- one \n\ntwo\n\n- nested')
+  })
+
+  it('turns a selected word of a bullet item nested in a numbered item into a numbered item', () => {
+    expect(
+      after('1. a\n   - Hello brave world', 14, 19, (e) =>
+        toggleBlock(e, (c) => c.toggleOrderedList(), 'orderedList'),
+      ),
+    ).toBe('1. a\n   - Hello \n   1. brave\n   -  world')
+  })
+
   it('leaves a collapsed caret on its whole paragraph, as before', () => {
     expect(after(sentence, 7, 7, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 })))).toBe(
       '## Hello brave world',

@@ -4,7 +4,7 @@ import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { TableKit } from '@tiptap/extension-table'
 import { Placeholder } from '@tiptap/extensions'
 import { Markdown } from '@tiptap/markdown'
-import { TextSelection } from '@tiptap/pm/state'
+import { TextSelection, type Transaction } from '@tiptap/pm/state'
 import { liftTarget } from '@tiptap/pm/transform'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -185,6 +185,24 @@ export function RichEditor({
 const listItemTypes = ['listItem', 'taskItem']
 
 /**
+ * Lifts the block at `pos` (of `size`) out of the list item it sits in. A list item starts with a
+ * paragraph, so a block that a nested list follows cannot be lifted as it is: the nested list goes out
+ * first (it becomes a list of its own, after the item), and then the block can.
+ */
+function liftOutOfItem(tr: Transaction, pos: number, size: number) {
+  const liftRange = (from: number, to: number) => {
+    const range = tr.doc.resolve(from).blockRange(tr.doc.resolve(to))
+    const target = range && liftTarget(range)
+    if (!range || target == null) return false
+    tr.lift(range, target)
+    return true
+  }
+  if (liftRange(pos, pos + size)) return
+  const itemEnd = tr.doc.resolve(pos).end()
+  if (pos + size < itemEnd && liftRange(pos + size, itemEnd)) liftRange(pos, pos + size)
+}
+
+/**
  * A block style (heading, list, quote, code block) changes every block its selection touches, so a
  * selection inside one paragraph would change the whole paragraph. This splits the paragraph at the
  * selection's ends, and lifts the selected blocks out of the list items they sit in, so the style covers
@@ -222,11 +240,8 @@ export const narrowToSelection: Command = ({ tr }) => {
   // From the last block back, so each lift leaves the positions of the blocks before it as they are.
   for (let i = blocks.length - 1; i >= 0; i--) {
     const { pos, size } = blocks[i]
-    const $from = tr.doc.resolve(pos)
-    if (!listItemTypes.includes($from.parent.type.name)) continue
-    const range = $from.blockRange(tr.doc.resolve(pos + size))
-    const target = range && liftTarget(range)
-    if (range && target != null) tr.lift(range, target)
+    if (!listItemTypes.includes(tr.doc.resolve(pos).parent.type.name)) continue
+    liftOutOfItem(tr, pos, size)
   }
   const map = tr.mapping.slice(mark)
   tr.setSelection(
@@ -237,6 +252,19 @@ export const narrowToSelection: Command = ({ tr }) => {
     ),
   )
   return true
+}
+
+/**
+ * The list the selection sits in, innermost first: a bullet item in a numbered item is a bullet item
+ * for this purpose, so a numbered style on its word is not taken for a toggle-off of the numbered list.
+ */
+function innermostList(editor: Editor): string | undefined {
+  const { $from } = editor.state.selection
+  for (let depth = $from.depth; depth > 0; depth--) {
+    const name = $from.node(depth).type.name
+    if (name === 'bulletList' || name === 'orderedList' || name === 'taskList') return name
+  }
+  return undefined
 }
 
 /**
@@ -253,9 +281,16 @@ export function toggleBlock(
     return
   }
   // The narrowing is a transaction of its own: the commands of one chain read the state from before it.
-  const wasOn = list !== undefined && editor.isActive(list)
+  const wasOn = list !== undefined && innermostList(editor) === list
   editor.chain().focus().command(narrowToSelection).run()
-  if (!wasOn) toggle(editor.chain().focus()).run()
+  if (wasOn) return
+  if (list && innermostList(editor)) {
+    // The selected text is still inside another list (a bullet item in a numbered one): the list is made
+    // around it, nested there. A toggle would take it for the outer list and undo that list instead.
+    editor.chain().focus().wrapInList(list).run()
+    return
+  }
+  toggle(editor.chain().focus()).run()
 }
 
 function Toolbar({
