@@ -28,16 +28,18 @@ export function DailyView({ projectId }: { projectId: number }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="min-w-0">
           <h1 className="text-xl font-semibold tracking-tight">Daily</h1>
           <p className="text-sm text-muted-foreground">
             The period's report, and what got done hour by hour.
           </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <PushedTodayBadge projectId={projectId} />
-          <ShiftClock projectId={projectId} />
+          {projectId !== undefined && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <PushedTodayBadge projectId={projectId} />
+              <ShiftClock projectId={projectId} />
+            </div>
+          )}
         </div>
         <div className="ml-auto flex items-center gap-1">
           <Button

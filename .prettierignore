@@ -1,2 +1,6 @@
 # Skills and agents bundled as their authors wrote them; installed byte for byte.
 src/server/skill/review/
+
+# The generated route tree, which asks for it in its header: a reformat is a diff against what
+# `pnpm generate-routes` writes.
+src/routeTree.gen.ts

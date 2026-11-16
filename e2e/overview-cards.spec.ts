@@ -1,13 +1,14 @@
 import type { Locator, Page } from '@playwright/test'
 
 import { startedAt, yesterdayNoon } from './db'
-import { expect, ok, section, test } from './fixtures'
-import { create, record, workedTicket } from './workTimeline'
+import { expect, expectTooltip, ok, section, test } from './fixtures'
+import { create, quietTicket, record, reviewTicket, stalledTicket } from './workTimeline'
 
 /**
- * Needs you and In progress, side by side on the Overview, are as tall as each other whatever they
- * hold; what does not fit scrolls under the card's header. On a phone the cards grow with their
- * content instead: the page scrolls, not the card.
+ * On a desktop the Overview's first row is Needs you alone, and the second row is Next, In progress
+ * and Done today in that order; every card is as tall as the others whatever it holds, and what does
+ * not fit scrolls under the card's header. On a phone the cards keep the layout's order, stacked,
+ * and grow with their content instead: the page scrolls, not the card.
  */
 
 const content = (card: Locator) => card.locator('[data-slot="card-content"]')
@@ -39,7 +40,7 @@ const height = async (l: Locator) => (await l.boundingBox())!.height
 const shot = (page: Page, name: string, fullPage = false) =>
   page.screenshot({ path: test.info().outputPath(`${name}.png`), animations: 'disabled', fullPage })
 
-test('Needs you and In progress are as tall as each other and scroll what does not fit', async ({
+test('the Overview cards are as tall as each other and scroll what does not fit', async ({
   page,
   project,
   api,
@@ -66,14 +67,24 @@ test('Needs you and In progress are as tall as each other and scroll what does n
   await expect(doneToday).toContainText('Shipped today 8')
   await expect(next).toContainText('Lined up 5')
 
-  // Every card of the pair grid is the same fixed height, whatever it holds.
+  // Every card of the grid is the same fixed height, whatever it holds.
   const desktop = await height(needsYou)
   expect(desktop).toBeGreaterThan(300)
   expect(desktop).toBeLessThan(500)
   for (const card of [inProgress, doneToday, next]) expect(await height(card)).toBe(desktop)
-  // The pairs sit side by side.
-  expect((await needsYou.boundingBox())!.y).toBe((await inProgress.boundingBox())!.y)
-  expect((await doneToday.boundingBox())!.y).toBe((await next.boundingBox())!.y)
+  // Needs you has the first row to itself, across the grid's width.
+  const needsBox = (await needsYou.boundingBox())!
+  const nextBox = (await next.boundingBox())!
+  expect(nextBox.y).toBeGreaterThan(needsBox.y + needsBox.height - 1)
+  // The second row, left to right: Next, In progress, Done today.
+  const inProgressBox = (await inProgress.boundingBox())!
+  const doneBox = (await doneToday.boundingBox())!
+  expect(inProgressBox.y).toBe(nextBox.y)
+  expect(doneBox.y).toBe(nextBox.y)
+  expect(nextBox.x).toBeLessThan(inProgressBox.x)
+  expect(inProgressBox.x).toBeLessThan(doneBox.x)
+  expect(Math.round(nextBox.x)).toBe(Math.round(needsBox.x))
+  expect(Math.round(doneBox.x + doneBox.width)).toBe(Math.round(needsBox.x + needsBox.width))
   await overflows(needsYou)
   await overflows(doneToday)
   // In progress and Next fit, and do not scroll; their areas still scroll once they need to.
@@ -86,6 +97,11 @@ test('Needs you and In progress are as tall as each other and scroll what does n
   await page.setViewportSize({ width: 390, height: 844 })
   // Capped first, all four cards in one shot: three entries each, and the way to see the rest.
   await page.evaluate(() => window.scrollTo(0, 0))
+  // A phone keeps the layout's order, stacked, with no row of its own.
+  const phoneY = async (card: Locator) => (await card.boundingBox())!.y
+  expect(await phoneY(needsYou)).toBeLessThan(await phoneY(inProgress))
+  expect(await phoneY(inProgress)).toBeLessThan(await phoneY(doneToday))
+  expect(await phoneY(doneToday)).toBeLessThan(await phoneY(next))
   await shot(page, 'phone-capped', true)
   // On a phone each card shows its first three entries and a way to see the rest; no nested scroll.
   for (const card of [needsYou, doneToday, next]) {
@@ -114,36 +130,69 @@ test('a stalled ticket says why and since when, in the same words on Needs you, 
   human,
   agent,
 }) => {
-  const { t } = await workedTicket(human, agent, project)
+  const { t } = await stalledTicket(human, agent, project)
+  const quiet = await quietTicket(human, agent, project)
+  const turn = await reviewTicket(human, project)
   const title = new RegExp(`#${t.id} Ship the importer`)
-  // The ticket's open build and the agent that has it, as the why names them everywhere.
-  const why = /Stalled \d+ min: claude has a build open, nobody heard from since \d{1,2}:\d{2}\s*[AP]M/
+  // Nothing is open: the why is the build that ended 40 minutes ago.
 
   await page.goto(`/projects/${project.id}`)
-  const row = section(page, 'Needs you')
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Ship the importer` }) })
-  await expect(row).toContainText(why)
+  const needsYou = section(page, 'Needs you')
+  const row = needsYou.getByRole('listitem').filter({
+    has: page.getByRole('link', { name: new RegExp(`No word \\d+m: #${t.id} Ship the importer`) }),
+  })
+  const rowLine = row.getByTestId('work-line')
+  await expect(rowLine).toHaveAttribute('data-state', 'no-word')
+  await expect(rowLine).toHaveAccessibleName(/No word \d+m/)
+  await expectTooltip(rowLine, /nothing open since the build ended at \d{1,2}:\d{2}\s*[AP]M/)
   await expect(row).toContainText(/last\s*claude/)
   await expect(row).not.toContainText('silent')
-  // In progress: what the ticket is doing now, a line on when an agent was last heard, and the same stall.
+  // A review ticket's row carries its turn, counted from the stage it entered.
+  const turnRow = needsYou
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('link', { name: new RegExp(`#${turn.t.id} Waiting for a look`) }) })
+  await expect(turnRow.getByTestId('work-line')).toHaveAttribute('data-state', 'your-turn')
+  await expect(turnRow.getByTestId('work-line')).toHaveAccessibleName(/Your turn · waiting 2d/)
+  // In progress: the one line, a line on when an agent was last heard, and the per-agent detail.
   const progress = section(page, 'In progress')
     .getByRole('listitem')
     .filter({ hasText: `#${t.id} Ship the importer` })
-  await expect(progress.getByTestId('now-line')).toContainText(/Building · claude · \d+ min/)
+  await expect(progress.getByTestId('work-line')).toHaveAttribute('data-state', 'no-word')
+  await expect(progress.getByTestId('work-line')).toHaveAccessibleName(/No word \d+m/)
   await expect(progress.getByTestId('last-heard')).toContainText(/Last heard \d+ min ago/)
-  await expect(progress.getByTestId('stall-notice')).toContainText(/Stalled \d+ min/)
+  // A live agent with no progress post in over a day reads Quiet, and a lane's post lifts it out.
+  const quietRow = section(page, 'In progress')
+    .getByRole('listitem')
+    .filter({ hasText: `#${quiet.t.id} Quiet importer` })
+  await expect(quietRow.getByTestId('work-line')).toHaveAttribute('data-state', 'quiet')
+  await expect(quietRow.getByTestId('work-line')).toHaveAccessibleName(/Quiet 1d/)
+  // It started yesterday, so Carrying over draws the same line for it.
+  const carried = section(page, 'Carrying over')
+    .getByRole('listitem')
+    .filter({ hasText: `#${quiet.t.id} Quiet importer` })
+  await expect(carried.getByTestId('work-line')).toHaveAttribute('data-state', 'quiet')
+  await expect(carried.getByTestId('work-line')).toHaveAccessibleName(/Quiet 1d/)
+  await ok(
+    agent.post(`/api/tickets/${quiet.lane.id}/updates`, {
+      data: { body: 'lane: tests pass', progress: true },
+    }),
+  )
+  await page.reload()
+  const quietAgain = section(page, 'In progress')
+    .getByRole('listitem')
+    .filter({ hasText: `#${quiet.t.id} Quiet importer` })
+  await expect(quietAgain.getByTestId('work-line')).not.toHaveAccessibleName(/Quiet/)
 
-  // The board card and the list row: the stall's badge, and on the list the now line too.
+  // The board card and the list row: the same one line, no second badged one.
   await page.goto(`/projects/${project.id}/features?view=board`)
   const card = page.getByRole('link', { name: title })
-  await expect(card.getByTestId('stall-notice')).toContainText(/Stalled \d+ min/)
-  // A stalled card's badge is its why: the card's now is left off where another badge is shown.
-  await expect(card.getByTestId('card-now')).toHaveCount(0)
+  await expect(card.getByTestId('work-line')).toHaveAttribute('data-state', 'no-word')
+  await expect(card.getByTestId('work-line')).toHaveAccessibleName(/No word \d+m/)
+  await expect(card.getByTestId('work-line')).toHaveCount(1)
   await page.getByRole('tab', { name: 'List' }).click()
   const listRow = page.getByRole('link', { name: title })
-  await expect(listRow.getByTestId('stall-notice')).toContainText(/Stalled \d+ min/)
-  await expect(listRow.getByTestId('now-line')).toContainText(/Building · claude · \d+ min/)
+  await expect(listRow.getByTestId('work-line')).toHaveAccessibleName(/No word \d+m/)
+  await expect(listRow.getByTestId('work-line')).toHaveCount(1)
 })
 
 test('In progress says what a ticket waits on and since when, when a person has to act', async ({
@@ -160,10 +209,9 @@ test('In progress says what a ticket waits on and since when, when a person has 
   const row = section(page, 'In progress')
     .getByRole('listitem')
     .filter({ hasText: `#${t.id} Approve the copy` })
-  await expect(row.getByTestId('now-line')).toContainText(
-    /Waiting on you for [^·]+ since \d{1,2}:\d{2}\s*[AP]M/,
-  )
-  await expect(row.getByTestId('stall-notice')).toHaveCount(0)
+  await expect(row.getByTestId('work-line')).toHaveAttribute('data-state', 'waiting')
+  await expect(row.getByTestId('work-line')).toHaveAccessibleName(/Waiting on you/)
+  await expect(row.getByText(/^since \d{1,2}:\d{2}\s*[AP]M$/).first()).toBeVisible()
 })
 
 test('Needs you lists a ticket whose agent is waiting on the human, and links to it', async ({
@@ -191,6 +239,41 @@ test('Needs you lists a ticket whose agent is waiting on the human, and links to
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/features/${t.id}`))
 })
 
+test('Needs you keeps threads only on tickets being worked, not on done or lined-up ones', async ({
+  page,
+  project,
+  api,
+  human,
+  agent,
+}) => {
+  /** The human's question and an agent's answer under it: a thread waiting on the human. */
+  const waitingThread = async (ticketId: number, words: string) => {
+    const post = await ok<{ id: number }>(
+      human.post(`/api/tickets/${ticketId}/updates`, { data: { body: `${words}?`, progress: false } }),
+    )
+    await ok(
+      agent.post('/api/comments', {
+        data: { parentType: 'update', parentId: post.id, body: `${words}: done` },
+      }),
+    )
+  }
+  const done = await api.ticket({ title: 'Shipped and quiet', status: 'done' })
+  const todo = await api.ticket({ title: 'Lined up and quiet', status: 'todo' })
+  const working = await api.ticket({ title: 'Being worked', status: 'in_progress' })
+  await waitingThread(done.id, 'Closed question')
+  await waitingThread(todo.id, 'Lined up question')
+  await waitingThread(working.id, 'Open question')
+
+  await page.goto(`/projects/${project.id}`)
+  const needsYou = section(page, 'Needs you')
+  await expect(needsYou.locator('li').filter({ hasText: 'Open question' })).toBeVisible()
+  await expect(needsYou).not.toContainText('Closed question')
+  await expect(needsYou).not.toContainText('Lined up question')
+  // The header count is the entries shown: the one thread, and nothing else.
+  await expect(needsYou.locator('[data-slot="card-title"] span')).toHaveText('1')
+  await expect(needsYou.locator('li')).toHaveCount(1)
+})
+
 test('a busy card with no other badge shows what it is doing now, as icon and time', async ({
   page,
   project,
@@ -202,8 +285,10 @@ test('a busy card with no other badge shows what it is doing now, as icon and ti
 
   await page.goto(`/projects/${project.id}/features?view=board`)
   const card = page.getByRole('link', { name: new RegExp(`#${t.id} Building right now`) })
-  await expect(card.getByTestId('card-now')).toContainText(/^\s*\d+ min|under a minute\s*$/)
-  await expect(card.getByTestId('stall-notice')).toHaveCount(0)
+  const line = card.getByTestId('work-line')
+  await expect(line).toHaveAttribute('data-state', 'working')
+  await expect(line).toHaveAccessibleName(/Working now · last word \d+m/)
+  await expect(card.getByTestId('work-line')).toHaveCount(1)
 })
 
 test('Carrying over is a full row of its own and caps the same way, at desktop and on a phone', async ({
@@ -225,6 +310,8 @@ test('Carrying over is a full row of its own and caps the same way, at desktop a
   const doneToday = section(page, 'Done today')
   const next = section(page, 'Next: To do')
   await expect(carrying).toContainText('Carried over 12')
+  // One line per carried-over ticket, the same one every row draws.
+  await expect(carrying.getByTestId('work-line')).toHaveCount(12)
 
   // Its own row, below every other card.
   const box = (await carrying.boundingBox())!

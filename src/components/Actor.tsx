@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { Tip } from '#/components/ui/tooltip'
+import { nameParts, truncateName } from '#/lib/actorName'
 import { type ActorRow, get } from '#/lib/api'
 import { useProjectAgent } from '#/lib/project'
 import { ROLE_LABEL, type Who, type WhoRole, chainOf, claimedShape, whoOf } from '#/lib/roles'
@@ -108,13 +109,14 @@ export function Actor({
   via?: string
   /** Cut the name short on its one line before the badge after it (see `Name`). */
   truncate?: boolean
-  /** On a card, show only the leaf of a sub-identity (`ticket-794`); the tooltip keeps the whole chain. */
+  /** On a card, show only the leaf of a sub-identity (`builder-832`); the tooltip keeps the whole chain. */
   short?: boolean
   className?: string
 }) {
   const who = useWho()
   const agent = useProjectAgent(name)
-  const shown = short && name.includes('/') ? name.split('/').pop()! : name
+  // A sub-identity shows the name it works as: the leaf, cut at a word boundary rather than mid-word.
+  const shown = short ? truncateName(nameParts(name).leaf) : name
   if (agent)
     return (
       <Tip

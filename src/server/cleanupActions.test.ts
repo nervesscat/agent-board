@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { DeleteItem, DeleteResult } from './cleanupActions'
+import type { JobState } from './jobs'
 import type { PreviewRunner, Proc } from './managedPreview'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
@@ -2068,19 +2069,109 @@ describe('the route', () => {
       actor: caller!.name,
     })
   }
+  /** The project's jobs as `GET /api/projects/:id/jobs` reads them for that caller. */
+  const jobsOf = async (actor = 'human:enrique') => {
+    const { api } = await import('./api')
+    const { api: guard } = await import('./http')
+    const { callerOf } = await import('./auth')
+    const request = new Request(`http://localhost/api/projects/${projectId}/jobs`, {
+      headers: { 'x-test-actor': actor },
+    })
+    const caller = await callerOf(request)
+    const res = await guard(({ request: r, actor: a }: { request: Request; actor: string }) =>
+      api.handle(r, a),
+    )({ request, actor: caller!.name })
+    return (await res.json()) as JobState[]
+  }
+  /** That job once it is no longer running: the registry is read until it ends. */
+  const ended = async (id: number, actor = 'human:enrique') => {
+    for (let i = 0; i < 600; i++) {
+      const job = (await jobsOf(actor)).find((x) => x.id === id)
+      if (job && job.state !== 'running') return job
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    throw new Error(`job ${id} did not end`)
+  }
 
-  it('gives the human each item’s outcome, under their name, and refuses a sha that is not one', async () => {
-    const { 'feat/b11': sha } = land(['feat/b11'])
-    const t = done('b11', 'feat/b11')
-    const items = [{ ticketId: t.id, branch: 'feat/b11', kind: 'local', sha }]
-    const bad = await call('human:enrique', { items: [{ ...items[0], sha: 'HEAD' }] })
-    expect(bad.status).toBe(400)
-    expect(hasRef(repo, 'refs/heads/feat/b11')).toBe(true)
-    const human = await call('human:enrique', { items })
-    expect(human.status).toBe(200)
-    expect(await human.json()).toEqual([expect.objectContaining({ branch: 'feat/b11', outcome: 'deleted' })])
-    expect(hasRef(repo, 'refs/heads/feat/b11')).toBe(false)
-    expect(logged(t.id)).toEqual([['enrique', `deleted the branch feat/b11 @ ${sha} of #${t.id}`]])
+  it('answers 202 with the running job at once, and ends it succeeded with the items as asked', async () => {
+    const names = ['feat/j1', 'feat/j2', 'feat/j3']
+    const shas = land(names)
+    const items: DeleteItem[] = names.map((name, i) => ({
+      ticketId: done(`j${i + 1}`, name).id,
+      branch: name,
+      kind: 'local',
+      sha: shas[name]!,
+    }))
+    const before = (await jobsOf()).length
+
+    const res = await call('human:enrique', { items })
+    expect(res.status).toBe(202)
+    const started = (await res.json()) as JobState
+    expect(started).toEqual({
+      id: expect.any(Number),
+      kind: 'cleanup-delete',
+      title: 'Delete 3 branches',
+      projectId,
+      actor: 'enrique',
+      total: 3,
+      done: 0,
+      state: 'running',
+      step: null,
+      reason: null,
+      startedAt: expect.any(String),
+      finishedAt: null,
+      href: `/projects/${projectId}/cleanup`,
+      result: null,
+    })
+    expect(Number.isInteger(started.id)).toBe(true)
+    expect((await jobsOf()).length).toBe(before + 1)
+
+    const job = await ended(started.id)
+    expect(job).toMatchObject({
+      state: 'succeeded',
+      done: 3,
+      total: 3,
+      step: null,
+      reason: null,
+      href: `/projects/${projectId}/cleanup`,
+    })
+    // The very items the request asked for, with the outcome and the restore command of each.
+    expect(job.result).toEqual(
+      items.map((item) => ({
+        ...item,
+        ok: true,
+        outcome: 'deleted',
+        reason: null,
+        removed: [],
+        unlinked: [],
+        restore: [`git branch ${item.branch} ${item.sha}`],
+      })),
+    )
+    for (const item of items) {
+      expect(hasRef(repo, `refs/heads/${item.branch}`)).toBe(false)
+      expect(logged(item.ticketId)).toEqual([
+        ['enrique', `deleted the branch ${item.branch} @ ${item.sha} of #${item.ticketId}`],
+      ])
+    }
+  })
+
+  it('reports each item as it lands, in the order asked, with its count and its step', async () => {
+    const names = ['feat/q1', 'feat/q2', 'feat/q3']
+    const shas = land(names)
+    const items: DeleteItem[] = names.map((name, i) => ({
+      ticketId: done(`q${i + 1}`, name).id,
+      branch: name,
+      kind: 'local',
+      sha: shas[name]!,
+    }))
+    const seen: { done: number; step: string }[] = []
+    const results = await deleteLeftovers(projectId, items, 'enrique', {
+      onProgress: (progress) => seen.push(progress),
+    })
+    expect(results.map((r) => r.outcome)).toEqual(['deleted', 'deleted', 'deleted'])
+    expect(seen).toEqual(
+      items.map((item, i) => ({ done: i + 1, step: `#${item.ticketId} ${item.branch}: deleted` })),
+    )
   })
 
   it('lets an agent delete landed local branches, each checked as for the human, under its name', async () => {
@@ -2102,8 +2193,13 @@ describe('the route', () => {
         { ticketId: onMain.id, branch: 'main', kind: 'local', sha: main },
       ],
     })
-    expect(res.status).toBe(200)
-    const results = (await res.json()) as DeleteResult[]
+    expect(res.status).toBe(202)
+    const started = (await res.json()) as JobState
+    expect(started).toMatchObject({ actor: 'codex', total: 4, state: 'running' })
+    // An agent follows its own job; the human sees it as well, under the agent's name.
+    const job = await ended(started.id, 'agent:codex')
+    expect(job.state).toBe('succeeded')
+    const results = job.result as DeleteResult[]
     expect(results.map((r) => [r.branch, r.outcome])).toEqual([
       ['feat/g1', 'deleted'],
       ['feat/g1m', 'refused'],
@@ -2132,6 +2228,42 @@ describe('the route', () => {
     for (const id of [tm.id, tu.id, onMain.id]) expect(logged(id)).toEqual([])
   })
 
+  it('keeps a moved sha, unique work, a protected branch and a missing ticket as results, and ends succeeded', async () => {
+    const shas = land(['feat/r1', 'feat/r1m'])
+    const unique = land(['feat/r1u'], { unique: true })['feat/r1u']!
+    const t = done('r1', 'feat/r1')
+    const tm = done('r1m', 'feat/r1m')
+    const tu = done('r1u', 'feat/r1u')
+    const onMain = done('r1 on main', 'main', { baseBranch: 'main' })
+    const main = git('rev-parse', 'main')
+    const res = await call('human:enrique', {
+      items: [
+        { ticketId: t.id, branch: 'feat/r1', kind: 'local', sha: shas['feat/r1'] },
+        { ticketId: tm.id, branch: 'feat/r1m', kind: 'local', sha: shas['feat/r1'] },
+        { ticketId: tu.id, branch: 'feat/r1u', kind: 'local', sha: unique },
+        { ticketId: onMain.id, branch: 'main', kind: 'local', sha: main },
+        { ticketId: 999_999, branch: 'feat/nowhere', kind: 'local', sha: shas['feat/r1'] },
+      ],
+    })
+    expect(res.status).toBe(202)
+    const job = await ended(((await res.json()) as JobState).id)
+    expect(job).toMatchObject({ state: 'succeeded', done: 5, total: 5, reason: null, step: null })
+    const results = job.result as DeleteResult[]
+    expect(results.map((r) => [r.branch, r.outcome])).toEqual([
+      ['feat/r1', 'deleted'],
+      ['feat/r1m', 'refused'],
+      ['feat/r1u', 'refused'],
+      ['main', 'refused'],
+      ['feat/nowhere', 'refused'],
+    ])
+    expect(results[4]!.reason).toBe('#999999 is no ticket of this project')
+    // One refusal did not stop the rest: the first one went, the others stayed.
+    expect(hasRef(repo, 'refs/heads/feat/r1')).toBe(false)
+    expect(git('rev-parse', 'refs/heads/feat/r1m')).toBe(shas['feat/r1m'])
+    expect(git('rev-parse', 'refs/heads/feat/r1u')).toBe(unique)
+    expect(git('rev-parse', 'refs/heads/main')).toBe(main)
+  })
+
   it('refuses an agent’s request with a worktree in it whole, and removes nothing', async () => {
     const shas = land(['feat/g8', 'feat/g8w'])
     git('worktree', 'add', '-q', wt('g8w'), 'feat/g8w')
@@ -2150,11 +2282,14 @@ describe('the route', () => {
     }
     // Its own worktree with the main checkout and a folder out of the repository named beside it.
     const named = { ...trees, worktrees: [...listed, repo, tmp] }
+    const jobsBefore = (await jobsOf()).length
     for (const items of [[trees], [local, trees], [named, local]]) {
       const res = await call('agent:codex', { items })
       expect(res.status, items.map((i) => i.kind).join(', ')).toBe(403)
       expect(await res.json()).toEqual({ error: 'only the human removes worktrees, from the Cleanup page' })
     }
+    // Refused whole, before any job: there is nothing to follow and nothing was started.
+    expect((await jobsOf()).length).toBe(jobsBefore)
     expect(fs.readdirSync(wt('g8w')).sort()).toEqual(files)
     expect(worktreePaths()).toContain(wt('g8w'))
     expect(git('rev-parse', 'refs/heads/feat/g8w')).toBe(shas['feat/g8w'])
@@ -2198,6 +2333,7 @@ describe('the route', () => {
       sha: shas['feat/g2w'],
       worktrees: [wt('g2w')],
     }
+    const jobsBefore = (await jobsOf()).length
     for (const items of [
       [remote],
       [local, remote],
@@ -2211,6 +2347,7 @@ describe('the route', () => {
         error: 'only the human deletes branches on origin, from the Cleanup page',
       })
     }
+    expect((await jobsOf()).length).toBe(jobsBefore)
     expect(refs()).toBe(before)
     expect(gitIn(origin)('rev-parse', 'refs/heads/feat/g2')).toBe(theirs)
     expect(gitIn(origin)('rev-parse', 'refs/heads/feat/g2w')).toBe(shas['feat/g2w'])
@@ -2230,8 +2367,10 @@ describe('the route', () => {
         { ticketId: t.id, branch: 'feat/g3h', kind: 'remote', sha },
       ],
     })
-    expect(res.status).toBe(200)
-    const results = (await res.json()) as DeleteResult[]
+    expect(res.status).toBe(202)
+    const job = await ended(((await res.json()) as JobState).id)
+    expect(job.state).toBe('succeeded')
+    const results = job.result as DeleteResult[]
     expect(results.map((r) => [r.kind, r.outcome])).toEqual([
       ['local', 'deleted'],
       ['remote', 'deleted'],
@@ -2249,13 +2388,72 @@ describe('the route', () => {
     const { 'feat/g4v': sha } = land(['feat/g4v'])
     const t = done('g4v', 'feat/g4v')
     const item: DeleteItem = { ticketId: t.id, branch: 'feat/g4v', kind: 'local', sha }
+    const jobsBefore = (await jobsOf()).length
     for (const body of [...malformed(item).map((items) => ({ items })), {}, { items: item }])
       for (const actor of ['agent:codex', 'human:enrique']) {
         const res = await call(actor, body)
         expect(res.status, `${actor}: ${JSON.stringify(body).slice(0, 120)}`).toBe(400)
       }
+    // Nothing was started, and nothing was deleted.
+    expect((await jobsOf()).length).toBe(jobsBefore)
     expect(git('rev-parse', 'refs/heads/feat/g4v')).toBe(sha)
     expect(logged(t.id)).toEqual([])
+  })
+
+  it('answers 404 for an unknown project with no job started', async () => {
+    const { api } = await import('./api')
+    const { api: guard } = await import('./http')
+    const { callerOf } = await import('./auth')
+    const request = new Request('http://localhost/api/projects/999999/cleanup/delete', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-actor': 'human:enrique' },
+      body: JSON.stringify({
+        items: [{ ticketId: 1, branch: 'feat/x', kind: 'local', sha: 'a'.repeat(40) }],
+      }),
+    })
+    const caller = await callerOf(request)
+    const jobsBefore = (await jobsOf()).length
+    const res = await guard(({ request: r, actor: a }: { request: Request; actor: string }) =>
+      api.handle(r, a),
+    )({ request, actor: caller!.name })
+    expect(res.status).toBe(404)
+    expect((await jobsOf()).length).toBe(jobsBefore)
+  })
+})
+
+describe('the work under a job', () => {
+  it('ends failed with the throw’s message, no result invented, and still hands the throw on', async () => {
+    const { runAsJob } = await import('./jobWork')
+    const { listJobs } = await import('./jobs')
+    const { job, results } = runAsJob(
+      {
+        kind: 'cleanup-delete',
+        title: 'Delete 2 branches',
+        projectId,
+        actor: 'enrique',
+        total: 2,
+        href: `/projects/${projectId}/cleanup`,
+      },
+      async (report) => {
+        report(1, '#12 lane/47: deleted')
+        throw new Error('the checkout could not be read')
+      },
+    )
+    const thrown = await results.then(
+      () => null,
+      (err: unknown) => err,
+    )
+    expect(thrown).toEqual(new Error('the checkout could not be read'))
+    const ended = listJobs(projectId).find((listed) => listed.id === job.id)!
+    expect(ended).toMatchObject({
+      state: 'failed',
+      reason: 'the checkout could not be read',
+      step: null,
+      result: null,
+      done: 1,
+      total: 2,
+    })
+    expect(typeof ended.finishedAt).toBe('string')
   })
 })
 

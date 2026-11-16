@@ -14,8 +14,19 @@ permissions:
 
 jobs:
   check:
+    # The job runs on GitHub's hosted runner (`ubuntu-latest`): a fresh VM for each run, as a
+    # non-root user with passwordless sudo, with nothing installed beyond the image. The steps below
+    # install what they need (node and pnpm via actions, dependencies, Playwright's Chromium with its
+    # system libraries). Nothing here runs on the owner's own server, so the job runs the same for a
+    # pull request from a fork, from a branch and from a push.
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The e2e suite is the long part of this job: about 8 minutes of install, typecheck, lint,
+    # migrations, unit tests and build come first, then the suite's tests. The
+    # 70-minute limit was set on the old self-hosted box, where the e2e step measured 31 minutes with
+    # another suite sharing the machine. The suite runs 2 workers here (playwright.config.ts): the
+    # hosted runner's own timing is what the runs must show; the limit is kept until a measured run
+    # says otherwise. No matrix: one job keeps the install and the build to one copy.
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -79,7 +90,14 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm check:migrations
-      - run: pnpm test
+
+      # Vitest starts a worker per core, and the git-backed tests spawn dozens of real git
+      # processes each: on a machine with many cores the whole suite can crowd the machine enough
+      # that a single one of those tests outlives vitest's 5 second default. What they assert is
+      # the git calls made, not how long they take, so the default buys nothing here and the
+      # release tests already ask for 30 seconds in code for the same reason.
+      - name: Unit tests
+        run: pnpm test --testTimeout=30000
 
       # One build, into the folder the e2e suite starts the board from (it then skips its own build).
       - name: Build
@@ -90,7 +108,10 @@ jobs:
       - name: Install Playwright's Chromium
         run: pnpm exec playwright install --with-deps chromium
 
+      # Its own timeout, so a suite that hangs fails this step and the Playwright report still
+      # uploads below (`if: failure()`) instead of the job's timeout cancelling it all.
       - name: End-to-end tests
+        timeout-minutes: 45
         run: pnpm test:e2e
         env:
           E2E_SKIP_BUILD: '1'

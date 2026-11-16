@@ -28,10 +28,10 @@ import type {
 } from '#/server/agents'
 
 /**
- * The shell the install lines are for, on a page whose route takes `?shell=` (Connect an agent, a
- * project's Agents): the one in the URL, else the one this browser remembers, else bash. Storage is
- * read only after mount, so the server's render and the browser's agree (as with the PR queue filter).
- * Returns the shell and how to pick another, which the URL and this browser keep.
+ * The shell the install lines are for, on a page whose route takes `?shell=` (Connect an agent): the one in
+ * the URL, else the one this browser remembers, else bash. Storage is read only after mount, so the
+ * server's render and the browser's agree (as with the PR queue filter). Returns the shell and how to pick
+ * another, which the URL and this browser keep.
  */
 export function useShell() {
   const { shell: picked } = useSearch({ strict: false })
@@ -48,20 +48,26 @@ export function useShell() {
 
 /**
  * The one-line install of the feature-review, review-queue and todo-review skills and their agents, which run the
- * default agents' cycle, for the page's shell (`useShell`), with the token the page's "Generate commands"
- * made (`GenerateCommands`); until then the line carries the placeholder. Below it, whether the copy the
- * board tracks (a board-wide setting) is current: the one in `~/.claude` on the board's machine, or each
- * repo's own (every repo, or `projectId`'s).
+ * default agents' cycle, for the page's shell (`useShell`). The line carries the page's short-lived download
+ * credential (`useSkillToken`), which the first copy mints: until then, and in the text, it is
+ * `TOKEN_PLACEHOLDER`. Below it, whether the copy the board tracks (a board-wide setting) is current: the
+ * one in `~/.claude` on the board's machine, or each repo's own (every repo, or `projectId`'s).
  */
 export function ReviewSkills({
   boardUrl,
   token = '',
+  copyLine,
   shell,
   onShellChange,
   projectId,
 }: {
   boardUrl: string
   token?: string
+  /**
+   * What one install line is copied as, minting the download credential when this page has none yet: the
+   * text for the clipboard, or null when it could not be had.
+   */
+  copyLine?: (build: (token: string) => string) => Promise<string | null>
   shell: Shell
   onShellChange: (shell: Shell) => void
   projectId?: string
@@ -70,6 +76,9 @@ export function ReviewSkills({
     queryKey: ['review-skills'],
     queryFn: () => get<string[]>('/api/agent-setup/review-skills?list'),
   })
+  /** The copied text for a line built from the page's token: minted on the first copy. */
+  const copy = (build: (token: string) => string) => async () =>
+    copyLine ? copyLine(build) : build(token.trim())
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
@@ -83,8 +92,9 @@ export function ReviewSkills({
           {!token && (
             <>
               {' '}
-              Generate commands to put the agent&apos;s token in place of{' '}
-              <code className="rounded bg-muted px-1">{TOKEN_PLACEHOLDER}</code>.
+              It carries <code className="rounded bg-muted px-1">{TOKEN_PLACEHOLDER}</code> until a line is
+              copied: the board then mints a download token, good for about ten minutes, for every install
+              line on this page.
             </>
           )}
         </p>
@@ -95,7 +105,10 @@ export function ReviewSkills({
           </TabsList>
         </Tabs>
       </div>
-      <CopyBlock text={reviewSkillsInstall(shell, boardUrl, token.trim())} />
+      <CopyBlock
+        text={reviewSkillsInstall(shell, boardUrl, token.trim())}
+        onCopy={copy((t) => reviewSkillsInstall(shell, boardUrl, t))}
+      />
       {paths.length > 0 && (
         <details className="rounded-md border">
           <summary className="cursor-pointer px-3 py-2 text-xs text-muted-foreground">
@@ -108,14 +121,20 @@ export function ReviewSkills({
           </ul>
         </details>
       )}
-      <InstalledSkills boardUrl={boardUrl} token={token.trim()} shell={shell} projectId={projectId} />
+      <InstalledSkills
+        boardUrl={boardUrl}
+        token={token.trim()}
+        copy={copy}
+        shell={shell}
+        projectId={projectId}
+      />
     </div>
   )
 }
 
 /**
- * Which copy the page tracks, a board-wide setting: the one in the settings cache (shared with the
- * Settings page and the other of Connect an agent and Team), or the one being saved. Undefined until the settings load.
+ * Which copy the page tracks, a board-wide setting: the one in the settings cache (shared with the Settings
+ * page), or the one being saved. Undefined until the settings load.
  */
 function useSkillsTracking() {
   const qc = useQueryClient()
@@ -132,7 +151,7 @@ function useSkillsTracking() {
 }
 
 /** The installed copies, as read when the page loads and on Check again: `~/.claude` and every repo's. */
-function useSkillsStatus(projectId?: string) {
+export function useSkillsStatus(projectId?: string) {
   return useQuery({
     queryKey: ['review-skills-status', projectId ?? 'all'],
     queryFn: () =>
@@ -146,11 +165,13 @@ function useSkillsStatus(projectId?: string) {
 function InstalledSkills({
   boardUrl,
   token,
+  copy,
   shell,
   projectId,
 }: {
   boardUrl: string
   token: string
+  copy: (build: (token: string) => string) => () => Promise<string | null>
   shell: Shell
   projectId?: string
 }) {
@@ -171,9 +192,9 @@ function InstalledSkills({
         </Tabs>
       </div>
       {tracking === 'global' ? (
-        <GlobalSkills boardUrl={boardUrl} token={token} shell={shell} projectId={projectId} />
+        <GlobalSkills boardUrl={boardUrl} token={token} copy={copy} shell={shell} projectId={projectId} />
       ) : (
-        <RepoSkills boardUrl={boardUrl} token={token} shell={shell} projectId={projectId} />
+        <RepoSkills boardUrl={boardUrl} token={token} copy={copy} shell={shell} projectId={projectId} />
       )}
     </>
   )
@@ -210,17 +231,20 @@ function CheckAgain({ status }: { status: ReturnType<typeof useSkillsStatus> }) 
 function GlobalSkills({
   boardUrl,
   token,
+  copy,
   shell,
   projectId,
 }: {
   boardUrl: string
   token: string
+  copy: (build: (token: string) => string) => () => Promise<string | null>
   shell: Shell
   projectId?: string
 }) {
   const status = useSkillsStatus(projectId)
   const { data, error } = status
   const installTo = data?.global.installTo ?? null
+  const build = (t: string) => reviewSkillsInstall(shell, boardUrl, t, installTo ?? undefined)
   return (
     <section className="space-y-2" aria-label="On this machine">
       <div className="flex items-center justify-between gap-2">
@@ -258,7 +282,8 @@ function GlobalSkills({
             noneLine={installTo !== null}
             files={data.global.files}
             total={data.files.length}
-            line={reviewSkillsInstall(shell, boardUrl, token, installTo ?? undefined)}
+            line={build(token)}
+            copy={copy(build)}
           />
         </ul>
       )}
@@ -273,11 +298,13 @@ function GlobalSkills({
 function RepoSkills({
   boardUrl,
   token,
+  copy,
   shell,
   projectId,
 }: {
   boardUrl: string
   token: string
+  copy: (build: (token: string) => string) => () => Promise<string | null>
   shell: Shell
   projectId?: string
 }) {
@@ -326,6 +353,7 @@ function RepoSkills({
                 files={r.files}
                 total={data.files.length}
                 line={reviewSkillsInstall(shell, boardUrl, token, repoClaudeDir(r.repoPath))}
+                copy={copy((t) => reviewSkillsInstall(shell, boardUrl, t, repoClaudeDir(r.repoPath)))}
               />
             ))}
           </ul>
@@ -350,6 +378,7 @@ function SkillsItem({
   files,
   total,
   line,
+  copy,
 }: {
   label: string
   name: ReactNode
@@ -365,6 +394,8 @@ function SkillsItem({
   files: RepoSkillsRow['files']
   total: number
   line: string
+  /** The same line to copy, with this page's download token minted on the first copy. */
+  copy: () => Promise<string | null>
 }) {
   const [open, setOpen] = useState(false)
   // The stale file whose changes are shown, and how many times one was opened: each opening reads anew.
@@ -389,7 +420,7 @@ function SkillsItem({
         </Badge>
       </div>
       {status === 'none' && <p className="text-xs text-muted-foreground">{none}</p>}
-      {status === 'none' && noneLine && <CopyBlock text={line} />}
+      {status === 'none' && noneLine && <CopyBlock text={line} onCopy={copy} />}
       {outdated && (
         <>
           <button
@@ -425,7 +456,7 @@ function SkillsItem({
                   </li>
                 ))}
               </ul>
-              <CopyBlock text={line} />
+              <CopyBlock text={line} onCopy={copy} />
             </div>
           )}
         </>

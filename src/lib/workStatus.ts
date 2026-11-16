@@ -1,4 +1,14 @@
-import type { Stalled, TimelineSpan, TimelineWait, WorkTimeline, WorkTotals } from './workTimeline'
+import { clock } from './format'
+import {
+  STALE_MS,
+  type Liveness,
+  type Stalled,
+  type TimelineSpan,
+  type TimelineStage,
+  type TimelineWait,
+  type WorkTimeline,
+  type WorkTotals,
+} from './workTimeline'
 
 /**
  * The short answers every place that shows a ticket's work gives: what is going on now, who was heard
@@ -11,8 +21,18 @@ export type WorkTimelineLike = Pick<
   WorkTimeline,
   'spans' | 'waits' | 'totals' | 'stalled' | 'live' | 'end' | 'start' | 'lastHeard'
 > & {
+  /** The ticket-wide latest word, when the read carried one (a timeline does; an activity's liveness does not). */
+  lastWordAt?: string | null
   /** The server's time when the timeline was read (absent for one built from an activity: then no offset). */
   now?: string
+  /** The ticket's state and per-agent facts, when the read carried one. */
+  liveness?: Liveness | null
+  /** The stage it is in, and when it entered it. */
+  stage?: TimelineStage
+  /** The last progress post on the ticket or a lane, else the work's start. */
+  progressAt?: string | null
+  /** Whether the human's turn is a fact the board already counts. */
+  waitingOnHuman?: boolean
 }
 
 /**
@@ -121,6 +141,66 @@ export function lastHeard(t: WorkTimelineLike): LastHeardLine | null {
   return { at: h.at, agent: h.agent, by: h.by, summary: h.note || h.reason || h.phase }
 }
 
+/** The ticket's last word: when the agent last spoke, who, and how many whole minutes ago. */
+export type LastWord = { at: string; agent: string; minutes: number }
+
+/**
+ * `last word N min ago`: the latest agent event or agent post, counted on the clock the caller gives
+ * (the server's, through `onServerClock`). Null when no agent has said anything on the ticket.
+ */
+export function lastWord(t: WorkTimelineLike, now: Date | number): LastWord | null {
+  const at = t.lastWordAt ?? t.lastHeard?.at ?? t.liveness?.lastWordAt ?? null
+  if (!at) return null
+  return {
+    at,
+    agent: t.lastHeard?.agent || t.liveness?.agent || '',
+    minutes: Math.max(0, Math.floor((+now - Date.parse(at)) / 60_000)),
+  }
+}
+
+/** The ticket's state, when the read carried one (rows may carry the activity's). */
+export const livenessOf = (t: WorkTimelineLike): Liveness | null =>
+  t.liveness ?? (t as { activity?: { liveness?: Liveness | null } }).activity?.liveness ?? null
+
+/** Whole minutes between `from` and `now`, never negative. */
+export const minutesBetween = (from: string, now: Date | number) =>
+  Math.max(0, Math.floor((+now - Date.parse(from)) / 60_000))
+
+/**
+ * The per-agent detail under the one work-state line, one per open span, opening with the agent:
+ * `claude · build · 43 min · last word 20 min ago`.
+ */
+export function livenessLines(l: Liveness | null | undefined, now: Date | number): string[] {
+  if (!l) return []
+  return l.spans.map((s) => {
+    const word = s.lastWordAt ? `last word ${s.silentMinutes} min ago` : 'no word yet'
+    const forSpan = minutesBetween(s.since, now)
+    return [s.agent, s.phase, `${forSpan} min`, word].filter(Boolean).join(' · ')
+  })
+}
+
+/** A lost ticket as the state reads it: the agent, its phase, since when and its last word. */
+export type LostContactWhy = {
+  agent: string
+  phase: string
+  since: string
+  silentMinutes: number
+  lastWordAt: string | null
+}
+
+/** Why an agent is lost: its lease expired with a span still open. Null for every other state. */
+export function lostContact(t: WorkTimelineLike): LostContactWhy | null {
+  const l = livenessOf(t)
+  if (l?.state !== 'lost') return null
+  return {
+    agent: l.agent,
+    phase: l.phase,
+    since: l.since,
+    silentMinutes: l.silentMinutes,
+    lastWordAt: l.lastWordAt,
+  }
+}
+
 export type StallReason =
   /** Nothing is open; the last closed span (if any) ended at `endedAt`. `quote` is what that event said. */
   | {
@@ -133,13 +213,12 @@ export type StallReason =
     }
   /** A wait is open on an agent (`on`) and nobody has been heard from since. */
   | { kind: 'waiting'; on: string; reason: string; since: string; stage: string | null }
-  /** A span is open, its agent silent since `since`. */
-  | { kind: 'working'; agent: string; phase: string; since: string; stage: string | null }
 
 /**
  * Why a stalled ticket is stalled, or null when it is not. An open wait is the answer when there is
- * one, else an open span, else nothing is open and the last closed span says when the work stopped.
- * `stage` is the name of the active stage when it is not the project's default one (else null).
+ * one, else nothing is open and the last closed span says when the work stopped. A span is never open
+ * on a stalled ticket any more: an expired lease with a span open reads as Lost contact (see
+ * `lostContact`). `stage` is the name of the active stage when it is not the project's default one.
  */
 export function stallReason(t: WorkTimelineLike, stage: string | null = null): StallReason | null {
   const s: Stalled | null = t.stalled
@@ -147,8 +226,6 @@ export function stallReason(t: WorkTimelineLike, stage: string | null = null): S
   const since = s.since
   const open = latestFirst(t.waits.filter((w) => w.open))[0]
   if (open) return { kind: 'waiting', on: waitTarget(open), reason: open.reason, since, stage }
-  const span = latestFirst(t.spans.filter((x) => x.open))[0]
-  if (span) return { kind: 'working', agent: span.agent, phase: span.phase, since, stage }
   const closed = t.spans.filter((x: TimelineSpan) => !x.open).sort((a, b) => ms(b.end) - ms(a.end))[0]
   const h = t.lastHeard
   const quote = closed && h && h.at === closed.end ? h.reason : ''
@@ -160,6 +237,148 @@ export function stallReason(t: WorkTimelineLike, stage: string | null = null): S
     quote,
     stage,
   }
+}
+
+/** Why a ticket reads `No word`: the same why the stall has always given, in the human's words. */
+export function stallWhy(r: StallReason): string {
+  if (r.stage) return `in ${r.stage}, no agent heard from since ${clock(r.since)}`
+  if (r.kind === 'waiting') return `waiting on ${r.on}, nobody heard from since ${clock(r.since)}`
+  if (!r.endedAt) return `nothing open since ${clock(r.since)}`
+  return `nothing open since the ${r.phase || 'work'} ended at ${clock(r.endedAt)}${r.quote ? ` ('${r.quote}')` : ''}`
+}
+
+/** The seven states a live ticket's one work-state line can say, in the order the State filter lists them. */
+export const WORK_LINE_STATES = [
+  'waiting',
+  'your-turn',
+  'lost',
+  'no-word',
+  'quiet',
+  'working',
+  'nothing',
+] as const
+export type WorkLineState = (typeof WORK_LINE_STATES)[number]
+
+/** Each state's name: the words its line starts with, and what the State filter calls it. */
+export const WORK_STATE_NAME: Record<WorkLineState, string> = {
+  waiting: 'Waiting on you',
+  'your-turn': 'Your turn',
+  lost: 'Lost contact',
+  'no-word': 'No word',
+  quiet: 'Quiet',
+  working: 'Working now',
+  nothing: 'Nothing open',
+}
+
+/**
+ * The states a State filter keeps, from its URL value (`lost,waiting`): the known ones, once each, in
+ * list order. Anything else in the value is dropped.
+ */
+export const parseWorkStates = (raw: string | undefined): WorkLineState[] => {
+  const asked = new Set((raw ?? '').split(','))
+  return WORK_LINE_STATES.filter((s) => asked.has(s))
+}
+
+/**
+ * Whether a row with this line's state is kept by the chosen states. An empty choice keeps every row; a
+ * row with no line (`null`: open, done, cancelled, archived) keeps none once a state is chosen.
+ */
+export const stateMatches = (state: WorkLineState | null, chosen: readonly WorkLineState[]): boolean =>
+  chosen.length === 0 || (state !== null && chosen.includes(state))
+
+/** The one answer a live row words itself by: its state, the line, the per-agent detail and the why. */
+export type WorkLineAnswer = {
+  state: WorkLineState
+  /** The line, exactly: `Working now · last word 12m`, `No word 47m`, `Your turn · waiting 2d`, … */
+  text: string
+  /** The per-agent lines under the word (one per open span), for a surface with room. */
+  detail: string[]
+  /** The why behind the word, for a tooltip ('' when the surface's own detail says it). */
+  why: string
+}
+
+/**
+ * A duration in the line's units, whole and floored, never negative: `12m`, `0m` right after a heartbeat,
+ * `5h` under a day and `2d` from it on.
+ */
+export function workDuration(ms: number): string {
+  const minutes = Math.max(0, Math.floor(ms / 60_000))
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h`
+  return `${Math.floor(hours / 24)}d`
+}
+
+/**
+ * The one work-state line: what a ticket is doing, in the human's words, from the facts the read carries.
+ * One place words it, by the precedence — the human's turn (a human wait, a card, a blocked next step, a
+ * blocked stage) > a review stage (`Your turn`) > a lost agent > today's stall (`No word`) > a day-long
+ * quiet (`Quiet`) > a live agent (`Working now`) > the neutral gap (`Nothing open`). Null when the row is
+ * not live: open, done and cancelled stages, archived tickets.
+ *
+ * `stageName` is the active stage's name when it is not the project's default one, so a `No word` why
+ * can name it (`in Bug Found, no agent heard from since …`).
+ */
+export function workLine(
+  t: WorkTimelineLike,
+  now: Date | number,
+  stageName: string | null = null,
+): WorkLineAnswer | null {
+  if (!t.live) return null
+  const n = +now
+  const l = livenessOf(t)
+  const detail = l ? livenessLines(l, n) : []
+  if (t.waitingOnHuman || t.stage?.kind === 'blocked') {
+    // The line invents no measure; the surface keeps a "since" detail underneath where it has room.
+    const since = t.waits.find((w) => w.open && w.reason === 'human')?.start ?? l?.since ?? null
+    return {
+      state: 'waiting',
+      text: 'Waiting on you',
+      detail: since ? [`since ${clock(since)}`] : [],
+      why: '',
+    }
+  }
+  if (t.stage?.kind === 'review')
+    return {
+      state: 'your-turn',
+      text: `Your turn · waiting ${workDuration(n - Date.parse(t.stage.since))}`,
+      detail,
+      why: '',
+    }
+  if (l?.state === 'lost')
+    return {
+      state: 'lost',
+      text: `Lost contact · ${workDuration(n - Date.parse(l.since))}`,
+      detail,
+      why: detail.join('\n'),
+    }
+  if (l?.state === 'stalled') {
+    const r = stallReason(t, stageName)
+    return {
+      state: 'no-word',
+      text: `No word ${workDuration(n - Date.parse(l.lastSignalAt))}`,
+      detail,
+      why: r ? stallWhy(r) : `nothing open since ${clock(l.lastSignalAt)}`,
+    }
+  }
+  const progressAt = t.progressAt ?? t.start ?? l?.lastSignalAt ?? null
+  if (progressAt && n - Date.parse(progressAt) > STALE_MS)
+    return {
+      state: 'quiet',
+      text: `Quiet ${workDuration(n - Date.parse(progressAt))}`,
+      detail,
+      why: `no progress post since ${clock(progressAt)}`,
+    }
+  if (l?.state === 'working') {
+    const wordAt = l.lastWordAt ?? l.lastSignalAt
+    return {
+      state: 'working',
+      text: `Working now · last word ${workDuration(n - Date.parse(wordAt))}`,
+      detail,
+      why: detail.join('\n'),
+    }
+  }
+  return { state: 'nothing', text: 'Nothing open', detail, why: '' }
 }
 
 export type WorkShares = {

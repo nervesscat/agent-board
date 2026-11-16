@@ -6,6 +6,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { Button } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
 import { get, type ReportDueList } from '#/lib/api'
+import { useHydrated } from '#/lib/useHydrated'
 import { useNow } from '#/lib/useNow'
 import { cn } from '#/lib/utils'
 
@@ -24,6 +25,8 @@ export function ReportDueBanner() {
   const permission = useNotificationPermission()
   const now = useNow(15_000)
   const router = useRouter()
+  // Read after mount: the reminder can answer before React has hydrated the page.
+  const hydrated = useHydrated()
 
   useEffect(() => {
     if (permission !== 'granted' || !items) return
@@ -46,7 +49,7 @@ export function ReportDueBanner() {
     }
   }, [items, permission, router])
 
-  if (!items?.length) return null
+  if (!hydrated || !items?.length) return null
   return (
     <section
       aria-label="Reports due"

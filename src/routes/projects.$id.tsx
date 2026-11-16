@@ -2,12 +2,12 @@ import { Link, Outlet, createFileRoute, useRouterState } from '@tanstack/react-r
 import { FolderGit2 } from 'lucide-react'
 import { useEffect } from 'react'
 
-import { PushedTodayBadge } from '#/components/daily/PushedToday'
 import { LAYOUT_ICONS } from '#/components/layoutIcons'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
 import { type AreaId, defaultLayout, layoutElement, shownIn } from '#/lib/layout'
 import { rememberCurrentProject, useProject } from '#/lib/project'
+import { useHydrated } from '#/lib/useHydrated'
 
 export const Route = createFileRoute('/projects/$id')({ component: ProjectLayout })
 
@@ -34,10 +34,14 @@ function ProjectLayout() {
   const { id } = Route.useParams()
   const navigate = Route.useNavigate()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const { data: project } = useProject(id)
+  const { data } = useProject(id)
+  // Read after mount: the project may answer before React has hydrated this page, and a sidebar drawn
+  // from it would not match the one the server sent (which had no project yet).
+  const hydrated = useHydrated()
+  // The defaults until the project has loaded.
+  const project = hydrated ? data : undefined
   // A link that names no project (the old `/daily`) opens this one.
   useEffect(() => rememberCurrentProject(id), [id])
-  // The defaults until the project has loaded.
   const pages = shownIn(project?.layout ?? defaultLayout(), 'nav')
   // The page the URL is on, for the phone-sized picker. The Overview's URL starts every other page's.
   const current =
@@ -55,7 +59,6 @@ function ProjectLayout() {
       <aside className="md:sticky md:top-[calc(4.5rem+1px+env(safe-area-inset-top))] md:max-h-[calc(100vh-6rem-1px-env(safe-area-inset-top))] md:w-52 md:shrink-0 md:self-start md:overflow-y-auto">
         <div className="mb-3 px-2">
           <div className="truncate font-semibold">{project?.name ?? '…'}</div>
-          <PushedTodayBadge projectId={Number(id)} compact />
           <ul className="mt-1 space-y-0.5">
             {project?.repos.map((r) => (
               <Tip key={r.id} content={r.repoPath}>

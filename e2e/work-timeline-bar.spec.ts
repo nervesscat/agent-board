@@ -36,6 +36,128 @@ test('the chart has a row per agent, its work and waits on its own row', async (
   expect(errors).toEqual([])
 })
 
+test('a sub-identity reads as the name it works as, its parent before it and the whole name on hover', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const errors = errorsOn(page)
+  const t = await create(human, project, { title: 'Names that fit', status: 'in_progress' })
+  // Two agents working under `opencode`: a short name, and one too long for the label's column.
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'build', agent: 'opencode/builder-832' })
+  await record(agent, project, t.id, {
+    kind: 'span_start',
+    phase: 'review',
+    agent: 'opencode/orchestrator-with-a-long-name',
+  })
+  // The orchestrator handed the work to both: they sit under its row in the chart.
+  await record(agent, project, t.id, { kind: 'handoff', from: 'opencode', to: 'opencode/builder-832' })
+  await record(agent, project, t.id, {
+    kind: 'handoff',
+    from: 'opencode',
+    to: 'opencode/orchestrator-with-a-long-name',
+  })
+  age(t.id, 40)
+  const long = 'opencode/orchestrator-with-a-long-name'
+
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const bar = page.getByRole('region', { name: 'Timeline' }).getByTestId('work-timeline')
+  const label = (full: string) => bar.locator(`[data-testid="agent-label"][aria-label^="${full}"]`)
+
+  // The leaf is the name it works as; the parent it works under sits before it, quiet, with a slash.
+  const short = label('opencode/builder-832')
+  await expect(short).toContainText('builder-832')
+  await expect(short).toContainText('opencode/')
+  await expect(short.locator('span').first()).toHaveClass(/text-muted-foreground/)
+
+  // A name longer than its column is cut at a word boundary, never mid-word.
+  await expect(label(long)).toContainText('orchestrator…')
+
+  // The whole name and the agent it works under are the label's own name and its tooltip.
+  await expect(short).toHaveAttribute('aria-label', 'opencode/builder-832, sub-agent of opencode')
+  await expect(label(long)).toHaveAttribute('aria-label', `${long}, sub-agent of opencode`)
+
+  // Nothing is clipped by its column: the leaf fits the label's line at both widths.
+  const clips = async () =>
+    bar.evaluate((root) =>
+      [...root.querySelectorAll('[data-testid="agent-label"]')]
+        .filter((el) => (el.getAttribute('aria-label') ?? '').includes('/'))
+        .map((el) => {
+          const leaf = el.querySelector('span:last-child')!
+          return { text: leaf.textContent, over: leaf.scrollWidth > leaf.clientWidth + 1 }
+        }),
+    )
+  expect(await clips()).toEqual([
+    { text: 'builder-832', over: false },
+    { text: 'orchestrator…', over: false },
+  ])
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await clips()).toEqual([
+    { text: 'builder-832', over: false },
+    { text: 'orchestrator…', over: false },
+  ])
+  // On a phone each label sits above its own row, and the page itself does not scroll sideways.
+  const above = await bar.evaluate((root) =>
+    [...root.querySelectorAll('[data-testid="agent-label"]')].every((el) => {
+      const track = el.closest('div.flex')!.children[1] as HTMLElement
+      return el.getBoundingClientRect().bottom <= track.getBoundingClientRect().top + 1
+    }),
+  )
+  expect(above).toBe(true)
+  expect(await scrollsSideways(page)).toBe(false)
+  await bar.screenshot({ path: test.info().outputPath('agent-labels-390.png') })
+  expect(errors).toEqual([])
+})
+
+test('the chart scrolls under the ticket’s sticky header: its labels never paint over it', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  await page.emulateMedia({ colorScheme: 'dark' })
+  const t = await create(human, project, {
+    title: 'A title long enough to fill the ticket header and wrap under it',
+    status: 'in_progress',
+  })
+  await record(agent, project, t.id, { kind: 'handoff', from: 'opencode', to: 'opencode/builder-832' })
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'build', agent: 'opencode/builder-832' })
+  await record(agent, project, t.id, { kind: 'wait_start', reason: 'lock', agent: 'opencode' })
+  age(t.id, 30)
+
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const bar = page.getByRole('region', { name: 'Timeline' }).getByTestId('work-timeline')
+  await expect(bar).toBeVisible()
+  // Scroll the chart up so its first rows sit inside the ticket header's own box.
+  const top = await bar.evaluate((el) => el.getBoundingClientRect().top + window.scrollY - 60)
+  await page.evaluate((y) => window.scrollTo(0, y), top)
+  await page.waitForTimeout(200)
+
+  // The ticket header is the one that says who opened the ticket; it is sticky and opaque.
+  const hit = await page.evaluate(() => {
+    const header = [...document.querySelectorAll('header')].find((h) => h.textContent?.includes('opened by'))!
+    const hr = header.getBoundingClientRect()
+    const under = [...document.querySelectorAll('[data-testid="agent-label"]')]
+      .filter((el) => {
+        const r = el.getBoundingClientRect()
+        return r.top < hr.bottom - 2 && r.bottom > hr.top + 2
+      })
+      .map((el) => {
+        const r = el.getBoundingClientRect()
+        const at = document.elementFromPoint(Math.max(2, r.left + 6), r.top + 4)
+        return { label: el.getAttribute('aria-label'), inHeader: !!at?.closest('header') }
+      })
+    return { headerTop: Math.round(hr.top), under }
+  })
+  // The labels do overlap the header's box (the chart is scrolled under it)…
+  expect(hit.under.length).toBeGreaterThan(0)
+  expect(hit.headerTop).toBeGreaterThan(0)
+  // …and the header paints above every one of them: the rows' z-10 stays inside the chart.
+  expect(hit.under).toEqual(hit.under.map((u) => ({ ...u, inHeader: true })))
+  await page.screenshot({ path: test.info().outputPath('labels-under-ticket-header.png') })
+})
+
 test('a delegated build: the builder on its own row, the orchestrator’s wait drawn as a connector, no second bar', async ({
   page,
   project,

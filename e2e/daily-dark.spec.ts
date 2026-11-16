@@ -103,7 +103,7 @@ test("a project's Daily page in the dark: banner, header, notice, report, calend
     await standsOut(card.getByRole('heading', { name: 'Done' }), TEXT)
     await standsOut(card.getByRole('listitem').filter({ hasText: 'Ship it' }), TEXT)
     await standsOut(card.getByText('done', { exact: true }), TEXT)
-    await card.getByRole('button', { name: 'show 1 earlier version' }).click()
+    await card.getByRole('button', { name: 'History (1)' }).click()
     await expect(card.getByRole('list', { name: 'Earlier versions' })).toContainText('first pass')
     await shot(card, 'report-card-dark')
     await card.getByRole('button', { name: 'Generate with claude' }).click()

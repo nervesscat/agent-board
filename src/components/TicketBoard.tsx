@@ -5,20 +5,15 @@ import {
   ArrowDownUp,
   ChevronLeft,
   ChevronRight,
-  GitBranch,
-  Hammer,
   Hand,
-  Hourglass,
   Layers,
   Scale,
-  UserRound,
 } from 'lucide-react'
 import { type DragEvent, type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { Actor } from '#/components/Actor'
 import { ComplexityChip } from '#/components/Complexity'
 import { NeedsBadge } from '#/components/Needs'
-import { PushDot } from '#/components/PushDot'
 import { Tag, compareTags } from '#/components/Tag'
 import {
   AlertDialog,
@@ -34,11 +29,11 @@ import {
 import { Button } from '#/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
-import { NowLine, StallNotice } from '#/components/WorkStatus'
-import type { Push, TicketRow } from '#/lib/api'
-import { hasWork, nowBrief, nowWords, stallStage, timelineFromActivity } from '#/lib/activityTimeline'
+import { WorkLine } from '#/components/WorkStatus'
+import type { TicketRow } from '#/lib/api'
+import { hasWork, stallStage, timelineFromActivity } from '#/lib/activityTimeline'
 import { ago } from '#/lib/format'
-import { repoLabel, useProject } from '#/lib/project'
+import { useProject } from '#/lib/project'
 import {
   type StageLike,
   columnOrder,
@@ -49,8 +44,6 @@ import {
   stageOf,
 } from '#/lib/stages'
 import { nameFirst } from '#/lib/tickets'
-import { useNow, useServerOffset } from '#/lib/useNow'
-import { onServerClock } from '#/lib/workStatus'
 
 /** Where a card goes in its own column: right above or below another card of it. */
 export type Placement = { anchor: number; side: 'above' | 'below' }
@@ -60,20 +53,17 @@ export type Placement = { anchor: number; side: 'above' | 'below' }
  * and down its own column to change its place there (a line shows where it lands). In a review column
  * the order is the merge order, read top to bottom, and a card placed above a ticket it needs says
  * "merge after" it. Clicking a card opens
- * the ticket. A done or cancelled column can archive all its tickets at once. `push` colours each
- * branch by whether it is on origin.
+ * the ticket. A done or cancelled column can archive all its tickets at once.
  */
 export function TicketBoard({
   projectId,
   items,
-  push,
   onMove,
   onPlace,
   onArchiveAll,
 }: {
   projectId: string
   items: TicketRow[]
-  push?: Map<number, Push>
   onMove: (ticketId: number, status: string) => void
   /** Put a card right above or below another card of its column (of the ones shown). */
   onPlace: (ticketId: number, to: Placement) => void
@@ -81,9 +71,6 @@ export function TicketBoard({
 }) {
   const { data: project } = useProject(projectId)
   const stages = project?.stages ?? []
-  const tick = useNow(60_000)
-  // The rows of one read share the server's time: the board's now is read on that clock, not the browser's.
-  const now = onServerClock(tick, useServerOffset(items[0]?.activity.now))
   const [dragging, setDragging] = useState<number | null>(null)
   const [over, setOver] = useState<string | null>(null)
   // Dragging within its own column: the gap it would land in, 0 above the first card.
@@ -213,17 +200,8 @@ export function TicketBoard({
               </div>
               <div data-column={status} className="min-h-12 flex-1 space-y-2 md:overflow-y-auto">
                 {column.map((t, i) => {
-                  // The card's work, from what its row carries: the now, and the stall (as the list and the ticket page word them).
+                  // The card's work, from what its row carries: the one line words its stage and facts.
                   const work = timelineFromActivity(t.activity, t.stalled, hasWork(kind))
-                  // The now shows on a card with no other badge: a busy card is capped in height, and its time must not clip.
-                  const badged =
-                    t.decisions > 0 ||
-                    t.blockedTasks > 0 ||
-                    !!t.stalled ||
-                    t.needs.some((n) => !n.merged) ||
-                    after?.has(t.id)
-                  const words = nowWords(work, now)
-                  const brief = badged ? null : nowBrief(work, now)
                   return (
                     <div key={t.id} data-card={t.id} className="relative">
                       {line === i && <DropLine at={i === 0 ? 'top-0' : '-top-[5px]'} />}
@@ -249,62 +227,35 @@ export function TicketBoard({
                               <span className="text-muted-foreground">#{t.id}</span> {t.title}
                             </div>
                           </div>
-                          {(t.decisions > 0 ||
-                            t.blockedTasks > 0 ||
-                            t.stalled ||
-                            brief ||
+                          {(hasWork(kind) ||
+                            t.decisions > 0 ||
+                            t.blockedNext ||
                             t.needs.some((n) => !n.merged) ||
                             after?.has(t.id)) && (
                             <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                              {brief && <NowBadge brief={brief} words={words} />}
-                              {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
-                              {after?.has(t.id) && <MergeAfterBadge ids={after.get(t.id)!} />}
-                              {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
-                              <StallNotice
+                              <WorkLine
                                 timeline={work}
                                 stage={stallStage(stages, t.status)}
-                                nowLine={words}
-                                focusable={false}
+                                variant="badge"
                               />
+                              {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
+                              {after?.has(t.id) && <MergeAfterBadge ids={after.get(t.id)!} />}
+                              {t.blockedNext && <BlockedTasksBadge n={t.blockedTasks} />}
                               <NeedsBadge needs={t.needs} />
                             </div>
                           )}
-                          {/* The time sits at the end of the last of these rows, so it always shares a line. */}
-                          {(repoLabel(project, t.repoId) || t.assignee || t.branch) && (
-                            <div className={INFO_ROW}>
-                              {repoLabel(project, t.repoId) && (
-                                <span className="shrink-0 rounded bg-muted px-1">
-                                  {repoLabel(project, t.repoId)}
-                                </span>
-                              )}
-                              {/* A long name is cut short before its badge; the branch gives way first. */}
-                              {t.assignee && <Actor name={t.assignee} truncate short />}
-                              {t.branch && (
-                                <span className="inline-flex min-w-0 shrink-[1000] items-center gap-1 overflow-hidden font-mono">
-                                  {push?.has(t.id) && <PushDot push={push.get(t.id)!} />}
-                                  <GitBranch className="size-3 shrink-0" />{' '}
-                                  <span className="truncate">{t.branch}</span>
-                                </span>
-                              )}
-                              {!t.tags.length && <Updated at={t.updatedAt} />}
-                            </div>
-                          )}
-                          {t.tags.length > 0 && (
-                            <div className={INFO_ROW}>
-                              {/* Tags clip on their own, so a long list never pushes the time out of view. */}
+                          {/* The time sits at the end of the row, so it always shares a line. */}
+                          <div className={INFO_ROW}>
+                            {t.tags.length > 0 && (
+                              // Tags clip on their own, so a long list never pushes the time out of view.
                               <div className="flex min-w-0 gap-1 overflow-hidden">
                                 {[...t.tags].sort(compareTags).map((tag) => (
                                   <Tag key={tag} tag={tag} className="shrink-0" />
                                 ))}
                               </div>
-                              <Updated at={t.updatedAt} />
-                            </div>
-                          )}
-                          {!repoLabel(project, t.repoId) && !t.assignee && !t.branch && !t.tags.length && (
-                            <div className={INFO_ROW}>
-                              <Updated at={t.updatedAt} />
-                            </div>
-                          )}
+                            )}
+                            <Updated at={t.updatedAt} />
+                          </div>
                           {t.lanes.total > 0 && <LaneCount lanes={t.lanes} stages={stages} />}
                           {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-auto pt-2" />}
                         </Link>
@@ -421,23 +372,6 @@ export function BlockedTasksBadge({ n, className = '' }: { n: number; className?
     >
       <Hand className="size-3" /> {n === 1 ? '1 task blocked' : `${n} tasks blocked`}
     </span>
-  )
-}
-
-/** The card's now in little: an icon and how long, with the whole line (what, who, since when) in its tooltip. */
-function NowBadge({ brief, words }: { brief: { kind: string; text: string }; words: string }) {
-  const Icon =
-    brief.kind === 'waiting-human' ? UserRound : brief.kind === 'waiting-agent' ? Hourglass : Hammer
-  return (
-    <Tip content={words}>
-      <span
-        data-testid="card-now"
-        className="inline-flex shrink-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground/80 tabular-nums"
-      >
-        <Icon className="size-3" aria-hidden />
-        {brief.text}
-      </span>
-    </Tip>
   )
 }
 
@@ -676,19 +610,10 @@ function SearchHit({ ticket }: { ticket: TicketRow }) {
  * first, then newest first), like the lanes list. The rows of a search put the tickets found by name
  * first.
  */
-export function TicketList({
-  projectId,
-  items,
-  push,
-}: {
-  projectId: string
-  items: TicketRow[]
-  push?: Map<number, Push>
-}) {
+export function TicketList({ projectId, items }: { projectId: string; items: TicketRow[] }) {
   useRememberedPageScroll(`features.list.${projectId}`)
   const { data: project } = useProject(projectId)
   const stages = project?.stages ?? []
-  const tick = useNow(60_000)
   const stageIndex = (key: string) => {
     const i = stages.findIndex((s) => s.key === key)
     return i < 0 ? stages.length : i
@@ -723,13 +648,11 @@ export function TicketList({
                     {t.title}
                   </span>
                   {t.decisions > 0 && <DecisionBadge n={t.decisions} className="ml-2 align-[1px]" />}
-                  {t.blockedTasks > 0 && (
-                    <BlockedTasksBadge n={t.blockedTasks} className="ml-2 align-[1px]" />
-                  )}
-                  <StallNotice
+                  {t.blockedNext && <BlockedTasksBadge n={t.blockedTasks} className="ml-2 align-[1px]" />}
+                  <WorkLine
                     timeline={work}
                     stage={stallStage(stages, t.status)}
-                    focusable={false}
+                    variant="badge"
                     className="ml-2 align-[1px]"
                   />
                   <NeedsBadge needs={t.needs} className="ml-2 align-[1px]" />
@@ -741,24 +664,16 @@ export function TicketList({
                     </span>
                   )}
                 </div>
-                {hasWork(stage.kind) && <NowLine timeline={work} now={tick} className="mt-0.5" />}
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                  {repoLabel(project, t.repoId) && (
-                    <span className="rounded bg-muted px-1">{repoLabel(project, t.repoId)}</span>
-                  )}
-                  {t.assignee && <Actor name={t.assignee} />}
-                  {t.branch && (
-                    <span className="inline-flex min-w-0 items-center gap-1 font-mono">
-                      {push?.has(t.id) && <PushDot push={push.get(t.id)!} />}
-                      <GitBranch className="size-3 shrink-0" /> <span className="truncate">{t.branch}</span>
-                    </span>
-                  )}
-                  {t.lanes.total > 0 && (
+                {t.lanes.total > 0 && (
+                  <div
+                    data-testid="row-meta"
+                    className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
+                  >
                     <span className="inline-flex items-center gap-1">
                       <Layers className="size-3" /> {t.lanes.total} lane{t.lanes.total === 1 ? '' : 's'}
                     </span>
-                  )}
-                </div>
+                  </div>
+                )}
                 <SearchHit ticket={t} />
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1 text-xs tabular-nums text-muted-foreground">
@@ -767,7 +682,7 @@ export function TicketList({
                     {t.rollup.done}/{t.rollup.total}
                   </span>
                 )}
-                <span>{ago(t.updatedAt)}</span>
+                <span data-testid="row-time">{ago(t.updatedAt)}</span>
               </div>
             </Link>
           </li>

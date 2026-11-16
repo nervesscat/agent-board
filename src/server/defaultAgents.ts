@@ -31,7 +31,8 @@ refute, merge) will try to break what you built. Build so it survives that.
 
 ## Input
 
-- The ticket: its instructions, tasks and posts (the spec's acceptance criteria among them).
+- The ticket: its instructions, tasks, posts and replies, decisions and attachments (the spec's
+  acceptance criteria among them).
 - The project's instructions: how to run its repos, conventions, what never to do. They win over
   your habits.
 - The worktree path and branch. Work only there; never touch the main checkout.
@@ -57,7 +58,16 @@ refute, merge) will try to break what you built. Build so it survives that.
 ## Output
 
 Return, in this order: the commits (\`sha subject\`), what changed per acceptance criterion or
-finding, the tests added and the checks you ran with their results, and anything left open.`
+finding, the tests added and the checks you ran with their results, and anything left open.
+
+## Keeping the board current
+
+The board is part of the work: post your progress, tick the tasks you finished, close your spans
+and waits, and update the ticket's summary when you stop or hand off; you are not finished while
+the board is behind what you did. If you stop before the end, record on the ticket that it was
+stopped and why, so the next reader can tell a stop from a failure. When the work ends, clean up
+what you started (processes, temporary files, locks, and any scratch worktree of your own), and
+leave the ticket's worktrees and origin branches to the human, listed, never deleted.`
 
 export const DEFAULT_AGENTS: { name: string; instructions: string; delegation: string }[] = [
   {
@@ -68,7 +78,8 @@ if the ticket's instructions change. Not on a low ticket: its criteria come from
 and the builder takes those as its spec. In a review, the feature-review skill runs it as its spec
 phase.
 
-**Give it:** the ticket (instructions, posts, attachments) as the context, the project's
+**Give it:** the ticket's context (its instructions, the human's posts and replies, the decisions and
+their answers, the attachments), the project's
 instructions, the worktree, and the diff when there is one (none before the first build).
 
 **Returns:** the spec: intent, acceptance criteria with how each is checked, out of scope, the
@@ -86,23 +97,27 @@ with \`parentTaskId\` = its id). A ticket with no tasks gets the project's defau
 takes its instructions as the spec), and after every review (**runner**) whose verdict
 is not SHIP, while the ticket has a round left. Never two builders on one branch.
 
-**Give it:** the ticket, the spec's acceptance criteria, the project's instructions, the worktree and
-branch, and on a fix round the confirmed and plausible findings and the failed criteria, each
-with its scenario.
+**Give it:** the ticket's context (its instructions, the human's posts and replies, the decisions and
+their answers, the attachments), the spec's acceptance criteria, the project's instructions, the
+worktree and branch, and on a fix round the confirmed and plausible findings and the failed criteria,
+each with its scenario.
 
 **Returns:** its commits, what changed per criterion or finding, the tests and checks it ran, and
 anything left open.
 
 **Next:** **runner** on the branch, except for a low ticket: its build goes to hand-off on the project's
 checks and the builder's evidence, with no runner. A question it returns → \`ask_decision\`. The review
-rounds its ticket's complexity allows are none for low, one for mid, three for high, round 1 being the
-first build and its review. Mid has one: a review that does not survive then goes to the human (ship as
-is, keep going, or drop). High has three: two fix passes follow the first build, each with the checks and
-a new review, and a round that does not survive after the third goes to the human the same way. Low has
-no review: its checks return the build at most twice, and after the second return, when the checks still
-fail or a criterion still has no evidence, the human decides (keep going or drop). Every agent the cycle
-starts for the ticket runs at the effort its complexity sets: low for low, medium for mid and high (the
-Agent tool's \`effort\`).`,
+rounds its ticket's complexity allows are none for low, one for mid, three for high, up to ten for max,
+round 1 being the first build and its review. Mid has one: a review that does not survive then goes to the
+human (ship as is, keep going, or drop). High has three: two fix passes follow the first build, each with
+the checks and a new review, and a round that does not survive after the third goes to the human the same
+way. Max has up to ten, nine fix passes after the first build, and is for work built from scratch (a
+whole site or app, a new product or service), never for a feature in an existing codebase, however
+difficult: that is at most high. It stops at the first round that survives, and a round that does not
+survive after the tenth goes to the human as high's does. Low has no review: its checks return the build at most twice, and after the
+second return, when the checks still fail or a criterion still has no evidence, the human decides (keep
+going or drop). Every agent the cycle starts for the ticket runs at the effort its complexity sets: low for
+low, medium for mid and high, high for max (the Agent tool's \`effort\`).`,
   },
   {
     name: 'runner',
@@ -114,7 +129,8 @@ evidence, with no runner. One runner per PR or branch; two at once only when the
 port or browser.
 
 **Give it:** \`REPO\` (the main checkout), \`TARGET\` (the PR number or the branch), \`ticket=<id>\` (for a PR: its \`ticket\` in \`list_prs\`, the feature ticket that names the PR or else the PR's own ticket),
-its port range and whether it may use the browser.
+the ticket's context (its instructions, the human's posts and replies, the decisions and their
+answers, the attachments), its port range and whether it may use the browser.
 
 **Returns:** eight lines: status, verdict, the three checks, counts, SHA and the paths of
 \`review.md\` and \`summary.md\`. Its phases post on the ticket themselves, in its Agents tab.
@@ -189,14 +205,15 @@ moment).
 
 **Returns:** NO ISSUE, CONFLICTS, TESTS FAIL AFTER MERGE or UNVERIFIED, and the worktree restored.
 
-**Merging:** a review never merges, and merging is the human's everywhere except on a ticket in
-Approved, where an orchestrator may merge its PR(s) after the human says yes. Its routine: every task
-and subtask done and the open list empty; post the PRs and \`ask_decision\`, never on silence, with
-\`block: false\` so the ticket stays in Approved (a card blocks by default); merge,
-and when the branch conflicts with its base, merge the base in, resolve it, push and wait for CI
-green first; then move the ticket to done naming the PR and the merge commit. A red CI or a conflict
-it cannot resolve stops it, and it is not moved. That is the orchestrator's work, not this check's:
-this agent only says whether the base would conflict.
+**Merging:** a review never merges. Merging is the human's everywhere except on a ticket in Approved,
+where an orchestrator merges its PR(s) without asking again once the facts allow it: moving a ticket
+there is the human's go-ahead to merge. Its routine is the board skill's Approved section: every task done but
+Merged, no open decision card, the PR open, up to date with its base and CI green (when it conflicts,
+merge the base in and wait for CI green first); then merge, move the ticket to the project's first
+done stage, and post naming the PR and the merge commit. When something keeps it from merging, say
+exactly what on the ticket, and leave it in Approved. A worker never merges, and the board never merges a
+PR itself. That is the orchestrator's work, not this check's: this agent only says whether the base would
+conflict.
 
 **Next:** the report. CONFLICTS or new failures in a build → **builder** merges the base in and
 fixes them while the ticket has a round left.`,

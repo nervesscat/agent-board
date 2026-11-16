@@ -26,6 +26,9 @@ const boardEnv = (port: number, baseURL: string, dataDir: string) => ({
   NITRO_PORT: String(port),
   BOARD_URL: baseURL,
   DATA_DIR: dataDir,
+  // The board's own home, so the board skill's install lands in the run's folder, never the real home.
+  HOME: env.home,
+  USERPROFILE: env.home,
   CLAUDE_HOME: env.claudeHome,
   // OpenCode's config sources this run controls: its global folder, and no $OPENCODE_CONFIG of the shell.
   XDG_CONFIG_HOME: env.opencodeConfigHome,
@@ -41,6 +44,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
+  // On CI, 2 workers, not one per core: with 4 on the hosted runner the boards answered slowly under
+  // load, and UI steps that wait 10 s or 30 s missed their budgets on some runs. Locally the suite keeps
+  // 4 workers.
   workers: process.env.CI ? 2 : 4,
   timeout: 30_000,
   expect: { timeout: 10_000 },

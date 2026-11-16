@@ -22,6 +22,7 @@ import {
   packageManager,
   packageType,
   readUpdateSettings,
+  RELAUNCH_READY_MS,
   shellQuote,
   UPDATES_FILE,
   updateError,
@@ -31,8 +32,8 @@ import {
 // The updater runs for real here: electron-updater's own updaters (NSIS, AppImage, deb, rpm, pacman)
 // against a feed served from 127.0.0.1 in the test (never github.com), its downloads checked against the
 // feed's sha512 by electron-updater. What stands in: the app (electron-updater's AppAdapter), its HTTP
-// (Node's http in place of Electron's net), pkexec (the spawnSync handed in), and the app's own server
-// stop/start, quit and relaunch.
+// (Node's http in place of Electron's net), pkexec (the spawnSync handed in), the app's own server
+// stop/start and quit, the start of the installed binary, and the new board's health answer.
 
 /**
  * Electron's executor (electron-updater's electronHttpExecutor.js) over Node's http: its download is
@@ -163,6 +164,10 @@ function realUpdater(kind, version = '0.2.0') {
 
 const quiet = { info: () => {}, warn: () => {}, error: () => {} }
 
+/** The binary of the installed package, as main.mjs hands it in (process.execPath), and its board. */
+const installedBinary = '/opt/CrossBoard/agent-board'
+const healthUrl = 'http://127.0.0.1:47100/api/health'
+
 /** A log that keeps its lines by level: the app's log file keeps the error ones (main.mjs). */
 function recordingLog() {
   const lines = /** @type {Record<'info' | 'warn' | 'error', string[]>} */ ({ info: [], warn: [], error: [] })
@@ -178,11 +183,13 @@ function recordingLog() {
 
 /**
  * The updates over `updater` with the app's edges as spies: `commands` are the ones on PATH (name to
- * path), `pkexec` answers each run of pkexec.
+ * path), `pkexec` answers each run of pkexec, and `probe` answers the relaunch check (the new board's
+ * /api/health). `clock` is the check's time: each wait moves it on, so a poll that never gets an
+ * answer ends at the timeout without the test waiting.
  * @param {{ updater: any, type: import('./app/updates.mjs').PackageType | null, installed?: string,
  *   settings?: import('./app/updates.mjs').UpdateSettings, commands?: Record<string, string>,
  *   pkexec?: (args: string[]) => { status: number | null, error?: Error, stderr?: string },
- *   log?: import('./app/updates.mjs').Logger }} o
+ *   probe?: () => Promise<boolean>, log?: import('./app/updates.mjs').Logger }} o
  */
 function setup({
   updater,
@@ -191,9 +198,11 @@ function setup({
   settings = DEFAULT_UPDATE_SETTINGS,
   commands = {},
   pkexec,
+  probe,
   log = quiet,
 }) {
   const order = /** @type {string[]} */ ([])
+  let clock = 0
   const edges = {
     saveSettings: vi.fn(),
     spawnSync: vi.fn((/** @type {string} */ cmd, /** @type {string[]} */ args) => {
@@ -205,7 +214,9 @@ function setup({
     startServer: vi.fn(async () => void order.push('startServer')),
     releaseLock: vi.fn(() => void order.push('releaseLock')),
     takeLock: vi.fn(() => void order.push('takeLock')),
-    relaunch: vi.fn(() => void order.push('relaunch')),
+    launch: vi.fn((/** @type {string} */ binary) => void order.push(`launch ${binary}`)),
+    probe: vi.fn(async () => (probe ? probe() : true)),
+    wait: vi.fn(async (/** @type {number} */ ms) => void (clock += ms)),
     quit: vi.fn(() => void order.push('quit')),
   }
   const timers = { setInterval: vi.fn(() => 'timer'), clearInterval: vi.fn() }
@@ -215,11 +226,14 @@ function setup({
     type,
     settings,
     has: (cmd) => commands[cmd] ?? null,
+    binary: installedBinary,
+    health: healthUrl,
+    now: () => new Date(clock),
     timers,
     log,
     ...edges,
   })
-  return { updates, edges, timers, order }
+  return { updates, edges, timers, order, clock: () => clock }
 }
 
 describe('the update settings', () => {
@@ -556,7 +570,7 @@ describe('Download and install', () => {
     )
     expect(edges.spawnSync).not.toHaveBeenCalled()
     expect(install).not.toHaveBeenCalled()
-    for (const edge of ['stopServer', 'releaseLock', 'relaunch', 'quit'])
+    for (const edge of ['stopServer', 'startServer', 'releaseLock', 'takeLock', 'launch', 'quit'])
       expect(/** @type {any} */ (edges)[edge], edge).not.toHaveBeenCalled()
     expect(fs.existsSync(pending(dir, 'agent-board_0.3.0_amd64.deb'))).toBe(false)
   })
@@ -579,12 +593,14 @@ describe('Download and install', () => {
     expect(edges.stopServer).not.toHaveBeenCalled()
   })
 
-  it('deb: installs the deb (not another package of the release) with dpkg through pkexec, then restarts', async () => {
+  it('deb: stops the board, installs the deb (not another package) with dpkg through pkexec, then starts the new version', async () => {
     release({ version: '0.3.0', files: linuxFiles('0.3.0') })
     const { updater, dir } = realUpdater('DebUpdater')
+    const { lines, log } = recordingLog()
     const { updates, edges, order } = await offered(updater, {
       type: 'deb',
       commands: { pkexec: '/usr/bin/pkexec', dpkg: '/usr/bin/dpkg', apt: '/usr/bin/apt' },
+      log,
     })
     await updates.install()
     const file = pending(dir, 'agent-board_0.3.0_amd64.deb')
@@ -594,13 +610,53 @@ describe('Download and install', () => {
       ['--disable-internal-agent', '/usr/bin/dpkg', '-i', file],
       expect.objectContaining({ encoding: 'utf8' }),
     )
-    // The package is in before the board stops: a declined polkit leaves it running.
+    // The board is stopped and gone before the package manager runs, so nothing of the old one can
+    // keep its port; then the lock goes, the installed binary starts, and the app ends only after the
+    // new board answered.
     expect(order).toEqual([
-      `spawn /usr/bin/pkexec --disable-internal-agent /usr/bin/dpkg -i ${file}`,
       'stopServer',
-      'relaunch',
+      `spawn /usr/bin/pkexec --disable-internal-agent /usr/bin/dpkg -i ${file}`,
+      'releaseLock',
+      `launch ${installedBinary}`,
       'quit',
     ])
+    expect(edges.launch).toHaveBeenCalledTimes(1)
+    expect(edges.probe).toHaveBeenCalledTimes(1)
+    expect(edges.takeLock).not.toHaveBeenCalled()
+    expect(edges.startServer).not.toHaveBeenCalled()
+    expect(lines.error).toEqual([])
+    expect(updates.state().status).toBe('installing')
+  })
+
+  it('deb: a new version that never answers is named in the log, and the app ends with the lock released', async () => {
+    release({ version: '0.3.0', files: linuxFiles('0.3.0') })
+    const { updater, dir } = realUpdater('DebUpdater')
+    const { lines, log } = recordingLog()
+    const { updates, edges, order, clock } = await offered(updater, {
+      type: 'deb',
+      commands: { pkexec: '/usr/bin/pkexec', dpkg: '/usr/bin/dpkg' },
+      probe: async () => false,
+      log,
+    })
+    await updates.install()
+    const file = pending(dir, 'agent-board_0.3.0_amd64.deb')
+    // The check is bounded by the minute the app gives its own start, then the old instance ends.
+    expect(clock()).toBe(RELAUNCH_READY_MS)
+    expect(edges.probe.mock.calls.length).toBeGreaterThan(1)
+    expect(order).toEqual([
+      'stopServer',
+      `spawn /usr/bin/pkexec --disable-internal-agent /usr/bin/dpkg -i ${file}`,
+      'releaseLock',
+      `launch ${installedBinary}`,
+      'quit',
+    ])
+    // Not silent: the log file's error line says what to run, and no lock is held against it.
+    expect(lines.error).toEqual([expect.stringContaining(`${installedBinary}`)])
+    expect(lines.error[0]).toMatch(
+      new RegExp(`did not answer on ${healthUrl} within ${RELAUNCH_READY_MS / 1000} s`),
+    )
+    expect(edges.takeLock).not.toHaveBeenCalled()
+    expect(edges.startServer).not.toHaveBeenCalled()
     expect(updates.state().status).toBe('installing')
   })
 
@@ -621,14 +677,17 @@ describe('Download and install', () => {
     expect(fs.existsSync(file)).toBe(true)
     expect(updates.state().error).toMatch(/pkexec \(polkit\) is not installed/)
     expect(edges.spawnSync).not.toHaveBeenCalled()
+    // Nothing is stopped for an install that cannot run: the board stays up as it was.
     expect(edges.stopServer).not.toHaveBeenCalled()
+    expect(edges.startServer).not.toHaveBeenCalled()
+    expect(edges.launch).not.toHaveBeenCalled()
     expect(edges.quit).not.toHaveBeenCalled()
   })
 
   it('deb: polkit declined (exit 126) asks once, keeps the board, and gives the dpkg command', async () => {
     release({ version: '0.3.0', files: linuxFiles('0.3.0') })
     const { updater, dir } = realUpdater('DebUpdater')
-    const { updates, edges } = await offered(updater, {
+    const { updates, edges, order } = await offered(updater, {
       type: 'deb',
       commands: { pkexec: '/usr/bin/pkexec', dpkg: '/usr/bin/dpkg' },
       pkexec: () => ({ status: 126 }),
@@ -640,9 +699,16 @@ describe('Download and install', () => {
       manual: { command: `sudo dpkg -i ${file}`, file },
     })
     expect(updates.state().error).toMatch(/polkit did not authorize the install \(pkexec exit 126\)/)
-    // Nothing more after a refusal (electron-updater would try apt-get install -f).
+    // Nothing more after a refusal (electron-updater would try apt-get install -f), and the board is
+    // started again: the install left nothing that would answer on its port.
     expect(edges.spawnSync).toHaveBeenCalledTimes(1)
-    expect(edges.stopServer).not.toHaveBeenCalled()
+    expect(order).toEqual([
+      'stopServer',
+      `spawn /usr/bin/pkexec --disable-internal-agent /usr/bin/dpkg -i ${file}`,
+      'startServer',
+    ])
+    expect(edges.launch).not.toHaveBeenCalled()
+    expect(edges.quit).not.toHaveBeenCalled()
     // Pressed again, it tries again.
     expect(() => updates.install()).not.toThrow()
   })
@@ -656,9 +722,10 @@ describe('Download and install', () => {
     const file = pending(ok.dir, 'agent-board-0.3.0.x86_64.rpm')
     expect(fs.readFileSync(file, 'utf8')).toBe('rpm 0.3.0')
     expect(a.order).toEqual([
-      `spawn /usr/bin/pkexec --disable-internal-agent /usr/bin/dnf install --nogpgcheck -y ${file}`,
       'stopServer',
-      'relaunch',
+      `spawn /usr/bin/pkexec --disable-internal-agent /usr/bin/dnf install --nogpgcheck -y ${file}`,
+      'releaseLock',
+      `launch ${installedBinary}`,
       'quit',
     ])
     const no = realUpdater('RpmUpdater')
@@ -669,7 +736,13 @@ describe('Download and install', () => {
       status: 'manual',
       manual: { command: `sudo dnf install ${file2}` },
     })
-    expect(b.edges.stopServer).not.toHaveBeenCalled()
+    // The board was stopped for the install: a refusal starts it again and nothing launches.
+    expect(b.order).toEqual([
+      'stopServer',
+      `spawn /usr/bin/pkexec --disable-internal-agent /usr/bin/dnf install --nogpgcheck -y ${file2}`,
+      'startServer',
+    ])
+    expect(b.edges.launch).not.toHaveBeenCalled()
   })
 
   it('rpm: with rpm alone, and no pkexec, the rpm command', async () => {
@@ -691,11 +764,13 @@ describe('Download and install', () => {
     const file = pending(ok.dir, 'agent-board-0.3.0.pacman')
     expect(fs.readFileSync(file, 'utf8')).toBe('pacman 0.3.0')
     expect(a.order).toEqual([
-      `spawn /usr/bin/pkexec --disable-internal-agent /usr/bin/pacman -U --noconfirm ${file}`,
       'stopServer',
-      'relaunch',
+      `spawn /usr/bin/pkexec --disable-internal-agent /usr/bin/pacman -U --noconfirm ${file}`,
+      'releaseLock',
+      `launch ${installedBinary}`,
       'quit',
     ])
+    expect(a.edges.launch).toHaveBeenCalledWith(installedBinary)
     const no = realUpdater('PacmanUpdater')
     const b = await offered(no.updater, { type: 'pacman', commands, pkexec: () => ({ status: 126 }) })
     await b.updates.install()
@@ -704,16 +779,23 @@ describe('Download and install', () => {
       status: 'manual',
       manual: { command: `sudo pacman -U ${file2}`, file: file2 },
     })
-    // Nothing more after a refusal (electron-updater would try pacman -Sy and a second -U).
+    // Nothing more after a refusal (electron-updater would try pacman -Sy and a second -U), and the
+    // board, stopped for the install, is started again.
     expect(b.edges.spawnSync).toHaveBeenCalledTimes(1)
-    expect(b.edges.stopServer).not.toHaveBeenCalled()
+    expect(b.order).toEqual([
+      'stopServer',
+      `spawn /usr/bin/pkexec --disable-internal-agent /usr/bin/pacman -U --noconfirm ${file2}`,
+      'startServer',
+    ])
+    expect(b.edges.launch).not.toHaveBeenCalled()
+    expect(b.edges.quit).not.toHaveBeenCalled()
   })
 
   it('pacman: a package manager that fails keeps the board and gives the command', async () => {
     release({ version: '0.3.0', files: linuxFiles('0.3.0') })
     const { updater, dir } = realUpdater('PacmanUpdater')
     const { lines, log } = recordingLog()
-    const { updates, edges } = await offered(updater, {
+    const { updates, edges, order } = await offered(updater, {
       type: 'pacman',
       commands: { pkexec: '/usr/bin/pkexec', pacman: '/usr/bin/pacman' },
       pkexec: () => ({ status: 1, stderr: 'error: failed to commit transaction' }),
@@ -737,6 +819,12 @@ describe('Download and install', () => {
       '--noconfirm',
       file,
     ])
+    expect(order).toEqual([
+      'stopServer',
+      `spawn /usr/bin/pkexec --disable-internal-agent /usr/bin/pacman -U --noconfirm ${file}`,
+      'startServer',
+    ])
+    expect(edges.launch).not.toHaveBeenCalled()
     // The log file names the cause, not electron-updater's retry, which never ran.
     expect(lines.error).toEqual([
       expect.stringMatching(
@@ -744,17 +832,18 @@ describe('Download and install', () => {
       ),
     ])
     expect([...lines.warn, ...lines.error].join('\n')).not.toMatch(/retry|-Sy/i)
-    expect(edges.stopServer).not.toHaveBeenCalled()
-    // Pressed again, it asks once more.
+    // Pressed again, it asks once more, stopping and starting the board each time.
     await updates.install()
     expect(edges.spawnSync).toHaveBeenCalledTimes(2)
+    expect(edges.startServer).toHaveBeenCalledTimes(2)
+    expect(edges.launch).not.toHaveBeenCalled()
   })
 
   it('deb: a dpkg that fails keeps the board and gives the command, without apt-get install -f', async () => {
     release({ version: '0.3.0', files: linuxFiles('0.3.0') })
     const { updater, dir } = realUpdater('DebUpdater')
     const { lines, log } = recordingLog()
-    const { updates, edges } = await offered(updater, {
+    const { updates, edges, order } = await offered(updater, {
       type: 'deb',
       commands: { pkexec: '/usr/bin/pkexec', dpkg: '/usr/bin/dpkg', 'apt-get': '/usr/bin/apt-get' },
       pkexec: () => ({ status: 1, stderr: 'dpkg: dependency problems prevent configuration' }),
@@ -776,13 +865,18 @@ describe('Download and install', () => {
       '-i',
       file,
     ])
+    expect(order).toEqual([
+      'stopServer',
+      `spawn /usr/bin/pkexec --disable-internal-agent /usr/bin/dpkg -i ${file}`,
+      'startServer',
+    ])
+    expect(edges.launch).not.toHaveBeenCalled()
     expect(lines.error).toEqual([
       expect.stringMatching(
         /^updates: the install failed: The package manager failed: dpkg -i .* exited with 1: dpkg: dependency problems/,
       ),
     ])
     expect([...lines.warn, ...lines.error].join('\n')).not.toMatch(/apt-get/)
-    expect(edges.stopServer).not.toHaveBeenCalled()
   })
 
   it('NSIS: stops the board, then runs the downloaded installer silently with --force-run and quits', async () => {

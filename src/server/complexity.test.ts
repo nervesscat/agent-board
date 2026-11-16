@@ -8,7 +8,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-complexity-'))
 process.env.DATA_DIR = tmp
 
-const LEVELS = ['low', 'mid', 'high']
+const LEVELS = ['low', 'mid', 'high', 'max']
 
 let dbm: typeof import('#/db')
 let handle: (request: Request) => Promise<Response>
@@ -90,6 +90,12 @@ describe("a ticket's complexity", () => {
     })
     expect(made.status).toBe(201)
     expect(made.body.complexity).toBe('high')
+    const atMax = await call('POST', `/api/projects/${p}/tickets`, {
+      title: 'max at once',
+      complexity: 'max',
+    })
+    expect(atMax.status).toBe(201)
+    expect(atMax.body.complexity).toBe('max')
     const agent = await call(
       'POST',
       `/api/projects/${p}/tickets`,
@@ -98,6 +104,15 @@ describe("a ticket's complexity", () => {
     )
     expect(agent.status).toBe(201)
     expect(agent.body.complexity).toBe('low')
+    // An agent token sets the top level too: nothing refuses it, and the level reads back.
+    const agentMax = await call(
+      'POST',
+      `/api/projects/${p}/tickets`,
+      { title: 'max by agent', complexity: 'max' },
+      'agent',
+    )
+    expect(agentMax.status).toBe(201)
+    expect(agentMax.body.complexity).toBe('max')
 
     const plain = await call('POST', `/api/projects/${p}/tickets`, { title: 'raised later' })
     expect(plain.body.complexity).toBe('mid')
@@ -106,19 +121,32 @@ describe("a ticket's complexity", () => {
     expect(patched.body.complexity).toBe('high')
     expect((await call('GET', `/api/tickets/${plain.body.id}`)).body.complexity).toBe('high')
 
+    // mid to max, and high to max: both answer 200 and stay max, over a re-read and the list.
+    const toMax = await call('PATCH', `/api/tickets/${plain.body.id}`, { complexity: 'max' })
+    expect(toMax.status).toBe(200)
+    expect(toMax.body.complexity).toBe('max')
+    expect((await call('GET', `/api/tickets/${plain.body.id}`)).body.complexity).toBe('max')
+    const raised = await call('PATCH', `/api/tickets/${made.body.id}`, { complexity: 'max' })
+    expect(raised.status).toBe(200)
+    expect(raised.body.complexity).toBe('max')
+    expect((await call('GET', `/api/tickets/${made.body.id}`)).body.complexity).toBe('max')
+
     const rows = (await call('GET', `/api/projects/${p}/tickets`)).body as {
       id: number
       complexity: string
     }[]
-    expect(rows.find((t) => t.id === made.body.id)?.complexity).toBe('high')
-    expect(rows.find((t) => t.id === plain.body.id)?.complexity).toBe('high')
+    expect(rows.find((t) => t.id === made.body.id)?.complexity).toBe('max')
+    expect(rows.find((t) => t.id === plain.body.id)?.complexity).toBe('max')
+    expect(rows.find((t) => t.id === atMax.body.id)?.complexity).toBe('max')
+    expect(rows.find((t) => t.id === agentMax.body.id)?.complexity).toBe('max')
+    expect(rows.find((t) => t.id === agent.body.id)?.complexity).toBe('low')
   })
 
-  it('is refused over REST unless it is exactly low, mid or high, naming the three, and nothing is stored', async () => {
+  it('is refused over REST unless it is exactly low, mid, high or max, naming the four, and nothing is stored', async () => {
     const p = newProject('refused rest')
     const kept = await call('POST', `/api/projects/${p}/tickets`, { title: 'kept as it is' })
     const before = ticketCount()
-    for (const complexity of ['extreme', 'High']) {
+    for (const complexity of ['extreme', 'High', 'Max', 'maximum', '']) {
       const posted = await call('POST', `/api/projects/${p}/tickets`, { title: 'refused', complexity })
       expect(posted.status, complexity).toBe(400)
       const patched = await call('PATCH', `/api/tickets/${kept.body.id}`, { complexity })
@@ -132,11 +160,11 @@ describe("a ticket's complexity", () => {
     expect((await call('GET', `/api/tickets/${kept.body.id}`)).body.complexity).toBe('mid')
   })
 
-  it('is refused over MCP with an error that names the three, and nothing is stored', async () => {
+  it('is refused over MCP with an error that names the four, and nothing is stored', async () => {
     const p = newProject('refused mcp')
     const kept = await tool('create_ticket', { projectId: p, title: 'kept as it is' })
     const before = ticketCount()
-    for (const complexity of ['extreme', 'High']) {
+    for (const complexity of ['extreme', 'High', 'Max', 'maximum', '']) {
       const posted = await refused('create_ticket', { projectId: p, title: 'refused', complexity })
       const patched = await refused('update_ticket', { ticketId: kept.id, complexity })
       for (const level of LEVELS) {
@@ -157,7 +185,7 @@ describe("a ticket's complexity", () => {
     expect((await tool('get_ticket', { ticketId: mcp.id })).complexity).toBe('mid')
   })
 
-  it("a lane copies its parent's level when it is made; a later change to the parent does not reach it", async () => {
+  it("a lane copies its parent's level when it is made, max included; a later change to the parent does not reach it", async () => {
     const p = newProject('lanes')
     const parent = await call('POST', `/api/projects/${p}/tickets`, { title: 'parent', complexity: 'high' })
     const lane = await call('POST', `/api/projects/${p}/tickets`, { title: 'lane', parentId: parent.body.id })
@@ -182,6 +210,46 @@ describe("a ticket's complexity", () => {
     const mcpLane = await tool('create_ticket', { projectId: p, title: 'mcp lane', parentId: parent.body.id })
     expect(mcpLane.complexity).toBe('low')
     expect((await tool('get_ticket', { ticketId: lane.body.id })).complexity).toBe('high')
+
+    // A max parent hands its level down the same way, and changing it later does not reach its lanes.
+    const top = await call('POST', `/api/projects/${p}/tickets`, {
+      title: 'max parent',
+      complexity: 'max',
+    })
+    const maxLane = await call('POST', `/api/projects/${p}/tickets`, {
+      title: 'max lane',
+      parentId: top.body.id,
+    })
+    expect(maxLane.body.complexity).toBe('max')
+    const lowGivenMaxLane = await call('POST', `/api/projects/${p}/tickets`, {
+      title: 'max lane given low',
+      parentId: top.body.id,
+      complexity: 'low',
+    })
+    expect(lowGivenMaxLane.body.complexity).toBe('low')
+    const mcpMaxLane = await tool('create_ticket', {
+      projectId: p,
+      title: 'mcp max lane',
+      parentId: top.body.id,
+    })
+    expect(mcpMaxLane.complexity).toBe('max')
+
+    expect((await call('PATCH', `/api/tickets/${top.body.id}`, { complexity: 'high' })).status).toBe(200)
+    expect((await call('GET', `/api/tickets/${maxLane.body.id}`)).body.complexity).toBe('max')
+    expect((await call('GET', `/api/tickets/${lowGivenMaxLane.body.id}`)).body.complexity).toBe('low')
+    expect((await tool('get_ticket', { ticketId: mcpMaxLane.id })).complexity).toBe('max')
+    // A lane made after the change copies the parent as it is then, over both surfaces.
+    const afterChange = await call('POST', `/api/projects/${p}/tickets`, {
+      title: 'lane after the change',
+      parentId: top.body.id,
+    })
+    expect(afterChange.body.complexity).toBe('high')
+    const mcpAfterChange = await tool('create_ticket', {
+      projectId: p,
+      title: 'mcp lane after the change',
+      parentId: top.body.id,
+    })
+    expect(mcpAfterChange.complexity).toBe('high')
   })
 
   it('is returned by MCP get_ticket and list_tickets, with the same rows as REST', async () => {
@@ -189,6 +257,9 @@ describe("a ticket's complexity", () => {
     const made = await tool('create_ticket', { projectId: p, title: 'high over MCP', complexity: 'high' })
     expect(made.complexity).toBe('high')
     expect((await tool('get_ticket', { ticketId: made.id })).complexity).toBe('high')
+    const atMax = await tool('create_ticket', { projectId: p, title: 'max over MCP', complexity: 'max' })
+    expect(atMax.complexity).toBe('max')
+    expect((await tool('get_ticket', { ticketId: atMax.id })).complexity).toBe('max')
 
     const listed = (await tool('list_tickets', { projectId: p })) as { id: number; complexity: string }[]
     const rest = (await call('GET', `/api/projects/${p}/tickets`)).body as {
@@ -196,10 +267,11 @@ describe("a ticket's complexity", () => {
       complexity: string
     }[]
     expect(listed.find((t) => t.id === made.id)?.complexity).toBe('high')
+    expect(listed.find((t) => t.id === atMax.id)?.complexity).toBe('max')
     expect(listed.map((t) => [t.id, t.complexity])).toEqual(rest.map((t) => [t.id, t.complexity]))
   })
 
-  it('is an optional enum of exactly low, mid and high on MCP create_ticket and update_ticket, with a description', async () => {
+  it('is an optional enum of exactly low, mid, high and max on MCP create_ticket and update_ticket, with a description', async () => {
     const tools = (await rpc('tools/list')).tools as { name: string; description: string; inputSchema: any }[]
     for (const name of ['create_ticket', 'update_ticket']) {
       const tool = tools.find((t) => t.name === name)!
@@ -208,6 +280,8 @@ describe("a ticket's complexity", () => {
       expect(tool.inputSchema.required ?? [], name).not.toContain('complexity')
       expect(field.description, name).toMatch(/\S/)
       expect(field.description, name).not.toContain('\n')
+      expect(field.description, name).toContain('max up to ten')
+      expect(field.description, name).toContain('never max')
       expect(tool.description, name).toContain('complexity')
     }
   })
@@ -221,6 +295,7 @@ describe('the review texts the board ships', () => {
   const todoReview = read(path.join(skills, 'skills', 'todo-review', 'SKILL.md'))
   const ticketAgent = read(path.join(skills, 'agents', 'todo-review-ticket.md'))
   const reviewQueue = read(path.join(skills, 'skills', 'review-queue', 'SKILL.md'))
+  const featureReview = read(path.join(skills, 'skills', 'feature-review', 'SKILL.md'))
   const boardSkill = read(path.join(import.meta.dirname, 'skill', 'board.md'))
   const agentsDoc = read(path.join(repo, 'AGENTS.md'))
   const readme = read(path.join(repo, 'README.md'))
@@ -249,7 +324,7 @@ describe('the review texts the board ships', () => {
   it('todo-review takes no rounds setting, and its brief to each ticket agent passes COMPLEXITY', () => {
     expect(todoReview).not.toContain('rounds=')
     expect(todoReview).not.toContain('ROUNDS=<n>')
-    expect(todoReview).toContain('COMPLEXITY=<low, mid or high>')
+    expect(todoReview).toContain('COMPLEXITY=<low, mid, high or max>')
   })
 
   it("todo-review says the orchestrator never changes a ticket's complexity, and the ticket agent never changes its own", () => {
@@ -267,9 +342,9 @@ describe('the review texts the board ships', () => {
 
   it('todo-review-ticket takes COMPLEXITY as its input and no ROUNDS input, and names the budget of each level', () => {
     const text = flat(ticketAgent)
-    expect(text).toContain('`COMPLEXITY` (`low`, `mid` or `high`')
+    expect(text).toContain('`COMPLEXITY` (`low`, `mid`, `high` or `max`')
     expect(ticketAgent).not.toContain('`ROUNDS`')
-    expect(text).toContain('low none, mid one round, high three')
+    expect(text).toContain('low none, mid one round, high three, max up to ten')
     expect(text).toContain(
       'Round 1 is the first build with its gate and its review; rounds 2 and 3 are fix passes',
     )
@@ -283,7 +358,7 @@ describe('the review texts the board ships', () => {
 
   it('mid runs one build-and-review round, with no fix pass after its review: a round that does not survive goes to a decision', async () => {
     const text = flat(ticketAgent)
-    expect(text).toContain('low none, mid one round, high three.')
+    expect(text).toContain('low none, mid one round, high three, max up to ten.')
     expect(text).toContain(
       'When a round does not survive and no round is left: post what is still open, `ask_decision` (ship as is, keep going, drop) and stop: `BLOCKER: decision`.',
     )
@@ -304,7 +379,7 @@ describe('the review texts the board ships', () => {
 
   it('high runs up to three build-and-review rounds: a surviving round ends the cycle, and there is no fourth round', () => {
     const text = flat(ticketAgent)
-    expect(text).toContain('low none, mid one round, high three.')
+    expect(text).toContain('low none, mid one round, high three, max up to ten.')
     expect(text).toContain(
       'Round 1 is the first build with its gate and its review; rounds 2 and 3 are fix passes, each followed by the gate and a review.',
     )
@@ -313,6 +388,39 @@ describe('the review texts the board ships', () => {
     expect(text).toContain('a `deep` review earns no extra round')
     expect(text).not.toContain('fourth')
     expect(text).not.toContain('round 4')
+  })
+
+  it('max runs up to ten rounds: round 1 the first build, rounds 2 to 10 fix passes, a decision after the tenth and never an eleventh', () => {
+    const text = flat(ticketAgent)
+    expect(ticketAgent).toMatch(/^description: .*max up to ten/m)
+    expect(text).toContain('low none, mid one round, high three, max up to ten.')
+    expect(text).toContain(
+      "a max ticket's rounds 2 to 10 are fix passes the same way, each followed by the gate and a review, and the ten are a ceiling, not a quota",
+    )
+    expect(text).toContain('A surviving round ends the cycle at every level.')
+    // Running out: the tenth round is the last, the decision the only human check-in, and no eleventh round.
+    const budget = flat(between(ticketAgent, '**The budget**', '**The effort**'))
+    expect(budget).toContain('after round 10, and there is never an eleventh round')
+    expect(budget).toContain('`ask_decision` (ship as is, keep going, drop) and stop: `BLOCKER: decision`')
+    expect(budget).not.toContain('before round')
+    expect(budget).not.toContain('check in with the human')
+    // Max is for work built from scratch, and a feature is never max.
+    expect(budget).toContain('built from scratch')
+    expect(budget).toContain('a feature in an existing codebase is never max, however difficult')
+    expect(budget).toContain('The complexity sets the budget at every review depth')
+  })
+
+  it('Review depth keeps the size rule for max, and nothing claims max forces a deeper review', () => {
+    const depth = flat(between(ticketAgent, '## Review depth', '## Escalation'))
+    expect(depth).toContain('This section is for mid, high and max')
+    expect(depth).toContain('The depth only moves up')
+    expect(depth).toContain("The round budget is the complexity's (step 5) at every depth.")
+    for (const claim of ['forces deep', 'always deep', 'deep on every round', 'max runs at deep']) {
+      expect(depth, claim).not.toContain(claim)
+      expect(flat(reviewQueue), claim).not.toContain(claim)
+    }
+    // The queue hands max its ten rounds too, at the depth the size rule picks.
+    expect(flat(reviewQueue)).toContain('a max ticket up to ten')
   })
 
   it('todo-review-ticket runs a low ticket with no spec agent and no review, and the builder verifies it itself', () => {
@@ -333,7 +441,7 @@ describe('the review texts the board ships', () => {
     )
     expect(text).toContain('Then go on to step 6.')
     // The low path reaches step 6 only through a gate that passed with that evidence for every criterion.
-    const low = flat(between(ticketAgent, '**Low: no review.**', '**Mid and high.**'))
+    const low = flat(between(ticketAgent, '**Low: no review.**', '**Mid, high and max.**'))
     expect(low).toContain(
       'After the second return, a criterion that still has no evidence is the decision in step 4, never a hand-off.',
     )
@@ -386,15 +494,15 @@ describe('the review texts the board ships', () => {
 
   it("todo-review-ticket's hand-off names the level and what checked it, and records a review only when one ran", () => {
     const text = flat(ticketAgent)
-    expect(text).toContain('"How it was tested" names the level (`low`, `mid` or `high`)')
-    expect(text).toContain('Only when a review ran (mid and high)')
+    expect(text).toContain('"How it was tested" names the level (`low`, `mid`, `high` or `max`)')
+    expect(text).toContain('Only when a review ran (mid, high or max)')
   })
 
   it('the default builder note names the review rounds each level gets; the spec note names the low exception', async () => {
     const { DEFAULT_AGENTS } = await import('./defaultAgents')
     const byName = Object.fromEntries(DEFAULT_AGENTS.map((a) => [a.name, flat(a.delegation)]))
     expect(byName.builder).toContain(
-      "The review rounds its ticket's complexity allows are none for low, one for mid, three for high, round 1 being the first build and its review.",
+      "The review rounds its ticket's complexity allows are none for low, one for mid, three for high, up to ten for max, round 1 being the first build and its review.",
     )
     expect(byName.builder).toContain('Mid has one: a review that does not survive then goes to the human')
     expect(byName.builder).toContain('High has three: two fix passes follow the first build')
@@ -431,7 +539,7 @@ describe('the review texts the board ships', () => {
       'MCP instructions': instructions,
       'AGENTS.md': agentsDoc,
     })) {
-      expect(flat(text), name).toContain('none for low, one for mid, three for high')
+      expect(flat(text), name).toContain('none for low, one for mid, three for high, up to ten for max')
       expect(flat(text), name).not.toContain('at most three rounds')
     }
   })
@@ -444,7 +552,7 @@ describe('the review texts the board ships', () => {
       'AGENTS.md': agentsDoc,
     })) {
       expect(flat(text), name).toContain(
-        "review rounds as the ticket's complexity allows: none for low, one for mid, three for high",
+        "review rounds as the ticket's complexity allows: none for low, one for mid, three for high, up to ten for max",
       )
       expect(flat(text), name).toContain('a mid ticket stops after its review')
     }
@@ -453,7 +561,9 @@ describe('the review texts the board ships', () => {
   it('the MCP get_ticket and list_tickets descriptions say that complexity is returned, low, mid or high', async () => {
     const { tools } = await served()
     for (const name of ['get_ticket', 'list_tickets']) {
-      expect(tools.find((t) => t.name === name)?.description, name).toContain('complexity (low, mid or high')
+      expect(tools.find((t) => t.name === name)?.description, name).toContain(
+        'complexity (low, mid, high or max',
+      )
     }
   })
 
@@ -463,7 +573,44 @@ describe('the review texts the board ships', () => {
       .find((l) => l.includes('`/api/projects/:id/tickets`') && l.includes('`/api/tickets/:id`'))
     expect(row, 'the README row for tickets').toBeDefined()
     expect(row).toContain('`complexity` on create and PATCH')
+    expect(row).toContain('`max`')
     expect(between(boardSkill, 'Creating a top-level ticket', '\n\n')).toContain('`complexity`')
+  })
+
+  it('every text that lists the levels lists all four, and no shipped text still gives only three', async () => {
+    const { instructions, tools } = await served()
+    const texts: Record<string, string> = {
+      'board.md': boardSkill,
+      'MCP instructions': instructions,
+      'MCP tool descriptions': tools.map((t) => t.description).join('\n'),
+      'AGENTS.md': agentsDoc,
+      'README.md': readme,
+      'todo-review': todoReview,
+      'todo-review-ticket': ticketAgent,
+      'review-queue': reviewQueue,
+      'feature-review': featureReview,
+      'defaultAgents.ts': read(path.join(import.meta.dirname, 'defaultAgents.ts')),
+    }
+    for (const [name, text] of Object.entries(texts)) {
+      const flatText = flat(text)
+      expect(flatText, name).not.toContain('low, mid or high')
+      expect(flatText, name).not.toMatch(/none for low, one for mid, three for high(?!, up to ten for max)/)
+    }
+    // Each place that gives the budget says what max is and how many rounds it may take.
+    expect(flat(boardSkill)).toContain('none for low, one for mid, three for high, up to ten for max')
+    expect(flat(instructions)).toContain('none for low, one for mid, three for high, up to ten for max')
+    expect(flat(agentsDoc)).toContain('none for low, one for mid, three for high, up to ten for max')
+    expect(flat(todoReview)).toContain('max up to ten for work built from scratch')
+    expect(flat(reviewQueue)).toContain('a max ticket up to ten')
+    expect(flat(readme)).toContain('up to ten for work built from scratch')
+    // Max is for work built from scratch, and a feature in an existing codebase is at most high.
+    for (const [name, text] of Object.entries({
+      'board.md': boardSkill,
+      'MCP instructions': instructions,
+      'AGENTS.md': agentsDoc,
+      'todo-review-ticket': ticketAgent,
+    }))
+      expect(flat(text), name).toMatch(/at most high|never max/)
   })
 
   it('no shipped text tells an agent to use a rounds setting', async () => {
@@ -492,9 +639,9 @@ describe('the review texts the board ships', () => {
   })
   it("sets the agents' effort from the complexity: low for low, medium for mid and high", async () => {
     const { COMPLEXITY_EFFORT } = await import('#/lib/constants')
-    expect(COMPLEXITY_EFFORT).toEqual({ low: 'low', mid: 'medium', high: 'medium' })
+    expect(COMPLEXITY_EFFORT).toEqual({ low: 'low', mid: 'medium', high: 'medium', max: 'high' })
     const rule =
-      "low for a low ticket, medium for mid and high; the orchestrator passes it as the Agent tool's"
+      "low for a low ticket, medium for mid and high, high for max; the orchestrator passes it as the Agent tool's"
     const { instructions } = await served()
     for (const [name, text] of Object.entries({
       'board.md': boardSkill,
@@ -502,25 +649,290 @@ describe('the review texts the board ships', () => {
       'AGENTS.md': agentsDoc,
     }))
       expect(flat(text).replace(/`/g, ''), name).toContain(rule)
-    expect(flat(readme)).toContain("the agents' effort, `low` for low and `medium` for mid and high")
+    expect(flat(readme)).toContain(
+      "the agents' effort, `low` for low, `medium` for mid and high and `high` for max",
+    )
     expect(flat(todoReview)).toContain(
-      "Pass `effort` on the Agent call as the ticket's complexity sets it: `low` for low, `medium` for mid and high",
+      "Pass `effort` on the Agent call as the ticket's complexity sets it: `low` for low, `medium` for mid and high, `high` for max",
     )
     expect(flat(ticketAgent)).toContain(
-      '**The effort** is set by the complexity too: `low` for low, `medium` for mid and high.',
+      '**The effort** is set by the complexity too: `low` for low, `medium` for mid and high, `high` for max.',
     )
     expect(ticketAgent).toContain('browser=<BROWSER> effort=<the effort>`')
-    const featureReview = read(path.join(skills, 'skills', 'feature-review', 'SKILL.md'))
     expect(featureReview).toContain(
       "high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`",
     )
     expect(featureReview).toContain("pass it as `effort` on every phase agent's Agent call")
-    expect(flat(reviewQueue)).toContain('pass `effort` on the Agent call and `effort=` to the runner')
+    expect(flat(reviewQueue)).toContain(
+      "pass `effort` on the Agent call and `effort=` to the runner as the ticket's complexity sets it (`low` for low, `medium` for mid and high, `high` for max)",
+    )
     expect(flat(reviewQueue)).toContain('runs at the effort the complexity sets')
     const { DEFAULT_AGENTS } = await import('./defaultAgents')
     const builder = DEFAULT_AGENTS.find((a) => a.name === 'builder')!
     expect(flat(builder.delegation)).toContain(
-      'runs at the effort its complexity sets: low for low, medium for mid and high',
+      'runs at the effort its complexity sets: low for low, medium for mid and high, high for max',
     )
+  })
+
+  it('splits heavy runs from light ones: only a build, e2e or the full unit suite takes a test slot', () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain(
+      "**Heavy**: a build (your gate's end-to-end build, a preview build), the end-to-end tests, scoped or full, and the full unit suite.",
+    )
+    expect(text).toContain(
+      '**Not heavy**: the typecheck, lint, the formatter (`prettier`), the migration check (`check:migrations`), the unit tests scoped to the changed files, and a targeted probe test.',
+    )
+    expect(text).toContain('The light ones take no slot, and nothing waits on one for them.')
+    expect(text).not.toContain("Heavy runs are the project's checks")
+    const review = flat(todoReview)
+    expect(review).toContain('a heavy run holds one slot, a light one none')
+    expect(review).toContain(
+      'the typecheck, lint, formatter, migration check, scoped unit tests and probe tests take none',
+    )
+  })
+
+  it('uses N = 2 slots, and caps parallel one above the slot count with that same number', () => {
+    expect(flat(ticketAgent)).toContain('has N = 2 of them, and a light run holds none')
+    const review = flat(todoReview)
+    expect(review).toContain('`QUEUE/locks/tests-<repo id>-1` … `-N` (N = 2, the measured count)')
+    expect(review).toContain(
+      'maximum tickets in flight, 1 to N+1 (so 1 to 3 with N = 2; the cap is one more than the repo',
+    )
+    expect(review).toContain('With N = 2 that is 3 in flight.')
+    // The measured number is named once; no other slot count or cap appears in the served bundle.
+    for (const text of [flat(ticketAgent), review]) {
+      expect(text).not.toContain('tests-<repo id>-3')
+      expect(text).not.toContain('tests-<REPO_ID>-3')
+    }
+  })
+
+  it('takes a slot with a plain mkdir and a holder line, releases it with rm -r, and never deletes another holder', () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain(
+      '`mkdir SLOTS/tests-<REPO_ID>-<n>` for n from 1 to N (a plain `mkdir`, never `mkdir -p`: the create must fail when the folder exists)',
+    )
+    expect(text).toContain('`SLOTS/tests-<REPO_ID>-<n>/holder.txt` with `#<TICKET> <step> <ISO time>`')
+    expect(text).toContain('**Release it** with `rm -r` on that folder as soon as the heavy command ends')
+    expect(text).toContain('Never keep a slot from one check through the next')
+    expect(text).toContain('Never delete a folder whose `holder.txt` names another ticket.')
+    expect(text).toContain('only its holder removes it, and the orchestrator once that holder')
+    expect(flat(todoReview)).toContain(
+      "You are the only one besides the holder who clears a dead run's slot, and only when its `holder.txt` names that ticket.",
+    )
+  })
+
+  it('runs a full suite alone: it takes tests-<repo id>-full first, and a scoped run that sees it gives its slot back', () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain(
+      'take `mkdir SLOTS/tests-<REPO_ID>-full` first (a plain `mkdir`; when it fails, a full run is in flight: wait and try again), then wait until every `tests-<REPO_ID>-<n>` slot is free',
+    )
+    expect(text).toContain(
+      'then checks for `tests-<REPO_ID>-full`: when that folder appeared, release its slot and wait for the full run to end before taking a slot again.',
+    )
+    expect(flat(todoReview)).toContain('`QUEUE/locks/tests-<repo id>-full` for a full suite')
+  })
+
+  it('writes one build record for the head and reuses it in the review only at that same SHA', () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain('write `WORKDIR/02-build.md` with the head SHA')
+    expect(text).toContain('the artifact path (`<worktree>/.output-e2e`) and the ISO time')
+    expect(text).toContain('build=<WORKDIR/02-build.md>')
+    const review = flat(read(path.join(skills, 'skills', 'feature-review', 'SKILL.md')))
+    expect(review).toContain('| `build=<path>` |')
+    expect(review).toContain('| `slots=<dir>` |')
+    expect(review).toContain('records `E2E_SKIP_BUILD=1`')
+    expect(review).toContain(
+      'A different SHA is stale: the record is ignored and the env agent builds once at this commit.',
+    )
+    expect(review).toContain('Nothing is reused across heads.')
+    const env = flat(read(path.join(skills, 'agents', 'feature-review-env.md')))
+    expect(env).toContain('record `E2E_SKIP_BUILD=1` in `00-env.md`')
+    expect(env).toContain('a different SHA is stale, so ignore the record, build once here and record that')
+    const verify = flat(read(path.join(skills, 'agents', 'feature-review-verify.md')))
+    expect(verify).toContain('records a reused build (`E2E_SKIP_BUILD=1`), run the end-to-end command')
+  })
+
+  it('warms node_modules by hardlink copy, never a symlink or junction, and installs offline only on a lockfile difference', () => {
+    const env = flat(read(path.join(skills, 'agents', 'feature-review-env.md')))
+    expect(env).toContain('`cp -al MAIN/node_modules WORKTREE/node_modules`')
+    expect(env).toContain('never a symlink or a junction')
+    expect(env).toContain("breaks the board's preview install, which cannot purge through one")
+    expect(env).toContain('only when a lockfile differs from the prepared copy')
+    expect(env).toContain('Copy its `node_modules` with `cp -al` into a real directory')
+    const text = flat(ticketAgent)
+    expect(text).toContain('`cp -al <prepared>/node_modules <path>/node_modules`')
+    expect(text).toContain('never a symlink or a junction')
+    // Nothing served still offers the symlink it replaced.
+    const reviewFiles = fs
+      .readdirSync(skills, { recursive: true, encoding: 'utf8' })
+      .filter((f) => f.endsWith('.md'))
+    for (const file of reviewFiles) {
+      expect(read(path.join(skills, file)), file).not.toContain('junction or symlink')
+    }
+  })
+
+  it('reruns only what a fix pass touches, and leaves the full suites to CI', () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain(
+      'A fix pass reruns only what its findings touch: the failed end-to-end spec file(s) and the unit files related to the changed files (`vitest related <changed files>`, or the project',
+    )
+    expect(text).toContain('never the whole gate')
+    expect(text).toContain('the full unit and end-to-end suites stay in CI')
+    expect(text).toContain(
+      'A fix pass reruns the failed end-to-end spec file(s), the unit files related to the changed files (`vitest related <changed files>`, or the project',
+    )
+  })
+
+  it('hands the context pack, 00-context.md, to every phase', () => {
+    for (const file of [
+      'feature-review-spec.md',
+      'feature-review-env.md',
+      'feature-review-verify.md',
+      'feature-review-hunt.md',
+      'feature-review-refute.md',
+      'feature-review-merge.md',
+    ]) {
+      expect(flat(read(path.join(skills, 'agents', file))), file).toContain('00-context.md')
+    }
+    const review = flat(read(path.join(skills, 'skills', 'feature-review', 'SKILL.md')))
+    expect(review).toContain(
+      '`00-context.md` as the context pack (every phase reads it: spec, env, verify, hunt, refute and merge)',
+    )
+    expect(review).toContain(
+      'the spec phase extends it with the changed files, their tests, their direct callers, the decisions and their answers, and the runbook',
+    )
+    const spec = flat(read(path.join(skills, 'agents', 'feature-review-spec.md')))
+    expect(spec).toContain(
+      'the changed files and their tests and callers, the decisions and their answers, and the runbook',
+    )
+    expect(spec).toContain('write into `00-context.md` what you established')
+  })
+
+  it('gives the next free slot to the ticket closest to hand-off, and never waits on a slot nothing needs', () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain('The next free slot goes to the ticket closest to hand-off')
+    expect(text).toContain('a ticket still in its first build')
+    expect(text).toContain('never wait on one you do not need')
+    const review = flat(todoReview)
+    expect(review).toContain('the ticket closest to hand-off')
+    expect(review).toContain('never waits on one it does not need')
+    expect(review).toContain('Fill every free ticket slot with the pending ticket closest to hand-off')
+  })
+
+  it('takes a slot only around a heavy run in each phase: verify and merge yes, hunt and refute never', () => {
+    const phase = (file: string) => flat(read(path.join(skills, 'agents', file)))
+    expect(phase('feature-review-verify.md')).toContain(
+      'Only the heavy runs take a test slot, from the exact `Test slots:` folders in `00-env.md` (or the `SLOTS` folder and repo id the prompt gives)',
+    )
+    expect(phase('feature-review-merge.md')).toContain('Take a test slot only for a heavy run')
+    for (const file of ['feature-review-hunt.md', 'feature-review-refute.md']) {
+      expect(phase(file), file).toContain(
+        'Targeted unit tests and probe tests are light and take no test slot',
+      )
+    }
+    const review = flat(read(path.join(skills, 'skills', 'feature-review', 'SKILL.md')))
+    expect(review).toContain(
+      'Only the heavy runs take a test slot, from the exact `Test slots:` folders in `00-env.md`',
+    )
+    expect(review).toContain('Its heavy part')
+    expect(review).toContain('and neither do the hunt')
+  })
+
+  it('builds on the merged tree for the merge check, and never labels an old artifact with a new head', () => {
+    const merge = flat(read(path.join(skills, 'agents', 'feature-review-merge.md')))
+    expect(merge).toContain(
+      "Do not reuse the caller's build here, even when `00-env.md` records `E2E_SKIP_BUILD=1`",
+    )
+    expect(merge).toContain('Build the merged tree once in a test slot')
+    expect(merge).toContain('`BOARD_BUILD_DIR=.output-e2e pnpm build`')
+    expect(merge).toContain('running the recorded end-to-end command with `E2E_SKIP_BUILD=1` removed')
+    expect(merge).toContain(
+      'Never run it with the flag on the merged tree, and never build the merged tree twice',
+    )
+    expect(merge).toContain('releases its slot and waits for the full suite, as the gate does')
+    expect(merge).toContain(
+      'The recorded build is reused only when the base was already an ancestor (step 2)',
+    )
+    const review = flat(read(path.join(skills, 'skills', 'feature-review', 'SKILL.md')))
+    expect(review).toContain(
+      "Because it merged the base, it never reuses the caller's build record, `E2E_SKIP_BUILD=1` or not",
+    )
+    expect(review).toContain('It builds the merged tree once')
+    expect(review).toContain('Never with the flag on the merged tree, and never two builds')
+    expect(review).toContain('releases its slot and waits for the full suite, as the gate does')
+    const text = flat(ticketAgent)
+    expect(text).toContain(
+      'a fix pass that built nothing deletes the record, and the next review builds once at the new head',
+    )
+    expect(text).toContain(
+      'rewrites `WORKDIR/02-build.md` at the new head only when it ran the end-to-end run',
+    )
+  })
+
+  it('takes a test slot for a targeted end-to-end run in the hunt and refute phases too', () => {
+    const phase = (file: string) => flat(read(path.join(skills, 'agents', file)))
+    for (const file of ['feature-review-hunt.md', 'feature-review-refute.md']) {
+      const text = phase(file)
+      expect(text, file).toContain('Targeted unit tests and probe tests are light and take no test slot')
+      expect(text, file).toContain(
+        'A targeted end-to-end spec is heavy like any end-to-end run and takes a test slot',
+      )
+      expect(text, file).toContain('releases its slot and waits for the full suite, as the gate does')
+    }
+    expect(phase('feature-review-hunt.md')).toContain('write `holder.txt` with `#<TICKET> hunt <ISO time>`')
+    expect(phase('feature-review-refute.md')).toContain(
+      'write `holder.txt` with `#<TICKET> refute <ISO time>`',
+    )
+    const ticket = flat(ticketAgent)
+    expect(ticket).toContain(
+      'its hunt and refute phases only for a targeted end-to-end run; their unit and probe tests take none',
+    )
+    expect(ticket).toContain("the hunt's and refute's targeted unit and probe tests take none")
+  })
+
+  it('passes the slot folder to every phase, and verify and merge also read it from 00-env.md', () => {
+    const review = flat(read(path.join(skills, 'skills', 'feature-review', 'SKILL.md')))
+    expect(review).toContain(
+      'the `SLOTS` directory when `slots=` was given (its record is the `Test slots:` line in `00-env.md`)',
+    )
+    expect(review).toContain(
+      'the ticket id (`TICKET`) when the review is on a ticket — every phase that takes a test slot writes it in its `holder.txt`',
+    )
+    for (const file of ['feature-review-verify.md', 'feature-review-merge.md']) {
+      expect(flat(read(path.join(skills, 'agents', file))), file).toContain(
+        'exact `Test slots:` folders in `00-env.md` (or the `SLOTS` folder and repo id',
+      )
+    }
+    expect(review).toContain('| `repoId=<id>` |')
+    expect(flat(ticketAgent)).toContain('repoId=<REPO_ID>')
+    expect(flat(read(path.join(skills, 'agents', 'feature-review-env.md')))).toContain(
+      '`REPO_ID` (only when the caller gave `repoId=`)',
+    )
+    expect(flat(read(path.join(skills, 'agents', 'feature-review-env.md')))).toContain(
+      'the exact folders with the repo id filled in',
+    )
+  })
+
+  it("serves the gate artifact through the board's preview run only where its base matches, and otherwise builds the preview's own", () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain('The preview, from at most one build of this head for the preview')
+    expect(text).toContain("Prefer the board's own preview run")
+    expect(text).toContain("Its build is the preview's one build for this head")
+    expect(text).toContain('it lives on after your session')
+    expect(text).toContain('When the artifact was built for the base the preview is served under')
+    expect(text).toContain(
+      "A checkout served under the board's preview base (the board's own case) builds its own",
+    )
+    expect(text).toContain('`test -d .output-e2e`')
+    expect(text).toContain('put back the run')
+    expect(text).toContain('a commit is built twice overall where the preview must build')
+    expect(text).toContain('`BOARD_ENV=development`, `AUTH=off`, `STORAGE=local`')
+    expect(text).toContain('`HOST=127.0.0.1`')
+    expect(text).toContain('`DATA_DIR` a copy of the data (never the live one)')
+    expect(text).toContain('That preview lives in your session, so it stops when the session ends')
+    expect(text).toContain('Keep the preview running while the ticket is in review')
+    expect(text).toContain('clear the link (`set_preview` with `""`)')
+    expect(text).toContain('In the summary say which of the three ran (the artifact through the board')
+    expect(text).toContain('how many times this head was built')
   })
 })

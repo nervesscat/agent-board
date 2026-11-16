@@ -60,36 +60,67 @@ describe('Approved, in the texts agents read', () => {
     }
   }
 
-  it("says merging is the human's except in Approved, where an orchestrator asks first and may merge after a yes", async () => {
+  it("says merging is the human's except in Approved, where an orchestrator merges without asking again once the facts allow it", async () => {
     const rule =
-      "merging is the human's everywhere except on a ticket in approved, where an orchestrator may merge its pr(s) after the human says yes"
+      "merging is the human's everywhere except on a ticket in approved, where an orchestrator merges its pr(s) without asking again once the facts allow it"
     for (const [name, text] of Object.entries(await texts()))
       expect(flat(text).toLowerCase(), name).toContain(rule)
   })
 
-  it('gives the routine: work finished, ask (without blocking the ticket), merge (the base in and CI green first when it conflicts), then move to done', async () => {
+  it("says the move to Approved is the human's go-ahead to merge, and only the human makes it", async () => {
+    for (const [name, text] of Object.entries(await texts())) {
+      const flatText = flat(text).toLowerCase()
+      expect(flatText, `${name}: go-ahead`).toContain("the human's go-ahead to merge")
+    }
+  })
+
+  it('gives the routine: every task done but Merged, no open decision card, the PR up to date and green, merge (the base in and CI green first when it conflicts), move to the first done stage, leave it in Approved when blocked', async () => {
     for (const [name, text] of Object.entries(await texts())) {
       const flatText = flat(text).toLowerCase()
       for (const phrase of [
-        'ask_decision',
-        'block: false',
-        'on silence',
+        'every task done but merged',
+        'no open decision card',
         'merge the base in',
         'wait for ci green',
-        'move the ticket to done',
+        'first done stage',
         'naming the pr and the merge commit',
+        'leave it in approved',
       ])
         expect(flatText, `${name}: ${phrase}`).toContain(phrase)
     }
   })
 
+  it('no longer asks the human before merging: the ask-first wording is gone from every text', async () => {
+    for (const [name, text] of Object.entries(await texts())) {
+      const flatText = flat(text).toLowerCase()
+      for (const phrase of [
+        'ask the human first',
+        'after the human says yes',
+        'human agreed to',
+        'agreed to the merge',
+        'on silence',
+        'may merge its pr(s) after',
+        'ask_decision` (or a comment), and wait for a yes',
+      ])
+        expect(flatText, `${name} must not say: ${phrase}`).not.toContain(phrase)
+    }
+  })
+
+  it("lists the tickets in Approved as approved, to merge in the orchestrator's reads", async () => {
+    expect(flat(await served()).toLowerCase()).toContain('approved, to merge')
+    expect(flat(await descriptionOf('get_summary')).toLowerCase()).toContain("labelled 'approved, to merge'")
+    expect(flat(await descriptionOf('get_live_work')).toLowerCase()).toContain(
+      "labelled 'approved, to merge'",
+    )
+  })
+
   it('carries the exception in the served update_ticket description too, not only in the instructions', async () => {
     const description = flat(await descriptionOf('update_ticket')).toLowerCase()
     expect(description).toContain(
-      "merge order is the human's, so leave it in review, except on a ticket in approved, where an orchestrator may merge its pr(s) after the human says yes",
+      "merge order is the human's, so leave it in review; merging is the human's everywhere except on a ticket in approved, where an orchestrator merges its pr(s) without asking again once the facts allow it",
     )
     expect(description).toContain(
-      "(merging is the human's everywhere except on a ticket in approved, where an orchestrator may merge its pr(s) after the human says yes)",
+      "(merging is the human's everywhere except on a ticket in approved, where an orchestrator merges its pr(s) without asking again once the facts allow it)",
     )
     // The two claims the exception replaced, so they cannot creep back in beside it.
     expect(description).not.toContain('so leave it in review. a move')

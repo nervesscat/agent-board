@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { FolderGit2, Plus } from 'lucide-react'
-import { useState, useSyncExternalStore } from 'react'
+import { useState } from 'react'
 
 import { Empty } from '#/components/Empty'
 import { RepoDialog } from '#/components/RepoDialog'
@@ -9,24 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '#/com
 import { Skeleton } from '#/components/ui/skeleton'
 import type { Repo } from '#/lib/api'
 import { useProject } from '#/lib/project'
+import { useHydrated } from '#/lib/useHydrated'
 
 export const Route = createFileRoute('/projects/$id/repositories')({ component: Repositories })
-
-/** Subscribing to nothing: the value never changes, only what the first render sees differs. */
-const noSubscribe = () => () => {}
-
-/**
- * False on the server and in the first render in the browser, which must match the server's HTML. The
- * projects may already be cached by then (the project layout asks for it while this page waits for its chunk),
- * and a list drawn from that cache would not match the skeleton the server sent.
- */
-function useHydrated() {
-  return useSyncExternalStore(
-    noSubscribe,
-    () => true,
-    () => false,
-  )
-}
 
 function Repositories() {
   const { id } = Route.useParams()

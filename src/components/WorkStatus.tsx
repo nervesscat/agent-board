@@ -1,62 +1,183 @@
-import { AlertTriangle, Hammer, Hourglass, UserRound } from 'lucide-react'
+import {
+  Activity,
+  CircleDashed,
+  ClockAlert,
+  Eye,
+  Hammer,
+  Hand,
+  Hourglass,
+  type LucideIcon,
+  Moon,
+  Unplug,
+  UserRound,
+} from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 
 import { spokenDuration } from '#/components/WorkTimeline'
 import { Tip } from '#/components/ui/tooltip'
 import { clock } from '#/lib/format'
 import { useNow, useServerOffset } from '#/lib/useNow'
 import {
-  currentActivity,
   lastHeard,
   onServerClock,
-  stallReason,
+  workLine,
   workShares,
-  type StallReason,
+  type WorkLineState,
   type WorkTimelineLike,
 } from '#/lib/workStatus'
 import type { WorkTotals as Totals } from '#/lib/workTimeline'
 
-/** A duration in words for the status lines: `43 min`, `1 h 5 min`; `0` for none. */
+/** A duration in words for the summary: `43 min`, `1 h 5 min`; `0` for none. */
 const dur = (ms: number) => (ms > 0 ? spokenDuration(ms) : '0')
 
-/** What is going on now, as one line, from the open spans and waits. `now` defaults to a live clock. */
-export function NowLine({
+/**
+ * Each state's icon and its colour. The shape carries the state; the colour only agrees with it, so no state is told by colour
+ * alone. `lost` (an unplugged cable) and `no-word` (a clock with an alert) are told apart by shape too.
+ */
+export const WORK_STATE_ICON: Record<WorkLineState, { Icon: LucideIcon; tone: string }> = {
+  waiting: { Icon: Hand, tone: 'text-amber-700 dark:text-amber-400' },
+  'your-turn': { Icon: Eye, tone: 'text-violet-700 dark:text-violet-400' },
+  lost: { Icon: Unplug, tone: 'text-rose-700 dark:text-rose-400' },
+  'no-word': { Icon: ClockAlert, tone: 'text-orange-700 dark:text-orange-400' },
+  quiet: { Icon: Moon, tone: 'text-muted-foreground' },
+  working: { Icon: Activity, tone: 'text-emerald-700 dark:text-emerald-400' },
+  nothing: { Icon: CircleDashed, tone: 'text-muted-foreground' },
+}
+
+/** The duration a line ends with (`40m`, `2d`), which a surface with room keeps beside the icon. */
+const measureOf = (text: string) => text.match(/(\d+[mhd])$/)?.[1] ?? ''
+
+/**
+ * One ticket's work-state line, as its state's icon: one element per ticket row (`data-testid="work-line"`,
+ * `data-state` one of the seven). Its accessible name is the line's text, and its tooltip the full line,
+ * the per-agent detail and the why, opened by focus, hover or a tap. A state with nothing to add to its
+ * line has no tooltip and is not a keyboard stop. The clock correction to the server's happens once,
+ * inside: a caller passes the server's own time or nothing, never a time already put on it.
+ */
+export function WorkLine({
   timeline,
   now,
+  stage = null,
+  variant = 'inline',
+  detail = false,
+  tooltip = true,
   className = '',
 }: {
   timeline: WorkTimelineLike
+  /** The server's clock, when the caller already put `now` on it; omitted, the browser's, corrected once. */
   now?: Date | number
+  /** The active stage's name when it is not the project's default one: the why then names it. */
+  stage?: string | null
+  /** `badge` for a card or a list row (the icon alone), `inline` for a line (the icon and its duration). */
+  variant?: 'inline' | 'badge'
+  /** Draw the per-agent lines under the icon: the ticket page, In progress and the Roadmap have room. */
+  detail?: boolean
+  /** Off, the icon has no tooltip and is not a keyboard stop. */
+  tooltip?: boolean
   className?: string
 }) {
   const tick = useNow(60_000)
-  // The browser's clock may run behind or ahead of the server's that stamped the spans: the times are read on the server's.
   const offset = useServerOffset(timeline.now)
-  const a = currentActivity(timeline, onServerClock(+(now ?? tick), offset))
-  const base = `${className} text-sm tabular-nums`
-  if (a.kind === 'building')
-    return (
-      <p data-testid="now-line" className={`${base} text-foreground`}>
-        <span className="font-medium">{a.verb}</span> · {a.agent} · {dur(a.ms)}
-      </p>
+  const [open, setOpen] = useState(false)
+  // A tip a tap opened stays while the pointer or the focus moves on (base-ui closes a tip on those): a tap
+  // elsewhere, Escape or a scroll closes it instead.
+  const [byTap, setByTap] = useState(false)
+  // The click a tap sends after opening the tip: it is the icon's own, not the enclosing link's.
+  const tapClick = useRef(false)
+  useEffect(() => {
+    if (!byTap) return
+    const close = () => {
+      setOpen(false)
+      setByTap(false)
+    }
+    const outside = (e: PointerEvent) => {
+      const target = e.target instanceof Element ? e.target : null
+      if (target?.closest('[data-tip], [data-slot="tooltip-content"]')) return
+      close()
+    }
+    document.addEventListener('pointerdown', outside)
+    // From the next frame on, as the tooltip's own scroll close: a scroll that comes with the tap is not one to close for.
+    const frame = requestAnimationFrame(() =>
+      window.addEventListener('scroll', close, { capture: true, passive: true }),
     )
-  if (a.kind === 'waiting-agent')
-    return (
-      <p data-testid="now-line" className={`${base} text-foreground`}>
-        <Hourglass className="mr-1 inline size-3.5 align-[-2px]" aria-hidden />
-        <span className="font-medium">Waiting on {a.agent}</span> · {dur(a.ms)}
-      </p>
-    )
-  if (a.kind === 'waiting-human')
-    return (
-      <p data-testid="now-line" className={`${base} font-medium text-amber-800 dark:text-amber-300`}>
-        <UserRound className="mr-1 inline size-3.5 align-[-2px]" aria-hidden />
-        Waiting on you for {dur(a.ms)} since {clock(a.since)}
-      </p>
-    )
+    return () => {
+      cancelAnimationFrame(frame)
+      document.removeEventListener('pointerdown', outside)
+      window.removeEventListener('scroll', close, { capture: true })
+    }
+  }, [byTap])
+  const onOpenChange = (next: boolean, details: { reason: string }) => {
+    if (!next && byTap && ['trigger-hover', 'trigger-focus', 'trigger-press'].includes(details.reason)) return
+    if (!next) setByTap(false)
+    setOpen(next)
+  }
+  const at = now === undefined ? onServerClock(tick, offset) : +now
+  const line = workLine(timeline, at, stage)
+  if (!line) return null
+  // The line's why already carries the per-agent detail where it has nothing else to say (a working or
+  // a lost run); a state whose why says something else (a stall, a quiet day) keeps the detail beside
+  // it. Either way the detail is in the tooltip once, and on screen once where the surface has room.
+  const why = [line.why, ...line.detail.filter((d) => !line.why.includes(d))].filter(Boolean).join('\n')
+  const tipped = tooltip
+  const { Icon, tone } = WORK_STATE_ICON[line.state]
+  const measure = variant === 'inline' ? measureOf(line.text) : ''
+  const icon = (
+    <span
+      role="img"
+      aria-label={line.text}
+      data-testid="work-line"
+      data-state={line.state}
+      // Every state's icon is a keyboard stop: focus opens its tooltip, the full line and what it adds.
+      tabIndex={tipped ? 0 : undefined}
+      // Hover does not exist on a touch screen: a tap opens the tooltip there.
+      onPointerDown={() => {
+        tapClick.current = false
+      }}
+      onPointerUp={(e) => {
+        if (tipped && e.pointerType === 'touch') {
+          tapClick.current = true
+          setOpen(true)
+          setByTap(true)
+        }
+      }}
+      // A tap on the icon opens its tooltip and goes no further: an enclosing link (a card, a row) keeps it.
+      onClick={(e) => {
+        if (!tapClick.current) return
+        tapClick.current = false
+        e.preventDefault()
+        e.stopPropagation()
+      }}
+      className={`rounded-sm text-sm font-medium tabular-nums outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring ${tone}`}
+    >
+      <Icon
+        aria-hidden
+        className={`inline-block size-4 align-[-0.125em] ${line.state === 'working' ? 'motion-safe:animate-pulse' : ''}`}
+      />
+      {measure && <span className="ml-1">{measure}</span>}
+    </span>
+  )
+  const shown = tipped ? (
+    <Tip
+      content={[line.text, why].filter(Boolean).join('\n')}
+      open={open}
+      onOpenChange={onOpenChange}
+      keepOnClick
+    >
+      {icon}
+    </Tip>
+  ) : (
+    icon
+  )
+  if (!detail || !line.detail.length) return <span className={className}>{shown}</span>
   return (
-    <p data-testid="now-line" className={`${base} text-muted-foreground`}>
-      Nothing open
-    </p>
+    <div className={`${className} grid gap-0.5`}>
+      <div>{shown}</div>
+      {line.detail.map((d) => (
+        <p key={d} className="text-xs text-muted-foreground tabular-nums">
+          {d}
+        </p>
+      ))}
+    </div>
   )
 }
 
@@ -75,67 +196,6 @@ export function LastHeard({ timeline, className = '' }: { timeline: WorkTimeline
       Last heard {clock(h.at)}
       {who}
     </p>
-  )
-}
-
-/** The why of a stall, in words. The stage, when given, replaces the detail. */
-function stallWhy(r: StallReason): string {
-  if (r.stage) return `in ${r.stage}, no agent heard from since ${clock(r.since)}`
-  if (r.kind === 'waiting') return `waiting on ${r.on}, nobody heard from since ${clock(r.since)}`
-  if (r.kind === 'working')
-    return `${r.agent} has a ${r.phase || 'span'} open, nobody heard from since ${clock(r.since)}`
-  if (!r.endedAt) return `nothing open since ${clock(r.since)}`
-  return `nothing open since the ${r.phase || 'work'} ended at ${clock(r.endedAt)}${r.quote ? ` ('${r.quote}')` : ''}`
-}
-
-/**
- * A stalled ticket's notice, the same words everywhere: `Stalled 33 min`, and why and since when. As a
- * `badge` for cards and lists (the why in its tooltip), or as an `inline` sentence for a page. `stage`
- * is the active stage's name when it is not the project's default stage; the why then says it.
- */
-export function StallNotice({
-  timeline,
-  stage = null,
-  nowLine = null,
-  variant = 'badge',
-  focusable = true,
-  className = '',
-}: {
-  timeline: WorkTimelineLike
-  stage?: string | null
-  /** The ticket's Now line in words, for a badge's tooltip above the why (a board card's). */
-  nowLine?: string | null
-  variant?: 'badge' | 'inline'
-  focusable?: boolean
-  className?: string
-}) {
-  const r = stallReason(timeline, stage)
-  if (!timeline.stalled || !r) return null
-  const head = `Stalled ${spokenDuration(timeline.stalled.minutes * 60_000)}`
-  const why = stallWhy(r)
-  if (variant === 'inline')
-    return (
-      <p
-        data-testid="stall-notice"
-        className={`${className} flex items-start gap-1.5 text-sm font-medium text-amber-800 dark:text-amber-300`}
-      >
-        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-        <span className="min-w-0">
-          {head}: {why}
-        </span>
-      </p>
-    )
-  return (
-    <Tip content={nowLine ? `${nowLine}\n${why}` : why}>
-      <span
-        tabIndex={focusable ? 0 : undefined}
-        data-testid="stall-notice"
-        className={`${className} inline-flex shrink-0 items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring dark:bg-amber-400/15 dark:text-amber-300`}
-      >
-        <AlertTriangle className="size-3" aria-hidden />
-        {head}
-      </span>
-    </Tip>
   )
 }
 

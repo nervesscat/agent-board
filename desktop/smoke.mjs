@@ -28,6 +28,13 @@
 //   - on Linux: the server gets the login shell's PATH (from a .bashrc in a stand-in home), Start at
 //     login writes and removes the autostart entry, and closing the window with no tray host ends the
 //     app and its server (with one, it hides the window). Run it under a display (`xvfb-run -a`).
+//   - with a board address in its settings (REMOTE_BOARD_URL, in the environment or `config.env`) the
+//     app is a window on a board at that address and starts none of its own: a stand-in board on
+//     loopback is reached instead of a local server, nothing answers on the local PORT and no data
+//     folder is made, the local PORT being taken is no error, an address nothing answers shows the
+//     address in the window and the board is loaded by itself once it answers, a board that goes away
+//     while its page is shown is named in the window again and loaded again by itself once it
+//     answers, and a restart from `config.env` opens it again.
 //
 // On Linux the dialogs are checked through stderr and the app is then killed (no window is closed
 // through the window system), and the missing-drive case is Windows only.
@@ -59,6 +66,9 @@ const appSrc = path.resolve(
   arg('--app', path.join(root, 'desktop', 'dist', WIN ? 'win-unpacked' : 'linux-unpacked')),
 )
 const port = Number(arg('--port', '8240'))
+/** The connect-mode section's stand-in board, on loopback beside the app's own ports. */
+const remotePort = port + 2
+const remoteOrigin = `http://127.0.0.1:${remotePort}`
 const screenshot = arg('--screenshot', '')
 const busyScreenshot = arg('--busy-screenshot', '')
 const dataDirScreenshot = arg('--data-dir-screenshot', '')
@@ -80,7 +90,7 @@ if (!fs.existsSync(appSrc)) {
   console.error(`no unpacked app at ${appSrc}; run pnpm desktop:package first`)
   process.exit(1)
 }
-for (const p of [port, port + 1])
+for (const p of [port, port + 1, remotePort])
   if (!(await isPortFree(p))) {
     console.error(`port ${p} is in use; pick another with --port`)
     process.exit(1)
@@ -113,6 +123,25 @@ const feed = http.createServer((req, res) => {
 await new Promise((resolve) => feed.listen(0, '127.0.0.1', () => resolve(undefined)))
 const feedUrl = `http://127.0.0.1:${/** @type {net.AddressInfo} */ (feed.address()).port}/`
 
+/**
+ * The board the connect-mode section reaches: its page and the health check, on loopback, and nothing
+ * else. It is a stand-in for a board on another machine, started only when that section says so.
+ */
+const standIn = () =>
+  http.createServer((req, res) => {
+    if (req.url === '/api/health') res.writeHead(200).end('{"ok":true}')
+    else if (req.url === '/')
+      res
+        .writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+        .end(
+          '<!doctype html><html><head><meta charset="utf-8"><title>Stand-in board</title></head>' +
+            '<body><h1>Stand-in board</h1></body></html>',
+        )
+    else res.writeHead(404).end()
+  })
+/** @type {http.Server | null} */
+let standInServer = null
+
 /** The environment of a run: everything but what the app decides itself, and `extra`. */
 /** @param {Record<string, string>} extra */
 function appEnv(extra) {
@@ -131,6 +160,7 @@ function appEnv(extra) {
     'BOARD_ENV',
     'AUTH',
     'BOARD_URL',
+    'REMOTE_BOARD_URL',
     'APPIMAGE',
   ])
     if (!(key in extra)) delete env[key]
@@ -151,6 +181,35 @@ async function health(p) {
 async function waitHealthy(p, ms = 90_000) {
   for (const until = Date.now() + ms; Date.now() < until; await sleep(250))
     if ((await health(p)) === 200) return true
+  return false
+}
+
+/**
+ * Waits until the window's page shows `text` (a page that is navigating is tried again), or `ms` passes.
+ * @param {import('@playwright/test').Page} page
+ * @param {string} text
+ * @param {number} ms
+ */
+async function waitForText(page, text, ms) {
+  for (const until = Date.now() + ms; Date.now() < until; await sleep(250)) {
+    try {
+      if ((await page.locator('body').innerText()).includes(text)) return true
+    } catch {
+      // between two pages
+    }
+  }
+  return false
+}
+
+/**
+ * Waits until the window is on `url` or under it, or `ms` passes.
+ * @param {import('@playwright/test').Page} page
+ * @param {string} url
+ * @param {number} ms
+ */
+async function waitForUrl(page, url, ms) {
+  for (const until = Date.now() + ms; Date.now() < until; await sleep(250))
+    if (page.url().startsWith(url)) return true
   return false
 }
 
@@ -479,11 +538,101 @@ try {
 
   // 10. Linux: the login shell's PATH for the server, Start at login, and closing the window.
   if (LINUX) await linuxDesktop()
+
+  // 11. A board on another machine: its address in the settings, none of the local lifecycle, the window
+  // on it, the page that says it cannot be reached, and the address remembered in config.env.
+  console.log(`\n11. connect mode: a board at ${remoteOrigin}`)
+  const remoteHome = path.join(tmp, 'remote-home')
+  const remoteData = path.join(tmp, 'remote-data')
+  let connectApp = await launch(
+    appEnv({
+      AGENT_BOARD_HOME: remoteHome,
+      PORT: String(port),
+      DATA_DIR: remoteData,
+      REMOTE_BOARD_URL: remoteOrigin,
+    }),
+  )
+  let said = ''
+  connectApp.process().stderr?.on('data', (d) => (said += d))
+  let connectWin = await connectApp.firstWindow()
+  // Nothing answers at the address yet: the window names it, and the app stays (no dialog, no exit).
+  check(
+    await waitForText(connectWin, remoteOrigin, 30_000),
+    'an address nothing answers is named in the window',
+  )
+  check(connectApp.process().exitCode === null, 'the app stays open instead of quitting')
+  check(!/The board cannot start|settings are not valid/.test(said), 'no dialog: the app is open on the page')
+  check(boardServer() === 0, 'no board of its own is started while it waits')
+  // The board comes up there: the window reaches it by itself (within the minute the retries allow).
+  standInServer = standIn()
+  await new Promise((resolve) => standInServer?.listen(remotePort, '127.0.0.1', () => resolve(null)))
+  check(
+    await waitForUrl(connectWin, `${remoteOrigin}/`, 60_000),
+    `the window reaches the board once it answers (${connectWin.url()})`,
+  )
+  await connectWin.waitForLoadState('networkidle')
+  check(
+    (await connectWin.title()) === 'Stand-in board',
+    `the board's own page is shown (${connectWin.url()})`,
+  )
+  check(boardServer() === 0, 'the app starts no board of its own (no index.mjs process)')
+  check((await health(port)) !== 200, `nothing answers on the app's own PORT :${port}`)
+  check(!fs.existsSync(remoteData), `no local data folder is made (${remoteData})`)
+  check(!said.includes(`Port ${port} is already in use`), 'the local port is never checked')
+  // The board goes away while its page is shown: the app's own page names the address again, a slow
+  // check having found it (an interval at most, with a health check's timeout), then the retries.
+  await new Promise((resolve) => standInServer?.close(() => resolve(null)))
+  standInServer = null
+  check(
+    await waitForText(connectWin, remoteOrigin, 45_000),
+    'a board that goes away once it is shown is named in the window again',
+  )
+  // It comes back, on the address it was: the app's retry loads the board by itself.
+  standInServer = standIn()
+  await new Promise((resolve) => standInServer?.listen(remotePort, '127.0.0.1', () => resolve(null)))
+  check(
+    await waitForUrl(connectWin, `${remoteOrigin}/`, 60_000),
+    `the board is loaded again once it answers (${connectWin.url()})`,
+  )
+  await connectWin.waitForLoadState('networkidle')
+  check((await connectWin.title()) === 'Stand-in board', `the board's own page is back (${connectWin.url()})`)
+  check(!/Object has been destroyed|Uncaught Exception/.test(said), 'nothing escapes from the app')
+  check(await quit(connectApp), 'Quit ends the app')
+  check(boardServer() === 0 && (await health(port)) !== 200, 'nothing of a local board is left running')
+  if (LINUX) check((await appLeftOver()).length === 0, 'nothing of the app runs after Quit')
+
+  // The address kept in config.env, and the local PORT taken by something else (another board, the
+  // forward): a later start opens the remote board again and reports nothing about the port.
+  fs.appendFileSync(path.join(remoteHome, 'config.env'), `REMOTE_BOARD_URL=${remoteOrigin}\n`)
+  const blocker = net.createServer()
+  await new Promise((resolve) => blocker.listen({ port, host: '127.0.0.1' }, () => resolve(null)))
+  try {
+    connectApp = await launch(
+      appEnv({ AGENT_BOARD_HOME: remoteHome, PORT: String(port), DATA_DIR: remoteData }),
+    )
+    said = ''
+    connectApp.process().stderr?.on('data', (d) => (said += d))
+    connectWin = await connectApp.firstWindow()
+    check(
+      await waitForUrl(connectWin, `${remoteOrigin}/`, 30_000),
+      `the address in config.env opens the remote board again (${connectWin.url()})`,
+    )
+    check((await connectWin.title()) === 'Stand-in board', 'the board is shown, not a local one')
+    check(!said.includes(`Port ${port} is already in use`), 'a local port that is taken is no error here')
+    check(connectApp.process().exitCode === null, 'the app waits on no dialog')
+    check(boardServer() === 0, 'still no board of its own')
+    check(await quit(connectApp), 'Quit ends the app')
+  } finally {
+    await new Promise((resolve) => blocker.close(() => resolve(null)))
+  }
+  await new Promise((resolve) => standInServer?.close(() => resolve(null)))
+  standInServer = null
 } catch (err) {
   console.error(err)
   failed = true
 } finally {
   feed.close()
+  standInServer?.close()
   // The app's processes are gone; their files may take a moment to let go on Windows.
   for (let i = 0; i < 10; i++) {
     try {

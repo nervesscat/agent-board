@@ -1,0 +1,1 @@
+ALTER TABLE `prs` ADD `requested` integer DEFAULT false NOT NULL;
