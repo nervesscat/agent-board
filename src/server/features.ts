@@ -1076,22 +1076,29 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
       `ticket ${id} is PR #${t.prNumber}'s: a PR is reviewed on the PR queue, not approved`,
     )
   const before = verdictOf(t)
-  if (before === verdict) return t
   const now = new Date().toISOString()
   const stages = listStages(t.projectId)
+  // The ticket's own Approved stage, when the project kept it: a key, and a review stage still.
+  const approved = stages.find((s) => s.key === 'approved' && s.kind === 'review')
+  // Approving again a ticket that a move took out of Approved puts it back there: the approval is the go-ahead.
+  const reapprove =
+    verdict === 'approved' &&
+    before === 'approved' &&
+    !!approved &&
+    t.status !== approved.key &&
+    kindOf(stages, t.status) === 'review'
+  if (before === verdict && !reapprove) return t
   const cancel = firstOfKind(stages, 'cancelled')
   // A PR review (tagged PR) is finished by the call: approving it closes it as done.
   const pr = t.tags.some((tag) => tag.toLowerCase() === 'pr')
   const finish = verdict === 'approved' && pr ? firstOfKind(stages, 'done') : undefined
   const kind = kindOf(stages, t.status)
-  // The ticket's own Approved stage, when the project kept it: a key, and a review stage still.
-  const approved = stages.find((s) => s.key === 'approved' && s.kind === 'review')
   const approve = verdict === 'approved' && kind === 'review' && approved ? approved : undefined
   const reopen =
     (before === 'disapproved' && kind === 'cancelled') ||
     (before === 'approved' && pr && kind === 'done' && verdict === null) ||
     // Taking back an approval returns a ticket in Approved to the review column it came from.
-    (before === 'approved' && kind === 'review' && verdict === null)
+    (before === 'approved' && verdict === null && !!approved && t.status === approved.key)
   const reopenTo = opts.reopenTo
     ? resolveStage(stages, opts.reopenTo, projectWorkStage(t.projectId, stages))
     : before === 'approved'

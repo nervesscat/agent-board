@@ -523,8 +523,8 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         stalled.length,
     },
     // The tickets in Approved: the human's go-ahead to merge, which an orchestrator merges without asking again.
-    approvedToMerge: top
-      .filter((t) => t.status === 'approved')
+    approvedToMerge: tickets
+      .filter((t) => t.status === 'approved' && kind(t.status) === 'review')
       .map((t) => ({
         ticketId: t.id,
         title: t.title,

@@ -373,3 +373,15 @@ describe('PR tickets', () => {
     expect(needs.needIds(feature.id)).toEqual([])
   })
 })
+
+describe("Approved is the human's to put a ticket in", () => {
+  it('refuses an agent that moves a ticket there, and lets the human do it', async () => {
+    const t = ticket('go-ahead', 'feat/go-ahead', { status: 'review' })
+    await expect(needs.changeTicket(t.id, { status: 'approved' }, 'orch', agent)).rejects.toThrow(
+      'only the human puts a ticket in Approved',
+    )
+    expect(features.getTicket(t.id).status).toBe('review')
+    await needs.changeTicket(t.id, { status: 'approved' }, 'enrique', { agent: false })
+    expect(features.getTicket(t.id).status).toBe('approved')
+  })
+})

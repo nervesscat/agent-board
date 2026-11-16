@@ -1373,3 +1373,32 @@ describe('the archive', () => {
     expect(features.getTicket(t.id).archivedAt).toBeNull()
   })
 })
+
+describe('the go-ahead, put back and taken back', () => {
+  it('a new approval after a move out of Approved puts the ticket back there', async () => {
+    const { db, schema } = await import('#/db')
+    const pid = db.insert(schema.projects).values({ name: 'go-ahead' }).returning().get().id
+    db.insert(schema.repos).values({ projectId: pid, name: 'app', repoPath: '/r/go-ahead' }).run()
+    const t = features.createTicket(pid, { title: 'again', status: 'review' }, 'claude')
+    expect(features.setVerdict(t.id, 'approved', 'enrique').status).toBe('approved')
+    features.updateTicket(t.id, { status: 'review' }, 'enrique')
+    expect(features.setVerdict(t.id, 'approved', 'enrique')).toMatchObject({
+      status: 'approved',
+      approvedBy: 'enrique',
+    })
+  })
+
+  it('taking the call back leaves a ticket in another review stage where it is', async () => {
+    const { db, schema } = await import('#/db')
+    const stages = await import('./stages')
+    const pid = db.insert(schema.projects).values({ name: 'qa-review' }).returning().get().id
+    db.insert(schema.repos).values({ projectId: pid, name: 'app', repoPath: '/r/qa-review' }).run()
+    const approved = stages.listStages(pid).find((s) => s.key === 'approved')!
+    stages.deleteStage(pid, approved.id, {}, 'enrique')
+    const qa = stages.createStage(pid, { name: 'QA', kind: 'review' }, 'enrique')
+    const t = features.createTicket(pid, { title: 'in qa', status: qa.key }, 'claude')
+    // No Approved stage: the approval moves nothing, and taking it back moves nothing either.
+    expect(features.setVerdict(t.id, 'approved', 'enrique').status).toBe(qa.key)
+    expect(features.setVerdict(t.id, null, 'enrique')).toMatchObject({ status: qa.key, approvedAt: null })
+  })
+})

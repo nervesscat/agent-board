@@ -455,7 +455,7 @@ export function getLiveWork(projectId: number, opts: LiveWorkOptions = {}) {
 
   // --- approved, to merge: the human's go-ahead is in; an orchestrator merges the PR without asking again ---
   const approvedToMerge: ApprovedToMergeEntry[] = tickets
-    .filter((t) => t.status === 'approved')
+    .filter((t) => t.status === 'approved' && kindOf(t.status) === 'review')
     .map((t) => ({
       ticketId: t.id,
       title: t.title,

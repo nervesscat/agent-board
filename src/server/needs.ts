@@ -431,6 +431,16 @@ export async function changeTicket(
   const { needs, force, position, ...patch } = input
   const before = features.getTicket(id)
   if (position !== undefined) features.checkPlacement(before, position)
+  // Only the human's verdict or a move puts a ticket in Approved: an agent never does, since the orchestrator
+  // reads that stage as the human's go-ahead to merge.
+  if (opts.agent && patch.status !== undefined && before.status !== 'approved') {
+    const stages = listStages(before.projectId)
+    if (resolveStage(stages, patch.status).key === 'approved')
+      throw new HttpError(
+        403,
+        'only the human puts a ticket in Approved: a verdict or a move by the human does',
+      )
+  }
   const ids = needs !== undefined ? checkNeeds(before, needs) : needIds(id)
   // Judged against the primary the write produces: a swap or a reordered list brings that repo's base.
   const { repos, ...fields } = patch

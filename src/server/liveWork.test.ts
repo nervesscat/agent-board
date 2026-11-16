@@ -768,3 +768,14 @@ describe('the REST route', () => {
     expect(await missing.json()).toMatchObject({ error: 'project not found' })
   })
 })
+
+describe('approved, to merge: only the review stage', () => {
+  it('leaves out a stage keyed approved of another kind', () => {
+    const pid = project('approved-kind')
+    const approved = stagesMod.listStages(pid).find((s) => s.key === 'approved')!
+    stagesMod.deleteStage(pid, approved.id, {}, 'enrique')
+    stagesMod.createStage(pid, { name: 'Approved', kind: 'active' }, 'enrique')
+    ticket(pid, 'Not a go-ahead', { status: 'approved' })
+    expect(read(pid).approvedToMerge).toEqual([])
+  })
+})
