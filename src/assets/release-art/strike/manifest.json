@@ -1,0 +1,253 @@
+{
+  "direction": "strike",
+  "madeBy": "Claude Fable 5.2",
+  "generator": "scripts/release-art/strike.mjs",
+  "canvas": {
+    "width": 1600,
+    "height": 900
+  },
+  "palette": {
+    "light": {
+      "ground": "#ECE5D5",
+      "inks": {
+        "petrol": "#1E4B5A",
+        "ochre": "#D29A2C",
+        "madder": "#C4472F"
+      },
+      "overprint": "multiply"
+    },
+    "dark": {
+      "ground": "#17191C",
+      "inks": {
+        "petrol": "#78ABB4",
+        "ochre": "#E0AC45",
+        "madder": "#E0603F"
+      },
+      "overprint": "normal"
+    }
+  },
+  "releases": [
+    {
+      "version": "v0.2.2",
+      "seed": 4180178577,
+      "themes": {
+        "bullets": 160,
+        "density": 0.958,
+        "hands": 0.522,
+        "precision": 0.117,
+        "wayfinding": 0.194,
+        "momentum": 0.167
+      },
+      "lead": "hands",
+      "press": {
+        "trueness": 0.321,
+        "axisDegrees": 1.612,
+        "blinds": 0,
+        "strikes": 24
+      },
+      "runs": [
+        {
+          "role": "primary",
+          "block": "slab",
+          "ink": "petrol",
+          "strikes": 9,
+          "step": 144.347
+        },
+        {
+          "role": "hand",
+          "block": "beam",
+          "ink": "ochre",
+          "strikes": 5,
+          "step": 69.823
+        },
+        {
+          "role": "hand",
+          "block": "quad",
+          "ink": "madder",
+          "strikes": 6,
+          "step": 109.303
+        },
+        {
+          "role": "hand",
+          "block": "plank",
+          "ink": "ochre",
+          "strikes": 4,
+          "step": 81.048
+        }
+      ],
+      "files": {
+        "light": {
+          "file": "v0.2.2-light.svg",
+          "bytes": 12588
+        },
+        "dark": {
+          "file": "v0.2.2-dark.svg",
+          "bytes": 12659
+        }
+      }
+    },
+    {
+      "version": "v0.2.3",
+      "seed": 4163400958,
+      "themes": {
+        "bullets": 16,
+        "density": 0.534,
+        "hands": 0.095,
+        "precision": 0.714,
+        "wayfinding": 0,
+        "momentum": 0.19
+      },
+      "lead": "precision",
+      "press": {
+        "trueness": 0.97,
+        "axisDegrees": 0.576,
+        "blinds": 0,
+        "strikes": 22
+      },
+      "runs": [
+        {
+          "role": "primary",
+          "block": "bar",
+          "ink": "petrol",
+          "strikes": 16,
+          "step": 60.609
+        },
+        {
+          "role": "keyline",
+          "block": "rule",
+          "ink": "madder",
+          "strikes": 2,
+          "step": 514.509
+        },
+        {
+          "role": "register",
+          "block": "quad",
+          "ink": "ochre",
+          "strikes": 4,
+          "step": 181.828
+        }
+      ],
+      "files": {
+        "light": {
+          "file": "v0.2.3-light.svg",
+          "bytes": 10729
+        },
+        "dark": {
+          "file": "v0.2.3-dark.svg",
+          "bytes": 10796
+        }
+      }
+    },
+    {
+      "version": "v0.2.4",
+      "seed": 4213733815,
+      "themes": {
+        "bullets": 14,
+        "density": 0.511,
+        "hands": 0.208,
+        "precision": 0.042,
+        "wayfinding": 0.667,
+        "momentum": 0.083
+      },
+      "lead": "wayfinding",
+      "press": {
+        "trueness": 0.3,
+        "axisDegrees": -2.415,
+        "blinds": 1,
+        "strikes": 12
+      },
+      "runs": [
+        {
+          "role": "primary",
+          "block": "ledger",
+          "ink": "petrol",
+          "strikes": 2,
+          "step": 150.635
+        },
+        {
+          "role": "reset",
+          "block": "ledger",
+          "ink": "petrol",
+          "strikes": 4,
+          "step": 150.635
+        },
+        {
+          "role": "lane",
+          "block": "rule",
+          "ink": "madder",
+          "strikes": 2,
+          "step": 479.851
+        },
+        {
+          "role": "hand",
+          "block": "quad",
+          "ink": "ochre",
+          "strikes": 4,
+          "step": 90.876
+        }
+      ],
+      "files": {
+        "light": {
+          "file": "v0.2.4-light.svg",
+          "bytes": 9490
+        },
+        "dark": {
+          "file": "v0.2.4-dark.svg",
+          "bytes": 9526
+        }
+      }
+    },
+    {
+      "version": "v0.2.5",
+      "seed": 4196956196,
+      "themes": {
+        "bullets": 36,
+        "density": 0.681,
+        "hands": 0.327,
+        "precision": 0.091,
+        "wayfinding": 0.073,
+        "momentum": 0.509
+      },
+      "lead": "momentum",
+      "press": {
+        "trueness": 0.345,
+        "axisDegrees": 2.117,
+        "blinds": 0,
+        "strikes": 22
+      },
+      "runs": [
+        {
+          "role": "primary",
+          "block": "plank",
+          "ink": "petrol",
+          "strikes": 14,
+          "step": 95.849
+        },
+        {
+          "role": "job",
+          "block": "beam",
+          "ink": "ochre",
+          "strikes": 3,
+          "step": 233.484
+        },
+        {
+          "role": "job",
+          "block": "quad",
+          "ink": "madder",
+          "strikes": 5,
+          "step": 92.195
+        }
+      ],
+      "files": {
+        "light": {
+          "file": "v0.2.5-light.svg",
+          "bytes": 11927
+        },
+        "dark": {
+          "file": "v0.2.5-dark.svg",
+          "bytes": 11907
+        }
+      }
+    }
+  ]
+}
