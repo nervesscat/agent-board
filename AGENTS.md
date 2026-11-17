@@ -489,7 +489,9 @@ githubRepo, baseBranch?, as?}`, agents only) posts one decision card, "Add repo 
     each phase its last review round lacks (`{round, phase, expected, found}`), another flag to clear before
     the hand-off stands, except a round the build skipped because its head SHA's review had already
     survived (reused, named in the summary). A phase counts only when its span or run report carries the
-    round (and the last segment of the agent name names the phase agent), so a run with no round is not counted. Put the rule in every subagent's brief.
+    round (and the last segment of the agent name names the phase agent), so a run with no round is not counted.
+    Moving the ticket out of a review stage, to any other stage, restarts the count (only runs after the move
+    count, from round 1): run a missing phase while the ticket stays in review. Put the rule in every subagent's brief.
 
 ## Notifications: tracked requests and important notices
 

@@ -550,8 +550,9 @@ Implementation and its steps (`set_task_done`).
    write theirs; you write none of your own. Also read `missingReviewPhases` (mid, high and max): each
    entry is a review phase the last round lacks (`round`, `phase`, `expected`, `found`; the hunt needs
    two). Run each missing phase, with a fix round through the builder if it needs code, and write its
-   report, before the hand-off stands; it is a flag, never a refusal, and `[]` is the answer when
-   every phase ran. Exception: when the flag names phases of a round that step 5 skipped because the
+   report, before the hand-off stands, while the ticket stays in review: moving it out of a review
+   stage, to any other stage, restarts the count (only runs after the move count, from round 1). It
+   is a flag, never a refusal, and `[]` is the answer when every phase ran. Exception: when the flag names phases of a round that step 5 skipped because the
    head SHA's review had already survived (a send-back with no new commit), do not run it again: say in
    the summary which head SHA and which review it reuses, and go on; any other missing phase is run. Then `open`: fix every task it lists and check again
    (Summary open: no summary written since the last commit). An open Preview may stay only when the

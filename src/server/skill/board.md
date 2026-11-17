@@ -381,7 +381,9 @@ name>"` (e.g. `orch/builder-1`) on every board tool call, so what it posts is fi
   ticket lacks; run them before the hand-off stands, except a round the build skipped because its head
   SHA's review had already survived: that one is reused and named in the summary). A phase counts only
   when its span or run report carries the round (and the last segment of the agent name names the
-  phase agent): a run with no round is not counted.
+  phase agent): a run with no round is not counted. Moving the ticket out of a review stage, to any
+  other stage, restarts the count (only runs after the move count, from round 1): run a missing
+  phase while the ticket stays in review.
 
 ### Watch for feedback
 
@@ -495,8 +497,9 @@ lacks (a phase counts only when its span or run report carries the round and the
 agent name names the phase agent, so a run with no round is not counted), as `{round, phase, expected, found}` (the hunt expects two; a span or a run report of that kind
 and round counts as a run). It is a flag, not a refusal: run each missing phase (with a fix round if it
 needs code) before the hand-off stands, except a round the build skipped because its head SHA's review
-had already survived (reused, named in the summary). `get_ticket` shows it in review too; it is `[]` for a low
-ticket.
+had already survived (reused, named in the summary). Moving the ticket out of a review stage, to any other
+stage, restarts the count (only runs after the move count, from round 1): run a missing phase while the
+ticket stays in review. `get_ticket` shows it in review too; it is `[]` for a low ticket.
 
 After that:
 

@@ -610,6 +610,16 @@ describe('the review texts the board ships', () => {
       for (const name of ['update_ticket', 'get_ticket'])
         expect(tools.find((x) => x.name === name)!.description, name).toContain('missingReviewPhases')
     })
+
+    it('every text that describes the flag says a move out of review restarts the count', async () => {
+      const restart =
+        'Moving the ticket out of a review stage, to any other stage, restarts the count (only runs after the move count, from round 1): run a missing phase while the ticket stays in review.'
+      expect(flat(boardSkill)).toContain(restart)
+      expect(flat(agentsDoc)).toContain(restart)
+      expect(flat(ticketAgent)).toContain('while the ticket stays in review: moving it out of a review stage')
+      const { tools } = await served()
+      expect(tools.find((x) => x.name === 'update_ticket')!.description).toContain(restart)
+    })
   })
 
   describe('the review round reaches the phases, and a reused review is not rerun', () => {
