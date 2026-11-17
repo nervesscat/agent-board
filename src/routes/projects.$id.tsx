@@ -46,7 +46,8 @@ const STICKY_TOP = 'md:top-[calc(4.5rem+1px+env(safe-area-inset-top))]'
 
 /**
  * How far left a hidden sidebar rests: its own width plus the page's left margin (the main column is centred
- * up to 80rem with 1rem of padding), so it is fully outside the window and slides in from the left edge.
+ * up to 80rem with 1rem of padding, and the sidebar starts there), so it is fully outside the window and slides
+ * in from the left edge to its place in the page.
  */
 const HIDDEN_SHIFT = 'md:-translate-x-[calc(100%+max(1rem,(100vw-80rem)/2+1rem)+1px)]'
 
@@ -80,7 +81,7 @@ function ProjectLayout() {
       cancelAnimationFrame(second)
     }
   }, [modeReady])
-  // A hidden sidebar shown over the page while the mouse is on its edge (desktop only).
+  // A hidden sidebar shown in its place (the page makes room) while the mouse is near its edge (desktop only).
   const [peeking, setPeeking] = useState(false)
   const closeTimer = useRef<number | undefined>(undefined)
   const asideRef = useRef<HTMLElement>(null)
@@ -97,6 +98,9 @@ function ProjectLayout() {
   const closePeekSoon = () => {
     window.clearTimeout(closeTimer.current)
     closeTimer.current = window.setTimeout(() => {
+      // The sidebar slid in under a pointer that was resting on the edge strip (no move, so no enter reached it):
+      // the pointer is on it, so it stays.
+      if (asideRef.current?.matches(':hover')) return
       // A link clicked in the peeked sidebar holds focus; hiding the sidebar would drop it to the page body,
       // so the toggle (inside the sidebar, and the one thing in it that stays reachable by keyboard while it
       // is hidden) takes it first. The same holds when the click did not focus the link and focus is on the body.
@@ -156,7 +160,8 @@ function ProjectLayout() {
           browser's scroll restoration keep working as on every other page.
           The wrapper is the sidebar's place in the page: its width slides between expanded, shrunk
           and hidden (none), and the page follows. The sidebar itself is always the same one: hidden, it
-          rests outside the window on the left and slides back in where it was while the mouse is near. */}
+          rests outside the window on the left; while the mouse is near, the wrapper opens to the expanded
+          width (the page moves right) and the sidebar slides in to its place, as in the expanded mode. */}
       <div
         className={cn(
           'md:sticky md:self-start md:shrink-0',
@@ -165,7 +170,7 @@ function ProjectLayout() {
           slide,
           mode === 'expanded' && 'md:mr-6 md:w-52',
           shrunk && 'md:mr-6 md:w-14',
-          hiddenNow && 'md:z-40 md:mr-0 md:w-0',
+          hiddenNow && (showPeek ? 'md:mr-6 md:w-52' : 'md:mr-0 md:w-0'),
         )}
       >
         <aside
@@ -198,11 +203,10 @@ function ProjectLayout() {
             slide,
             mode === 'expanded' && 'md:w-52',
             shrunk && 'md:w-14',
-            // Hidden: outside the window on the left, out of the tab order and out of reach once it has slid
-            // out (visibility follows the slide), and slid back in while the mouse has shown it. It keeps
-            // its look, with the page's background so the page does not show through it.
-            hiddenNow &&
-              'md:h-[calc(100vh-6rem-1px-env(safe-area-inset-top))] md:w-52 md:border-r md:bg-background',
+            // Hidden: the expanded sidebar, outside the window on the left, out of the tab order and out of
+            // reach once it has slid out (visibility follows the slide), and slid back in to its place while
+            // the mouse has shown it.
+            hiddenNow && 'md:w-52',
             hiddenNow && !showPeek && [HIDDEN_SHIFT, 'md:invisible md:[transition-delay:0s,0s,200ms]'],
             showPeek && 'md:visible md:translate-x-0',
           )}
@@ -289,18 +293,18 @@ function ProjectLayout() {
       </div>
       {hiddenNow && (
         // The strip along the left border, about 40px wide, where the mouse shows the hidden sidebar. Desktop only.
-        // It sits under the sidebar's wrapper, so the sidebar and its toggle stay clickable above it.
         <div
           aria-hidden="true"
           onMouseEnter={openPeek}
           // Leaving the strip closes it too: the sidebar can appear under a resting pointer, which then sends no
           // enter to it, and moving into the sidebar opens it again (cancelling this close).
           onMouseLeave={closePeekSoon}
-          // While the sidebar shows, the strip reaches as far as the sidebar's right edge, so a pointer on its way
-          // from the window's edge to the sidebar (far away on a wide window) stays on the strip and keeps it open.
+          // While the sidebar shows, the strip covers only what is left of it (up to the sidebar's place), so the
+          // sidebar itself is not under it. A pointer on its way from the window's edge to the sidebar (far away
+          // on a wide window) stays on the strip and keeps it open.
           className={cn(
             'fixed bottom-0 left-0 z-30 hidden md:block',
-            showPeek ? 'md:w-[calc(max(1rem,(100vw-80rem)/2+1rem)+13rem)]' : 'md:w-10',
+            showPeek ? 'md:w-[max(1rem,(100vw-80rem)/2+1rem)]' : 'md:w-10',
             'top-[calc(4.5rem+1px+env(safe-area-inset-top))]',
           )}
         />

@@ -84,7 +84,53 @@ test('a shrunk sidebar shows each page as an icon with its label in a tooltip', 
   await expectTooltip(link, 'Roadmap')
 })
 
-test('a hidden sidebar shows while the mouse is on the left border, and closes once it leaves', async ({
+test('hidden takes no width; the left edge brings the normal sidebar back and the page makes room; leaving gives the width back', async ({
+  page,
+  project,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto(`/projects/${project.id}/prs`)
+  const aside = sidebar(page)
+  await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
+  await settled(page)
+  const column = page.locator('section.min-w-0')
+  const expanded = (await column.boundingBox())!
+  const wrapper = asideEl(page).locator('xpath=..')
+  await page.getByRole('button', { name: 'Shrink sidebar' }).click()
+  await page.getByRole('button', { name: 'Hide sidebar' }).click()
+  await expect(aside).toBeHidden()
+  await settled(page)
+
+  // Hidden: the sidebar's place has no width and the page uses the whole width.
+  expect((await rect(wrapper)).width).toBe(0)
+  const hidden = (await column.boundingBox())!
+  expect(hidden.x).toBeLessThan(expanded.x - 100)
+  expect(hidden.width).toBeGreaterThan(expanded.width + 100)
+
+  // Near the left edge: the sidebar is back in its normal place with its normal width, and the page has moved
+  // right to make room (it is not drawn over the page).
+  await page.mouse.move(640, 400)
+  await page.mouse.move(2, 400)
+  await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
+  await settled(page)
+  const peeked = (await column.boundingBox())!
+  expect(peeked.x).toBeCloseTo(expanded.x, 0)
+  expect(peeked.width).toBeCloseTo(expanded.width, 0)
+  expect((await rect(wrapper)).width).toBeCloseTo(208, 0)
+  const sidebarBox = await rect(asideEl(page))
+  expect(sidebarBox.x + sidebarBox.width).toBeLessThanOrEqual(peeked.x)
+
+  // Leaving it: the sidebar slides away and the page takes the whole width again.
+  await page.mouse.move(640, 400)
+  await expect(aside).toBeHidden()
+  await settled(page)
+  const after = (await column.boundingBox())!
+  expect(after.x).toBeCloseTo(hidden.x, 0)
+  expect(after.width).toBeCloseTo(hidden.width, 0)
+  expect((await rect(wrapper)).width).toBe(0)
+})
+
+test('a pointer resting on the edge while the sidebar slides in under it keeps it open', async ({
   page,
   project,
 }) => {
@@ -94,17 +140,15 @@ test('a hidden sidebar shows while the mouse is on the left border, and closes o
   await page.getByRole('button', { name: 'Hide sidebar' }).click()
   const aside = sidebar(page)
   await expect(aside).toBeHidden()
-
   await page.mouse.move(640, 400)
-  await page.mouse.move(2, 400)
+  // 30px from the edge: on the strip, and where the sidebar will be once it has slid in (its place starts at 16px).
+  await page.mouse.move(30, 400)
   await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
-  // The page does not move while the sidebar is over it.
-  await settled(page)
-  const pageBox = (await page.locator('section.min-w-0').boundingBox())!
-  expect(pageBox.x).toBeLessThan(100)
-
-  await page.mouse.move(640, 400)
-  await expect(aside).toBeHidden()
+  await page.waitForTimeout(1000)
+  await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
+  // The sidebar's links take the clicks: nothing lies over it.
+  await aside.getByRole('link', { name: 'Roadmap' }).click()
+  await expect(page).toHaveURL(/\/roadmap$/)
 })
 
 test('a peeked hidden sidebar that closes after a click keeps focus on the toggle in it, not the page body', async ({
@@ -264,12 +308,28 @@ test('a hidden sidebar is the real sidebar, same width and links, with no box of
   expect(shown.x).toBeCloseTo(expanded.x, 0)
   expect(shown.width).toBeCloseTo(expanded.width, 0)
   expect(await aside.getByRole('link').allInnerTexts()).toEqual(links)
-  // The sidebar itself, not a card: no shadow, no rounded corners, in the page's flow position (not pinned).
+  // The sidebar itself, not a card: no shadow, border, background or rounded corners, in the page's flow position
+  // (not pinned), and no layer over the page.
   const look = await asideEl(page).evaluate((el) => {
     const style = getComputedStyle(el)
-    return { shadow: style.boxShadow, radius: style.borderRadius, position: style.position }
+    const place = getComputedStyle(el.parentElement!)
+    return {
+      shadow: style.boxShadow,
+      radius: style.borderRadius,
+      position: style.position,
+      border: style.borderRightWidth,
+      background: style.backgroundColor,
+      layer: place.zIndex,
+    }
   })
-  expect(look).toEqual({ shadow: 'none', radius: '0px', position: 'static' })
+  expect(look).toEqual({
+    shadow: 'none',
+    radius: '0px',
+    position: 'static',
+    border: '0px',
+    background: 'rgba(0, 0, 0, 0)',
+    layer: 'auto',
+  })
 
   // Leaving slides it back out to the left, and then it is out of reach.
   await page.mouse.move(640, 400)
@@ -319,12 +379,17 @@ test('shrinking and expanding slide the sidebar and the page follows', async ({ 
   await settled(page)
   await expect(aside).toBeHidden()
 
-  // Back to expanded: the width slides open again.
+  // Back to expanded: the sidebar slides in (the page moves right with it), and pressing Show in it keeps it
+  // where it is: the same sidebar, now staying, and the page does not jump.
   await peek(page)
+  expect(await pageX()).toBeCloseTo(expandedX, 0)
   await page.getByRole('button', { name: 'Show sidebar' }).click()
-  expect(await sliding(page)).toContain('width')
+  await page.mouse.move(640, 400)
+  await page.waitForTimeout(600)
   await settled(page)
+  await expect(page.getByRole('button', { name: 'Shrink sidebar' })).toBeVisible()
   expect((await rect(asideEl(page))).width).toBeCloseTo(expandedWidth, 0)
+  expect(await pageX()).toBeCloseTo(expandedX, 0)
 })
 
 test('with reduced motion the sidebar changes at once, with no slide', async ({ page, project }) => {
@@ -461,10 +526,15 @@ test('clicking blank space inside a peeked sidebar keeps it open under the point
   const aside = sidebar(page)
   await expect(aside).toBeHidden()
   await peek(page)
-  // Focus is on the toggle in the sidebar; a click on the sidebar's empty space below its links moves it to the body.
-  await page.getByRole('button', { name: 'Show sidebar' }).focus()
-  await page.mouse.move(100, 700)
-  await page.mouse.click(100, 700)
+  // Focus is on the toggle in the sidebar; a click on the sidebar's empty space (left of the toggle, in its
+  // first row) moves it to the body.
+  const show = page.getByRole('button', { name: 'Show sidebar' })
+  await show.focus()
+  const toggleBox = (await show.boundingBox())!
+  const blank = { x: toggleBox.x - 20, y: toggleBox.y + toggleBox.height / 2 }
+  await page.mouse.move(blank.x, blank.y)
+  await page.mouse.click(blank.x, blank.y)
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true)
   await page.waitForTimeout(800)
   await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
 })
