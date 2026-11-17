@@ -3,6 +3,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { db, schema } from '#/db'
 import { retryWhileLocked } from '#/db/busy'
 import { COMMENT_PARENTS, type Complexity, DEFAULT_COMPLEXITY, type FeedTab } from '#/lib/constants'
+import { hasGitSide } from '#/lib/kinds'
 import { AUTO_PHASE_RULE, autoPhaseOf } from '#/lib/autoPhases'
 import { columnOrder, isClosed, placeInColumn, stageColumn } from '#/lib/stages'
 import { nextTask, treeTasks } from '#/lib/tasks'
@@ -509,14 +510,21 @@ export function placement(
   projectId: number,
   input: { repoId?: number | null; parentId?: number | null; baseBranch?: string },
 ) {
-  getProject(projectId)
+  const project = getProject(projectId)
   const parent = input.parentId ? getTicket(input.parentId) : null
   if (parent && parent.projectId !== projectId)
     throw new HttpError(400, `ticket ${parent.id} is not in project ${projectId}`)
-  const repo = resolveRepo(projectId, input.repoId ?? parent?.repoId ?? (parent && ticketRepo(parent)?.id))
+  // A lane takes its parent's repo; a parent with none (a project with no software kind) gives it none.
+  const inherited = parent
+    ? (parent.repoId ?? (hasGitSide(project.kinds) ? ticketRepo(parent)?.id : null))
+    : null
+  const given = input.repoId ?? inherited
+  // A project with no software kind has no git side: its tickets need no repo, and the repos it may
+  // still hold stay out of it unless one is named.
+  const repo = !given && !hasGitSide(project.kinds) ? null : resolveRepo(projectId, given)
   // A lane branches off its parent's branch when they share a repo, so its PR goes back into it.
-  const parentBase = parent && ticketRepo(parent)?.id === repo.id ? parent.branch || parent.baseBranch : ''
-  return { parent, repo, baseBranch: input.baseBranch || parentBase || repo.baseBranch }
+  const parentBase = parent && ticketRepo(parent)?.id === repo?.id ? parent.branch || parent.baseBranch : ''
+  return { parent, repo, baseBranch: input.baseBranch || parentBase || repo?.baseBranch || '' }
 }
 
 /**
@@ -605,7 +613,7 @@ export function createTicket(
   // Checked before the ticket exists: a bad repo does not leave a ticket behind without them.
   if (input.repos)
     resolveTicketRepos(
-      { id: 0, projectId, repoId: repo.id, branch: '', baseBranch, prNumber: null },
+      { id: 0, projectId, repoId: repo?.id ?? null, branch: '', baseBranch, prNumber: null },
       input.repos,
     )
   if (parent?.prId) throw new HttpError(400, `ticket ${parent.id} is a PR's: it has no lanes`)
@@ -632,14 +640,15 @@ export function createTicket(
           .insert(schema.tickets)
           .values({
             projectId,
-            repoId: repo.id,
+            repoId: repo?.id ?? null,
             parentId: parent?.id ?? null,
             title: input.title,
             body: input.body ?? '',
             status,
             ...startedPatch(stages, null, status),
             // A lane copies its parent's level as it is now; a later change to the parent does not reach it.
-            complexity: input.complexity ?? parent?.complexity ?? DEFAULT_COMPLEXITY,
+            // Work with no repo (a project with no software kind) has no review rounds: low, the builder's own check.
+            complexity: input.complexity ?? parent?.complexity ?? (repo ? DEFAULT_COMPLEXITY : 'low'),
             assignee: input.assignee ?? '',
             branch: input.branch ?? '',
             baseBranch,
@@ -823,6 +832,10 @@ export function updateTicket(
     .set({
       ...patch,
       ...(patch.status ? movePatch(stages, before.status, patch.status, before.startedAt) : {}),
+      // A ticket sent back from done is no longer approved: the approval was for the work it closed.
+      ...(patch.status && kindOf(stages, before.status) === 'done' && kindOf(stages, patch.status) !== 'done'
+        ? { approvedAt: null, approvedBy: '', closedByApproval: false }
+        : {}),
       updatedAt: new Date().toISOString(),
     })
     .where(eq(schema.tickets.id, id))
@@ -1056,6 +1069,23 @@ export const verdictOf = (t: Pick<schema.Ticket, 'approvedAt' | 'disapprovedAt'>
   t.approvedAt ? 'approved' : t.disapprovedAt ? 'disapproved' : null
 
 /**
+ * Whether approving this ticket closes it (to the first done stage): a PR review at any stage, and the
+ * hand-off of work in a project with no software kind from its review stage, where the human's approval
+ * is the review.
+ */
+export function approvalCloses(
+  t: Pick<schema.Ticket, 'projectId' | 'status' | 'tags' | 'repoId'>,
+  stages: ReturnType<typeof listStages>,
+) {
+  if (t.tags.some((tag) => tag.toLowerCase() === 'pr')) return true
+  // A hand-off is a ticket with no repo in a project with no software kind. A ticket that names a repo
+  // keeps its approval as the human's call only, so taking it back never has to reopen it.
+  return (
+    t.repoId === null && !hasGitSide(getProject(t.projectId).kinds) && kindOf(stages, t.status) === 'review'
+  )
+}
+
+/**
  * The human's call on a ticket or lane: approve it, disapprove it (which moves it to the project's
  * first cancelled stage), or clear the call. Approving a ticket in a review stage moves it to Approved
  * (the review-kind stage the default layout puts after In review), where an orchestrator merges the PR
@@ -1089,14 +1119,17 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     kindOf(stages, t.status) === 'review'
   if (before === verdict && !reapprove) return t
   const cancel = firstOfKind(stages, 'cancelled')
-  // A PR review (tagged PR) is finished by the call: approving it closes it as done.
+  // A PR review (tagged PR) is finished by the call: approving it closes it as done. So is the hand-off
+  // of work in a project with no software kind: the files are the deliverable, and the human's approval
+  // is its review.
   const pr = t.tags.some((tag) => tag.toLowerCase() === 'pr')
-  const finish = verdict === 'approved' && pr ? firstOfKind(stages, 'done') : undefined
   const kind = kindOf(stages, t.status)
+  const finish = verdict === 'approved' && approvalCloses(t, stages) ? firstOfKind(stages, 'done') : undefined
   const approve = verdict === 'approved' && kind === 'review' && approved ? approved : undefined
   const reopen =
     (before === 'disapproved' && kind === 'cancelled') ||
-    (before === 'approved' && pr && kind === 'done' && verdict === null) ||
+    // Taking back the approval of a ticket that closed on it: a PR review, or a hand-off (closedByApproval).
+    (before === 'approved' && (pr || t.closedByApproval) && kind === 'done' && verdict === null) ||
     // Taking back an approval returns a ticket in Approved to the review column it came from.
     (before === 'approved' && verdict === null && t.status === 'approved')
   const reopenTo = opts.reopenTo
@@ -1119,6 +1152,7 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     .set({
       approvedAt: verdict === 'approved' ? now : null,
       approvedBy: verdict === 'approved' ? actor : '',
+      closedByApproval: verdict === 'approved' && finish !== undefined,
       disapprovedAt: verdict === 'disapproved' ? now : null,
       disapprovedBy: verdict === 'disapproved' ? actor : '',
       status,
