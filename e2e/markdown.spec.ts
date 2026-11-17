@@ -1,18 +1,7 @@
-import type { Locator, Page } from '@playwright/test'
+import type { Locator } from '@playwright/test'
 
 import type { TicketFull, TicketRow } from '#/lib/api'
 import { expect, ok, test } from './fixtures'
-
-/** What the page computes for `--muted` as a background color, to compare a chip's background with. */
-const muted = (page: Page) =>
-  page.evaluate(() => {
-    const probe = document.createElement('span')
-    probe.style.backgroundColor = 'var(--muted)'
-    document.body.append(probe)
-    const color = getComputedStyle(probe).backgroundColor
-    probe.remove()
-    return color
-  })
 
 const look = (code: Locator) =>
   code.evaluate((el) => {
@@ -22,6 +11,7 @@ const look = (code: Locator) =>
       before: pseudo('::before'),
       after: pseudo('::after'),
       background: style.backgroundColor,
+      color: style.color,
       padding: style.paddingLeft,
     }
   })
@@ -43,13 +33,15 @@ test('inline code renders as a tinted chip without backticks; a code block keeps
   const block = instructions.locator('pre code')
   await expect(inline).toHaveText('pnpm dev')
   await expect(block).toContainText('const port = 47101')
-  const color = await muted(page)
-  expect(color).not.toBe('rgba(0, 0, 0, 0)')
+  // The chip takes the code block's own background and text colour, in either theme.
+  const blockLook = await look(instructions.locator('pre'))
+  expect(blockLook.background).not.toBe('rgba(0, 0, 0, 0)')
 
   const chip = await look(inline)
   expect(chip.before).toMatch(NO_CONTENT)
   expect(chip.after).toMatch(NO_CONTENT)
-  expect(chip.background).toBe(color)
+  expect(chip.background).toBe(blockLook.background)
+  expect(chip.color).toBe(blockLook.color)
   expect(parseFloat(chip.padding)).toBeGreaterThan(0)
   // The paragraph reads as written: no backtick in what the page shows.
   expect(await instructions.locator('p').first().innerText()).toBe('Run pnpm dev in the worktree.')
@@ -68,7 +60,8 @@ test('inline code renders as a tinted chip without backticks; a code block keeps
   const inEditor = await look(edited)
   expect(inEditor.before).toMatch(NO_CONTENT)
   expect(inEditor.after).toMatch(NO_CONTENT)
-  expect(inEditor.background).toBe(color)
+  expect(inEditor.background).toBe(blockLook.background)
+  expect(inEditor.color).toBe(blockLook.color)
 })
 
 /**
