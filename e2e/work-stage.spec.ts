@@ -43,7 +43,7 @@ test('the human chooses the stage work starts in, and claims land there', async 
     'In progress',
   ])
   await page.getByRole('option', { name: 'In progress' }).click()
-  await expect(page.getByText('Saved')).toBeVisible()
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible()
   await expect.poll(saved).toBe('in_progress')
   await page.reload()
   await expect(select).toContainText('In progress')

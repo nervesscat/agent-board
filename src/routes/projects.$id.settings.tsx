@@ -10,8 +10,10 @@ import { StagesEditor } from '#/components/StagesEditor'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
+import { KindPicker } from '#/components/KindPicker'
 import { errorMessage, patch } from '#/lib/api'
 import { STALL_MINUTES } from '#/lib/constants'
+import type { Kind } from '#/lib/kinds'
 import { useProject } from '#/lib/project'
 import { useAnchor, useReveal } from '#/lib/reveal'
 import { DEFAULT_TAG_SUGGESTIONS, cleanSuggestions } from '#/lib/tags'
@@ -61,6 +63,7 @@ function Settings() {
           own page.
         </p>
       </div>
+      <ProjectKinds key={`kinds-${id}`} projectId={id} saved={p.kinds} />
       <DefaultPhases key={id} projectId={id} saved={p.defaultPhases} />
       <TagSuggestions key={`tags-${id}`} projectId={id} saved={p.tagSuggestions} />
       <StallMinutes key={`stall-${id}`} projectId={id} saved={p.stallMinutes} />
@@ -68,6 +71,40 @@ function Settings() {
       <RunsSettings projectId={id} />
       <LayoutEditor key={`layout-${id}`} projectId={id} saved={p.layout} />
     </div>
+  )
+}
+
+/**
+ * What the project is for: its kinds. Software keeps the git side (repositories, PRs, CI, previews,
+ * Cleanup); a project with none of software hides it. Changing a kind keeps its repos and PRs stored.
+ */
+function ProjectKinds({ projectId, saved }: { projectId: string; saved: Kind[] }) {
+  const qc = useQueryClient()
+  const [kinds, setKinds] = useState<Kind[]>(saved)
+  const dirty = kinds.join(',') !== saved.join(',')
+  const save = useMutation({
+    mutationFn: (next: Kind[]) => patch<{ kinds: Kind[] }>(`/api/projects/${projectId}`, { kinds: next }),
+    onSuccess: async (row) => {
+      setKinds(row.kinds)
+      await qc.invalidateQueries({ queryKey: ['project', projectId] })
+      toast.success('Saved')
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+  return (
+    <section id="kinds" aria-label="Kinds" className="max-w-3xl scroll-mt-16 space-y-3">
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight">Kinds</h2>
+        <p className="text-sm text-muted-foreground">
+          What the project is for. A project with no software kind hides its repositories, PRs, CI, previews
+          and Cleanup; its repos and PRs stay stored.
+        </p>
+      </div>
+      <KindPicker value={kinds} onChange={setKinds} />
+      <Button type="button" size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate(kinds)}>
+        Save
+      </Button>
+    </section>
   )
 }
 
