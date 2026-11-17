@@ -147,10 +147,14 @@ export const reviewBundlePaths = () =>
     .map((k) => k.replace('./skill/review/', ''))
     .sort()
 
-/** A ustar archive of the review bundle, to extract into ~/.claude (tar ships with Windows too). */
+/**
+ * A ustar archive of the review bundle, to extract into ~/.claude (tar ships with Windows too). Every entry
+ * carries the same fixed modification time, so the archive is the same bytes on every download: stamping the
+ * current second made two downloads that straddled a second differ.
+ */
 export function reviewBundle(): Buffer {
   const blocks: Buffer[] = []
-  const now = Math.floor(Date.now() / 1000)
+  const mtime = 0
   for (const [key, text] of Object.entries(reviewFiles).sort(([a], [b]) => a.localeCompare(b))) {
     const name = key.replace('./skill/review/', '')
     const body = Buffer.from(text, 'utf8')
@@ -162,7 +166,7 @@ export function reviewBundle(): Buffer {
     put(octal(0, 8), 108, 8)
     put(octal(0, 8), 116, 8)
     put(octal(body.length, 12), 124, 12)
-    put(octal(now, 12), 136, 12)
+    put(octal(mtime, 12), 136, 12)
     put('        ', 148, 8)
     put('0', 156, 1)
     put('ustar\0', 257, 6)
