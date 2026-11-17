@@ -68,3 +68,50 @@ test('a ticket tag sits on the same row as its work-state icon, on an Ongoing fe
   await page.getByRole('tab', { name: 'List' }).click()
   await sameRow('list row')
 })
+
+test('on an Ongoing features card the time shares the icon and tags row, with no row below it', async ({
+  page,
+  api,
+  agent,
+  project,
+}) => {
+  const t = await api.ticket({
+    title: 'Time on the icon row',
+    status: 'in_progress',
+    tags: ['Ongoing features', 'UI'],
+  })
+  await ok(
+    agent.post(`/api/tickets/${t.id}/decisions`, {
+      data: {
+        body: 'Which row?',
+        options: [
+          { label: 'Yes', detail: 'Keep it', recommended: true },
+          { label: 'No', detail: 'Drop it' },
+        ],
+      },
+    }),
+  )
+  await page.goto(`/projects/${project.id}/features`)
+  const card = page.getByRole('link', { name: new RegExp(`#${t.id} Time on the icon row`) })
+  const icon = card.getByTestId('work-line')
+  const tag = card.getByText('Ongoing features', { exact: true })
+  const time = card.getByTestId('card-time')
+  await expect(icon).toHaveAttribute('data-state', 'waiting')
+  const [i, g, m] = [await icon.boundingBox(), await tag.boundingBox(), await time.boundingBox()]
+  expect(i && g && m).toBeTruthy()
+  const mid = (b: { y: number; height: number }) => b.y + b.height / 2
+  // The time is level with the icon and the tag, and to the tag's right.
+  expect(Math.abs(mid(m!) - mid(i!))).toBeLessThan(i!.height)
+  expect(Math.abs(mid(m!) - mid(g!))).toBeLessThan(g!.height)
+  expect(m!.x).toBeGreaterThan(g!.x + g!.width - 1)
+  // One row holds the icon, the tags and the time: the time's own row is the icon's.
+  const row = time.locator('xpath=..')
+  await expect(row.getByTestId('work-line')).toHaveCount(1)
+  // No empty row under it: the next thing on the card (its progress bar) starts right below that row.
+  const [r, next] = [
+    await row.boundingBox(),
+    await row.locator('xpath=following-sibling::*[1]').boundingBox(),
+  ]
+  expect(r && next).toBeTruthy()
+  expect(next!.y - (r!.y + r!.height)).toBeLessThan(i!.height)
+})
