@@ -327,6 +327,18 @@ describe('the review skills bundle', () => {
     for (const p of paths)
       expect(fs.readFileSync(path.join(out, p)).equals(fs.readFileSync(path.join(src, p))), p).toBe(true)
   })
+
+  it('is the same bytes whenever it is asked for, so two downloads never differ', () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+      const first = agents.reviewBundle()
+      vi.setSystemTime(new Date('2026-01-01T00:00:01.000Z'))
+      expect(agents.reviewBundle().equals(first)).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 // --- copies of the review bundle on disk, by path under the folder that holds `.claude` ---

@@ -24,7 +24,7 @@ test('archives every ticket in Done, lists them under Archived, restores one', a
   await expect(page.locator('[data-column="todo"]').getByRole('link', { name: /Still open/ })).toBeVisible()
 
   await page.getByRole('tab', { name: /Archived/ }).click()
-  await expect(page.getByRole('tab', { name: /Archived/ })).toContainText('(2)')
+  await expect(page.getByRole('tab', { name: /Archived/ })).toHaveText('Archived')
   const row = page.getByRole('listitem').filter({ hasText: 'Shipped one' })
   await expect(row).toContainText('archived')
   await expect(row).toContainText('enrique')
@@ -33,7 +33,7 @@ test('archives every ticket in Done, lists them under Archived, restores one', a
   await row.getByRole('button', { name: 'Restore' }).click()
   await expect(page.getByText(`Restored #${shipped.id} to the board`)).toBeVisible()
   await expect(row).toHaveCount(0)
-  await expect(page.getByRole('tab', { name: /Archived/ })).toContainText('(1)')
+  await expect(page.getByRole('tab', { name: /Archived/ })).toHaveText('Archived')
 
   await page.getByRole('tab', { name: 'Board' }).click()
   await expect(done.getByRole('link', { name: /Shipped one/ })).toBeVisible()

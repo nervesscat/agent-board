@@ -51,6 +51,17 @@ const withoutDropped = ({
   ...rest
 }: Record<string, unknown>) => rest
 
+/**
+ * Tickets gained closed_by_approval in 0056: no ticket that existed had closed on an approval, so the
+ * column is 0 on every one, and the other columns are compared as they were.
+ */
+function ticketsWithClosedFlag(rows: Record<string, unknown>[]) {
+  // Before 0056 the table has no such column: the rows are compared as they are.
+  if (!rows.length || !('closed_by_approval' in rows[0]!)) return rows
+  expect(rows.map((r) => r.closed_by_approval)).toEqual(rows.map(() => 0))
+  return rows.map(({ closed_by_approval: _c, ...rest }) => rest)
+}
+
 describe('0023_daily_reports_and_shifts', () => {
   it('turns the daily summaries into report versions and the due time into the shift end', () => {
     const sqlite = databaseAt('0022_pr_review_stages')
@@ -398,7 +409,7 @@ describe('0029_ticket_pr_link', () => {
     // Later migrations add the Merged phase marker and the place in the column: the rest of each ticket
     // is what it was.
     expect(
-      after.tickets.map((t) =>
+      ticketsWithClosedFlag(after.tickets).map((t) =>
         withoutDropped({
           ...t,
           pr_id: undefined,
@@ -827,7 +838,11 @@ describe('0037_drop_handoff_post_phase', () => {
       // Every other row is as it was: done, blocked, position and parent included.
       expect(rows(`id IN (${kept.join(', ')})`)).toEqual(before.kept)
       expect(rows('1')).toEqual(before.others)
-      expect(sqlite.prepare('SELECT * FROM tickets ORDER BY id').all()).toEqual(before.tickets)
+      expect(
+        ticketsWithClosedFlag(
+          sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[],
+        ),
+      ).toEqual(before.tickets)
 
       expect(progress('ticket_id = ?', full)).toEqual({ done: 2, total: 2 })
       expect(progress('ticket_id = ?', almost)).toEqual({ done: 1, total: 1 })
@@ -944,7 +959,7 @@ describe('0038_multi_repo_tickets_and_runs', () => {
     expect(counts()).toEqual(before)
     // The tickets themselves are untouched, their repo, branch and PR included (a later migration adds
     // their place in the column).
-    expect(tickets().map(({ rank: _r, ...rest }) => withoutDropped(rest))).toEqual(
+    expect(ticketsWithClosedFlag(tickets()).map(({ rank: _r, ...rest }) => withoutDropped(rest))).toEqual(
       ticketsBefore.map(withoutDropped),
     )
     expect(
@@ -1224,9 +1239,9 @@ describe('0042_summary_phase', () => {
       expect(after.filter((t) => t.ticket_id === id)).toEqual(before.tasks.filter((t) => t.ticket_id === id))
     // A later migration adds the tickets' place in the column: the rest of each is what it was.
     expect(
-      (sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[]).map(
-        ({ rank: _r, ...rest }) => withoutDropped(rest),
-      ),
+      ticketsWithClosedFlag(
+        sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[],
+      ).map(({ rank: _r, ...rest }) => withoutDropped(rest)),
     ).toEqual(before.tickets.map(withoutDropped))
 
     const list = (id: number) =>
@@ -1490,7 +1505,9 @@ describe('0050_widen_ticket_complexity', () => {
 
     // Every ticket kept its id, its level and the rest of its columns, and so did each row that refers to one.
     const after = rows()
-    expect(after).toEqual(before)
+    expect({ ...after, tickets: ticketsWithClosedFlag(after.tickets as Record<string, unknown>[]) }).toEqual(
+      before,
+    )
     expect(
       Object.fromEntries(
         (after.tickets as { id: number; complexity: string }[]).map((t) => [t.id, t.complexity]),
@@ -1552,9 +1569,22 @@ describe('0051_agent_cards', () => {
 
     migrate(drizzle(sqlite), { migrationsFolder: folder })
 
-    // The existing tables are exactly what they were.
-    expect(sqlite.prepare('SELECT * FROM projects ORDER BY id').all()).toEqual(before.projects)
-    expect(sqlite.prepare('SELECT * FROM tickets ORDER BY id').all()).toEqual(before.tickets)
+    // The existing tables are exactly what they were. Projects gained a column later (0055 kinds): every
+    // project that existed is software now, and every column 0050 had is unchanged.
+    expect(before.projects.length).toBeGreaterThan(0)
+    const projects = sqlite.prepare('SELECT * FROM projects ORDER BY id').all() as Record<string, unknown>[]
+    expect(projects.map((row) => row.kinds)).toEqual(before.projects.map(() => '["software"]'))
+    expect(
+      projects.map((row) => {
+        const { kinds: _kinds, ...kept } = row
+        return kept
+      }),
+    ).toEqual(before.projects)
+    expect(
+      ticketsWithClosedFlag(
+        sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[],
+      ),
+    ).toEqual(before.tickets)
     expect(sqlite.prepare('SELECT * FROM tasks ORDER BY id').all()).toEqual(before.tasks)
     expect(sqlite.prepare('SELECT * FROM updates ORDER BY id').all()).toEqual(before.updates)
 
