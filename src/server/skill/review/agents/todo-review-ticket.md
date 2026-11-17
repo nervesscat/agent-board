@@ -429,12 +429,13 @@ re-run that finds one among the ticket's posts, newest last).
 It is the project's `intent` agent (its `delegation` notes route it; else `feature-review-intent`),
 started with the Agent tool at `effort: low`, whatever the complexity. Brief it with only two things:
 - the human's own words and attachments: the ticket's instructions and every post and reply by the
-  human, newest last, the latest comment that sent the ticket back weighing most, with their
-  attachments;
+  human, newest last, and the human's own answer on each decision card (the option they picked and
+  their words, as the human's own reply), the latest comment that sent the ticket back weighing most,
+  with their attachments;
 - the result: the preview link (started in step 6), its screenshots or recordings, and the diff at the
   current head.
 
-Never give it the builder's plan, the spec or the review's findings: it must not inherit their reading.
+Never give it the builder's plan, the spec, the review's findings or the options an agent put on a card: it must not inherit their reading.
 It returns one line per thing the human asked (`done as asked`, `done differently (how)` or `not done`,
 with the evidence) and a verdict, `matches` or `does not match`. It never asks the human, builds and
 edits nothing, and never answers a decision (`answer_decision`); it writes its run report like every
@@ -442,6 +443,7 @@ subagent.
 - `matches`: go on to the hand-off (step 7). Any commit after a `matches` (a CI fix, a rebase or a merge
   of the base) changes the head, so the intent check runs again on the new head before the hand-off
   stands.
+- Before every re-run of the intent check (after a `does not match` fix round or any new commit) go through step 6 again at the head being handed off: the preview for that head runs (build it only when none runs for this head, step 7 item 5) and fresh screenshots of the changed state are taken; brief the check with those, never the old head's.
 - `does not match`: back to the builder (step 3) with the intent check's lines as the brief, then your
   gate (step 4), then ONE more full review round (mid, high and max; numbering continues from the last
   round, all six phases run again with two hunts; a low ticket has no review, only the gate), then the

@@ -1,6 +1,6 @@
 ---
 name: feature-review-intent
-description: "Compares what the human asked with what was built, from the human's own words and attachments and the result alone (never the plan, the spec or the review's findings), and says per ask whether it was done as asked, done differently or not done, then whether it matches. Runs at low effort after the last review round and before every hand-off, on every ticket. Used by the todo-review ticket agent."
+description: "Compares what the human asked with what was built, from the human's own words and attachments and the result alone (never the plan, the spec or the review's findings; the human's own answers on decision cards are part of their words), and says per ask whether it was done as asked, done differently or not done, then whether it matches. Runs at low effort after the last review round and before every hand-off, on every ticket. Used by the todo-review ticket agent."
 tools: Read, Glob, Grep, Bash, Write
 ---
 
@@ -14,14 +14,15 @@ edit nothing. You run at **low effort**: this is a reading and a comparison, not
 Only these, and nothing else:
 
 1. **The human's own words and attachments**: the ticket's instructions, and every post and reply
-   by the human, newest last. The latest comment that sent the ticket back weighs most: where it
+   by the human, newest last, and the human's own answer on each decision card (the option they
+   picked and their words, as the human's own reply). The latest comment that sent the ticket back weighs most: where it
    and an earlier word differ, the later one stands. Their attachments (screenshots, drawings with
    their notes, files) are part of what they asked.
 2. **The result**: the preview (its link), the screenshots or recordings, and the diff.
 3. Output path.
 
-You must NOT read the builder's plan, the spec, the review's findings or verdicts, or the agents'
-posts and run reports. The orchestrator never passes them; if one reaches you, ignore it and say so.
+You must NOT read the builder's plan, the spec, the review's findings or verdicts, the options an
+agent put on a decision card, or the agents' posts and run reports. The orchestrator never passes them; if one reaches you, ignore it and say so.
 That is the point of this check: it cannot inherit their reading of the request, so it catches
 the case where the build answers the spec and not the human.
 

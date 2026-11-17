@@ -173,7 +173,7 @@ short message shape with the numbered list of what needs the human. Its line is
    earlier results); **Done when**; **Return** (the exact shape of the answer). It also carries the
    ticket's context, not just its title: `get_ticket` first, and include its instructions, the
    human's posts and replies, the decisions and their answers, and the attachments; say the
-   subagent may read the rest itself with `get_ticket` and `list_comments`, except the intent agent: it gets only the human's own words and attachments (the instructions and every post and reply by the human) and the result, never the decisions with their answers, the spec, the plan or the review's findings, and it may not read the rest of the ticket's posts itself.
+   subagent may read the rest itself with `get_ticket` and `list_comments`, except the intent agent: it gets only the human's own words and attachments (the instructions, every post and reply by the human, and the human's own answer on a decision card) and the result, never the spec, the plan, the review's findings or the options an agent put on a card, and it may not read the rest of the ticket's posts itself.
 5. **Report as you go** with `post_update`: short markdown, what you did and what is next, and
    attach evidence with `files` (absolute paths to screenshots, recordings, logs on this machine —
    the board copies them). One update per meaningful step, not per keystroke. A ticket's feed of
@@ -372,9 +372,9 @@ short message shape with the numbered list of what needs the human. Its line is
    is started first, with its screenshots, and the check reads it at the current head; a commit after a
    `matches`, such as a CI fix, changes the head, so the check runs again on it): at `low`
    effort whatever the complexity, again after any human comment that sent the ticket back. It gets only
-   the human's own words and attachments (the instructions and every post and reply by the human, newest
+   the human's own words and attachments (the instructions, every post and reply by the human and the human's own answer on a decision card, newest
    last, the latest comment that sent the ticket back weighing most) and the result (the preview link,
-   its screenshots or recordings, the diff at the current head), never the builder's plan, the spec or the review's findings. It
+   its screenshots or recordings, the diff at the current head), never the builder's plan, the spec, the review's findings or the options an agent put on a card. It
    returns one line per ask (`done as asked`, `done differently (how)` or `not done`, with its evidence)
    and a verdict, `matches` or `does not match`. `matches` hands off; `does not match` goes back to the
    builder with its lines as the brief, then the gate, then one more full review round (above low; the numbering continues, all six phases run again), then the intent check again. A `does not match` is outside the complexity's round budget; after the second one on a ticket the ticket agent stops and asks the human (`ask_decision`: keep going, ship as is, drop) with the intent check's lines and the human's words on the card. It never asks the human earlier: the human is asked (`ask_decision`, both readings on the card) only
@@ -521,7 +521,7 @@ personas the human sets up on the board's Team page (the project's agents). A ti
 
 - `claim_ticket` with `as: <its name>`, brief a subagent with the agent's instructions plus the
   ticket's context (its instructions, the human's posts and replies, the decisions and their
-  answers, the attachments; except the intent agent: it gets only the human's own words and attachments (the instructions and every post and reply by the human) and the result, never the decisions with their answers, the spec, the plan or the review's findings, and it may not read the rest of the ticket's posts itself), and post that work with `post_update` / `comment` using `as: <its name>`. It shows
+  answers, the attachments; except the intent agent: it gets only the human's own words and attachments (the instructions, every post and reply by the human, and the human's own answer on a decision card) and the result, never the spec, the plan, the review's findings or the options an agent put on a card, and it may not read the rest of the ticket's posts itself), and post that work with `post_update` / `comment` using `as: <its name>`. It shows
   under the agent's name, via your token name, in the ticket's Agents tab; what the human must
   read goes in the summary (`set_ticket_summary`, `as` too) or a reply under their post.
 - Never take a reserved ticket as yourself or reassign it; only the human does.
@@ -535,7 +535,7 @@ personas the human sets up on the board's Team page (the project's agents). A ti
 call it, what to give it, what it returns, what comes next. With them you can work a ticket as its
 orchestrator instead of doing the work yourself: each step runs as a subagent briefed with that
 agent's instructions, the project's, the ticket's context (`get_ticket`: its instructions, the
-human's posts and replies, the decisions and their answers, the attachments; except the intent agent: it gets only the human's own words and attachments (the instructions and every post and reply by the human) and the result, never the decisions with their answers, the spec, the plan or the review's findings, and it may not read the rest of the ticket's posts itself) and a five-part brief
+human's posts and replies, the decisions and their answers, the attachments; except the intent agent: it gets only the human's own words and attachments (the instructions, every post and reply by the human, and the human's own answer on a decision card) and the result, never the spec, the plan, the review's findings or the options an agent put on a card, and it may not read the rest of the ticket's posts itself) and a five-part brief
 (step 4) holding the ticket's step and
 the hand-off checklist (step 7), and with the `agentName` it passes on every board call
 (`<your whoami name>/<its name>`, Identity and auth above); its result is posted on the ticket as

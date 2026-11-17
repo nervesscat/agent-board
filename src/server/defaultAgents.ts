@@ -244,11 +244,11 @@ human comment that sent the ticket back. Run it at effort low (the Agent tool's 
 every complexity.
 
 **Give it:** only the human's own words and attachments (the ticket's instructions, and every post and
-reply by the human, newest last, the latest comment that sent the ticket back weighing most) and the
+reply by the human, newest last, and the human's own answer on a decision card, the latest comment that sent the ticket back weighing most) and the
 result (the preview link, its screenshots or recordings, the diff at the current head). The preview
 is started, and its screenshots taken, before this check. A commit after a \`matches\` (a CI fix, a
-rebase or a merge of the base) changes the head, so it runs again on the new head. Never the builder's plan, the spec or
-the review's findings: it must not inherit their reading.
+rebase or a merge of the base) changes the head, so it runs again on the new head, with the preview of that head and fresh screenshots. Never the builder's plan, the spec, the
+review's findings or the options an agent put on a card: it must not inherit their reading.
 
 **Returns:** one line per thing the human asked (done as asked, done differently with how, or not
 done, each with its evidence) and a verdict: matches, or does not match with the human's words next

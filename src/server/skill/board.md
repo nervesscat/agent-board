@@ -341,7 +341,7 @@ Every spawned agent and lane costs time: hand out only what is new, and only wha
 - A brief carries the ticket's context, not just its title: `get_ticket` first, then put in the
   brief its instructions (the body), the human's posts and replies in full (the Main tab's threads,
   `list_comments` on each post), the decisions with their answers, and the attachments (their local
-  `path`s). Say the subagent may read the rest itself with `get_ticket` and `list_comments`, except the intent agent: it gets only the human's own words and attachments (the instructions and every post and reply by the human) and the result, never the decisions with their answers, the spec, the plan or the review's findings, and it may not read the rest of the ticket's posts itself.
+  `path`s). Say the subagent may read the rest itself with `get_ticket` and `list_comments`, except the intent agent: it gets only the human's own words and attachments (the instructions, every post and reply by the human, and the human's own answer on a decision card) and the result, never the spec, the plan, the review's findings or the options an agent put on a card, and it may not read the rest of the ticket's posts itself.
 - Every brief you hand another agent (a subagent's prompt, a lane's `create_ticket` `body`, a
   project agent's run under [Orchestrating](#orchestrating-the-projects-agents)) has five parts:
   1. Goal: what to achieve.
@@ -467,9 +467,9 @@ agent compares what the human asked with what was built, before any item above s
 is started first, with its screenshots, and the check reads it at the current head; a commit after a
 `matches`, such as a CI fix, changes the head, so the check runs again on it): at `low`
 effort whatever the complexity, again after any human comment that sent the ticket back. It gets only
-the human's own words and attachments (the instructions and every post and reply by the human, newest
+the human's own words and attachments (the instructions, every post and reply by the human and the human's own answer on a decision card, newest
 last, the latest comment that sent the ticket back weighing most) and the result (the preview link,
-its screenshots or recordings, the diff at the current head), never the builder's plan, the spec or the review's findings. It
+its screenshots or recordings, the diff at the current head), never the builder's plan, the spec, the review's findings or the options an agent put on a card. It
 returns one line per ask (`done as asked`, `done differently (how)` or `not done`, with its evidence)
 and a verdict, `matches` or `does not match`. `matches` hands off; `does not match` goes back to the
 builder with its lines as the brief, then the gate, then one more full review round (above low; the numbering continues, all six phases run again), then the intent check again. A `does not match` is outside the complexity's round budget; after the second one on a ticket the ticket agent stops and asks the human (`ask_decision`: keep going, ship as is, drop) with the intent check's lines and the human's words on the card. It never asks the human earlier: the human is asked (`ask_decision`, both readings on the card) only
@@ -660,7 +660,7 @@ Without those skills, or for one ticket, orchestrate by hand:
 2. Per step: pick the agent whose notes match where the ticket is; run it as a subagent whose
    prompt is its `instructions`, the project's `instructions`, the ticket's context (`get_ticket`:
    its instructions, the human's posts and replies, the decisions and their answers, the attachments;
-   the subagent may read the rest itself, except the intent agent: it gets only the human's own words and attachments (the instructions and every post and reply by the human) and the result, never the decisions with their answers, the spec, the plan or the review's findings, and it may not read the rest of the ticket's posts itself) and a brief in the five parts of
+   the subagent may read the rest itself, except the intent agent: it gets only the human's own words and attachments (the instructions, every post and reply by the human, and the human's own answer on a decision card) and the result, never the spec, the plan, the review's findings or the options an agent put on a card, and it may not read the rest of the ticket's posts itself) and a brief in the five parts of
    [Delegating](#delegating): the step's goal from the ticket (`get_ticket`), its focus, what is
    known (the worktree and branch, what earlier steps returned, the `agentName` it passes on every
    board call: subagents share nothing else),

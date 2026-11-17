@@ -458,10 +458,10 @@ plan first, then the result with its proofs.
    todo-review skill's ticket agent). It runs on every ticket, of any complexity (low included, which
    has no review rounds), and again after any human comment that sent the ticket back. It runs the
    project's `intent` agent (or `feature-review-intent`) at `low` effort, whatever the complexity,
-   and gives it only the human's own words and attachments (the ticket's instructions and every post
-   and reply by the human, newest last, the latest comment that sent the ticket back weighing most)
+   and gives it only the human's own words and attachments (the ticket's instructions, every post
+   and reply by the human, newest last, and the human's own answer on a decision card, the latest comment that sent the ticket back weighing most)
    and the result (the preview, the screenshots or recordings, the diff). It never gets the
-   builder's plan, the spec or the review's findings, so it cannot inherit their reading. It returns
+   builder's plan, the spec, the review's findings or the options an agent put on a card, so it cannot inherit their reading. It returns
    one line per thing the human asked (`done as asked`, `done differently (how)` or `not done`, with
    the evidence) and a verdict, `matches` or `does not match`. `matches` hands off. `does not match`
    goes back to the builder with the intent check's lines as the brief, then the gate, then ONE more

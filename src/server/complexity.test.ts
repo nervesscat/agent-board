@@ -334,6 +334,9 @@ describe('the review texts the board ships', () => {
       expect(t).toContain('You run at **low effort**')
       expect(t).toContain("The human's own words and attachments")
       expect(t).toContain('every post and reply by the human, newest last')
+      expect(t).toContain(
+        "and the human's own answer on each decision card (the option they picked and their words, as the human's own reply)",
+      )
       expect(t).toContain('The latest comment that sent the ticket back weighs most')
       expect(t).toContain('the preview (its link), the screenshots or recordings, and the diff')
       expect(t).toContain("You must NOT read the builder's plan, the spec, the review's findings")
@@ -362,7 +365,9 @@ describe('the review texts the board ships', () => {
       expect(d).toContain('a low ticket included')
       expect(d).toContain('again after any human comment that sent the ticket back')
       expect(d).toContain("(the Agent tool's `effort: low`) for every complexity")
-      expect(d).toContain("Never the builder's plan, the spec or the review's findings")
+      expect(d).toContain(
+        "Never the builder's plan, the spec, the review's findings or the options an agent put on a card",
+      )
       expect(d).toContain('done as asked, done differently with how, or not done')
       expect(d).toContain('`matches` hands off')
       expect(d).toContain(
@@ -390,7 +395,9 @@ describe('the review texts the board ships', () => {
         const t = flat(text)
         expect(t, name).toContain('intent')
         expect(t, name).toContain('`low` effort')
-        expect(t, name).toMatch(/builder's plan, the spec or the review's findings/i)
+        expect(t, name).toMatch(
+          /builder's plan, the spec, the review's findings or the options an agent put on a card/i,
+        )
         expect(t, name).toContain('`does not match`')
         expect(t, name).toContain('`matches`')
       }
@@ -415,6 +422,15 @@ describe('the review texts the board ships', () => {
       )
       expect(flat(between(ticketAgent, '### 6. Evidence', '### 6b.'))).toContain(
         'Start the preview here, before the intent check: it is the one build of this head for the preview',
+      )
+      expect(ticket).toContain(
+        "and the human's own answer on each decision card (the option they picked and their words, as the human's own reply)",
+      )
+      expect(ticket).toContain(
+        "the spec, the review's findings or the options an agent put on a card: it must not inherit their reading",
+      )
+      expect(ticket).toContain(
+        "Before every re-run of the intent check (after a `does not match` fix round or any new commit) go through step 6 again at the head being handed off: the preview for that head runs (build it only when none runs for this head, step 7 item 5) and fresh screenshots of the changed state are taken; brief the check with those, never the old head's",
       )
       const handoff = flat(between(ticketAgent, '### 7. Hand off', '## Review depth'))
       expect(handoff).toContain(
@@ -447,7 +463,9 @@ describe('the review texts the board ships', () => {
           'The intent check comes first, on every ticket of any complexity (low included)',
         )
         expect(t, name).toContain('at `low` effort whatever the complexity')
-        expect(t, name).toContain("never the builder's plan, the spec or the review's findings")
+        expect(t, name).toContain(
+          "never the builder's plan, the spec, the review's findings or the options an agent put on a card",
+        )
         expect(t, name).toContain('`matches` hands off; `does not match` goes back to the builder')
         expect(t, name).toContain(
           "then the gate, then one more full review round (above low; the numbering continues, all six phases run again), then the intent check again. A `does not match` is outside the complexity's round budget; after the second one on a ticket the ticket agent stops and asks the human (`ask_decision`: keep going, ship as is, drop) with the intent check's lines and the human's words on the card",
@@ -464,7 +482,7 @@ describe('the review texts the board ships', () => {
 
     it('the context rule and the builder note carry the intent exception, and the runner passes the round on', async () => {
       const ex =
-        "except the intent agent: it gets only the human's own words and attachments (the instructions and every post and reply by the human) and the result, never the decisions with their answers, the spec, the plan or the review's findings, and it may not read the rest of the ticket's posts itself"
+        "except the intent agent: it gets only the human's own words and attachments (the instructions, every post and reply by the human, and the human's own answer on a decision card) and the result, never the spec, the plan, the review's findings or the options an agent put on a card, and it may not read the rest of the ticket's posts itself"
       for (const [name, text] of [
         ['board skill', boardSkill],
         ['AGENTS.md', agentsDoc],
@@ -500,7 +518,7 @@ describe('the review texts the board ships', () => {
       const todo = flat(todoReview)
       expect(todo).toContain('except the intent agent, which runs at `low` effort whatever the complexity')
       expect(todo).toContain(
-        "except the intent agent: it gets only the human's own words and attachments (the instructions and every post and reply by the human) and the result, never the decisions with their answers, the spec, the plan or the review's findings, and it may not read the rest of the ticket's posts itself",
+        "except the intent agent: it gets only the human's own words and attachments (the instructions, every post and reply by the human, and the human's own answer on a decision card) and the result, never the spec, the plan, the review's findings or the options an agent put on a card, and it may not read the rest of the ticket's posts itself",
       )
     })
 

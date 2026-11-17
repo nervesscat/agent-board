@@ -130,8 +130,8 @@ Loop until nothing is pending or running:
   `get_ticket` the ticket before anything else and to carry its context — the instructions, the
   human's posts and replies, the decisions and their answers, the attachments — into every agent
   it starts (a phase agent may read the rest itself), except the intent agent: it gets only the human's own
-  words and attachments (the instructions and every post and reply by the human) and the result, never the
-  decisions with their answers, the spec, the plan or the review's findings, and it may not read the rest of
+  words and attachments (the instructions, every post and reply by the human, and the human's own answer on a decision card) and the result, never the
+  spec, the plan, the review's findings or the options an agent put on a card, and it may not read the rest of
   the ticket's posts itself. They run in the background; do
   not poll. Continue when a completion notification arrives. Record each start on the ticket's work
   timeline: `handoff` with `projectId`, `ticketId` and `to` the ticket agent's name.
@@ -163,8 +163,8 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    summary, and not rerun), the intent
    check ran on the head and its verdict is `matches` (it runs on every ticket, low included, after the
    last review round and before the hand-off, and again after a human comment that sent the ticket back;
-   at `low` effort, from only the human's words and attachments and the result, never the builder's
-   plan, the spec or the review's findings; `does not match` goes back to the builder, then the gate, then one more full review round
+   at `low` effort, from only the human's words (their answers on decision cards included) and attachments and the result, never the builder's
+   plan, the spec, the review's findings or the options an agent put on a card; `does not match` goes back to the builder, then the gate, then one more full review round
    (outside the round budget; after the second one the ticket agent asks the human), then the intent check
    again; it runs on the preview started before it, and again on any new head), and `open` is empty, or
    holds only the Preview phase with a summary saying why the change cannot be tried. The ticket's summary
