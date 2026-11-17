@@ -666,6 +666,8 @@ export function AnnotateImage({
 
   // Changing tool drops the cursor the Select tool set on the canvas, and the X.
   const pickTool = (next: Tool) => {
+    // A pointer press in progress keeps the tool it started with until it is released: a tap on a tool waits.
+    if (origin.current || gesture.current) return
     setTool(next)
     setTipHover(false)
     if (canvasRef.current) canvasRef.current.style.cursor = ''

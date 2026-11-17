@@ -595,6 +595,38 @@ test.describe('touch', () => {
     await expect(canvas).toBeHidden()
   })
 
+  test('a tool tap while a finger holds a drawing press leaves the box to the finger, which finishes it', async ({
+    page,
+    project,
+    human,
+  }) => {
+    const { dialog, canvas } = await openCanvas(page, project.id, 'Tool tap during press')
+    await control(canvas, 'Box').click()
+    const cdp = await page.context().newCDPSession(page)
+    const first = (p: { x: number; y: number }) => ({ x: p.x, y: p.y, id: 1 })
+
+    const a = await at(canvas, [50, 50])
+    const b = await at(canvas, [150, 150])
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [first(a)] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [first(b)] })
+
+    // A second pointer taps the Select tool while the first finger is still drawing: the tool does not change.
+    await control(canvas, 'Select').click()
+
+    // The first finger keeps drawing: its box grows to where it ends, and it is the box that is kept.
+    const c = await at(canvas, [200, 200])
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [first(c)] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+
+    const attached = await attachAndCreate(human, project.id, dialog, canvas)
+    const items = storedItems(attached)
+    expect(items).toHaveLength(1)
+    expect(items[0]!.rect!.x).toBeCloseTo(50, 0)
+    expect(items[0]!.rect!.y).toBeCloseTo(50, 0)
+    expect(items[0]!.rect!.w).toBeCloseTo(150, 0)
+    expect(items[0]!.rect!.h).toBeCloseTo(150, 0)
+  })
+
   test('a picture closed while a finger holds a drawing press leaves the next picture free to draw on', async ({
     page,
     project,
