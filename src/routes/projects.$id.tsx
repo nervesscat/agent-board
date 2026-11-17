@@ -41,7 +41,7 @@ const TOGGLE_ICON = { expanded: PanelLeftClose, shrunk: PanelLeft, hidden: Panel
 /** How long a hidden sidebar stays open after the mouse leaves it, so a small move off its edge does not close it. */
 const PEEK_CLOSE_MS = 250
 
-/** The sidebar's place under the sticky header, shared by the sidebar and the toggle column beside it. */
+/** The sidebar's place under the sticky header. */
 const STICKY_TOP = 'md:top-[calc(4.5rem+1px+env(safe-area-inset-top))]'
 
 /**
@@ -85,14 +85,6 @@ function ProjectLayout() {
   const closeTimer = useRef<number | undefined>(undefined)
   const asideRef = useRef<HTMLElement>(null)
   const toggleRef = useRef<HTMLButtonElement>(null)
-  // A press moves the toggle to another place when the mode crosses 'hidden' (the sidebar's row, or the column
-  // beside it), so the button that was pressed unmounts: the one that replaces it takes the focus.
-  const focusToggleAfterChange = useRef(false)
-  useEffect(() => {
-    if (!focusToggleAfterChange.current) return
-    focusToggleAfterChange.current = false
-    toggleRef.current?.focus()
-  }, [mode])
   // A link was clicked in this peek. Some browsers (Safari) do not focus a link on a mouse click, so focus
   // may be on the page body although the click was in the sidebar.
   const linkClickedInPeek = useRef(false)
@@ -106,8 +98,8 @@ function ProjectLayout() {
     window.clearTimeout(closeTimer.current)
     closeTimer.current = window.setTimeout(() => {
       // A link clicked in the peeked sidebar holds focus; hiding the sidebar would drop it to the page body,
-      // so the toggle that shows the sidebar again takes it first. The same holds when the click did not
-      // focus the link and focus is on the body.
+      // so the toggle (inside the sidebar, and the one thing in it that stays reachable by keyboard while it
+      // is hidden) takes it first. The same holds when the click did not focus the link and focus is on the body.
       const active = document.activeElement
       const onBody = active === null || active === document.body
       if (asideRef.current?.contains(active) || (linkClickedInPeek.current && onBody))
@@ -129,8 +121,8 @@ function ProjectLayout() {
     }) ?? pages[0]
   const pageItems = Object.fromEntries(pages.map((page) => [page, layoutElement(page).label]))
   const ToggleIcon = TOGGLE_ICON[mode]
-  // The one toggle, rendered in one place only: the first row of the sidebar, or while the sidebar is hidden,
-  // the column beside it.
+  // The one toggle, inside the sidebar (its first row), so it goes where the sidebar goes: hidden with it, back
+  // with it when the pointer comes near.
   const toggle = (
     <Tip content={SIDEBAR_TOGGLE_LABEL[mode]}>
       <Button
@@ -141,7 +133,6 @@ function ProjectLayout() {
         aria-label={SIDEBAR_TOGGLE_LABEL[mode]}
         onClick={() => {
           setPeeking(false)
-          focusToggleAfterChange.current = true
           chooseMode(nextSidebarMode(mode))
         }}
       >
@@ -174,6 +165,16 @@ function ProjectLayout() {
           ref={asideRef}
           onMouseEnter={hiddenNow ? openPeek : undefined}
           onMouseLeave={hiddenNow ? closePeekSoon : undefined}
+          // A hidden sidebar is out of the window and its links are out of the tab order; only its toggle can take
+          // focus, and focusing it shows the sidebar, so the keyboard reaches it again. It closes when focus leaves.
+          onFocus={hiddenNow ? openPeek : undefined}
+          onBlur={
+            hiddenNow
+              ? (event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget)) closePeekSoon()
+                }
+              : undefined
+          }
           onClickCapture={(event) => {
             if (hiddenNow && event.target instanceof Element && event.target.closest('a'))
               linkClickedInPeek.current = true
@@ -194,10 +195,17 @@ function ProjectLayout() {
           )}
         >
           {/* The toggle is the sidebar's first row, above Overview, right-aligned when expanded and centred when
-              shrunk. While the sidebar is hidden the toggle has its own column at the left edge (below), and
-              this row is only its place. Desktop only. */}
-          <div className={cn('mb-1 hidden h-7 md:flex', shrunk ? 'md:justify-center' : 'md:justify-end')}>
-            {!hiddenNow && toggle}
+              shrunk. It is part of the sidebar, so it hides with it. Hidden, it is the one thing in the sidebar
+              that keeps its visibility (out of the window with the sidebar), so Tab can reach it and show the
+              sidebar. Desktop only. */}
+          <div
+            className={cn(
+              'mb-1 hidden h-7 md:flex',
+              shrunk ? 'md:justify-center' : 'md:justify-end',
+              hiddenNow && 'md:visible',
+            )}
+          >
+            {toggle}
           </div>
           {pages.length > 0 && current && (
             <div className="mb-2 px-2 md:hidden">
@@ -266,26 +274,9 @@ function ProjectLayout() {
           </nav>
         </aside>
       </div>
-      {/* While the sidebar is hidden the toggle has its own column at the left edge, so it stays reachable above
-          the sidebar that slides in. Its width slides open with the others. Desktop only: the phone layout has
-          no toggle. It sits over the peeked sidebar's first row, so the pointer on it keeps an open sidebar open
-         (it does not open one: the press that hides the sidebar leaves the pointer on this column). */}
-      <div
-        onMouseEnter={showPeek ? openPeek : undefined}
-        onMouseLeave={hiddenNow ? closePeekSoon : undefined}
-        className={cn(
-          'hidden md:sticky md:z-50 md:flex md:shrink-0 md:justify-center md:self-start',
-          STICKY_TOP,
-          animated && 'md:motion-safe:transition-[width,margin]',
-          slide,
-          hiddenNow ? 'md:mr-6 md:w-8' : 'md:mr-0 md:w-0',
-        )}
-      >
-        {hiddenNow && toggle}
-      </div>
       {hiddenNow && (
         // The strip along the left border, about 40px wide, where the mouse shows the hidden sidebar. Desktop only.
-        // It sits under the sidebar's wrapper and the toggle column, so the toggle stays clickable above it.
+        // It sits under the sidebar's wrapper, so the sidebar and its toggle stay clickable above it.
         <div
           aria-hidden="true"
           onMouseEnter={openPeek}

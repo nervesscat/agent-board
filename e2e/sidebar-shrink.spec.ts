@@ -22,6 +22,18 @@ const sliding = (page: Page) =>
         .filter((property) => slides.includes(property)),
     SLIDES,
   )
+/** Out of the window on the left: where a hidden sidebar, and the toggle inside it, rest. */
+const isOffscreen = async (locator: Locator) => {
+  const box = await rect(locator)
+  return box.x + box.width <= 0
+}
+/** Brings the pointer to the left edge, where a hidden sidebar slides in, and waits until it has settled there. */
+async function peek(page: Page) {
+  await page.mouse.move(640, 400)
+  await page.mouse.move(20, 400)
+  await expect(sidebar(page).getByRole('link', { name: 'Overview' })).toBeVisible()
+  await settled(page)
+}
 /** A shrunk link is icon-only: its label is screen-reader text, so the link is narrow. */
 async function linkIsIconOnly(page: Page, name: string) {
   const box = (await sidebar(page).getByRole('link', { name }).boundingBox())!
@@ -51,8 +63,13 @@ test('one toggle cycles the sidebar through expanded, shrunk and hidden, with a 
 
   await page.getByRole('button', { name: 'Hide sidebar' }).click()
   await expect(aside).toBeHidden()
-  await expect(page.getByRole('button', { name: 'Show sidebar' })).toBeVisible()
+  // The toggle is inside the sidebar: it went out of the window with it.
+  await settled(page)
+  expect(await isOffscreen(page.getByRole('button', { name: 'Show sidebar' }))).toBe(true)
 
+  // Back where the sidebar comes from, the sidebar shows with its toggle in it.
+  await peek(page)
+  await expect(page.getByRole('button', { name: 'Show sidebar' })).toBeInViewport()
   await page.getByRole('button', { name: 'Show sidebar' }).click()
   await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Shrink sidebar' })).toBeVisible()
@@ -90,7 +107,7 @@ test('a hidden sidebar shows while the mouse is on the left border, and closes o
   await expect(aside).toBeHidden()
 })
 
-test('a peeked hidden sidebar that closes after a click keeps focus on the toggle, not the page body', async ({
+test('a peeked hidden sidebar that closes after a click keeps focus on the toggle in it, not the page body', async ({
   page,
   project,
 }) => {
@@ -106,11 +123,11 @@ test('a peeked hidden sidebar that closes after a click keeps focus on the toggl
   await aside.getByRole('link', { name: 'Roadmap' }).click()
   await page.mouse.move(640, 400)
   await expect(aside).toBeHidden()
-  // The link the click focused is gone with the sidebar: focus goes to the toggle that shows it again.
+  // The link the click focused is gone with the sidebar: focus goes to the toggle inside it, which shows it again.
   await expect(page.getByRole('button', { name: 'Show sidebar' })).toBeFocused()
 })
 
-test('a click in a peeked sidebar that leaves focus on the body still closes it with focus on the toggle', async ({
+test('a click in a peeked sidebar that leaves focus on the body still closes it with focus on the toggle in it', async ({
   page,
   project,
 }) => {
@@ -303,6 +320,7 @@ test('shrinking and expanding slide the sidebar and the page follows', async ({ 
   await expect(aside).toBeHidden()
 
   // Back to expanded: the width slides open again.
+  await peek(page)
   await page.getByRole('button', { name: 'Show sidebar' }).click()
   expect(await sliding(page)).toContain('width')
   await settled(page)
@@ -348,32 +366,86 @@ test('a remembered hidden sidebar is hidden on load, not sliding away', async ({
     )
   })
   await page.goto(`/projects/${project.id}/prs`)
-  await expect(page.getByRole('button', { name: 'Show sidebar' })).toBeVisible()
   await expect(sidebar(page)).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Show sidebar' })).toHaveCount(1)
+  expect(await isOffscreen(page.getByRole('button', { name: 'Show sidebar' }))).toBe(true)
   await page.waitForTimeout(500)
   const slid = await page.evaluate(() => (window as unknown as { slid: string[] }).slid)
   expect(slid.filter((property) => ['width', 'translate', 'margin-right'].includes(property))).toEqual([])
 })
 
-test('the pointer resting on the toggle keeps a peeked hidden sidebar open', async ({ page, project }) => {
+test('the toggle is inside the sidebar: out of the window with it while hidden, back with it', async ({
+  page,
+  project,
+}) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto(`/projects/${project.id}/prs`)
   await page.getByRole('button', { name: 'Shrink sidebar' }).click()
   await page.getByRole('button', { name: 'Hide sidebar' }).click()
   const aside = sidebar(page)
   await expect(aside).toBeHidden()
-
-  await page.mouse.move(640, 400)
-  await page.mouse.move(20, 400)
-  await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
   await settled(page)
-  // Onto the toggle, which sits over the sidebar's first row, and rest there well past the close delay.
-  const box = (await page.getByRole('button', { name: 'Show sidebar' }).boundingBox())!
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 })
+  const show = page.getByRole('button', { name: 'Show sidebar' })
+  // No toggle on the screen, and the only one there is lives inside the sidebar.
+  expect(await isOffscreen(show)).toBe(true)
+  expect(await page.locator('button[aria-label$=" sidebar"]').count()).toBe(1)
+  expect(await asideEl(page).locator('button[aria-label$=" sidebar"]').count()).toBe(1)
+
+  await peek(page)
+  // The toggle is in the sidebar's first row, above Overview, inside its box.
+  const asideBox = await rect(asideEl(page))
+  const toggleBox = await rect(show)
+  const overviewBox = (await aside.getByRole('link', { name: 'Overview' }).boundingBox())!
+  expect(toggleBox.x).toBeGreaterThanOrEqual(asideBox.x)
+  expect(toggleBox.x + toggleBox.width).toBeLessThanOrEqual(asideBox.x + asideBox.width)
+  expect(toggleBox.y + toggleBox.height).toBeLessThanOrEqual(overviewBox.y)
+  // Resting the pointer on it keeps the sidebar open, well past the close delay.
+  await page.mouse.move(toggleBox.x + toggleBox.width / 2, toggleBox.y + toggleBox.height / 2, { steps: 4 })
   await page.waitForTimeout(800)
   await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
 
-  // Leaving it for the page closes the sidebar.
+  // Leaving it for the page closes the sidebar, and the toggle goes with it.
   await page.mouse.move(640, 400)
   await expect(aside).toBeHidden()
+  await settled(page)
+  expect(await isOffscreen(show)).toBe(true)
+})
+
+test('pressing Hide with the mouse leaves the sidebar hidden, not reopened under the pointer', async ({
+  page,
+  project,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto(`/projects/${project.id}/prs`)
+  await page.getByRole('button', { name: 'Shrink sidebar' }).click()
+  await page.getByRole('button', { name: 'Hide sidebar' }).click()
+  // The pointer rests where the toggle was; the sidebar slides out and stays out.
+  await page.waitForTimeout(800)
+  await expect(sidebar(page)).toBeHidden()
+  expect(await isOffscreen(asideEl(page))).toBe(true)
+})
+
+test('a hidden sidebar is reached by keyboard: Tab to its toggle shows it, Enter expands it', async ({
+  page,
+  project,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto(`/projects/${project.id}/prs`)
+  await page.getByRole('button', { name: 'Shrink sidebar' }).click()
+  await page.getByRole('button', { name: 'Hide sidebar' }).click()
+  const aside = sidebar(page)
+  await expect(aside).toBeHidden()
+  // Focus left the toggle (the press that hid the sidebar kept it there). The sidebar's links are out of the
+  // tab order; its toggle is the one thing the keyboard can reach, and reaching it shows the sidebar.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+  await page.getByRole('button', { name: 'Show sidebar' }).focus()
+  await expect(aside.getByRole('link', { name: 'Overview' })).toBeVisible()
+  await settled(page)
+  await expect(page.getByRole('button', { name: 'Show sidebar' })).toBeInViewport()
+  await page.keyboard.press('Tab')
+  await expect(aside.getByRole('link', { name: 'Overview' })).toBeFocused()
+  await page.getByRole('button', { name: 'Show sidebar' }).focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('button', { name: 'Shrink sidebar' })).toBeFocused()
+  await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
 })
