@@ -449,3 +449,68 @@ test('a hidden sidebar is reached by keyboard: Tab to its toggle shows it, Enter
   await expect(page.getByRole('button', { name: 'Shrink sidebar' })).toBeFocused()
   await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
 })
+
+test('clicking blank space inside a peeked sidebar keeps it open under the pointer', async ({
+  page,
+  project,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto(`/projects/${project.id}/prs`)
+  await page.getByRole('button', { name: 'Shrink sidebar' }).click()
+  await page.getByRole('button', { name: 'Hide sidebar' }).click()
+  const aside = sidebar(page)
+  await expect(aside).toBeHidden()
+  await peek(page)
+  // Focus is on the toggle in the sidebar; a click on the sidebar's empty space below its links moves it to the body.
+  await page.getByRole('button', { name: 'Show sidebar' }).focus()
+  await page.mouse.move(100, 700)
+  await page.mouse.click(100, 700)
+  await page.waitForTimeout(800)
+  await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
+})
+
+test('pressing Hide with the keyboard keeps the sidebar shown around the focused toggle until focus leaves', async ({
+  page,
+  project,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto(`/projects/${project.id}/prs`)
+  const aside = sidebar(page)
+  await page.getByRole('button', { name: 'Shrink sidebar' }).focus()
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Enter')
+  const show = page.getByRole('button', { name: 'Show sidebar' })
+  await expect(show).toBeFocused()
+  await settled(page)
+  // Focus is on a toggle the user can see: the sidebar is still there, while the page has taken its room.
+  await expect(show).toBeInViewport()
+  await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
+  // Focus moves on to the page: the sidebar slides out.
+  await page.locator('section.min-w-0 a, section.min-w-0 button').first().focus()
+  await expect(aside).toBeHidden()
+})
+
+test('on a wide window a pointer travelling slowly from the left edge to the sidebar keeps it open', async ({
+  page,
+  project,
+}) => {
+  await page.setViewportSize({ width: 1920, height: 900 })
+  await page.goto(`/projects/${project.id}/prs`)
+  await page.getByRole('button', { name: 'Shrink sidebar' }).click()
+  await page.getByRole('button', { name: 'Hide sidebar' }).click()
+  const aside = sidebar(page)
+  await expect(aside).toBeHidden()
+  await page.mouse.move(960, 400)
+  await page.mouse.move(20, 400)
+  await expect(aside.getByRole('link', { name: 'Overview' })).toBeVisible()
+  await settled(page)
+  // The sidebar rests well right of the 40px edge strip here: stop between them for longer than the close delay.
+  const box = (await rect(asideEl(page)))!
+  expect(box.x).toBeGreaterThan(100)
+  await page.mouse.move(box.x / 2, 400)
+  await page.waitForTimeout(800)
+  await expect(aside.getByRole('link', { name: 'Overview' })).toBeVisible()
+  await page.mouse.move(box.x + 20, 400)
+  await page.waitForTimeout(500)
+  await expect(aside.getByRole('link', { name: 'Overview' })).toBeVisible()
+})

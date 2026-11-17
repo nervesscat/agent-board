@@ -131,9 +131,13 @@ function ProjectLayout() {
         variant="ghost"
         size="icon-sm"
         aria-label={SIDEBAR_TOGGLE_LABEL[mode]}
-        onClick={() => {
-          setPeeking(false)
-          chooseMode(nextSidebarMode(mode))
+        onClick={(event) => {
+          const next = nextSidebarMode(mode)
+          // Pressed by keyboard (no pointer click: detail is 0) into hidden: focus stays on this toggle, so the
+          // sidebar stays shown around it until focus moves away, instead of leaving focus on a toggle nobody sees.
+          // A pointer press hides it, and the pointer resting on it does not show it again.
+          setPeeking(next === 'hidden' && event.detail === 0)
+          chooseMode(next)
         }}
       >
         <ToggleIcon className="size-4" />
@@ -171,7 +175,13 @@ function ProjectLayout() {
           onBlur={
             hiddenNow
               ? (event) => {
-                  if (!event.currentTarget.contains(event.relatedTarget)) closePeekSoon()
+                  // Focus left for something outside the sidebar. Not when it fell to the page body because of a
+                  // click on the sidebar's own blank space: the pointer is still in it, and it stays open.
+                  if (
+                    !event.currentTarget.contains(event.relatedTarget) &&
+                    !event.currentTarget.matches(':hover')
+                  )
+                    closePeekSoon()
                 }
               : undefined
           }
@@ -283,8 +293,11 @@ function ProjectLayout() {
           // Leaving the strip closes it too: the sidebar can appear under a resting pointer, which then sends no
           // enter to it, and moving into the sidebar opens it again (cancelling this close).
           onMouseLeave={closePeekSoon}
+          // While the sidebar shows, the strip reaches as far as the sidebar's right edge, so a pointer on its way
+          // from the window's edge to the sidebar (far away on a wide window) stays on the strip and keeps it open.
           className={cn(
-            'fixed bottom-0 left-0 z-30 hidden w-10 md:block',
+            'fixed bottom-0 left-0 z-30 hidden md:block',
+            showPeek ? 'md:w-[calc(max(1rem,(100vw-80rem)/2+1rem)+13rem)]' : 'md:w-10',
             'top-[calc(4.5rem+1px+env(safe-area-inset-top))]',
           )}
         />
