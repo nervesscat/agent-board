@@ -113,7 +113,7 @@ export const reminder = (page: Page, project: Project) =>
 
 /** The pushed-today pill in the Daily page's header (not the compact one under the project's name). */
 export const pushedPill = (page: Page) =>
-  page.locator('aside + section').getByRole('button', { name: /^Pushed today/ })
+  page.locator('div:has(> aside) ~ section').getByRole('button', { name: /^Pushed today/ })
 
 /** Whether the page itself scrolls sideways (a board's own column scroller does not count). */
 export const scrollsSideways = (page: Page) =>
