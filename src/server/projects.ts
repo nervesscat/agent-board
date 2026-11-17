@@ -4,6 +4,7 @@ import { asc, count, eq, isNull, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db, schema } from '#/db'
+import { cleanKinds, DEFAULT_KINDS, hasGitSide, KINDS, type Kind, presetPhases } from '#/lib/kinds'
 import { LAYOUT_AREAS, LAYOUT_ELEMENTS, mergeLayout } from '#/lib/layout'
 import { MAX_TAG_LENGTH, cleanSuggestions, matchTags, tagChoices, usedTags } from '#/lib/tags'
 import { logActivity } from './activity'
@@ -14,6 +15,7 @@ import { listNotes } from './notes'
 import { listAgents } from './projectAgents'
 import { listRepos } from './repos'
 import { listStages } from './stages'
+import { ensureProjectWorkFolder } from './workFolder'
 
 /**
  * The top-level phases a new ticket starts with when its project keeps no list of its own: the
@@ -33,10 +35,15 @@ export const BUILT_IN_PHASES: readonly string[] = [
 
 /**
  * A project as it is handed out: `defaultPhases` is the list in effect and `layout` the layout in
- * effect (what was saved merged with the elements there are now), never null.
+ * effect (what was saved merged with the elements there are now), never null. A project it saved
+ * no list for gets its kinds' preset (`#/lib/kinds`): the built-in list when it has software.
  */
-function withPhases<T extends Pick<schema.Project, 'defaultPhases' | 'layout'>>(p: T) {
-  return { ...p, defaultPhases: p.defaultPhases ?? [...BUILT_IN_PHASES], layout: mergeLayout(p.layout) }
+function withPhases<T extends Pick<schema.Project, 'defaultPhases' | 'layout' | 'kinds'>>(p: T) {
+  return {
+    ...p,
+    defaultPhases: p.defaultPhases ?? presetPhases(p.kinds) ?? [...BUILT_IN_PHASES],
+    layout: mergeLayout(p.layout),
+  }
 }
 
 /** Projects with their repos and what they hold, for the top-bar menu and agents' `list_projects`. */
@@ -80,8 +87,11 @@ export function getProject(id: number) {
  check of the tools on this machine the board runs (null before the first one ends).
  */
 export function getProjectFull(id: number) {
+  const project = getProject(id)
   return {
-    ...getProject(id),
+    ...project,
+    // Where the work of a project with no git side is kept: a plain folder, no repo.
+    workFolder: hasGitSide(project.kinds) ? null : ensureProjectWorkFolder(id),
     usedTags: projectUsedTags(id),
     repos: listRepos(id),
     stages: listStages(id),
@@ -178,14 +188,19 @@ export function projectTags(
  * orchestrator; a worker is refused and nothing is made. Without `who` the caller is taken for a worker.
  */
 export function createProject(
-  input: { name: string; instructions?: string },
+  input: { name: string; instructions?: string; kinds?: Kind[] },
   actor: string,
   who: Changer = { name: actor, role: 'worker' },
 ) {
   const instructions = input.instructions || ''
   if (instructions) assertMayChangeInstructions(who)
+  const kinds = kindsOf(input.kinds ?? DEFAULT_KINDS)
   return db.transaction(() => {
-    const row = db.insert(schema.projects).values({ name: input.name, instructions: '' }).returning().get()
+    const row = db
+      .insert(schema.projects)
+      .values({ name: input.name, instructions: '', kinds })
+      .returning()
+      .get()
     logActivity({
       projectId: row.id,
       actor,
@@ -197,6 +212,13 @@ export function createProject(
     if (instructions) setInstructions(row.id, instructions, who)
     return withPhases({ ...row, instructions })
   })
+}
+
+/** A project's kinds, each once and in KINDS order; a list with no kind in it is a 400. */
+function kindsOf(kinds: readonly string[]): Kind[] {
+  const clean = cleanKinds(kinds)
+  if (!clean) throw new HttpError(400, `kinds: give one or more of ${KINDS.join(', ')}`)
+  return clean
 }
 
 /** The tags offered under every ticket's tags field, as REST and MCP take them; [] offers none of the project's own. */
@@ -243,14 +265,21 @@ export function updateProject(
   patch: Partial<
     Pick<
       schema.Project,
-      'name' | 'instructions' | 'defaultPhases' | 'tagSuggestions' | 'stallMinutes' | 'layout' | 'workStage'
+      | 'name'
+      | 'instructions'
+      | 'defaultPhases'
+      | 'tagSuggestions'
+      | 'stallMinutes'
+      | 'layout'
+      | 'workStage'
+      | 'kinds'
     >
   >,
   actor: string,
   who: Changer = { name: actor, role: 'worker' },
 ) {
   getProject(id)
-  const { defaultPhases, tagSuggestions, instructions, layout, ...rest } = patch
+  const { defaultPhases, tagSuggestions, instructions, layout, kinds, ...rest } = patch
   if (instructions !== undefined) assertMayChangeInstructions(who)
   if (rest.workStage != null) {
     const stage = listStages(id).find((s) => s.key === rest.workStage)
@@ -265,6 +294,7 @@ export function updateProject(
     ...(defaultPhases !== undefined && { defaultPhases: defaultPhases?.map((name) => name.trim()) ?? null }),
     ...(tagSuggestions !== undefined && { tagSuggestions: cleanSuggestions(tagSuggestions) }),
     ...(layout !== undefined && { layout: layout && mergeLayout(layout) }),
+    ...(kinds !== undefined && { kinds: kindsOf(kinds) }),
   }
   return db.transaction(() => {
     if (instructions !== undefined) setInstructions(id, instructions, who)

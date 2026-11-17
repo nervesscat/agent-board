@@ -6,6 +6,7 @@ import { and, asc, eq, inArray, isNull, ne, or } from 'drizzle-orm'
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
 import { folderKey } from './cleanup'
+import { hasGitSide } from '#/lib/kinds'
 import { assertRepo, originUrl, repoNameWithOwner } from './git'
 import { HttpError, notFound } from './http'
 import { forgetPreview } from './managedPreview'
@@ -50,6 +51,13 @@ export function resolveRepo(projectId: number, repoId?: number | null) {
 /** The checkout a ticket's branch lives in: its own repo, else the project's first. */
 export function ticketRepo(ticket: Pick<schema.Ticket, 'projectId' | 'repoId'>) {
   if (ticket.repoId) return getRepo(ticket.repoId)
+  // A project with no software kind keeps its repos out of a ticket that names none.
+  const kinds = db
+    .select({ kinds: schema.projects.kinds })
+    .from(schema.projects)
+    .where(eq(schema.projects.id, ticket.projectId))
+    .get()?.kinds
+  if (!hasGitSide(kinds)) return null
   return listRepos(ticket.projectId)[0] ?? null
 }
 

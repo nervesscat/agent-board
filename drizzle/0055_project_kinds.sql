@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `kinds` text DEFAULT '["software"]' NOT NULL;
