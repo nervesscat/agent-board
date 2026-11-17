@@ -62,7 +62,7 @@ const RECENT_MS = 7 * 24 * 60 * 60 * 1000
 
 /**
  * How many of the tickets updated in the week before `now` (created counts, a new ticket being updated
- * when made) carry each tag, keyed by the tag in lower case: each ticket once per tag. `updatedAt` is
+ * when made) carry each tag, keyed by `'#' + the tag in lower case`: each ticket once per tag. `updatedAt` is
  * the ISO text the database keeps, compared as text.
  */
 export function recentTagCounts(
@@ -73,7 +73,9 @@ export function recentTagCounts(
   const counts: Record<string, number> = Object.create(null)
   for (const ticket of tickets) {
     if (ticket.updatedAt < since) continue
-    for (const key of new Set(ticket.tags.map((tag) => tag.toLowerCase())))
+    // The prefix: a key such as `__proto__` does not survive a plain object copy, and this record is
+    // copied on the client (TanStack Query's structural sharing drops it), so no tag name is used bare.
+    for (const key of new Set(ticket.tags.map((tag) => '#' + tag.toLowerCase())))
       counts[key] = (counts[key] ?? 0) + 1
   }
   return counts
@@ -102,7 +104,7 @@ export function tagChoices(
   }
   // Not `recent[tag]` alone: `constructor` and the like are on every plain object.
   const weekOf = (tag: string) => {
-    const n = recent[tag.toLowerCase()]
+    const n = recent['#' + tag.toLowerCase()]
     return typeof n === 'number' ? n : 0
   }
   return out.sort((a, b) => weekOf(b) - weekOf(a) || a.toLowerCase().localeCompare(b.toLowerCase()))

@@ -257,7 +257,7 @@ describe('GET /api/projects/:id/tags', () => {
     newTicket(counted, ['Bug'], daysAgo(8))
     const res = await send(`/api/projects/${counted}`)
     expect(res.status).toBe(200)
-    expect((await res.json()).tagWeek).toEqual({ ui: 1 })
+    expect((await res.json()).tagWeek).toEqual({ '#ui': 1 })
   })
 
   it('refuses a caller not signed in, and answers 404 for a project there is not', async () => {
