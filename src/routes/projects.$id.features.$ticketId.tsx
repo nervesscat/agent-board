@@ -510,7 +510,9 @@ function TicketPage() {
           )}
           {/* A PR's ticket cannot be deleted: it is archived instead. */}
           {!t.prId && (
-            <AlertDialog>
+            // Keyed by the ticket: this page is reused when a delete returns to the parent, and the dialog
+            // must not carry the lane's open state over to it.
+            <AlertDialog key={t.id}>
               <AlertDialogTrigger render={<Button variant="ghost" size="icon-sm" />}>
                 <TrashIcon />
               </AlertDialogTrigger>
