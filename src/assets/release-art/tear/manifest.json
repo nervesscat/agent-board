@@ -1,0 +1,600 @@
+{
+  "direction": "tear",
+  "madeBy": "Claude Fable 5.2",
+  "generator": "scripts/release-art/tear.mjs",
+  "canvas": {
+    "width": 1600,
+    "height": 900
+  },
+  "palette": {
+    "hexes": [
+      "#E9E2D4",
+      "#1D1924",
+      "#3F3152",
+      "#63517F",
+      "#9CB7A6",
+      "#638A79",
+      "#E0A132",
+      "#FCF9F1",
+      "#7B2D34",
+      "#A5494E",
+      "#9FB2C8",
+      "#5F7A9A",
+      "#2B3A67",
+      "#5468A6",
+      "#D8AFA3",
+      "#A87868",
+      "#CEDCD3",
+      "#8AAB9C",
+      "#BACCC1",
+      "#789E8D",
+      "#799D86",
+      "#527264",
+      "#5F836D",
+      "#456055",
+      "#4E6C59",
+      "#3B5248",
+      "#D6DEE8",
+      "#8A9EB7",
+      "#BFCCDB",
+      "#778FAB",
+      "#7893B2",
+      "#4F6681",
+      "#5A799D",
+      "#44576E",
+      "#4B6583",
+      "#3A4B5E",
+      "#F2E4E0",
+      "#C2A195",
+      "#E7CEC7",
+      "#B78F82",
+      "#C68A78",
+      "#936455",
+      "#B76A54",
+      "#7F5749",
+      "#9F5843",
+      "#6F4C40"
+    ],
+    "light": {
+      "ground": "#E9E2D4",
+      "core": "#FCF9F1",
+      "accent": "#E0A132"
+    },
+    "dark": {
+      "ground": "#1D1924",
+      "core": "#FCF9F1",
+      "accent": "#E0A132"
+    }
+  },
+  "lays": {
+    "hands": "gather",
+    "precision": "hold",
+    "wayfinding": "clear",
+    "pulse": "run"
+  },
+  "thematics": [
+    {
+      "major": 0,
+      "name": "Loose",
+      "meaning": "Before 1.0 the product is still finding its shape. Nothing is fixed: the sheets lie loose on the table, at any angle, and the table shows between them.",
+      "grammar": "loose",
+      "axis": "free",
+      "ground": "open",
+      "dyes": "plum and celadon",
+      "accent": "#E0A132",
+      "deep": {
+        "light": "#3F3152",
+        "dark": "#63517F"
+      },
+      "pale": {
+        "light": "#9CB7A6",
+        "dark": "#638A79"
+      }
+    },
+    {
+      "major": 1,
+      "name": "Coursed",
+      "meaning": "The first version people rely on. The sheets have found their places: all follow one axis and lie in courses, edge over edge, and the ground is covered.",
+      "grammar": "coursed",
+      "axis": "one",
+      "ground": "covered",
+      "dyes": "madder and slate",
+      "accent": "#E0A132",
+      "deep": {
+        "light": "#7B2D34",
+        "dark": "#A5494E"
+      },
+      "pale": {
+        "light": "#9FB2C8",
+        "dark": "#5F7A9A"
+      }
+    }
+  ],
+  "releases": [
+    {
+      "version": "v0.1.0",
+      "seed": 2289045896,
+      "notes": "scripts/release-art/notes/v0.1.0.md",
+      "standIn": true,
+      "thematic": "Loose",
+      "variation": {
+        "minor": 1,
+        "bath": 1,
+        "bearing": -7,
+        "pale": {
+          "light": "#BACCC1",
+          "dark": "#789E8D"
+        }
+      },
+      "themes": {
+        "lines": 7,
+        "lead": "hands",
+        "density": 0.194,
+        "hands": 1,
+        "precision": 0,
+        "wayfinding": 0.167,
+        "pulse": 0
+      },
+      "lay": {
+        "name": "gather",
+        "sheets": 5,
+        "focus": [945.7, 402.5],
+        "grammar": "loose"
+      },
+      "tear": {
+        "amp": 13,
+        "core": 17
+      },
+      "accent": [926.8, 427.5],
+      "fibres": 186,
+      "files": {
+        "light": {
+          "file": "v0.1.0-light.svg",
+          "bytes": 21698
+        },
+        "dark": {
+          "file": "v0.1.0-dark.svg",
+          "bytes": 21698
+        }
+      }
+    },
+    {
+      "version": "v0.2.0",
+      "seed": 2577228773,
+      "notes": "scripts/release-art/notes/v0.2.0.md",
+      "standIn": false,
+      "thematic": "Loose",
+      "variation": {
+        "minor": 2,
+        "bath": 2,
+        "bearing": 0,
+        "pale": {
+          "light": "#9CB7A6",
+          "dark": "#638A79"
+        }
+      },
+      "themes": {
+        "lines": 134,
+        "lead": "hands",
+        "density": 1,
+        "hands": 1,
+        "precision": 0.182,
+        "wayfinding": 0.614,
+        "pulse": 0.75
+      },
+      "lay": {
+        "name": "gather",
+        "sheets": 7,
+        "focus": [865.9, 497.2],
+        "grammar": "loose"
+      },
+      "tear": {
+        "amp": 12.36,
+        "core": 16.45
+      },
+      "accent": [831.6, 476.7],
+      "fibres": 253,
+      "files": {
+        "light": {
+          "file": "v0.2.0-light.svg",
+          "bytes": 28779
+        },
+        "dark": {
+          "file": "v0.2.0-dark.svg",
+          "bytes": 28779
+        }
+      }
+    },
+    {
+      "version": "v0.2.2",
+      "seed": 2543673535,
+      "notes": "scripts/release-art/notes/v0.2.2.md",
+      "standIn": false,
+      "thematic": "Loose",
+      "variation": {
+        "minor": 2,
+        "bath": 2,
+        "bearing": 0,
+        "pale": {
+          "light": "#9CB7A6",
+          "dark": "#638A79"
+        }
+      },
+      "themes": {
+        "lines": 160,
+        "lead": "hands",
+        "density": 1,
+        "hands": 1,
+        "precision": 0.163,
+        "wayfinding": 0.592,
+        "pulse": 0.857
+      },
+      "lay": {
+        "name": "gather",
+        "sheets": 7,
+        "focus": [796.1, 418.2],
+        "grammar": "loose"
+      },
+      "tear": {
+        "amp": 12.43,
+        "core": 16.51
+      },
+      "accent": [827.5, 376.8],
+      "fibres": 249,
+      "files": {
+        "light": {
+          "file": "v0.2.2-light.svg",
+          "bytes": 29043
+        },
+        "dark": {
+          "file": "v0.2.2-dark.svg",
+          "bytes": 29043
+        }
+      }
+    },
+    {
+      "version": "v0.2.3",
+      "seed": 2526895916,
+      "notes": "scripts/release-art/notes/v0.2.3.md",
+      "standIn": false,
+      "thematic": "Loose",
+      "variation": {
+        "minor": 2,
+        "bath": 2,
+        "bearing": 0,
+        "pale": {
+          "light": "#9CB7A6",
+          "dark": "#638A79"
+        }
+      },
+      "themes": {
+        "lines": 16,
+        "lead": "precision",
+        "density": 0.444,
+        "hands": 0.125,
+        "precision": 1,
+        "wayfinding": 0,
+        "pulse": 0.625
+      },
+      "lay": {
+        "name": "hold",
+        "sheets": 3,
+        "tilt": -2.08,
+        "joint": 822.8,
+        "shelf": 350,
+        "seam": 15.1,
+        "grammar": "loose"
+      },
+      "tear": {
+        "amp": 5.13,
+        "core": 11.38
+      },
+      "accent": [842.6, 623.7],
+      "fibres": 199,
+      "files": {
+        "light": {
+          "file": "v0.2.3-light.svg",
+          "bytes": 15452
+        },
+        "dark": {
+          "file": "v0.2.3-dark.svg",
+          "bytes": 15452
+        }
+      }
+    },
+    {
+      "version": "v0.2.4",
+      "seed": 2510118297,
+      "notes": "scripts/release-art/notes/v0.2.4.md",
+      "standIn": false,
+      "thematic": "Loose",
+      "variation": {
+        "minor": 2,
+        "bath": 2,
+        "bearing": 0,
+        "pale": {
+          "light": "#9CB7A6",
+          "dark": "#638A79"
+        }
+      },
+      "themes": {
+        "lines": 14,
+        "lead": "wayfinding",
+        "density": 0.389,
+        "hands": 0.833,
+        "precision": 0,
+        "wayfinding": 1,
+        "pulse": 0.5
+      },
+      "lay": {
+        "name": "clear",
+        "sheets": 3,
+        "rising": true,
+        "hinge": "right",
+        "opening": 11.3,
+        "bend": -47.4,
+        "grammar": "loose"
+      },
+      "tear": {
+        "amp": 12.17,
+        "core": 16.5
+      },
+      "accent": [556.8, 367.2],
+      "fibres": 197,
+      "files": {
+        "light": {
+          "file": "v0.2.4-light.svg",
+          "bytes": 22690
+        },
+        "dark": {
+          "file": "v0.2.4-dark.svg",
+          "bytes": 22690
+        }
+      }
+    },
+    {
+      "version": "v0.2.5",
+      "seed": 2493340678,
+      "notes": "scripts/release-art/notes/v0.2.5.md",
+      "standIn": false,
+      "thematic": "Loose",
+      "variation": {
+        "minor": 2,
+        "bath": 2,
+        "bearing": 0,
+        "pale": {
+          "light": "#9CB7A6",
+          "dark": "#638A79"
+        }
+      },
+      "themes": {
+        "lines": 36,
+        "lead": "pulse",
+        "density": 1,
+        "hands": 0.813,
+        "precision": 0.125,
+        "wayfinding": 0.125,
+        "pulse": 1
+      },
+      "lay": {
+        "name": "run",
+        "sheets": 2,
+        "pieces": 6,
+        "slope": -7.12,
+        "crowded": true,
+        "grammar": "loose"
+      },
+      "tear": {
+        "amp": 11.63,
+        "core": 16.06
+      },
+      "accent": [1399, 344.1],
+      "fibres": 259,
+      "files": {
+        "light": {
+          "file": "v0.2.5-light.svg",
+          "bytes": 20396
+        },
+        "dark": {
+          "file": "v0.2.5-dark.svg",
+          "bytes": 20396
+        }
+      }
+    },
+    {
+      "version": "v0.3.0",
+      "seed": 841063230,
+      "notes": "scripts/release-art/notes/v0.3.0.md",
+      "standIn": true,
+      "thematic": "Loose",
+      "variation": {
+        "minor": 3,
+        "bath": 3,
+        "bearing": 7,
+        "pale": {
+          "light": "#799D86",
+          "dark": "#527264"
+        }
+      },
+      "themes": {
+        "lines": 7,
+        "lead": "wayfinding",
+        "density": 0.194,
+        "hands": 0.167,
+        "precision": 0.167,
+        "wayfinding": 1,
+        "pulse": 0.167
+      },
+      "lay": {
+        "name": "clear",
+        "sheets": 3,
+        "rising": false,
+        "hinge": "left",
+        "opening": 12.53,
+        "bend": -44.5,
+        "grammar": "loose"
+      },
+      "tear": {
+        "amp": 8.25,
+        "core": 14
+      },
+      "accent": [1160.8, 393.4],
+      "fibres": 169,
+      "files": {
+        "light": {
+          "file": "v0.3.0-light.svg",
+          "bytes": 22178
+        },
+        "dark": {
+          "file": "v0.3.0-dark.svg",
+          "bytes": 22178
+        }
+      }
+    },
+    {
+      "version": "v1.1.0",
+      "seed": 1375594755,
+      "notes": "scripts/release-art/notes/v1.1.0.md",
+      "standIn": true,
+      "thematic": "Coursed",
+      "variation": {
+        "minor": 1,
+        "bath": 1,
+        "bearing": 19,
+        "pale": {
+          "light": "#BFCCDB",
+          "dark": "#778FAB"
+        }
+      },
+      "themes": {
+        "lines": 7,
+        "lead": "pulse",
+        "density": 0.194,
+        "hands": 0.5,
+        "precision": 0,
+        "wayfinding": 0,
+        "pulse": 1
+      },
+      "lay": {
+        "name": "run",
+        "grammar": "coursed",
+        "sheets": 3,
+        "pieces": 5,
+        "lean": 19.75,
+        "crowded": false
+      },
+      "tear": {
+        "amp": 10.5,
+        "core": 15.5
+      },
+      "accent": [630.4, 114.4],
+      "fibres": 168,
+      "files": {
+        "light": {
+          "file": "v1.1.0-light.svg",
+          "bytes": 20509
+        },
+        "dark": {
+          "file": "v1.1.0-dark.svg",
+          "bytes": 20509
+        }
+      }
+    },
+    {
+      "version": "v1.2.0",
+      "seed": 354547250,
+      "notes": "scripts/release-art/notes/v1.2.0.md",
+      "standIn": true,
+      "thematic": "Coursed",
+      "variation": {
+        "minor": 2,
+        "bath": 2,
+        "bearing": 26,
+        "pale": {
+          "light": "#9FB2C8",
+          "dark": "#5F7A9A"
+        }
+      },
+      "themes": {
+        "lines": 8,
+        "lead": "hands",
+        "density": 0.222,
+        "hands": 1,
+        "precision": 0.125,
+        "wayfinding": 0,
+        "pulse": 0
+      },
+      "lay": {
+        "name": "gather",
+        "grammar": "coursed",
+        "sheets": 5,
+        "lean": 24.75,
+        "seam": 47.1
+      },
+      "tear": {
+        "amp": 12.56,
+        "core": 16.63
+      },
+      "accent": [816.7, 537],
+      "fibres": 175,
+      "files": {
+        "light": {
+          "file": "v1.2.0-light.svg",
+          "bytes": 19876
+        },
+        "dark": {
+          "file": "v1.2.0-dark.svg",
+          "bytes": 19876
+        }
+      }
+    },
+    {
+      "version": "v1.3.0",
+      "seed": 2069924441,
+      "notes": "scripts/release-art/notes/v1.3.0.md",
+      "standIn": true,
+      "thematic": "Coursed",
+      "variation": {
+        "minor": 3,
+        "bath": 3,
+        "bearing": 33,
+        "pale": {
+          "light": "#7893B2",
+          "dark": "#4F6681"
+        }
+      },
+      "themes": {
+        "lines": 7,
+        "lead": "precision",
+        "density": 0.194,
+        "hands": 0,
+        "precision": 1,
+        "wayfinding": 0.143,
+        "pulse": 0.429
+      },
+      "lay": {
+        "name": "hold",
+        "grammar": "coursed",
+        "sheets": 4,
+        "lean": 31.55,
+        "seam": 18.6
+      },
+      "tear": {
+        "amp": 4.5,
+        "core": 11
+      },
+      "accent": [1117.7, 335.2],
+      "fibres": 183,
+      "files": {
+        "light": {
+          "file": "v1.3.0-light.svg",
+          "bytes": 18795
+        },
+        "dark": {
+          "file": "v1.3.0-dark.svg",
+          "bytes": 18795
+        }
+      }
+    }
+  ]
+}
