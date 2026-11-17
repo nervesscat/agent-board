@@ -209,18 +209,8 @@ function drawMark(ctx: CanvasRenderingContext2D, a: Annotation) {
   ctx.restore()
 }
 
-/**
- * The picture, the marks, the numbered notes and, when an overlay is given, the selection's box with
- * its rotate handle and the marquee being dragged, at the picture's own size. The overlay is on
- * screen only: the attached render is painted without one.
- */
-function paint(canvas: HTMLCanvasElement, bitmap: ImageBitmap, items: Annotation[], overlay: Overlay | null) {
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  ctx.drawImage(bitmap, 0, 0)
-  for (const item of items) drawMark(ctx, item)
-  // The number each note is listed under, on top of everything, in the order the notes are listed.
+/** The number each note is listed under, in the order the notes are listed. */
+function paintNoteNumbers(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, items: Annotation[]) {
   let n = 0
   for (const item of items) {
     if (!item.note?.trim()) continue
@@ -241,7 +231,15 @@ function paint(canvas: HTMLCanvasElement, bitmap: ImageBitmap, items: Annotation
   }
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
-  if (!overlay) return
+}
+
+/** The selection's box, its handles and its tip, and the marquee being dragged, on screen only. */
+function paintOverlay(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  bitmap: ImageBitmap,
+  overlay: Overlay,
+) {
   // Image pixels per css pixel: the overlay keeps the same size on screen whatever the picture's size.
   const css = canvas.getBoundingClientRect().width
   const k = css > 0 ? canvas.width / css : 1
@@ -291,6 +289,22 @@ function paint(canvas: HTMLCanvasElement, bitmap: ImageBitmap, items: Annotation
     }
   }
   ctx.restore()
+}
+
+/**
+ * The picture, the marks, the numbered notes and, when an overlay is given, the selection's box with
+ * its rotate handle and the marquee being dragged, at the picture's own size. The overlay is on
+ * screen only: the attached render is painted without one.
+ */
+function paint(canvas: HTMLCanvasElement, bitmap: ImageBitmap, items: Annotation[], overlay: Overlay | null) {
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.drawImage(bitmap, 0, 0)
+  for (const item of items) drawMark(ctx, item)
+  // The numbers go on top of the selection's handles on screen, so a selected mark's number is never covered.
+  if (overlay) paintOverlay(ctx, canvas, bitmap, overlay)
+  paintNoteNumbers(ctx, canvas, items)
 }
 
 /**

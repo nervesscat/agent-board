@@ -657,6 +657,28 @@ test.describe('touch', () => {
   })
 })
 
+test('a selected mark keeps its note number on top of the selection handles', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Note number under selection')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await noteField(canvas).fill('first')
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+
+  // The selection's handles are on screen: one sits on the box's far corner, where no note number is.
+  await expect.poll(() => selectionBlue(canvas, { x: 94, y: 94, w: 12, h: 12 })).toBeGreaterThan(0)
+  // The number badge sits on the box's top-left corner, where a corner handle is: the handle does not cover it.
+  expect(await selectionBlue(canvas, { x: 16, y: 16, w: 8, h: 8 })).toBe(0)
+
+  // The attached picture is unaffected: the badge is there, painted as before, with no selection colour.
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const rose = ({ r, g, b }: { r: number; g: number; b: number }) => r > 180 && g < 90 && b < 120
+  expect(rose(await pixelOf(page, attached, [20, 14]))).toBe(true)
+})
+
 test('the attached picture has no selection pixels, whatever is selected', async ({
   page,
   project,
