@@ -2,6 +2,7 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db, schema } from '#/db'
+import { hasGitSide } from '#/lib/kinds'
 import {
   RUN_REPORT_AGENTS,
   RUN_REPORT_TIME_KEYS,
@@ -12,6 +13,7 @@ import {
 } from '#/lib/runReports'
 import { HttpError, notFound } from './http'
 import { listAgents } from './projectAgents'
+import { getProject } from './projects'
 import { ticketTimeline } from './workTimeline'
 
 /**
@@ -441,4 +443,64 @@ export function missingReports(ticketId: number): MissingRunReport[] {
       since,
     }))
     .sort((a, b) => a.since.localeCompare(b.since) || a.agent.localeCompare(b.agent))
+}
+
+/** The phases of one review round, in the order the cycle runs them, with how many runs each needs. */
+const REVIEW_PHASES = [
+  { phase: 'spec', expected: 1 },
+  { phase: 'env', expected: 1 },
+  { phase: 'verify', expected: 1 },
+  { phase: 'hunt', expected: 2 },
+  { phase: 'refute', expected: 1 },
+  { phase: 'merge', expected: 1 },
+] as const
+
+/** A review phase the ticket's last round has fewer runs of than the cycle requires: the hand-off's flag. */
+export interface MissingReviewPhase {
+  round: number
+  phase: string
+  /** How many runs the phase needs in a round (two for the hunts, one for each other phase). */
+  expected: number
+  /** How many the round has: the larger of its spans and its reports of that kind. */
+  found: number
+}
+
+/**
+ * The review phases the ticket's last round lacks. Above low, every round runs spec, env, verify, two
+ * hunts, refute and the merge check; a phase counts as run when a span or a run report of its kind
+ * (a numbered worker counts as its agent) carries the round, the larger of the two so one run with a
+ * span and a report is one run. The last round is the highest round on any span or report of a review
+ * phase, or 1 when the timeline has activity but names no round. Empty for a low ticket, a project with
+ * no software kind, and a ticket whose timeline has no activity at all. The intent check is no round
+ * phase. Enforcement is a flag, never a refusal: a move to review goes through and answers with this.
+ */
+export function missingReviewPhases(ticketId: number): MissingReviewPhase[] {
+  const t = db.select().from(schema.tickets).where(eq(schema.tickets.id, ticketId)).get()
+  if (!t || t.complexity === 'low') return []
+  if (!hasGitSide(getProject(t.projectId).kinds)) return []
+  const { timeline } = ticketTimeline(ticketId)
+  if (!timeline.spans.length && !timeline.handoffs.length && !timeline.waits.length) return []
+  const known = knownKinds(t.projectId)
+  const phases = new Set<string>(REVIEW_PHASES.map((p) => p.phase))
+  const spans = new Map<string, number>()
+  const reports = new Map<string, number>()
+  let last = 0
+  const count = (counts: Map<string, number>, kind: string | null, round: number | null) => {
+    if (!kind || !phases.has(kind) || round == null) return
+    const key = `${kind}|${round}`
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+    if (round > last) last = round
+  }
+  for (const span of timeline.spans) count(spans, runKindOf(span.agent, known), span.round ?? null)
+  for (const r of db
+    .select({ agent: schema.runReports.agent, round: schema.runReports.round })
+    .from(schema.runReports)
+    .where(eq(schema.runReports.ticketId, ticketId))
+    .all())
+    count(reports, runKindOf(r.agent, known), r.round ?? null)
+  const round = last || 1
+  return REVIEW_PHASES.flatMap(({ phase, expected }) => {
+    const found = Math.max(spans.get(`${phase}|${round}`) ?? 0, reports.get(`${phase}|${round}`) ?? 0)
+    return found < expected ? [{ round, phase, expected, found }] : []
+  })
 }
