@@ -213,7 +213,7 @@ test('the human sets after how many minutes a ticket reads as stalled', async ({
   await expect(minutes).toHaveValue('30')
   await minutes.fill('45')
   await settings.getByRole('button', { name: 'Save' }).click()
-  await expect(page.getByText('Saved')).toBeVisible()
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible()
   await page.reload()
   await expect(
     page.getByRole('region', { name: 'Stalled tickets' }).getByLabel('Stalled after (minutes)'),

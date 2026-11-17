@@ -61,12 +61,12 @@ test('the List and the Archived tickets search by name first, then the thread, w
   await expect(rows.filter({ hasText: 'Beta' })).toContainText('Post: tried it on the alpha build')
   await expect(rows.filter({ hasText: 'Gamma' })).toContainText('Reply: the ALPHA flag is still on')
 
-  // The query goes with the view: the archive is searched on its own, and its count stays the total.
+  // The query goes with the view: the archive is searched on its own. The Archived tab shows no count.
   await page.getByRole('tab', { name: /Archived/ }).click()
   await expect(page).toHaveURL(/view=archived/)
   await expect(field).toHaveValue('ALPHA')
   await expect(rows).toHaveText([/Alpha archived/, /Delta/])
-  await expect(page.getByRole('tab', { name: /Archived/ })).toContainText('(3)')
+  await expect(page.getByRole('tab', { name: /Archived/ })).toHaveText('Archived')
 
   // Nothing found says so, and clearing brings the whole archive back, last archived first.
   await field.fill('nomatchxyz')
