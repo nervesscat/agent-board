@@ -260,6 +260,25 @@ test('Escape while a mouse button is held on a drawing tool, with nothing select
   expect(drawn!.rect!.w).toBeCloseTo(80, 0)
 })
 
+test('Escape while a mouse button is held on empty picture with the Note tool leaves the canvas open', async ({
+  page,
+  project,
+}) => {
+  const { canvas } = await openCanvas(page, project.id, 'Escape during note press')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Note').click()
+
+  const empty = await at(canvas, [220, 220])
+  await page.mouse.move(empty.x, empty.y)
+  await page.mouse.down()
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(300)
+  await expect(canvas).toBeVisible()
+  await page.mouse.up()
+
+  await expect(canvas).toBeVisible()
+})
+
 test('a click on a mark in the band under the rotate handle picks that mark, not the handle', async ({
   page,
   project,
@@ -487,6 +506,49 @@ test.describe('touch', () => {
 
     const attached = await attachAndCreate(human, project.id, dialog, canvas)
     expect(storedItems(attached)).toHaveLength(2)
+  })
+
+  test('a second finger on a drawing press does not replace the box the first finger is drawing', async ({
+    page,
+    project,
+    human,
+  }) => {
+    const { dialog, canvas } = await openCanvas(page, project.id, 'Second finger')
+    await control(canvas, 'Box').click()
+    const cdp = await page.context().newCDPSession(page)
+    const first = (p: { x: number; y: number }) => ({ x: p.x, y: p.y, id: 1 })
+    const second = (p: { x: number; y: number }) => ({ x: p.x, y: p.y, id: 2 })
+
+    const a = await at(canvas, [50, 50])
+    const b = await at(canvas, [150, 150])
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [first(a)] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [first(b)] })
+
+    // A second finger lands and moves, then lifts, while the first finger is still down.
+    const c = await at(canvas, [200, 200])
+    const d = await at(canvas, [220, 220])
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [first(b), second(c)],
+    })
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [first(b), second(d)],
+    })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [second(d)] })
+
+    // The first finger keeps drawing: its box grows to where it is now, and it is the box that is kept.
+    const e = await at(canvas, [160, 160])
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [first(e)] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+
+    const attached = await attachAndCreate(human, project.id, dialog, canvas)
+    const items = storedItems(attached)
+    expect(items).toHaveLength(1)
+    expect(items[0]!.rect!.x).toBeCloseTo(50, 0)
+    expect(items[0]!.rect!.y).toBeCloseTo(50, 0)
+    expect(items[0]!.rect!.w).toBeCloseTo(110, 0)
+    expect(items[0]!.rect!.h).toBeCloseTo(110, 0)
   })
 })
 

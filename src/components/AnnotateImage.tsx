@@ -334,6 +334,10 @@ export function AnnotateImage({
   const [busy, setBusy] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const origin = useRef<Point | null>(null)
+  // The pointer whose press began the drawing, so no other pointer draws or commits its box.
+  const originPointer = useRef<number | null>(null)
+  // The pointers whose button is down on the canvas, whatever the tool: Escape waits for them to lift.
+  const held = useRef(new Set<number>())
   const gesture = useRef<Gesture | null>(null)
 
   // The marks selected that are still on the picture (an undo can take one away).
@@ -431,7 +435,6 @@ export function AnnotateImage({
       within(point, handleAt(box, HANDLE_GAP * k, bitmap ?? { width: 0, height: 0 }), TIP_REACH * k))
 
   const startSelect = (e: PointerEvent<HTMLCanvasElement>, point: Point) => {
-    e.currentTarget.setPointerCapture(e.pointerId)
     const k = scale(e)
     const hit = markAt(items, point[0], point[1])
     const box = unionBounds(picked)
@@ -525,6 +528,9 @@ export function AnnotateImage({
   }
 
   const onPointerDown = (e: PointerEvent<HTMLCanvasElement>) => {
+    // Every press is captured, so its release reaches the canvas wherever the pointer is let go.
+    e.currentTarget.setPointerCapture(e.pointerId)
+    held.current.add(e.pointerId)
     // A second pointer during a gesture (a second finger) is ignored: the first gesture owns the picture.
     if (!bitmap || busy || gesture.current) return
     const point = at(e)
@@ -535,7 +541,9 @@ export function AnnotateImage({
       return
     }
     if (tool === 'text' && !text.trim()) return
-    e.currentTarget.setPointerCapture(e.pointerId)
+    // A drawing press already in progress keeps its pointer: a second finger does not start another box.
+    if (origin.current) return
+    originPointer.current = e.pointerId
     origin.current = point
     setDraft(fresh(tool, point))
   }
@@ -568,7 +576,7 @@ export function AnnotateImage({
     }
     // With no gesture and the Select tool, the pointer's position sets the cursor and whether the X shows.
     if (tool === 'select') return hover(e, at(e))
-    if (!draft || !origin.current) return
+    if (!draft || !origin.current || e.pointerId !== originPointer.current) return
     const [x, y] = at(e)
     const [x0, y0] = origin.current
     setDraft(
@@ -602,6 +610,7 @@ export function AnnotateImage({
   }
 
   const onPointerUp = (e: PointerEvent<HTMLCanvasElement>) => {
+    held.current.delete(e.pointerId)
     const g = gesture.current
     if (g && e.pointerId !== g.pointer) return
     if (g) {
@@ -627,7 +636,7 @@ export function AnnotateImage({
       }
       return
     }
-    if (!draft) return
+    if (!draft || e.pointerId !== originPointer.current) return
     const box = draft.rect
     const line =
       draft.from && draft.to ? Math.hypot(draft.to[0] - draft.from[0], draft.to[1] - draft.from[1]) : 0
@@ -642,6 +651,7 @@ export function AnnotateImage({
     }
     setDraft(null)
     origin.current = null
+    originPointer.current = null
   }
 
   // Changing tool drops the cursor the Select tool set on the canvas, and the X.
@@ -707,8 +717,8 @@ export function AnnotateImage({
   const onKeyDown = (e: globalThis.KeyboardEvent) => {
     // A key pressed during a pointer gesture waits: the gesture commits its own step on release. A drawing
     // tool's press is a gesture too (its origin is set until release). Escape is still taken here, so the
-    // dialog does not close on the picture while the button is held.
-    if (busy || gesture.current || origin.current) {
+    // dialog does not close on the picture while a button is held on the canvas, whatever the tool.
+    if (busy || gesture.current || origin.current || held.current.size) {
       if (e.key === 'Escape') {
         e.preventDefault()
         e.stopPropagation()
