@@ -486,7 +486,9 @@ export function AnnotateImage({
     if (hov && !shift && !selected.has(hov.id)) {
       const layout = layoutAt(k)
       const mine = unionBounds(picked)
-      if (!(mine && onGrip(mine, point, layout)) && onGrip(markBounds(hov), point, layout))
+      // The X that shows beside the selection's tip takes the press before any other mark's grips.
+      const onX = tipHover && mine !== null && within(point, deleteXAt(mine, k), X_REACH * k)
+      if (!onX && !(mine && onGrip(mine, point, layout)) && onGrip(markBounds(hov), point, layout))
         return { marks: [hov], adopt: true }
     }
     return { marks: picked, adopt: false }
@@ -507,7 +509,7 @@ export function AnnotateImage({
     setTipHover(nearTip(box, point, k))
     if (box) {
       // The X beside the rotate tip deletes the selection, as one step.
-      if (shown && !grabbed.adopt && within(point, deleteXAt(box, k), X_REACH * k)) {
+      if (shown && within(point, deleteXAt(box, k), X_REACH * k)) {
         deleteSelected()
         return
       }

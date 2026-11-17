@@ -1359,3 +1359,27 @@ test('the attached picture has no chrome pixels when a mark was only hovered', a
   )
   expect(blue).toBe(0)
 })
+
+test('the X beside the selection tip deletes it even where another hovered mark has a handle under the X', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'X over another handle')
+  await draw(page, canvas, 'Box', [83, 124], [140, 180])
+  await draw(page, canvas, 'Box', [20, 150], [100, 250])
+  await control(canvas, 'Select').click()
+
+  // The second box is selected: its rotate tip is at (60, 124) and the X beside it at (76, 124). The pointer on the
+  // first box's corner (83, 124) is inside the X's reach and outside the tip's, so the X shows and sets its cursor.
+  expect(await cursorAt(page, canvas, [83, 124])).toBe('grab')
+  await page.mouse.down()
+  await page.mouse.up()
+
+  // The X took the press: the selection is deleted, and the first box is left as it was.
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const items = storedItems(attached)
+  expect(items).toHaveLength(1)
+  expect(items[0]!.rect!.x).toBeCloseTo(83, 0)
+  expect(items[0]!.rect!.w).toBeCloseTo(57, 0)
+})
