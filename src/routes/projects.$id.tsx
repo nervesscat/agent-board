@@ -1,6 +1,6 @@
 import { Link, Outlet, createFileRoute, useRouterState } from '@tanstack/react-router'
 import { PanelLeft, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from 'cn'
 
 import { LAYOUT_ICONS } from '#/components/layoutIcons'
@@ -51,6 +51,9 @@ const STICKY_TOP = 'md:top-[calc(4.5rem+1px+env(safe-area-inset-top))]'
  */
 const HIDDEN_SHIFT = 'md:-translate-x-[calc(100%+max(1rem,(100vw-80rem)/2+1rem)+1px)]'
 
+/** How far from the window's left border the pointer shows a hidden sidebar. */
+const EDGE_PX = 40
+
 /** The slide's length and easing; the transitions themselves are `motion-safe`, so reduced motion changes at once. */
 const SLIDE = 'md:motion-safe:duration-200 md:motion-safe:ease-out'
 
@@ -85,21 +88,24 @@ function ProjectLayout() {
   const [peeking, setPeeking] = useState(false)
   const closeTimer = useRef<number | undefined>(undefined)
   const asideRef = useRef<HTMLElement>(null)
+  const placeRef = useRef<HTMLDivElement>(null)
+  // What holds the sidebar shown: the pointer (so moving it away closes the sidebar) or the keyboard (focus).
+  const peekedBy = useRef<'pointer' | 'keyboard'>('pointer')
   const toggleRef = useRef<HTMLButtonElement>(null)
   // A link was clicked in this peek. Some browsers (Safari) do not focus a link on a mouse click, so focus
   // may be on the page body although the click was in the sidebar.
   const linkClickedInPeek = useRef(false)
   useEffect(() => () => window.clearTimeout(closeTimer.current), [])
-  const openPeek = () => {
+  const openPeek = useCallback((by: 'pointer' | 'keyboard') => {
     window.clearTimeout(closeTimer.current)
     linkClickedInPeek.current = false
+    peekedBy.current = by
     setPeeking(true)
-  }
-  const closePeekSoon = () => {
+  }, [])
+  const closePeekSoon = useCallback(() => {
     window.clearTimeout(closeTimer.current)
     closeTimer.current = window.setTimeout(() => {
-      // The sidebar slid in under a pointer that was resting on the edge strip (no move, so no enter reached it):
-      // the pointer is on it, so it stays.
+      // The pointer is on the sidebar (it may have slid in under a resting pointer): it stays.
       if (asideRef.current?.matches(':hover')) return
       // A link clicked in the peeked sidebar holds focus; hiding the sidebar would drop it to the page body,
       // so the toggle (inside the sidebar, and the one thing in it that stays reachable by keyboard while it
@@ -111,10 +117,42 @@ function ProjectLayout() {
       linkClickedInPeek.current = false
       setPeeking(false)
     }, PEEK_CLOSE_MS)
-  }
+  }, [])
   const hiddenNow = mode === 'hidden'
   const shrunk = mode === 'shrunk'
   const showPeek = hiddenNow && peeking
+  // A hidden sidebar is shown by where the pointer is, not by an element over the page: near the window's left
+  // border, and while it shows, anywhere over its place (which can lie far from the border on a wide window, so a
+  // slow pointer on its way keeps it open). Nothing lies over the page, so nothing blocks its clicks.
+  useEffect(() => {
+    if (!hiddenNow) return
+    const desktop = window.matchMedia('(min-width: 768px)')
+    const onMove = (event: MouseEvent) => {
+      const place = placeRef.current
+      const aside = asideRef.current
+      if (!desktop.matches || !place || !aside) return
+      const top = Number.parseFloat(getComputedStyle(place).top) || 0
+      // The sidebar's place starts at the page's left margin and the sidebar is as wide as when expanded.
+      const right = showPeek ? place.getBoundingClientRect().left + aside.offsetWidth : EDGE_PX
+      if (event.clientY >= top && event.clientX < Math.max(right, EDGE_PX)) {
+        if (!showPeek) openPeek('pointer')
+        else {
+          window.clearTimeout(closeTimer.current)
+          peekedBy.current = 'pointer'
+        }
+      } else if (showPeek && peekedBy.current === 'pointer') closePeekSoon()
+    }
+    // The pointer left the window (by the border or the top): the sidebar goes too.
+    const onLeave = () => {
+      if (showPeek && peekedBy.current === 'pointer') closePeekSoon()
+    }
+    document.addEventListener('mousemove', onMove)
+    document.documentElement.addEventListener('mouseleave', onLeave)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.documentElement.removeEventListener('mouseleave', onLeave)
+    }
+  }, [hiddenNow, showPeek, openPeek, closePeekSoon])
   // A project with no software kind has no git side: its git pages are hidden whatever its layout says.
   const pages = visibleNavPages(shownIn(project?.layout ?? defaultLayout(), 'nav'), project?.kinds)
   // The page the URL is on, for the phone-sized picker. The Overview's URL starts every other page's.
@@ -141,9 +179,10 @@ function ProjectLayout() {
           // stays shown around it until focus moves away, instead of leaving focus on a toggle nobody sees. A pointer
           // press hides it, and the pointer resting on it does not show it again; neither does a script's click, which
           // has no focus that would later leave and close it.
-          setPeeking(
-            next === 'hidden' && event.detail === 0 && document.activeElement === event.currentTarget,
-          )
+          const byKeyboard =
+            next === 'hidden' && event.detail === 0 && document.activeElement === event.currentTarget
+          peekedBy.current = 'keyboard'
+          setPeeking(byKeyboard)
           chooseMode(next)
         }}
       >
@@ -163,6 +202,7 @@ function ProjectLayout() {
           rests outside the window on the left; while the mouse is near, the wrapper opens to the expanded
           width (the page moves right) and the sidebar slides in to its place, as in the expanded mode. */}
       <div
+        ref={placeRef}
         className={cn(
           'md:sticky md:self-start md:shrink-0',
           STICKY_TOP,
@@ -175,11 +215,18 @@ function ProjectLayout() {
       >
         <aside
           ref={asideRef}
-          onMouseEnter={hiddenNow ? openPeek : undefined}
-          onMouseLeave={hiddenNow ? closePeekSoon : undefined}
           // A hidden sidebar is out of the window and its links are out of the tab order; only its toggle can take
           // focus, and focusing it shows the sidebar, so the keyboard reaches it again. It closes when focus leaves.
-          onFocus={hiddenNow ? openPeek : undefined}
+          onFocus={
+            hiddenNow
+              ? () => {
+                  // Focus shows a hidden sidebar by keyboard. One the pointer already shows stays the pointer's
+                  // (a click on a link focuses it), and closes when the pointer leaves.
+                  if (showPeek) window.clearTimeout(closeTimer.current)
+                  else openPeek('keyboard')
+                }
+              : undefined
+          }
           onBlur={
             hiddenNow
               ? (event) => {
@@ -291,24 +338,6 @@ function ProjectLayout() {
           </nav>
         </aside>
       </div>
-      {hiddenNow && (
-        // The strip along the left border, about 40px wide, where the mouse shows the hidden sidebar. Desktop only.
-        <div
-          aria-hidden="true"
-          onMouseEnter={openPeek}
-          // Leaving the strip closes it too: the sidebar can appear under a resting pointer, which then sends no
-          // enter to it, and moving into the sidebar opens it again (cancelling this close).
-          onMouseLeave={closePeekSoon}
-          // While the sidebar shows, the strip covers only what is left of it (up to the sidebar's place), so the
-          // sidebar itself is not under it. A pointer on its way from the window's edge to the sidebar (far away
-          // on a wide window) stays on the strip and keeps it open.
-          className={cn(
-            'fixed bottom-0 left-0 z-30 hidden md:block',
-            showPeek ? 'md:w-[max(1rem,(100vw-80rem)/2+1rem)]' : 'md:w-10',
-            'top-[calc(4.5rem+1px+env(safe-area-inset-top))]',
-          )}
-        />
-      )}
       <section className="min-w-0 flex-1">
         <Outlet />
       </section>

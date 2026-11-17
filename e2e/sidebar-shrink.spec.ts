@@ -22,6 +22,25 @@ const sliding = (page: Page) =>
         .filter((property) => slides.includes(property)),
     SLIDES,
   )
+/**
+ * Records every sidebar slide that starts from now on (a transition lasts 200 ms and can start and end between two
+ * polls, so a poll for a running one can miss it).
+ */
+const recordSlides = (page: Page) =>
+  page.evaluate((slides) => {
+    const seen: string[] = []
+    ;(window as unknown as { slidesSeen: string[] }).slidesSeen = seen
+    document.addEventListener(
+      'transitionrun',
+      (event) => {
+        if (slides.includes((event as TransitionEvent).propertyName))
+          seen.push((event as TransitionEvent).propertyName)
+      },
+      true,
+    )
+  }, SLIDES)
+const slidesSeen = (page: Page) =>
+  page.evaluate(() => (window as unknown as { slidesSeen: string[] }).slidesSeen)
 /** Out of the window on the left: where a hidden sidebar, and the toggle inside it, rest. */
 const isOffscreen = async (locator: Locator) => {
   const box = await rect(locator)
@@ -130,6 +149,37 @@ test('hidden takes no width; the left edge brings the normal sidebar back and th
   expect((await rect(wrapper)).width).toBe(0)
 })
 
+test('a pointer resting near the edge below the sidebar keeps it open and does not make it flicker', async ({
+  page,
+  project,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto(`/projects/${project.id}/prs`)
+  await page.getByRole('button', { name: 'Shrink sidebar' }).click()
+  await page.getByRole('button', { name: 'Hide sidebar' }).click()
+  const aside = sidebar(page)
+  await expect(aside).toBeHidden()
+  await page.mouse.move(640, 400)
+  // Near the edge but lower than the sidebar's last link: over the empty space it leaves below it.
+  await page.mouse.move(30, 760)
+  await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
+  await settled(page)
+  expect((await rect(asideEl(page))).y + (await rect(asideEl(page))).height).toBeLessThan(760)
+  await recordSlides(page)
+  await page.waitForTimeout(1500)
+  // Resting there it stays open: nothing slides in or out.
+  await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
+  expect(await slidesSeen(page)).toEqual([])
+  // Nothing lies over the page at the left edge: what is there is the page's own.
+  await page.mouse.move(640, 400)
+  await expect(aside).toBeHidden()
+  await settled(page)
+  const over = await page.evaluate(
+    () => document.elementFromPoint(20, 400)?.closest('[aria-hidden="true"]') != null,
+  )
+  expect(over).toBe(false)
+})
+
 test('a pointer resting on the edge while the sidebar slides in under it keeps it open', async ({
   page,
   project,
@@ -141,7 +191,7 @@ test('a pointer resting on the edge while the sidebar slides in under it keeps i
   const aside = sidebar(page)
   await expect(aside).toBeHidden()
   await page.mouse.move(640, 400)
-  // 30px from the edge: on the strip, and where the sidebar will be once it has slid in (its place starts at 16px).
+  // 30px from the edge: near it, and where the sidebar will be once it has slid in (its place starts at 16px).
   await page.mouse.move(30, 400)
   await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
   await page.waitForTimeout(1000)
@@ -298,10 +348,11 @@ test('a hidden sidebar is the real sidebar, same width and links, with no box of
   const resting = await rect(asideEl(page))
   expect(resting.x + resting.width).toBeLessThanOrEqual(0)
 
+  await recordSlides(page)
   await page.mouse.move(640, 400)
   await page.mouse.move(20, 400)
   // It slides: a translate transition runs (it is not there at once), and ends where the sidebar was.
-  await expect.poll(() => sliding(page)).toContain('translate')
+  await expect.poll(() => slidesSeen(page)).toContain('translate')
   await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
   await settled(page)
   const shown = await rect(asideEl(page))
@@ -332,9 +383,10 @@ test('a hidden sidebar is the real sidebar, same width and links, with no box of
   })
 
   // Leaving slides it back out to the left, and then it is out of reach.
+  await page.evaluate(() => ((window as unknown as { slidesSeen: string[] }).slidesSeen.length = 0))
   await page.mouse.move(640, 400)
-  await expect.poll(() => sliding(page), { timeout: 3000 }).toContain('translate')
   await expect(aside).toBeHidden()
+  expect(await slidesSeen(page)).toContain('translate')
   const gone = await rect(asideEl(page))
   expect(gone.x + gone.width).toBeLessThanOrEqual(0)
 })
