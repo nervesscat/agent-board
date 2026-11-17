@@ -7,6 +7,7 @@ import { LAYOUT_ICONS } from '#/components/layoutIcons'
 import { Button } from '#/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
+import { visibleNavPages } from '#/lib/kinds'
 import { type AreaId, defaultLayout, layoutElement, shownIn } from '#/lib/layout'
 import { rememberCurrentProject, useProject } from '#/lib/project'
 import { SIDEBAR_TOGGLE_LABEL, nextSidebarMode, useSidebarMode } from '#/lib/sidebar'
@@ -118,7 +119,8 @@ function ProjectLayout() {
   const hiddenNow = mode === 'hidden'
   const shrunk = mode === 'shrunk'
   const showPeek = hiddenNow && peeking
-  const pages = shownIn(project?.layout ?? defaultLayout(), 'nav')
+  // A project with no software kind has no git side: its git pages are hidden whatever its layout says.
+  const pages = visibleNavPages(shownIn(project?.layout ?? defaultLayout(), 'nav'), project?.kinds)
   // The page the URL is on, for the phone-sized picker. The Overview's URL starts every other page's.
   const current =
     pages.find((page) => {

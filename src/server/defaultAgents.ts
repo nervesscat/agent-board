@@ -1,3 +1,6 @@
+import { hasGitSide } from '#/lib/kinds'
+import { kindWork } from './kindText'
+import { getProject } from './projects'
 import { createAgent, listAgents } from './projectAgents'
 
 /**
@@ -233,12 +236,68 @@ fixes them while the ticket has a round left.`,
   },
 ]
 
+/**
+ * The default agents of a project with no software kind: one maker, who makes the work's files in the
+ * project's folder. The review cycle is for code and does not apply to it.
+ */
+export const FILES_AGENTS: { name: string; instructions: string; delegation: string }[] = [
+  {
+    name: 'maker',
+    instructions: `# Maker
+
+You make the work a ticket asks for: the files the human will approve (text, audio, images, documents).
+Your work is a plain folder with no version control: the project's work folder (get_project's
+workFolder), with one sub-folder per ticket. There is no review round here: the human approves the
+finished files, or sends the ticket back.
+
+## Input
+
+- The ticket: its instructions, its tasks, its posts and replies (the human's above all), its
+  attachments and any decisions with their answers.
+- The project's instructions: how the work should sound, look or read. They win over your habits.
+- The ticket's folder in the project's work folder: create it, and write only there.
+
+## Rules
+
+- Read the ticket's words first and make what they ask, no more. Where the brief leaves a choice open,
+  take the simplest reading and say which one you took.
+- Name the files so the human can find them at a glance: what each is, and its take or version.
+- Attach what is finished: post the files with post_update (absolute paths), one line on what each is.
+- Something only the human can decide (two valid directions for the work): stop and return the
+  question with its options. Never answer a decision yourself.
+- Never approve the ticket or move it to done: that is the human's call.
+
+## Output
+
+Return the files you finished (path, and what each is), what you took where the brief was open, and
+anything the human must decide.`,
+    delegation: `**When:** after the ticket's tasks are set (its Implementation phase), to make the work itself.
+
+**Give it:** the ticket (its instructions, posts, attachments), the project's instructions and its work folder.
+
+**Returns:** the finished files, each with its path, and what was left open.
+
+**Next:** you post the files on the ticket, write its summary and move the ticket to review. The human
+approves it or sends it back.`,
+  },
+]
+
+/**
+ * The default agents of the project's kinds: the review cycle for software, the maker for the rest. The
+ * maker's instructions say what the work of the project's kinds is (`kindWork`), so each kind gets its own.
+ */
+export function defaultAgentsFor(kinds: readonly string[]) {
+  if (hasGitSide(kinds)) return DEFAULT_AGENTS
+  const work = `## This project's work\n\n${kindWork(kinds)}`
+  return FILES_AGENTS.map((a) => ({ ...a, instructions: `${a.instructions}\n\n${work}` }))
+}
+
 /** Adds each default agent the project does not have yet (by name, any casing); keeps the rest. */
 export function addDefaultAgents(projectId: number, actor: string) {
   const taken = new Set(listAgents(projectId).map((a) => a.name.toLowerCase()))
   const added: string[] = []
   const kept: string[] = []
-  for (const a of DEFAULT_AGENTS) {
+  for (const a of defaultAgentsFor(getProject(projectId).kinds)) {
     if (taken.has(a.name)) {
       kept.push(a.name)
       continue

@@ -28,6 +28,7 @@ import {
 } from '#/lib/constants'
 import type { AnnotationDoc } from '#/lib/annotations'
 import type { SavedLayout } from '#/lib/layout'
+import type { Kind } from '#/lib/kinds'
 import type { RunReportDurationSource, RunReportStep, RunReportTime } from '#/lib/runReports'
 import type { RunType } from '#/lib/runs'
 
@@ -63,6 +64,9 @@ export const projects = sqliteTable('projects', {
   // The key of the active stage claiming a ticket (and a status given as in_progress or active) puts it
   // in. Null, or a stage that is gone or no longer active, is the first active stage.
   workStage: text('work_stage'),
+  // What the project is for (`#/lib/kinds`): one or more kinds. Software is the git side; a project
+  // with none of software hides it. The migration gives every existing project software.
+  kinds: text('kinds', { mode: 'json' }).$type<Kind[]>().notNull().default(['software']),
 })
 
 // The columns of a project's board, in order. A ticket's status is the key of one of them; the key
@@ -277,6 +281,8 @@ export const tickets = sqliteTable(
     // The human's sign-off (on a lane, usually); null until approved. Agents can read it, not set it.
     approvedAt: text('approved_at'),
     approvedBy: text('approved_by').notNull().default(''),
+    // Set when the approval closed the ticket to done (a PR review, or a hand-off): taking it back reopens it.
+    closedByApproval: integer('closed_by_approval', { mode: 'boolean' }).notNull().default(false),
     // The opposite call: the human rejected it, which also cancels it. At most one of the two is set.
     disapprovedAt: text('disapproved_at'),
     disapprovedBy: text('disapproved_by').notNull().default(''),

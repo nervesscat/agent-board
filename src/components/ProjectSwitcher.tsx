@@ -4,6 +4,7 @@ import { Check, ChevronsUpDown, FolderGit2, Plus, Settings2 } from 'lucide-react
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { KindPicker } from '#/components/KindPicker'
 import { TrashIcon } from '#/components/TrashIcon'
 import {
   AlertDialog,
@@ -29,6 +30,7 @@ import { Input } from '#/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
 import { Tip } from '#/components/ui/tooltip'
 import { del, errorMessage, patch, post, type Project, type ProjectRow } from '#/lib/api'
+import { type Kind, DEFAULT_KINDS } from '#/lib/kinds'
 import { useProjects } from '#/lib/project'
 import { useHydrated } from '#/lib/useHydrated'
 
@@ -146,12 +148,14 @@ export function NewProject({
 }) {
   const qc = useQueryClient()
   const [name, setName] = useState('')
+  const [kinds, setKinds] = useState<Kind[]>([...DEFAULT_KINDS])
   const create = useMutation({
-    mutationFn: () => post<Project>('/api/projects', { name }),
+    mutationFn: () => post<Project>('/api/projects', { name, kinds }),
     onSuccess: (p) => {
       qc.invalidateQueries({ queryKey: ['projects'] })
       onOpenChange(false)
       setName('')
+      setKinds([...DEFAULT_KINDS])
       onCreated(p)
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -179,6 +183,7 @@ export function NewProject({
             required
             autoFocus
           />
+          <KindPicker value={kinds} onChange={setKinds} />
           <DialogFooter>
             <Button type="submit" disabled={create.isPending}>
               Create
