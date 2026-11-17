@@ -10,7 +10,7 @@ import { NewTicket } from '#/components/NewTicket'
 import { toastRefusal } from '#/components/Needs'
 import { tagTextClass } from '#/components/Tag'
 import { WORK_STATE_ICON } from '#/components/WorkStatus'
-import { ArchivedList, type Placement, TicketBoard, TicketList } from '#/components/TicketBoard'
+import { ArchivedList, type Placement, StageScroll, TicketBoard, TicketList } from '#/components/TicketBoard'
 import { Button } from '#/components/ui/button'
 import { Checkbox } from '#/components/ui/checkbox'
 import { Input } from '#/components/ui/input'
@@ -82,6 +82,8 @@ function Features() {
   // refreshes the archive and its count too.
   const key = ticketsKey(id, 'root')
   const { data, isLoading } = useQuery({ ...ticketsQuery(id, 'root'), refetchInterval: 10_000 })
+  // The board's columns scroller: the header's stage buttons step it.
+  const boardScroller = useRef<HTMLDivElement>(null)
   const { data: archived, isLoading: archiveLoading } = useQuery({
     ...ticketsQuery(id, 'archived'),
     refetchInterval: 30_000,
@@ -200,7 +202,6 @@ function Features() {
       <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="sm:min-w-32 sm:flex-1">
           <h1 className="text-xl font-semibold tracking-tight">Ongoing features</h1>
-          <p className="text-sm text-muted-foreground">Tickets in flight, by stage.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto sm:shrink-0">
           {view !== 'archived' && <StateFilter value={chosen} counts={counts} onChange={filterStates} />}
@@ -223,12 +224,11 @@ function Features() {
               </TabsTrigger>
               <TabsTrigger value="archived" aria-label="Archived">
                 <Archive /> Archived
-                {archived && archived.length > 0 && (
-                  <span className="tabular-nums text-muted-foreground">({archived.length})</span>
-                )}
               </TabsTrigger>
             </TabsList>
           </Tabs>
+          {/* The board's stage buttons: shown only while the board is on screen and scrolls sideways. */}
+          {view === 'board' && !isLoading && <StageScroll scroller={boardScroller} />}
           <NewTicket projectId={id} />
         </div>
       </div>
@@ -286,6 +286,7 @@ function Features() {
           onMove={(ticketId, status) => move.mutate({ ticketId, status })}
           onPlace={placeBy}
           onArchiveAll={(status) => archiveAll.mutate(status)}
+          scroller={boardScroller}
         />
       )}
     </div>
