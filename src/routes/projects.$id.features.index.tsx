@@ -381,7 +381,7 @@ function TagFilter({
   const qc = useQueryClient()
   const { data: project } = useProject(projectId)
   // The tag picked, in the casing the project uses for it: what the trigger shows and the list holds.
-  const tags = tagChoices(project?.tagSuggestions ?? [], project?.usedTags ?? [], [])
+  const tags = tagChoices(project?.tagSuggestions ?? [], project?.usedTags ?? [], [], project?.tagWeek)
   const current = tags.find((t) => t.toLowerCase() === value.toLowerCase()) ?? value
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')

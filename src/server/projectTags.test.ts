@@ -66,13 +66,20 @@ async function page(target: string): Promise<Page> {
 }
 
 const MANY = Array.from({ length: 50 }, (_, i) => `Module ${i + 1}`)
+/** Tags by name, case-insensitive: the order of those no ticket used lately. */
+const byName = (tags: string[]) => [...tags].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+const NAMED = byName(MANY)
 
 function newProject(name: string, tagSuggestions: string[]) {
   return dbm.db.insert(dbm.schema.projects).values({ name, tagSuggestions }).returning().get().id
 }
-function newTicket(projectId: number, tags: string[]) {
-  dbm.db.insert(dbm.schema.tickets).values({ projectId, title: 'A ticket', createdBy: 'claude', tags }).run()
+function newTicket(projectId: number, tags: string[], updatedAt?: string) {
+  dbm.db
+    .insert(dbm.schema.tickets)
+    .values({ projectId, title: 'A ticket', createdBy: 'claude', tags, ...(updatedAt && { updatedAt }) })
+    .run()
 }
+const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString()
 
 /** `target` with the page `cursor` asks for (none: the first) and `limit`. */
 function at(target: string, cursor: string | null, limit?: number) {
@@ -103,16 +110,17 @@ describe('GET /api/projects/:id/tags', () => {
     newTicket(other, ['Secret', 'Module 1'])
   })
 
-  const everyTag = () => [...MANY, 'ui', 'Bug']
+  // Used in the last week: ui 3 tickets, Bug 1, then the suggestions no ticket used, by name.
+  const everyTag = () => ['ui', 'Bug', ...NAMED]
 
   it('pages through every tag in the order the filter shows them, without gaps or repeats', async () => {
     const first = await page(`/api/projects/${main}/tags`)
-    expect(first.tags).toEqual(MANY.slice(0, 20))
+    expect(first.tags).toEqual(everyTag().slice(0, 20))
     expect(first.next).toMatch(/^[\w-]+$/)
     const second = await page(at(`/api/projects/${main}/tags`, first.next))
-    expect(second.tags).toEqual(MANY.slice(20, 40))
+    expect(second.tags).toEqual(everyTag().slice(20, 40))
     const last = await page(at(`/api/projects/${main}/tags`, second.next))
-    expect(last).toEqual({ tags: [...MANY.slice(40), 'ui', 'Bug'], next: null })
+    expect(last).toEqual({ tags: everyTag().slice(40), next: null })
 
     for (const limit of [7, 20, 50]) {
       const pages = await allPages(`/api/projects/${main}/tags`, limit)
@@ -131,7 +139,7 @@ describe('GET /api/projects/:id/tags', () => {
     })
     const mod = await allPages(`/api/projects/${main}/tags?q=MOD`)
     expect(mod.map((p) => p.tags.length)).toEqual([20, 20, 10])
-    expect(mod.flatMap((p) => p.tags)).toEqual(MANY)
+    expect(mod.flatMap((p) => p.tags)).toEqual(NAMED)
     expect(await page(`/api/projects/${main}/tags?q=${encodeURIComponent('  Ui ')}`)).toEqual({
       tags: ['ui'],
       next: null,
@@ -140,10 +148,7 @@ describe('GET /api/projects/:id/tags', () => {
   })
 
   it('puts a tag the project does not offer first when it is included, and a known one where it is', async () => {
-    expect((await page(`/api/projects/${main}/tags?include=Zeta`)).tags.slice(0, 2)).toEqual([
-      'Zeta',
-      'Module 1',
-    ])
+    expect((await page(`/api/projects/${main}/tags?include=Zeta`)).tags.slice(0, 2)).toEqual(['Zeta', 'ui'])
     expect((await allPages(`/api/projects/${main}/tags?include=Zeta`)).flatMap((p) => p.tags)).toEqual([
       'Zeta',
       ...everyTag(),
@@ -161,7 +166,7 @@ describe('GET /api/projects/:id/tags', () => {
   })
 
   it('follows next without a repeat or a gap while the order moves under it', async () => {
-    // Used tags only, most used first: high 3, Bug 2, then once each in the order first seen.
+    // Used tags only, most used in the week first: high 3, Bug 2, then the others by name.
     const moving = newProject('Moving', [])
     for (const tags of [
       ['high', 'Bug', 'Extra A'],
@@ -171,13 +176,13 @@ describe('GET /api/projects/:id/tags', () => {
     ])
       newTicket(moving, tags)
     const target = `/api/projects/${moving}/tags`
-    const before = ['high', 'Bug', 'Extra A', 'UI', 'Extra B', 'critical', 'Extra C', 'low']
+    const before = ['high', 'Bug', 'critical', 'Extra A', 'Extra B', 'Extra C', 'low', 'UI']
     expect((await allPages(target)).flatMap((p) => p.tags)).toEqual(before)
 
     const first = await page(at(target, null, 3))
-    expect(first.tags).toEqual(['high', 'Bug', 'Extra A'])
-    // Between the pages, a tag of the next page and one further on move up past the first page's
-    // end, and one in another casing moves up most: page 1 at the same offset would now end there.
+    expect(first.tags).toEqual(['high', 'Bug', 'critical'])
+    // Between the pages, tags of the next page and further on move up past the first page's end,
+    // and one in another casing moves up most.
     newTicket(moving, ['Extra C', 'UI', 'EXTRA b'])
     newTicket(moving, ['Extra C', 'extra b'])
     newTicket(moving, ['extra b'])
@@ -187,13 +192,12 @@ describe('GET /api/projects/:id/tags', () => {
     expect(new Set(tags.map((t) => t.toLowerCase())).size).toBe(tags.length)
     const keys = (list: string[]) => list.map((t) => t.toLowerCase()).sort()
     expect(keys(tags)).toEqual(keys(before))
-    // The pages after the first hold the rest in the order the list has now (where the first page's
-    // offset would give 'UI', 'Extra A', 'critical', 'low': 'Extra A' again, 'extra b' and 'Extra C' never).
-    expect(tags.slice(3)).toEqual(['extra b', 'Extra C', 'UI', 'critical', 'low'])
-    // A tag new since the first page comes too, once, after those not given yet.
+    // The pages after the first hold the rest in the order the list has now.
+    expect(tags.slice(3)).toEqual(['extra b', 'Extra C', 'UI', 'Extra A', 'low'])
+    // A tag new since the first page comes too, once, in its place by name among those not given yet.
     newTicket(moving, ['brand new'])
     expect(await page(at(target, rest[1].next, 50))).toEqual({
-      tags: ['critical', 'low', 'brand new'],
+      tags: ['brand new', 'Extra A', 'low'],
       next: null,
     })
   })
@@ -204,16 +208,30 @@ describe('GET /api/projects/:id/tags', () => {
     expect(tags).not.toContain('Elsewhere')
     expect(await page(`/api/projects/${main}/tags?q=secret`)).toEqual({ tags: [], next: null })
     expect(await page(`/api/projects/${other}/tags`)).toEqual({
-      tags: ['Elsewhere', 'Secret', 'Module 1'],
+      tags: ['Module 1', 'Secret', 'Elsewhere'],
       next: null,
     })
   })
 
+  it('orders by the tickets updated in the last week, one updated longer ago not counted', async () => {
+    const lately = newProject('Lately', ['Zed', 'Alpha'])
+    for (let i = 0; i < 3; i++) newTicket(lately, ['Zed'], daysAgo(10))
+    newTicket(lately, ['Alpha'])
+    newTicket(lately, ['Mod B'])
+    newTicket(lately, ['Mod B'])
+    newTicket(lately, ['Mod A'], daysAgo(10))
+    const target = `/api/projects/${lately}/tags`
+    expect((await page(target)).tags).toEqual(['Mod B', 'Alpha', 'Mod A', 'Zed'])
+    // The search keeps that order, and finds a tag by its letters in order.
+    expect((await page(`${target}?q=mod`)).tags).toEqual(['Mod B', 'Mod A'])
+    expect((await page(`${target}?q=zd`)).tags).toEqual(['Zed'])
+  })
+
   it('clamps the limit to 50 and refuses what is no page', async () => {
     const big = await page(`/api/projects/${main}/tags?limit=1000`)
-    expect(big.tags).toEqual(MANY)
+    expect(big.tags).toEqual(everyTag().slice(0, 50))
     expect(big.next).not.toBeNull()
-    expect((await page(`/api/projects/${main}/tags?limit=1`)).tags).toEqual(['Module 1'])
+    expect((await page(`/api/projects/${main}/tags?limit=1`)).tags).toEqual(['ui'])
     for (const bad of [
       'limit=0',
       'limit=-3',
@@ -231,6 +249,15 @@ describe('GET /api/projects/:id/tags', () => {
     }
     const long = await send(`/api/projects/${main}/tags?q=${'a'.repeat(201)}`)
     expect(long.status).toBe(400)
+  })
+
+  it('gives the tag counts of the last week with the project, a ticket once per tag', async () => {
+    const counted = newProject('Counted', [])
+    newTicket(counted, ['UI', 'ui'], daysAgo(1))
+    newTicket(counted, ['Bug'], daysAgo(8))
+    const res = await send(`/api/projects/${counted}`)
+    expect(res.status).toBe(200)
+    expect((await res.json()).tagWeek).toEqual({ ui: 1 })
   })
 
   it('refuses a caller not signed in, and answers 404 for a project there is not', async () => {

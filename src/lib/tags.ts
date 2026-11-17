@@ -57,15 +57,39 @@ export function usedTags(lists: string[][]): string[] {
     .map((e) => e.tag)
 }
 
+/** How far back a ticket's update counts as recent use of its tags. */
+const RECENT_MS = 7 * 24 * 60 * 60 * 1000
+
 /**
- * The chips offered under a tags field: the project's suggestions, then the tags its tickets carry
- * (most used first), each once in any casing, and none already in `value`. A suggestion the tickets
- * already carry in another casing is offered in theirs.
+ * How many of the tickets updated in the week before `now` (created counts, a new ticket being updated
+ * when made) carry each tag, keyed by the tag in lower case: each ticket once per tag. `updatedAt` is
+ * the ISO text the database keeps, compared as text.
+ */
+export function recentTagCounts(
+  tickets: readonly { tags: readonly string[]; updatedAt: string }[],
+  now: Date,
+): Record<string, number> {
+  const since = new Date(now.getTime() - RECENT_MS).toISOString()
+  const counts: Record<string, number> = Object.create(null)
+  for (const ticket of tickets) {
+    if (ticket.updatedAt < since) continue
+    for (const key of new Set(ticket.tags.map((tag) => tag.toLowerCase())))
+      counts[key] = (counts[key] ?? 0) + 1
+  }
+  return counts
+}
+
+/**
+ * The chips offered under a tags field: the project's suggestions, then the tags its tickets carry,
+ * each once in any casing, and none already in `value`. A suggestion the tickets already carry in
+ * another casing is offered in theirs. The chips go most used in the last week first (`recent`, as
+ * `recentTagCounts`), ties and tags not used lately by name, case-insensitive.
  */
 export function tagChoices(
   suggestions: readonly string[],
   used: readonly string[],
   value: readonly string[],
+  recent: Readonly<Record<string, number>> = {},
 ) {
   const usedCasing = new Map(used.map((t) => [t.toLowerCase(), t]))
   const taken = new Set(value.map((t) => t.toLowerCase()))
@@ -76,7 +100,12 @@ export function tagChoices(
     taken.add(tag.toLowerCase())
     out.push(tag)
   }
-  return out
+  // Not `recent[tag]` alone: `constructor` and the like are on every plain object.
+  const weekOf = (tag: string) => {
+    const n = recent[tag.toLowerCase()]
+    return typeof n === 'number' ? n : 0
+  }
+  return out.sort((a, b) => weekOf(b) - weekOf(a) || a.toLowerCase().localeCompare(b.toLowerCase()))
 }
 
 /** `suggestions` as kept: trimmed, whitespace runs made one space, blanks and repeats in any casing left out. */
@@ -92,8 +121,23 @@ export function cleanSuggestions(suggestions: readonly string[]): string[] {
   return out
 }
 
-/** The tags whose name holds `query` (trimmed) in any casing, in their order; all of them for none. */
+/** A name as matched: accents removed, lower case. */
+const foldTag = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+
+/** Whether the characters of `query` appear in `name` in their order, not necessarily next to each other. */
+function holdsInOrder(query: string, name: string) {
+  const want = [...query]
+  let at = 0
+  for (const ch of name) if (ch === want[at]) at++
+  return at === want.length
+}
+
+/**
+ * The tags the typed `query` soft-matches: its letters in the tag's name in order, not as a prefix or
+ * a whole (`rdm` holds in Roadmap, `ogfe` in Ongoing features), with case and accents set aside.
+ * `query` is trimmed; none is all of them, in their order.
+ */
 export function matchTags(tags: readonly string[], query: string): string[] {
-  const q = query.trim().toLowerCase()
-  return q ? tags.filter((t) => t.toLowerCase().includes(q)) : [...tags]
+  const q = foldTag(query.trim())
+  return q ? tags.filter((t) => holdsInOrder(q, foldTag(t))) : [...tags]
 }
