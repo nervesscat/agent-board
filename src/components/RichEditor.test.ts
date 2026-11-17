@@ -942,7 +942,82 @@ const CASES: [name: string, md: string, style: BlockStyle, expected: string, rel
     '- x\n  1. a\n  \n  > b\n  \n  3. c',
     true,
   ],
+  [
+    'heading on a single space between two words keeps the heading on reload',
+    'Hello« »brave world',
+    'heading',
+    'Hello\n\n## &#32;\n\nbrave world',
+    true,
+  ],
+  [
+    'numbered list on a single space between two words keeps the item on reload',
+    'Hello« »brave world',
+    'orderedList',
+    'Hello\n\n1. &#32;\n\nbrave world',
+    true,
+  ],
+  [
+    'quote on a single space between two words keeps the quote on reload',
+    'Hello« »brave world',
+    'quote',
+    'Hello\n\n> &#32;\n\nbrave world',
+    true,
+  ],
+  [
+    'numbered over a selection that runs into a code block of a bullet item and its second code block reads back with both',
+    '- «x\n  ```\n  co»de\n  ```\n- c',
+    'orderedList',
+    '1. x\n   ```\n   co\n   ```\n   ```\n   de\n   ```\n\n- c',
+    true,
+  ],
 ]
+
+/** The whole document selected (Ctrl+A): each block style applies to every block it covers. */
+const SELECT_ALL_CASES: [name: string, style: BlockStyle, expected: string][] = [
+  ['heading', 'heading', '## one\n\n## two'],
+  ['bulletList', 'bulletList', '- one\n- two'],
+  ['orderedList', 'orderedList', '1. one\n2. two'],
+  ['taskList', 'taskList', '- [ ] one\n- [ ] two'],
+  ['quote', 'quote', '> one\n>\n> two'],
+  ['code', 'code', '```\none\n```\n\n```\ntwo\n```'],
+]
+
+describe('RichEditor block styles on the whole document', () => {
+  it.each(SELECT_ALL_CASES)('select all | %s', (_name, style, expected) => {
+    const editor = new Editor({ extensions, content: 'one\n\ntwo', contentType: 'markdown' })
+    try {
+      editor.commands.selectAll()
+      toggleBlock(editor, style)
+      const out = tidy(editor.getMarkdown())
+      expect(out).toBe(expected)
+      expect(roundTrip(out)).toBe(out)
+    } finally {
+      editor.destroy()
+    }
+  })
+})
+
+describe('RichEditor numbered items with code blocks', () => {
+  it('reads two code blocks of one numbered item back as both', () => {
+    const md = '1. x\n   ```\n   code\n   ```\n   ```\n   code\n   ```'
+    expect(roundTrip(md)).toBe(md)
+    const item = markdown.parse(md).content?.[0]?.content?.[0]
+    expect(item?.content?.map((n) => n.type)).toEqual(['paragraph', 'codeBlock', 'codeBlock'])
+    expect(item?.content?.slice(1).map((n) => n.content?.[0]?.text)).toEqual(['code', 'code'])
+  })
+
+  it('reloads a numbered selection over a code block to the editor text', () => {
+    const editor = setup('- «x\n  ```\n  co»de\n  ```\n- c')
+    try {
+      expect(editor.state.doc.textContent).toBe('xcodec')
+      toggleBlock(editor, 'orderedList')
+      const reloaded = Node.fromJSON(schema, markdown.parse(tidy(editor.getMarkdown())))
+      expect(reloaded.textContent).toBe(editor.state.doc.textContent)
+    } finally {
+      editor.destroy()
+    }
+  })
+})
 
 /**
  * A paragraph after a numbered list in a bullet item, starting with a space: the space is written as an entity, and

@@ -7,7 +7,7 @@ import { TableKit } from '@tiptap/extension-table'
 import { Placeholder } from '@tiptap/extensions'
 import { Markdown } from '@tiptap/markdown'
 import { type Node, type ResolvedPos } from '@tiptap/pm/model'
-import { TextSelection, type Transaction } from '@tiptap/pm/state'
+import { AllSelection, TextSelection, type Transaction } from '@tiptap/pm/state'
 import { findWrapping, liftTarget } from '@tiptap/pm/transform'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -34,13 +34,23 @@ import { cn } from '#/lib/utils'
 /**
  * The serializer leaves extra blank lines around tables and at the end. Collapse them, outside code
  * blocks, where blank lines are part of the code. It also writes an empty list item as a marker and a
- * space; a marker alone reads back as a list, one with a space after it does not, so the space goes.
+ * space; a marker alone reads back as a list, one with a space after it does not, so the space goes. A heading of
+ * spaces alone is written with its spaces as entities: a heading with nothing in it does not read back, and a line of
+ * spaces does not either.
  */
 export function tidy(markdown: string): string {
   return markdown
     .split(/(```[\s\S]*?```)/)
     .map((part, i) =>
-      i % 2 ? part : part.replace(/\n{3,}/g, '\n\n').replace(/^([ \t]*[-+*])[ \t]+$/gm, '$1'),
+      i % 2
+        ? part
+        : part
+            .replace(/\n{3,}/g, '\n\n')
+            .replace(/^([ \t]*[-+*])[ \t]+$/gm, '$1')
+            .replace(
+              /^(#{1,6}) ( +)$/gm,
+              (_line, hashes: string, spaces: string) => `${hashes} ${'&#32;'.repeat(spaces.length)}`,
+            ),
     )
     .join('')
     .trimEnd()
@@ -88,6 +98,9 @@ const Paragraph = EditorNode.create({
       return previous?.type === 'paragraph' && previousEmpty ? EMPTY_PARAGRAPH_MARKDOWN : ''
     }
     const text = h.renderChildren(content)
+    // A paragraph of spaces alone reads back as nothing, so its spaces are written as entities (not in a task item,
+    // where the reader drops the entity's `&`, see below).
+    if (/^ +$/.test(text) && ctx?.parentType !== 'taskItem') return text.replace(/ /g, '&#32;')
     // After a numbered or checklist list, a paragraph that starts with a space reads back inside the item unless the
     // space is written as an entity.
     // Inside a task item the reader drops the entity's `&` (the nested paragraph reads back as `#32;`), so there the space is written bare.
@@ -155,10 +168,43 @@ const TaskItemWithParagraphs = TaskItem.extend({
 })
 
 /**
+ * The text of a numbered item without its marker and the space after it, each continuation line cut by the same width.
+ * The library cuts those lines one column short (it counts `1` for `1.`), so each line keeps a space, and a fenced block
+ * after the first one loses its fence. An item with a fenced block is lexed again from this text (see the tokenizer
+ * of `OrderedListWithBlankLine`); the other items read as the library reads them.
+ */
+function orderedItemText(raw: string): string {
+  const [first = ''] = raw.split('\n')
+  const marker = /^\s*\S+?[.)](?:[ \t]+|$)/.exec(first)?.[0] ?? ''
+  return raw
+    .split('\n')
+    .map((line, i) => {
+      if (i === 0) return line.slice(marker.length)
+      const indent = line.length - line.trimStart().length
+      return line.slice(Math.min(indent, marker.length))
+    })
+    .join('\n')
+}
+
+/**
  * A numbered list in a list item that does not start at 1 cannot follow a paragraph or a quote on the next line: the
  * reader takes its first line for more of that text. It goes after a blank line.
  */
 const OrderedListWithBlankLine = OrderedList.extend({
+  markdownTokenizer: {
+    name: 'orderedList',
+    level: 'block',
+    start: () => -1,
+    tokenize(src, tokens, lexer) {
+      const list = OrderedList.config.markdownTokenizer?.tokenize(src, tokens, lexer)
+      if (!list || !list.items) return list
+      for (const item of list.items) {
+        if (item.raw === undefined || !/^[ \t]*(```|~~~)/m.test(item.raw)) continue
+        item.tokens = lexer.blockTokens(orderedItemText(item.raw)).filter((token) => token.type !== 'space')
+      }
+      return list
+    },
+  },
   renderMarkdown(node, h, ctx) {
     const list = this.parent?.(node, h, ctx) ?? ''
     const inItem = ctx?.parentType === 'listItem' || ctx?.parentType === 'taskItem'
@@ -382,13 +428,14 @@ function styleActive(editor: Editor, style: BlockStyle): boolean {
 
 /**
  * Splits the textblocks the selection touches at its ends, so the selection covers whole textblocks, and returns the
- * positions of those blocks (none for a selection that is not text, or covers no character). A split beside a line
- * break would leave the break in a block of its own, so there the break stays where it is. With `splitBreaks`, the
- * blocks are split at the breaks the selection covers too, and the breaks go: a heading or checklist item cannot hold a
- * line break once it is saved.
+ * positions of those blocks (none for a selection that covers no character). A selection that is not text (the whole
+ * document, Ctrl+A, or a node) has no ends inside a textblock to split, so it covers the blocks it touches as they are.
+ * A split beside a line break would leave the break in a block of its own, so there the break stays where it is. With
+ * `splitBreaks`, the blocks are split at the breaks the selection covers too, and the breaks go: a heading or checklist
+ * item cannot hold a line break once it is saved.
  */
 function splitSelection(tr: Transaction, splitBreaks = false): number[] {
-  if (!(tr.selection instanceof TextSelection) || tr.selection.empty) return []
+  if (tr.selection.empty) return []
   const { from, to } = tr.selection
   const splittable = (pos: number) => {
     const $pos = tr.doc.resolve(pos)
@@ -672,7 +719,11 @@ export function applyBlockStyle(tr: Transaction, style: BlockStyle, active: bool
   }
   keepNumbers(tr, numbers)
   const map = tr.mapping.slice(mark)
-  tr.setSelection(TextSelection.create(tr.doc, map.map(from, 1), map.map(to, -1)))
+  tr.setSelection(
+    tr.selection instanceof AllSelection
+      ? new AllSelection(tr.doc)
+      : TextSelection.create(tr.doc, map.map(from, 1), map.map(to, -1)),
+  )
 }
 
 /**
