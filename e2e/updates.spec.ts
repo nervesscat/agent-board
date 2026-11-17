@@ -308,8 +308,11 @@ test('no card for an agent, nor on a checkout board, nor when the updates route 
   // The server's HTML never carries the card (it renders in the browser, for the human only).
   expect(await (await human.get('/')).text()).not.toContain('data-testid="update-card"')
 
-  // A checkout board has no updater to offer anything.
+  // A checkout board has no updater to offer anything. The human's page asks for the updates once it
+  // knows who it is: wait for that answer, so it cannot land on the agent's route below.
+  const answered = page.waitForResponse((res) => new URL(res.url()).pathname === '/api/updates')
   await page.goto('/')
+  await answered
   await expect(card(page)).toHaveCount(0)
   // The human's page asks the updates route in the browser: let that finish, so it is not counted below as a request of the agent's page.
   await page.waitForLoadState('networkidle')
