@@ -159,8 +159,9 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    check ran on the head and its verdict is `matches` (it runs on every ticket, low included, after the
    last review round and before the hand-off, and again after a human comment that sent the ticket back;
    at `low` effort, from only the human's words and attachments and the result, never the builder's
-   plan, the spec or the review's findings; `does not match` goes back to the builder, then the review
-   rounds again, then the intent check again), and `open` is empty, or
+   plan, the spec or the review's findings; `does not match` goes back to the builder, then the gate, then one more full review round
+   (outside the round budget; after the second one the ticket agent asks the human), then the intent check
+   again; it runs on the preview started before it, and again on any new head), and `open` is empty, or
    holds only the Preview phase with a summary saying why the change cannot be tried. The ticket's summary
    (`summary` on `get_ticket`, `fallback: false`: the hand-off is the summary the agent wrote, not a
    separate post) has screenshots in its attachments when the change has a UI, and a "Tested" part

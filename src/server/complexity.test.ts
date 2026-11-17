@@ -366,7 +366,16 @@ describe('the review texts the board ships', () => {
       expect(d).toContain('done as asked, done differently with how, or not done')
       expect(d).toContain('`matches` hands off')
       expect(d).toContain(
-        "`does not match` goes back to **builder** with the intent check's lines as the brief, then the review rounds again (above low), then the intent check again",
+        "`does not match` goes back to **builder** with the intent check's lines as the brief, then the gate, then one more full review round (above low; numbering continues, all six phases run again), then the intent check again",
+      )
+      expect(d).toContain(
+        "A `does not match` is outside the complexity's round budget; after the second one on a ticket the ticket agent stops and asks the human (`ask_decision`: keep going, ship as is, drop) with the intent check's lines and the human's words on the card",
+      )
+      expect(d).toContain(
+        'the result (the preview link, its screenshots or recordings, the diff at the current head). The preview is started, and its screenshots taken, before this check',
+      )
+      expect(d).toContain(
+        'A commit after a `matches` (a CI fix, a rebase or a merge of the base) changes the head, so it runs again on the new head',
       )
       expect(d).toContain('the human is asked only when two readings of their words are both plausible')
       expect(d).toContain('with both readings on the card (`ask_decision`)')
@@ -393,7 +402,29 @@ describe('the review texts the board ships', () => {
       expect(ticket).toContain('at `effort: low`, whatever the complexity')
       expect(ticket).toContain('`done as asked`, `done differently (how)` or `not done`')
       expect(ticket).toContain(
-        "`does not match`: back to the builder (step 3) with the intent check's lines as the brief, then your gate (step 4), then the review rounds again (mid, high and max; a low ticket has none), then the intent check again",
+        "`does not match`: back to the builder (step 3) with the intent check's lines as the brief, then your gate (step 4), then ONE more full review round (mid, high and max; numbering continues from the last round, all six phases run again with two hunts; a low ticket has no review, only the gate), then the intent check again",
+      )
+      expect(ticket).toContain(
+        "A `does not match` is not a gate return and is outside the complexity's round budget (step 5). After the SECOND `does not match` on one ticket, stop and ask the human with `ask_decision` (keep going, ship as is, drop), with the intent check's lines and the human's words on the card",
+      )
+      expect(ticket).toContain(
+        'the result: the preview link (started in step 6), its screenshots or recordings, and the diff at the current head',
+      )
+      expect(ticket).toContain(
+        'Any commit after a `matches` (a CI fix, a rebase or a merge of the base) changes the head, so the intent check runs again on the new head before the hand-off stands',
+      )
+      expect(flat(between(ticketAgent, '### 6. Evidence', '### 6b.'))).toContain(
+        'Start the preview here, before the intent check: it is the one build of this head for the preview',
+      )
+      const handoff = flat(between(ticketAgent, '### 7. Hand off', '## Review depth'))
+      expect(handoff).toContain(
+        'the one step 6 already started and kept running, reused here, not built again',
+      )
+      expect(handoff).toContain(
+        'A fix commit changes the head, so the intent check (step 6b) runs again on the new head before the hand-off stands',
+      )
+      expect(flat(between(ticketAgent, '**The budget**', '**The full cycle'))).toContain(
+        'An intent return (`does not match`, step 6b) is not a gate return and is outside this budget',
       )
       expect(ticket).toContain('both readings on the card (`ask_decision`), never otherwise')
       expect(flat(ticketAgent)).toContain('it runs at `low` effort whatever the complexity')
@@ -418,6 +449,12 @@ describe('the review texts the board ships', () => {
         expect(t, name).toContain('at `low` effort whatever the complexity')
         expect(t, name).toContain("never the builder's plan, the spec or the review's findings")
         expect(t, name).toContain('`matches` hands off; `does not match` goes back to the builder')
+        expect(t, name).toContain(
+          "then the gate, then one more full review round (above low; the numbering continues, all six phases run again), then the intent check again. A `does not match` is outside the complexity's round budget; after the second one on a ticket the ticket agent stops and asks the human (`ask_decision`: keep going, ship as is, drop) with the intent check's lines and the human's words on the card",
+        )
+        expect(t, name).toContain(
+          'the preview is started first, with its screenshots, and the check reads it at the current head; a commit after a `matches`, such as a CI fix, changes the head, so the check runs again on it',
+        )
         expect(t.replaceAll('**intent**', 'intent'), name).toContain(
           'the intent check at `low` effort (every complexity) → hand off',
         )

@@ -244,7 +244,9 @@ every complexity.
 
 **Give it:** only the human's own words and attachments (the ticket's instructions, and every post and
 reply by the human, newest last, the latest comment that sent the ticket back weighing most) and the
-result (the preview, the screenshots or recordings, the diff). Never the builder's plan, the spec or
+result (the preview link, its screenshots or recordings, the diff at the current head). The preview
+is started, and its screenshots taken, before this check. A commit after a \`matches\` (a CI fix, a
+rebase or a merge of the base) changes the head, so it runs again on the new head. Never the builder's plan, the spec or
 the review's findings: it must not inherit their reading.
 
 **Returns:** one line per thing the human asked (done as asked, done differently with how, or not
@@ -252,8 +254,11 @@ done, each with its evidence) and a verdict: matches, or does not match with the
 to what was built.
 
 **Next:** \`matches\` hands off. \`does not match\` goes back to **builder** with the intent check's
-lines as the brief, then the review rounds again (above low), then the intent check again. It never
-asks the human: the human is asked only when two readings of their words are both plausible and give
+lines as the brief, then the gate, then one more full review round (above low; numbering continues, all
+six phases run again), then the intent check again. A \`does not match\` is outside the complexity's
+round budget; after the second one on a ticket the ticket agent stops and asks the human
+(\`ask_decision\`: keep going, ship as is, drop) with the intent check's lines and the human's words on
+the card. It never asks the human earlier: the human is asked only when two readings of their words are both plausible and give
 visibly different results, with both readings on the card (\`ask_decision\`). It never answers a
 decision (\`answer_decision\`).`,
   },

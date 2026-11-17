@@ -503,7 +503,8 @@ export function missingReviewPhases(ticketId: number): MissingReviewPhase[] {
     counts.set(key, (counts.get(key) ?? 0) + 1)
     if (round > last) last = round
   }
-  for (const span of timeline.spans.filter((x) => x.start >= cut)) count(spans, runKindOf(span.agent, known), span.round ?? null)
+  for (const span of timeline.spans.filter((x) => x.start >= cut))
+    count(spans, runKindOf(span.agent, known), span.round ?? null)
   for (const r of db
     .select({
       agent: schema.runReports.agent,

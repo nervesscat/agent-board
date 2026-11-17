@@ -460,15 +460,16 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
 
 **The intent check comes first, on every ticket of any complexity (low included).** When you
 orchestrate the cycle, the last review round (none for low) passes and then the project's **intent**
-agent compares what the human asked with what was built, before any item above stands: at `low`
+agent compares what the human asked with what was built, before any item above stands (the preview
+is started first, with its screenshots, and the check reads it at the current head; a commit after a
+`matches`, such as a CI fix, changes the head, so the check runs again on it): at `low`
 effort whatever the complexity, again after any human comment that sent the ticket back. It gets only
 the human's own words and attachments (the instructions and every post and reply by the human, newest
-last, the latest comment that sent the ticket back weighing most) and the result (the preview, the
-screenshots or recordings, the diff), never the builder's plan, the spec or the review's findings. It
+last, the latest comment that sent the ticket back weighing most) and the result (the preview link,
+its screenshots or recordings, the diff at the current head), never the builder's plan, the spec or the review's findings. It
 returns one line per ask (`done as asked`, `done differently (how)` or `not done`, with its evidence)
 and a verdict, `matches` or `does not match`. `matches` hands off; `does not match` goes back to the
-builder with its lines as the brief, then the review rounds again (above low), then the intent check
-again. It never asks the human: the human is asked (`ask_decision`, both readings on the card) only
+builder with its lines as the brief, then the gate, then one more full review round (above low; the numbering continues, all six phases run again), then the intent check again. A `does not match` is outside the complexity's round budget; after the second one on a ticket the ticket agent stops and asks the human (`ask_decision`: keep going, ship as is, drop) with the intent check's lines and the human's words on the card. It never asks the human earlier: the human is asked (`ask_decision`, both readings on the card) only
 when two readings of their words are both plausible and give visibly different results.
 
 **Above low, the full cycle is mandatory.** For `mid`, `high` and `max` every review round runs spec,

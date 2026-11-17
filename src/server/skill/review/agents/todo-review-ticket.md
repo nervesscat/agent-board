@@ -390,7 +390,9 @@ round ends the cycle at every level. When a round does not survive and no round 
 still open, `ask_decision` (ship as is, keep going, drop) and stop: `BLOCKER: decision`. On max that is
 after round 10, and there is never an eleventh round. Never start one more round on your own. The
 complexity sets the budget at every review depth: a `deep` review earns no extra round, a `light` one
-loses none.
+loses none. An intent return (`does not match`, step 6b) is not a gate return and is outside this
+budget: it gets its own fix pass and one more review (step 6b), so "never start one more round on
+your own" does not apply to it.
 
 **The full cycle is mandatory above low.** For `mid`, `high` and `max`, every review round runs
 spec, env, verify, TWO independent hunts, refute and the merge check. None is skipped because the
@@ -406,9 +408,12 @@ agent (step 6b): it runs at `low` effort whatever the complexity.
 
 ### 6. Evidence
 
-The review's `shots/` folder has the verify phase's screenshots. For a UI change you also need one
-of the finished thing in the preview (step 7) at the state the ticket is about. A low ticket has no
-review folder, so its screenshots come from the preview. With
+Start the preview here, before the intent check: it is the one build of this head for the preview
+(step 7 item 5 says how, from the pushed or the local worktree under the preview rules), and it keeps
+running. The review's `shots/` folder has the verify phase's screenshots. For a UI change you also need
+one of the finished thing in that preview at the state the ticket is about. A low ticket has no review
+folder, so its screenshots come from the preview. The intent check (6b) is given this preview, these
+screenshots and the diff. With
 `BROWSER=no` and a UI change, do everything else, leave the ticket in progress with its summary saying
 where you stopped, and return `STATUS: needs-browser`: the orchestrator runs you again with the browser.
 
@@ -424,19 +429,26 @@ started with the Agent tool at `effort: low`, whatever the complexity. Brief it 
 - the human's own words and attachments: the ticket's instructions and every post and reply by the
   human, newest last, the latest comment that sent the ticket back weighing most, with their
   attachments;
-- the result: the preview, the screenshots or recordings, and the diff.
+- the result: the preview link (started in step 6), its screenshots or recordings, and the diff at the
+  current head.
 
 Never give it the builder's plan, the spec or the review's findings: it must not inherit their reading.
 It returns one line per thing the human asked (`done as asked`, `done differently (how)` or `not done`,
 with the evidence) and a verdict, `matches` or `does not match`. It never asks the human, builds and
 edits nothing, and never answers a decision (`answer_decision`); it writes its run report like every
 subagent.
-- `matches`: go on to the hand-off (step 7).
+- `matches`: go on to the hand-off (step 7). Any commit after a `matches` (a CI fix, a rebase or a merge
+  of the base) changes the head, so the intent check runs again on the new head before the hand-off
+  stands.
 - `does not match`: back to the builder (step 3) with the intent check's lines as the brief, then your
-  gate (step 4), then the review rounds again (mid, high and max; a low ticket has none), then the
-  intent check again.
-- The human is asked only when two readings of their words are both plausible and give visibly
-  different results: both readings on the card (`ask_decision`), never otherwise.
+  gate (step 4), then ONE more full review round (mid, high and max; numbering continues from the last
+  round, all six phases run again with two hunts; a low ticket has no review, only the gate), then the
+  intent check again. A `does not match` is not a gate return and is outside the complexity's round
+  budget (step 5). After the SECOND `does not match` on one ticket, stop and ask the human with
+  `ask_decision` (keep going, ship as is, drop), with the intent check's lines and the human's words
+  on the card.
+- Earlier than that the human is asked only when two readings of their words are both plausible and
+  give visibly different results: both readings on the card (`ask_decision`), never otherwise.
 
 ### 7. Hand off
 
@@ -456,7 +468,9 @@ Implementation and its steps (`set_task_done`).
    calls under the Bash tool's 10-minute limit): CI runs the full unit and end-to-end suites, the
    part your scoped gate left out, on another platform than yours. CI green on the final head is
    required before hand-off. A failure there goes back to the builder like a gate failure (step 4),
-   fixed before you hand off, never waved through as flaky without a rerun that passes. Only when a review ran (mid, high or max) and the PR's head SHA is the SHA whose review survived,
+   fixed before you hand off, never waved through as flaky without a rerun that passes. A fix commit
+   changes the head, so the intent check (step 6b) runs again on the new head before the hand-off
+   stands. Only when a review ran (mid, high or max) and the PR's head SHA is the SHA whose review survived,
    record that review on the PR's ticket so the review queue does not run it again: `post_review_result`
    with its verdict, its `summary.md` as `summaryMd`, the `sha`, its checks and counts, and `repoId` when
    the project has several repos. It also posts the summary there as a progress post, on the PR's ticket
@@ -475,7 +489,9 @@ Implementation and its steps (`set_task_done`).
    like a gate failure. When it passes, comment on the PR `CI run locally: green on <sha>` with
    that head SHA (`gh pr comment`): that ticks CI. After each later push, run it again and comment
    again.
-5. The preview, from at most one build of this head for the preview. Prefer the board's own
+5. The preview, from at most one build of this head for the preview: the one step 6 already started
+   and kept running, reused here, not built again; build only when none runs for this head (a new
+   commit since changes the head). Prefer the board's own
    preview run: `start_run` it (or `start_preview` on the workspace), wait for `running` (on
    `failed`, read its log tail and fix). Its build is the preview's one build for this head, it
    carries the preview base the board serves under, it lives on after your session, and the board
