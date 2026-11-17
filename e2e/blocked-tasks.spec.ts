@@ -92,7 +92,11 @@ test('a task can be tagged blocked on the human: chip, reason and its parent on 
   expect((await read()).status).toBe('in_progress')
 })
 
-test('blocked tasks show on the board card, the list, and the summary', async ({ page, project, human }) => {
+test('blocked tasks show on the summary, not on the Ongoing features cards or list', async ({
+  page,
+  project,
+  human,
+}) => {
   const make = (title: string, tasks: unknown[]) =>
     ok<TicketFull>(
       human.post(`/api/projects/${project.id}/tickets`, {
@@ -125,12 +129,13 @@ test('blocked tasks show on the board card, the list, and the summary', async ({
   // The ticket's own card, not its lane's.
   const named = new RegExp(`#${waiting.id} Waits on keys(?!:)`)
   const card = page.getByRole('link', { name: named })
-  await expect(card).toContainText('3 tasks blocked')
+  // The cards carry no blocked-task badge: the summary and the ticket page show the count.
+  await expect(card).not.toContainText('tasks blocked')
   await expect(page.getByRole('link', { name: /All clear/ })).not.toContainText('blocked')
   await card.screenshot({ path: test.info().outputPath('board-card-blocked.png') })
 
   await page.getByRole('tab', { name: 'List' }).click()
-  await expect(page.getByRole('link', { name: named })).toContainText('3 tasks blocked')
+  await expect(page.getByRole('link', { name: named })).not.toContainText('tasks blocked')
   await expect(page.getByRole('link', { name: /All clear/ })).not.toContainText('blocked')
 
   // The summary lists the blocked step each ticket works next, and counts only those.
@@ -233,7 +238,7 @@ test('a blocked task reaches the board only when it is the next step', async ({ 
   await expect.poll(async () => (await row()).blockedNext).toBe(true)
 
   await page.goto(`/projects/${project.id}/features`)
-  await expect(page.getByRole('link', { name: named })).toContainText('1 task blocked')
+  await expect(page.getByRole('link', { name: named })).not.toContainText('task blocked')
 
   await page.goto(`/projects/${project.id}`)
   const entry = needsYou.getByRole('listitem').filter({ hasText: 'Approve the release' })
