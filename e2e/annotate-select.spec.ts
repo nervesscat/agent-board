@@ -1385,3 +1385,72 @@ test('the X beside the selection tip deletes it even where another hovered mark 
   expect(items[0]!.rect!.x).toBeCloseTo(83, 0)
   expect(items[0]!.rect!.w).toBeCloseTo(57, 0)
 })
+
+test('a box keeps the last move before its release, even when both arrive before the canvas has redrawn', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Last move kept')
+  await control(canvas, 'Box').click()
+  const a = await at(canvas, [50, 50])
+  const b = await at(canvas, [150, 150])
+  const c = await at(canvas, [160, 160])
+  await page.mouse.move(a.x, a.y)
+  await page.mouse.down()
+  await page.mouse.move(b.x, b.y)
+  // The last move and the release land in one task, as on a busy page: nothing renders between them.
+  await pictureOf(canvas).evaluate(
+    (el, p) => {
+      const init = { pointerId: 1, pointerType: 'mouse', bubbles: true, clientX: p.x, clientY: p.y }
+      el.dispatchEvent(new PointerEvent('pointermove', init))
+      el.dispatchEvent(new PointerEvent('pointerup', init))
+    },
+    { x: c.x, y: c.y },
+  )
+  await page.mouse.up()
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [mark] = storedItems(attached)
+  expect(mark!.rect!.x).toBeCloseTo(50, 0)
+  expect(mark!.rect!.w).toBeCloseTo(110, 0)
+  expect(mark!.rect!.h).toBeCloseTo(110, 0)
+})
+
+test('a pencil stroke keeps every point of moves that arrive before the canvas has redrawn', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Stroke points kept')
+  await control(canvas, 'Pencil').click()
+  const a = await at(canvas, [50, 50])
+  const b = await at(canvas, [100, 100])
+  const c = await at(canvas, [150, 60])
+  await page.mouse.move(a.x, a.y)
+  await page.mouse.down()
+  await pictureOf(canvas).evaluate(
+    (el, points) => {
+      for (const p of points)
+        el.dispatchEvent(
+          new PointerEvent('pointermove', {
+            pointerId: 1,
+            pointerType: 'mouse',
+            bubbles: true,
+            clientX: p.x,
+            clientY: p.y,
+          }),
+        )
+    },
+    [b, c],
+  )
+  await page.mouse.up()
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [mark] = storedItems(attached)
+  const points = mark!.points!
+  // The press point and both moves are on the stroke (the release adds none).
+  expect(points.length).toBeGreaterThanOrEqual(3)
+  expect(points.some(([x, y]) => Math.abs(x - 100) < 1 && Math.abs(y - 100) < 1)).toBe(true)
+  expect(points.some(([x, y]) => Math.abs(x - 150) < 1 && Math.abs(y - 60) < 1)).toBe(true)
+})

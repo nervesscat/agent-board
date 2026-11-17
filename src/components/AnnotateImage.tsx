@@ -358,6 +358,13 @@ export function AnnotateImage({
   const [hoverId, setHoverId] = useState<string | null>(null)
   const [text, setText] = useState('')
   const [draft, setDraft] = useState<Annotation | null>(null)
+  // The drawing as the last pointer event left it: a move and the release after it may come before a render, so
+  // the next event builds on this, never on the `draft` of the render it was handled in.
+  const drawing = useRef<Annotation | null>(null)
+  const putDraft = (next: Annotation | null) => {
+    drawing.current = next
+    setDraft(next)
+  }
   const [busy, setBusy] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const origin = useRef<Point | null>(null)
@@ -398,6 +405,7 @@ export function AnnotateImage({
     setSelected(new Set())
     setPreview(null)
     setMarquee(null)
+    drawing.current = null
     setDraft(null)
     gesture.current = null
     createImageBitmap(file).then(
@@ -609,7 +617,7 @@ export function AnnotateImage({
     if (tool === 'text' && !text.trim()) return
     originPointer.current = e.pointerId
     origin.current = point
-    setDraft(fresh(tool, point))
+    putDraft(fresh(tool, point))
   }
 
   const onPointerMove = (e: PointerEvent<HTMLCanvasElement>) => {
@@ -640,10 +648,11 @@ export function AnnotateImage({
     }
     // With no gesture and the Select tool, the pointer's position sets the cursor and whether the X shows.
     if (tool === 'select') return hover(e, at(e))
+    const draft = drawing.current
     if (!draft || !origin.current || e.pointerId !== originPointer.current) return
     const [x, y] = at(e)
     const [x0, y0] = origin.current
-    setDraft(
+    putDraft(
       draft.kind === 'pen'
         ? { ...draft, points: [...(draft.points ?? []), [x, y]] }
         : draft.kind === 'rect' || draft.kind === 'ellipse'
@@ -693,6 +702,7 @@ export function AnnotateImage({
 
   // The drawing press ends on the release of the pointer that began it, whatever gesture another pointer has.
   const finishDraw = (pointer: number) => {
+    const draft = drawing.current
     if (!draft || pointer !== originPointer.current) return
     const box = draft.rect
     const line =
@@ -706,7 +716,7 @@ export function AnnotateImage({
       setHistory((h) => edit(h, [...h.present, draft]))
       setSelected(new Set([draft.id]))
     }
-    setDraft(null)
+    putDraft(null)
     origin.current = null
     originPointer.current = null
   }
