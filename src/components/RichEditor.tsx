@@ -655,6 +655,20 @@ function keepNumbers(tr: Transaction, numbers: Map<Node, number>) {
 }
 
 /**
+ * Whether every node around the block at `pos` holds valid content. A node that does not (a heading that leads a list
+ * item, as markdown can write it) cannot be lifted out of: the lift asks that node where the block would fit, and the
+ * schema refuses to answer, so the block stays where it is.
+ */
+function insideValid(doc: Node, pos: number): boolean {
+  const $pos = doc.resolve(pos)
+  for (let depth = 0; depth <= $pos.depth; depth++) {
+    const node = $pos.node(depth)
+    if (!node.type.validContent(node.content)) return false
+  }
+  return true
+}
+
+/**
  * Whether the block at `pos` is the first paragraph of a list item and is followed by a list, quote or code block there:
  * such a block keeps its place when it is restyled in place (see `applyBlockStyle`).
  */
@@ -689,7 +703,10 @@ export function applyBlockStyle(tr: Transaction, style: BlockStyle, active: bool
     const kind = style === 'code' ? 'codeBlock' : 'heading'
     const ofKind = (block: number) =>
       style === 'quote' ? inQuote(tr.doc.resolve(block)) : tr.doc.nodeAt(block)?.type.name === kind
-    const changed = blocks.filter((block) => (!active || ofKind(block)) && !leadsItemWithRest(tr.doc, block))
+    const changed = blocks.filter(
+      (block) =>
+        (!active || ofKind(block)) && !leadsItemWithRest(tr.doc, block) && insideValid(tr.doc, block),
+    )
     // A list item starts with its paragraph, so a first paragraph that is followed by another paragraph leaves its list
     // and the next paragraph becomes the first of the item. (A first paragraph followed by a list, quote or code block
     // is left as it is above: no paragraph can stand in front of that rest, and markdown cannot write an empty one.)

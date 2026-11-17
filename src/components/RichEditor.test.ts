@@ -1014,6 +1014,24 @@ describe('RichEditor block styles on the whole document', () => {
   })
 })
 
+describe('RichEditor quote on the whole document with a heading in a list item', () => {
+  it('does not throw, and reloads to the editor document', () => {
+    const editor = new Editor({
+      extensions,
+      content: '- ## a\n  - b\n\nplain',
+      contentType: 'markdown',
+    })
+    try {
+      editor.commands.selectAll()
+      expect(() => toggleBlock(editor, 'quote')).not.toThrow()
+      const reloaded = Node.fromJSON(schema, markdown.parse(tidy(editor.getMarkdown())))
+      expect(reloaded.textContent).toBe(editor.state.doc.textContent)
+    } finally {
+      editor.destroy()
+    }
+  })
+})
+
 describe('RichEditor numbered items with code blocks', () => {
   it('reads two code blocks of one numbered item back as both', () => {
     const md = '1. x\n   ```\n   code\n   ```\n   ```\n   code\n   ```'
