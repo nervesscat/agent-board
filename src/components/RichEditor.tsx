@@ -399,9 +399,24 @@ function listOf(doc: Node, pos: number): string | undefined {
   return $pos.node($pos.depth - 1).type.name
 }
 
+/**
+ * The position the selection starts at, inside a textblock. A whole-document selection (Ctrl+A) starts before the first
+ * block, so it starts in the first textblock, as a text selection starts in the block it begins in.
+ */
+function startPos(editor: Editor): ResolvedPos {
+  const { selection, doc } = editor.state
+  if (!(selection instanceof AllSelection)) return selection.$from
+  let first = -1
+  doc.descendants((node, pos) => {
+    if (first >= 0) return false
+    if (node.isTextblock) first = pos
+    return first < 0
+  })
+  return first < 0 ? selection.$from : doc.resolve(first + 1)
+}
+
 /** The list kind the selection starts in, innermost first: a bullet item in a numbered item is a bullet item here. */
-function innermostList(editor: Editor): string | undefined {
-  const { $from } = editor.state.selection
+function innermostList($from: ResolvedPos): string | undefined {
   for (let depth = $from.depth; depth > 0; depth--) {
     const name = $from.node(depth).type.name
     if (name === 'bulletList' || name === 'orderedList' || name === 'taskList') return name
@@ -419,8 +434,8 @@ function inQuote($pos: ResolvedPos): boolean {
 
 /** Whether the selection, where it starts, is already in `style` (a toggle then turns it off). */
 function styleActive(editor: Editor, style: BlockStyle): boolean {
-  const { $from } = editor.state.selection
-  if (isListKind(style)) return innermostList(editor) === style
+  const $from = startPos(editor)
+  if (isListKind(style)) return innermostList($from) === style
   if (style === 'quote') return inQuote($from)
   if (style === 'code') return $from.parent.type.name === 'codeBlock'
   return $from.parent.type.name === 'heading' && $from.parent.attrs.level === 2

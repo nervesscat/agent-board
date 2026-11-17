@@ -995,6 +995,23 @@ describe('RichEditor block styles on the whole document', () => {
       editor.destroy()
     }
   })
+
+  // A second press on the same whole-document selection takes the style off again, as on a text selection.
+  it.each(SELECT_ALL_CASES)('select all, toggled twice | %s', (_name, style, expected) => {
+    const editor = new Editor({ extensions, content: 'one\n\ntwo', contentType: 'markdown' })
+    try {
+      editor.commands.selectAll()
+      toggleBlock(editor, style)
+      expect(tidy(editor.getMarkdown())).toBe(expected)
+      editor.commands.selectAll()
+      toggleBlock(editor, style)
+      const out = tidy(editor.getMarkdown())
+      expect(out).toBe('one\n\ntwo')
+      expect(roundTrip(out)).toBe(out)
+    } finally {
+      editor.destroy()
+    }
+  })
 })
 
 describe('RichEditor numbered items with code blocks', () => {
