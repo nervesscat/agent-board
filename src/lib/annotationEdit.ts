@@ -228,10 +228,13 @@ export function handlePoint({ x, y, w, h }: Box, part: ResizePart): Point {
  * The handle under a point, the nearest one within reach, or null. A box with no size at all has no handles, so a
  * press on a dot moves it. A side handle on an axis of zero size is no handle: a vertical line's east and west
  * handles would sit on its stroke, and a press there moves it. A side handle's reach is at most a third of the box
- * on its axis, so in the middle of a thin line or box a press moves it; the corners keep `reach`.
+ * on its axis, so in the middle of a thin line or box a press moves it; the corners keep `reach`, but on a box
+ * thinner than `reach` a corner counts only when the point is nearer it than the box's centre.
  */
 export function resizeHandleAt(box: Box, point: Point, reach: number): ResizePart | null {
   if (!box.w && !box.h) return null
+  const thin = box.w < reach || box.h < reach
+  const centre = Math.hypot(point[0] - (box.x + box.w / 2), point[1] - (box.y + box.h / 2))
   let best: ResizePart | null = null
   let bestDistance = Infinity
   for (const part of RESIZE_PARTS) {
@@ -240,6 +243,7 @@ export function resizeHandleAt(box: Box, point: Point, reach: number): ResizePar
     const partReach = dx && dy ? reach : Math.min(reach, (dx ? box.w : box.h) / 3)
     const [hx, hy] = handlePoint(box, part)
     const distance = Math.hypot(point[0] - hx, point[1] - hy)
+    if (dx && dy && thin && distance > centre) continue
     if (distance <= partReach && distance <= bestDistance) {
       best = part
       bestDistance = distance
@@ -343,10 +347,11 @@ export const cursorOf = (part: Part | null) => (part ? PART_CURSOR[part] : 'defa
 
 /**
  * Where the X that deletes a selection sits: beside its rotate tip, `offset` to the right, or to the left where
- * there is no room before the picture's edge.
+ * there is no room before the picture's edge. On a picture too narrow for either side the X's centre is held at
+ * the left edge, so it stays on the picture.
  */
 export function deleteAt([x, y]: Point, offset: number, picture: { width: number }): Point {
-  return [x + offset <= picture.width ? x + offset : x - offset, y]
+  return [x + offset <= picture.width ? x + offset : Math.max(0, x - offset), y]
 }
 
 /** What the canvas measures a pointer's reach with, in picture pixels, and where the rotate tip sits. */

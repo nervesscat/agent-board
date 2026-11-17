@@ -648,6 +648,16 @@ describe('resizeHandleAt', () => {
     expect(resizeHandleAt(line, [20, 100], 8)).not.toBeNull()
   })
 
+  it('has no corner handle in the middle of a short horizontal line, so a press there moves it', () => {
+    const line = { x: 100, y: 100, w: 12, h: 0 }
+    expect(resizeHandleAt(line, [106, 100], 8)).toBeNull()
+    // Its ends still take the handles that resize its width: a corner or the side at that end.
+    expect(resizeHandleAt(line, [101, 100], 8)).toMatch(/^(nw|w|sw)$/)
+    expect(resizeHandleAt(line, [111, 100], 8)).toMatch(/^(ne|e|se)$/)
+    // A box 10 px across keeps its corners at full reach, so a press at its middle still resizes it.
+    expect(resizeHandleAt({ x: 100, y: 100, w: 10, h: 10 }, [105, 105], 8)).toMatch(/^(nw|ne|se|sw)$/)
+  })
+
   it('is no side handle in the middle of a box 10 px across, so a press there moves it', () => {
     const narrow = { x: 100, y: 100, w: 10, h: 100 }
     expect(resizeHandleAt(narrow, [105, 150], 8)).toBeNull()
@@ -765,6 +775,10 @@ describe('deleteAt', () => {
   it('puts the X to the right of the rotate tip, or to the left at the picture edge', () => {
     expect(deleteAt([50, 40], 16, { width: 300 })).toEqual([66, 40])
     expect(deleteAt([290, 40], 16, { width: 300 })).toEqual([274, 40])
+  })
+
+  it('keeps the X on the picture when neither side has room for it, as on a picture 24 px wide', () => {
+    expect(deleteAt([12, 0], 16, { width: 24 })).toEqual([0, 0])
   })
 })
 
