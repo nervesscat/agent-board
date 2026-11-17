@@ -360,7 +360,7 @@ or is the base its merge check used; and `RETRY` does not name that review, its 
 findings. Then go on to step 6 with that review.
 
 Otherwise run `/feature-review` through the Skill tool, unattended:
-`repo=<REPO> <branch> ticket=<TICKET> ports=<PORTS> browser=<BROWSER> effort=<the effort>`, `slots=<SLOTS> build=<WORKDIR/02-build.md> repoId=<REPO_ID>`, then `scoped`, plus `light` when the depth
+`repo=<REPO> <branch> ticket=<TICKET> round=<n> ports=<PORTS> browser=<BROWSER> effort=<the effort>`, `slots=<SLOTS> build=<WORKDIR/02-build.md> repoId=<REPO_ID>`, then `scoped`, plus `light` when the depth
 is `light` and `deep` when it is `deep` (nothing more for `standard`). With `scoped`, its phases
 run only the scoped checks, since CI runs the full suites on the PR. With `slots=`, its verify
 phase takes a test slot around the end-to-end run and the full suite and its merge check around
@@ -368,8 +368,10 @@ a heavy test run; its typecheck, lint and scoped unit runs and the hunt's and re
 unit and probe tests take none, so hold no slot while you wait for it. With `build=`, its env phase copies the
 gate's artifact at the same head instead of building it again. It reviews the branch's
 commits in a worktree of its own, posts its phases on the ticket, and writes `review.md` and
-`summary.md`. When it would ask a question, go on with the spec's assumption and note it. When it
-returns, however it ended, release any slot folder under `SLOTS` whose `holder.txt` names this
+`summary.md`. When it would ask a question, go on with the spec's assumption and note it. `round=<n>` is the review
+round this run is (1 for the first, then counting on, continuing after an intent return, step 6b): its
+phase agents put it on their spans and run reports, and the board counts a phase only when it is there.
+When it returns, however it ended, release any slot folder under `SLOTS` whose `holder.txt` names this
 ticket.
 
 The change **survives** when the verdict is `SHIP`, the "works" check is `YES`, the base check is
@@ -547,7 +549,9 @@ Implementation and its steps (`set_task_done`).
    entry is a review phase the last round lacks (`round`, `phase`, `expected`, `found`; the hunt needs
    two). Run each missing phase, with a fix round through the builder if it needs code, and write its
    report, before the hand-off stands; it is a flag, never a refusal, and `[]` is the answer when
-   every phase ran. Then `open`: fix every task it lists and check again
+   every phase ran. Exception: when the flag names phases of a round that step 5 skipped because the
+   head SHA's review had already survived (a send-back with no new commit), do not run it again: say in
+   the summary which head SHA and which review it reuses, and go on; any other missing phase is run. Then `open`: fix every task it lists and check again
    (Summary open: no summary written since the last commit). An open Preview may stay only when the
    summary says why.
 

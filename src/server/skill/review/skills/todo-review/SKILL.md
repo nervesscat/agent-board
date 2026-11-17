@@ -155,7 +155,9 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    `missingRunReports` is empty (it names the runs that still have no report; none listed means every
    run has one: the phase agents write theirs, the orchestrator writes none), `missingReviewPhases` is
    empty (for a mid, high or max ticket it names each phase its last review round lacks: every round
-   runs spec, env, verify, two hunts, refute and the merge check, and none is skipped), the intent
+   runs spec, env, verify, two hunts, refute and the merge check, and none is skipped; a round the
+   ticket agent skipped because its head SHA's review had already survived is reused, named in the
+   summary, and not rerun), the intent
    check ran on the head and its verdict is `matches` (it runs on every ticket, low included, after the
    last review round and before the hand-off, and again after a human comment that sent the ticket back;
    at `low` effort, from only the human's words and attachments and the result, never the builder's

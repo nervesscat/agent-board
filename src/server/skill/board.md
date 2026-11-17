@@ -378,7 +378,10 @@ name>"` (e.g. `orch/builder-1`) on every board tool call, so what it posts is fi
   the work timeline records with no report — a span, a hand-off, or a second run of one agent and
   round that only one report covers: flagged, not refused; get them written before the hand-off.
   It also answers with `missingReviewPhases` (the review phases the last round of a mid, high or max
-  ticket lacks; run them before the hand-off stands).
+  ticket lacks; run them before the hand-off stands, except a round the build skipped because its head
+  SHA's review had already survived: that one is reused and named in the summary). A phase counts only
+  when its span or run report carries the round (and the last segment of the agent name names the
+  phase agent): a run with no round is not counted.
 
 ### Watch for feedback
 
@@ -488,9 +491,11 @@ while the ticket is in review, and its page shows them on the Tasks card.
 
 `update_ticket` → `review` also answers with `missingReviewPhases` for a mid, high or max ticket
 whose project has a software kind and whose timeline records work: each phase its last review round
-lacks, as `{round, phase, expected, found}` (the hunt expects two; a span or a run report of that kind
+lacks (a phase counts only when its span or run report carries the round and the last segment of the
+agent name names the phase agent, so a run with no round is not counted), as `{round, phase, expected, found}` (the hunt expects two; a span or a run report of that kind
 and round counts as a run). It is a flag, not a refusal: run each missing phase (with a fix round if it
-needs code) before the hand-off stands. `get_ticket` shows it in review too; it is `[]` for a low
+needs code) before the hand-off stands, except a round the build skipped because its head SHA's review
+had already survived (reused, named in the summary). `get_ticket` shows it in review too; it is `[]` for a low
 ticket.
 
 After that:

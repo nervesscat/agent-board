@@ -552,6 +552,63 @@ describe('the review texts the board ships', () => {
     })
   })
 
+  describe('the review round reaches the phases, and a reused review is not rerun', () => {
+    it('feature-review takes round=<n>, puts it in every phase brief and on each span and report', () => {
+      const f = flat(featureReview)
+      expect(f).toContain('| `round=<n>` | the review round this run is')
+      expect(f).toContain("`start_span` / `end_span` with `agent` = the phase's agent name")
+      expect(f).toContain('`write_run_report` with `round`')
+      expect(f).toContain('| `1` when a board ticket is given and no round is |')
+      expect(f).toContain(
+        'the review round (`ROUND`, from `round=`, 1 when not given), the full text of the contract',
+      )
+      expect(f).toContain(
+        "the orchestrator of the review records the span with the phase agent's name and the round",
+      )
+    })
+
+    it('the ticket agent passes round=<n>, and the runner delegation passes it on', async () => {
+      expect(ticketAgent).toContain('ticket=<TICKET> round=<n> ports=<PORTS>')
+      expect(flat(ticketAgent)).toContain('continuing after an intent return, step 6b')
+      const { DEFAULT_AGENTS } = await import('./defaultAgents')
+      const runner = flat(DEFAULT_AGENTS.find((a) => a.name === 'runner')!.delegation)
+      expect(runner).toContain('the review round (`round=<n>`')
+      expect(runner).toContain('passes it on to /feature-review')
+    })
+
+    it('board.md and AGENTS.md say a phase counts only with the round and the phase agent name', () => {
+      for (const text of [boardSkill, agentsDoc]) {
+        const f = flat(text)
+        expect(f).toContain('carries the round')
+        expect(f).toContain('last segment of the agent name names the phase agent')
+        expect(f).toContain('a run with no round is not counted')
+      }
+    })
+
+    it('a review step 5 skipped because its head SHA survived is not rerun when the flag names it', () => {
+      const step7 = flat(between(ticketAgent, '7. `update_ticket` to `review`', '## Review depth'))
+      expect(step7).toContain(
+        "a round that step 5 skipped because the head SHA's review had already survived",
+      )
+      expect(step7).toContain('do not run it again')
+      expect(step7).toContain('any other missing phase is run')
+      expect(flat(todoReview)).toContain(
+        'had already survived is reused, named in the summary, and not rerun',
+      )
+      for (const text of [boardSkill, agentsDoc]) expect(flat(text)).toContain('had already survived')
+    })
+
+    it('feature-review item 5 carries the bound of the does-not-match loop', () => {
+      const item = flat(between(featureReview, '5. **The intent check**', '## Delegation'))
+      expect(item).toContain('ONE more full review round above low')
+      expect(item).toContain('all six phases, two hunts')
+      expect(item).toContain("outside the complexity's round budget")
+      expect(item).toContain('After the SECOND `does not match` on one ticket')
+      expect(item).toContain('`ask_decision` (keep going, ship as is, drop)')
+      expect(item).not.toContain('It never asks the human')
+    })
+  })
+
   it('todo-review takes no rounds setting, and its brief to each ticket agent passes COMPLEXITY', () => {
     expect(todoReview).not.toContain('rounds=')
     expect(todoReview).not.toContain('ROUNDS=<n>')

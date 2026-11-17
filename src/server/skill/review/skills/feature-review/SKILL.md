@@ -91,6 +91,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `repoId=<id>` | the repo id the test slot folders are named with (`tests-<id>-1` … `-N`, `tests-<id>-full`), passed to every phase; the env phase writes the exact folders into `00-env.md` | none |
 | `post` | post the report as a PR comment when the target is a PR | off |
 | `effort=<low\|medium\|high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`; a board cycle sets it from the ticket's complexity (`low` for low, `medium` for mid and high, `high` for max) | the session's |
+| `round=<n>` | the review round this run is: every phase span (`start_span` / `end_span` with `agent` = the phase's agent name, e.g. `spec`, `env`, `verify`, `hunt-1`, `hunt-2`, `refute`, `merge`, and `round`) and every phase's run report (`write_run_report` with `round`) carry it, because the board counts a phase only when its span or report carries the round | `1` when a board ticket is given and no round is |
 | `ticket=<id>` | the board ticket this change belongs to: turns on **On the board** below | found from the PR's `ticket` in `list_prs` when the board is connected |
 
 ## Setup
@@ -182,7 +183,7 @@ phase reads it: spec, env, verify, hunt, refute and merge), the `SLOTS` director
 was given (its record is the `Test slots:` line in `00-env.md`), the repo id (`repoId`) the slot
 folders are named with, the ticket id (`TICKET`) when
 the review is on a ticket — every phase that takes a test slot writes it in its `holder.txt` —
-the full text of the contract,
+the review round (`ROUND`, from `round=`, 1 when not given), the full text of the contract,
 and the path of
 `00-focus.md` with this rule: start from it; read outside it only to follow a reference from it.
 With `scoped`, it also includes the word `scoped`. Agents treat `WORKTREE` as the repo root.
@@ -428,7 +429,11 @@ plan first, then the result with its proofs.
    to Main (no summary, no new top-level post for the human), and the ticket's summary is the
    job of whoever hands the ticket off. Every phase agent also fills in its run report with
    `write_run_report` before it hands back: one report per run, from its own template,
-   `run-reports/<agent>.md` in this skill's bundle. Put that in its brief.
+   `run-reports/<agent>.md` in this skill's bundle. Put that in its brief. Each phase agent's span
+   (`start_span`, with the phase's agent name and `round`) and its report carry `ROUND`: the board
+   counts a phase only when its span or report carries the round and the last segment of its agent
+   name names the phase. When a phase agent cannot reach the board tools, the orchestrator of the
+   review records the span with the phase agent's name and the round.
 3. **Decisive open questions** from the spec go to the human with `ask_decision` on the ticket (the
    interpretations as options, the spec's assumption marked recommended). If Phase 1 already asked
    the human this question in the chat, step 3 never asks it again, whatever the human did. If they
@@ -459,10 +464,14 @@ plan first, then the result with its proofs.
    builder's plan, the spec or the review's findings, so it cannot inherit their reading. It returns
    one line per thing the human asked (`done as asked`, `done differently (how)` or `not done`, with
    the evidence) and a verdict, `matches` or `does not match`. `matches` hands off. `does not match`
-   goes back to the builder with the intent check's lines as the brief, then the review rounds again
-   (above low), then the intent check again. It never asks the human: the human is asked only when
-   two readings of their words are both plausible and give visibly different results, with both
-   readings on the card (`ask_decision`).
+   goes back to the builder with the intent check's lines as the brief, then the gate, then ONE more
+   full review round above low (numbering continues from the last round, all six phases, two hunts; a
+   low ticket has no review, only the gate), then the intent check again. A `does not match` is
+   outside the complexity's round budget. After the SECOND `does not match` on one ticket, the ticket
+   agent asks the human with `ask_decision` (keep going, ship as is, drop), with the intent check's
+   lines and the human's words on the card. Earlier than that the human is asked only when two
+   readings of their words are both plausible and give visibly different results, with both readings
+   on the card (`ask_decision`).
 
 ## Delegation
 

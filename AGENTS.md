@@ -487,7 +487,9 @@ githubRepo, baseBranch?, as?}`, agents only) posts one decision card, "Add repo 
     subagent run the work timeline records with no report: that is a flag, not a refusal — get them
     written before the hand-off. It also answers with `missingReviewPhases`: for a mid, high or max ticket,
     each phase its last review round lacks (`{round, phase, expected, found}`), another flag to clear before
-    the hand-off stands. Put the rule in every subagent's brief.
+    the hand-off stands, except a round the build skipped because its head SHA's review had already
+    survived (reused, named in the summary). A phase counts only when its span or run report carries the
+    round (and the last segment of the agent name names the phase agent), so a run with no round is not counted. Put the rule in every subagent's brief.
 
 ## Notifications: tracked requests and important notices
 

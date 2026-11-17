@@ -146,7 +146,8 @@ port or browser.
 
 **Give it:** \`REPO\` (the main checkout), \`TARGET\` (the PR number or the branch), \`ticket=<id>\` (for a PR: its \`ticket\` in \`list_prs\`, the feature ticket that names the PR or else the PR's own ticket),
 the ticket's context (its instructions, the human's posts and replies, the decisions and their
-answers, the attachments), its port range and whether it may use the browser.
+answers, the attachments), its port range, whether it may use the browser and the review round
+(\`round=<n>\`, 1 for the first; it passes it on to /feature-review and its phases).
 
 **Returns:** eight lines: status, verdict, the three checks, counts, SHA and the paths of
 \`review.md\` and \`summary.md\`. Its phases post on the ticket themselves, in its Agents tab.
