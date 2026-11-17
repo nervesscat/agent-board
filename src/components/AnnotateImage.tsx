@@ -462,6 +462,17 @@ export function AnnotateImage({
         return
       }
     }
+    // Shift-click adds one mark to the selection or takes it away, with no drag. It comes before the rotate handle,
+    // so a Shift-press on a selected mark in the handle's band removes it rather than turning the selection.
+    if (hit && e.shiftKey) {
+      setSelected((prev) => {
+        const next = new Set(prev)
+        if (next.has(hit.id)) next.delete(hit.id)
+        else next.add(hit.id)
+        return next
+      })
+      return
+    }
     // The rotate handle of the selection sits above its box, in a band that can hold a mark: a mark under the
     // pointer is picked first, and the handle takes a press that lands on no mark or on one of the selected
     // marks (a selected mark's reach can cover the handle).
@@ -480,16 +491,6 @@ export function AnnotateImage({
         }
         return
       }
-    }
-    if (hit && e.shiftKey) {
-      // Shift-click adds one mark to the selection or takes it away, with no drag.
-      setSelected((prev) => {
-        const next = new Set(prev)
-        if (next.has(hit.id)) next.delete(hit.id)
-        else next.add(hit.id)
-        return next
-      })
-      return
     }
     // A press on a mark, or on empty picture inside the selection's box, moves the picked marks; a mark outside
     // the picked group is picked alone first.

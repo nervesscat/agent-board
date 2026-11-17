@@ -282,6 +282,42 @@ test('a click on a mark in the band under the rotate handle picks that mark, not
   expect(drawn!.rotation).toBeUndefined()
 })
 
+test('a Shift-click on a selected mark under the rotate tip removes it from the selection and does not turn it', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Shift-click under the tip')
+  await canvas.getByLabel('Stroke width').fill('20')
+  await draw(page, canvas, 'Box', [120, 220], [180, 260])
+  await noteField(canvas).fill('below')
+  await draw(page, canvas, 'Box', [100, 100], [200, 200])
+  await noteField(canvas).fill('thick')
+
+  // Both boxes are selected: the selection's box starts at the thick box's top edge, so its rotate tip sits at
+  // (150, 74), inside the reach of the thick box's own stroke.
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [150, 150])
+  await click(page, canvas, [150, 240], true)
+  await expect(noteField(canvas)).toBeDisabled()
+
+  // Shift-click on the tip's spot takes the thick box out of the selection; the lower box is left, its note shown.
+  await click(page, canvas, [150, 74], true)
+  await expect(noteField(canvas)).toHaveValue('below')
+
+  // Nothing turned: the thick box keeps its place and has no rotation, and the lower box is where it was drawn.
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [below, thick] = storedItems(attached)
+  expect(thick!.note).toBe('thick')
+  expect(thick!.rotation).toBeUndefined()
+  expect(thick!.rect!.x).toBeCloseTo(100, 0)
+  expect(thick!.rect!.y).toBeCloseTo(100, 0)
+  expect(thick!.rect!.w).toBeCloseTo(100, 0)
+  expect(below!.rotation).toBeUndefined()
+  expect(below!.rect!.x).toBeCloseTo(120, 0)
+  expect(below!.rect!.y).toBeCloseTo(220, 0)
+})
+
 test('Delete removes the selection, and undo and redo bring it back and take it away again', async ({
   page,
   project,
