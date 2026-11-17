@@ -397,6 +397,50 @@ export function partAt(
   return null
 }
 
+/** Whether a point is on a box's grips: one of its eight resize handles or its rotate tip. */
+export function onGrip(box: Box, point: Point, layout: Layout): boolean {
+  if (resizeHandleAt(box, point, layout.handleReach)) return true
+  const [tx, ty] = handleAt(box, layout.gap, layout.picture)
+  return Math.hypot(point[0] - tx, point[1] - ty) <= layout.tipReach
+}
+
+/**
+ * The mark the pointer is hovering, whose selection chrome the Select tool then shows: the mark whose
+ * grips (handles, rotate tip) the pointer is on, so the chrome stays while the pointer travels to a
+ * handle that lies outside the mark; else the mark under the pointer, the newest first; else the
+ * current mark while the pointer is still inside its box; else none. `current` is the id hovered so far.
+ */
+export function hoverTarget(
+  items: Annotation[],
+  current: string | null,
+  point: Point,
+  layout: Layout,
+): string | null {
+  const now = current ? items.find((a) => a.id === current) : undefined
+  if (now && onGrip(markBounds(now), point, layout)) return now.id
+  const hit = markAt(items, point[0], point[1])
+  if (hit) return hit.id
+  if (now && insideBox(markBounds(now), point)) return now.id
+  return null
+}
+
+/**
+ * The marks whose selection chrome (outline, handles, rotate tip) is on screen. Only the Select tool
+ * shows any: the selected marks, always, as one group, and the hovered mark when it is not one of them.
+ * With any other tool, or with no mark selected or hovered, there is none.
+ */
+export function chromeOf(
+  tool: string,
+  picked: Annotation[],
+  hovered: Annotation | undefined,
+): { group: Annotation[]; hovered: Annotation | null } {
+  if (tool !== 'select') return { group: [], hovered: null }
+  return {
+    group: picked,
+    hovered: hovered && !picked.some((a) => a.id === hovered.id) ? hovered : null,
+  }
+}
+
 /** Notes typed after a snapshot was taken stay when the snapshot comes back by undo or redo. */
 export function carryNotes(restored: Annotation[], current: Annotation[]): Annotation[] {
   return restored.map((a) => {

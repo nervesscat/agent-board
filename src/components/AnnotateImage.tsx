@@ -34,6 +34,7 @@ import {
   type ResizePart,
   RESIZE_PARTS,
   carryNotes,
+  chromeOf,
   createHistory,
   cursorOf,
   deleteAt,
@@ -41,12 +42,14 @@ import {
   fillMark,
   handleAt,
   handlePoint,
+  hoverTarget,
   insideBox,
   isFillable,
   isTinyDrag,
   markAt,
   markBounds,
   marqueeIds,
+  onGrip,
   partAt,
   pivotOf,
   redo,
@@ -107,9 +110,14 @@ const X_OFFSET = 16
 const X_RADIUS = 6
 const X_REACH = 9
 
-/** What the canvas paints over the picture while marks are selected: the group box, its handles and its tip. */
+/**
+ * What the canvas paints over the picture with the Select tool: the selection's box, handles and tip, the
+ * chrome of the mark under the pointer, and the marquee being dragged. With any other tool there is none.
+ */
 interface Overlay {
   picked: Annotation[]
+  /** The mark under the pointer when it is not selected: its box, handles and tip show, with no X. */
+  hovered: Annotation | null
   marquee: Box | null
   /** The pointer is near the rotate tip, so the X that deletes the selection is shown beside it. */
   hover: boolean
@@ -252,8 +260,9 @@ function paintOverlay(
     const m = overlay.marquee
     ctx.strokeRect(m.x, m.y, m.w, m.h)
   }
-  const box = unionBounds(overlay.picked)
-  if (box) {
+  // One box's chrome: the dashed outline, the rotate tip on its stem and the eight resize handles.
+  const chrome = (box: Box, withX: boolean) => {
+    ctx.setLineDash([8 * k, 5 * k])
     ctx.strokeRect(box.x - 6 * k, box.y - 6 * k, box.w + 12 * k, box.h + 12 * k)
     const [hx, hy] = handleAt(box, HANDLE_GAP * k, bitmap)
     ctx.setLineDash([])
@@ -265,7 +274,6 @@ function paintOverlay(
     ctx.arc(hx, hy, HANDLE_RADIUS * k, 0, Math.PI * 2)
     ctx.fill()
     ctx.stroke()
-    // The eight resize handles: squares on the box's corners and the middles of its sides.
     const size = HANDLE_SIZE * k
     for (const part of RESIZE_PARTS) {
       const [px, py] = handlePoint(box, part)
@@ -273,7 +281,7 @@ function paintOverlay(
       ctx.strokeRect(px - size / 2, py - size / 2, size, size)
     }
     // The X beside the rotate tip, only while the pointer is near the tip.
-    if (overlay.hover) {
+    if (withX) {
       const [cx, cy] = deleteAt([hx, hy], X_OFFSET * k, bitmap)
       const r = X_RADIUS * k
       ctx.beginPath()
@@ -288,6 +296,9 @@ function paintOverlay(
       ctx.stroke()
     }
   }
+  const group = unionBounds(overlay.picked)
+  if (group) chrome(group, overlay.hover)
+  if (overlay.hovered) chrome(markBounds(overlay.hovered), false)
   ctx.restore()
 }
 
@@ -343,6 +354,8 @@ export function AnnotateImage({
   // Whether new boxes and ellipses are drawn filled (the Fill checkbox), and whether the pointer is near the rotate tip.
   const [fill, setFill] = useState(false)
   const [tipHover, setTipHover] = useState(false)
+  // The mark under the Select tool's pointer, whose chrome shows while it is not selected.
+  const [hoverId, setHoverId] = useState<string | null>(null)
   const [text, setText] = useState('')
   const [draft, setDraft] = useState<Annotation | null>(null)
   const [busy, setBusy] = useState(false)
@@ -362,6 +375,11 @@ export function AnnotateImage({
     setTipHover(false)
   }, [selected])
   const selectedItem = picked.length === 1 ? picked[0] : undefined
+  // The mark under the Select tool's pointer (an undo can take it away).
+  const hoveredMark = useMemo(
+    () => (hoverId ? shown.find((a) => a.id === hoverId) : undefined),
+    [shown, hoverId],
+  )
   const canUndo = history.past.length > 0 && !busy
   const canRedo = history.future.length > 0 && !busy
 
@@ -407,8 +425,17 @@ export function AnnotateImage({
       w: Math.abs(marquee[1][0] - marquee[0][0]),
       h: Math.abs(marquee[1][1] - marquee[0][1]),
     }
-    paint(canvas, bitmap, drawn, { picked, marquee: box || null, hover: tipHover })
-  }, [bitmap, shown, draft, picked, marquee, tipHover])
+    // The selection chrome is on screen only with the Select tool: for the selected marks and the hovered one.
+    const chrome = chromeOf(tool, picked, hoveredMark)
+    paint(
+      canvas,
+      bitmap,
+      drawn,
+      tool === 'select'
+        ? { picked: chrome.group, hovered: chrome.hovered, marquee: box || null, hover: tipHover }
+        : null,
+    )
+  }, [bitmap, shown, draft, tool, picked, hoveredMark, marquee, tipHover])
 
   // Image pixels for a css pixel of the canvas as it is shown, and where a pointer is in the picture.
   const scale = (e: PointerEvent<HTMLCanvasElement>) => {
@@ -452,17 +479,35 @@ export function AnnotateImage({
     (within(point, deleteXAt(box, k), X_REACH * k) ||
       within(point, handleAt(box, HANDLE_GAP * k, bitmap ?? { width: 0, height: 0 }), TIP_REACH * k))
 
+  // The marks a press at `point` works on: the selection, or the hovered mark that is not selected when the press
+  // is on that mark's handles or tip and not on the selection's own grips (`adopt`: it becomes the selection).
+  const grabbedAt = (point: Point, k: number, shift: boolean) => {
+    const hov = hoverId ? items.find((a) => a.id === hoverId) : undefined
+    if (hov && !shift && !selected.has(hov.id)) {
+      const layout = layoutAt(k)
+      const mine = unionBounds(picked)
+      if (!(mine && onGrip(mine, point, layout)) && onGrip(markBounds(hov), point, layout))
+        return { marks: [hov], adopt: true }
+    }
+    return { marks: picked, adopt: false }
+  }
+
   const startSelect = (e: PointerEvent<HTMLCanvasElement>, point: Point) => {
     const k = scale(e)
     const hit = markAt(items, point[0], point[1])
-    const box = unionBounds(picked)
+    // The mark under the pointer shows its handles and tip though it is not selected: a press on one takes it,
+    // as a selected one's would, unless the press is on the selection's own grips.
+    const grabbed = grabbedAt(point, k, e.shiftKey)
+    if (grabbed.adopt) setSelected(new Set(grabbed.marks.map((a) => a.id)))
+    const marks = grabbed.marks
+    const box = unionBounds(marks)
     // A touch sends no move before its press, so the press itself shows the X when it lands near the tip. The X
     // is tested only while it shows: a mark under its spot is picked by a tap that did not show it.
     const shown = tipHover
     setTipHover(nearTip(box, point, k))
     if (box) {
       // The X beside the rotate tip deletes the selection, as one step.
-      if (shown && within(point, deleteXAt(box, k), X_REACH * k)) {
+      if (shown && !grabbed.adopt && within(point, deleteXAt(box, k), X_REACH * k)) {
         deleteSelected()
         return
       }
@@ -473,7 +518,7 @@ export function AnnotateImage({
           mode: 'resize',
           pointer: e.pointerId,
           start: point,
-          ids: new Set(picked.map((a) => a.id)),
+          ids: new Set(marks.map((a) => a.id)),
           base: items,
           centre: point,
           additive: false,
@@ -497,14 +542,14 @@ export function AnnotateImage({
     // The rotate handle of the selection sits above its box, in a band that can hold a mark: a mark under the
     // pointer is picked first, and the handle takes a press that lands on no mark or on one of the selected
     // marks (a selected mark's reach can cover the handle).
-    if (box && (!hit || picked.some((a) => a.id === hit.id))) {
+    if (box && (!hit || marks.some((a) => a.id === hit.id))) {
       const handle = handleAt(box, HANDLE_GAP * k, bitmap ?? { width: 0, height: 0 })
       if (within(point, handle, TIP_REACH * k)) {
         gesture.current = {
           mode: 'turn',
           pointer: e.pointerId,
           start: point,
-          ids: new Set(picked.map((a) => a.id)),
+          ids: new Set(marks.map((a) => a.id)),
           base: items,
           centre: [box.x + box.w / 2, box.y + box.h / 2],
           additive: false,
@@ -516,8 +561,8 @@ export function AnnotateImage({
     // A press on a mark, or on empty picture inside the selection's box, moves the picked marks; a mark outside
     // the picked group is picked alone first.
     if (hit || (box && insideBox(box, point))) {
-      const inGroup = !hit || picked.some((a) => a.id === hit.id)
-      const group = hit && !inGroup ? [hit] : picked
+      const inGroup = !hit || marks.some((a) => a.id === hit.id)
+      const group = hit && !inGroup ? [hit] : marks
       if (hit && !inGroup) setSelected(new Set([hit.id]))
       gesture.current = {
         mode: 'move',
@@ -542,6 +587,7 @@ export function AnnotateImage({
       additive: e.shiftKey,
       next: null,
     }
+    setHoverId(null)
     setMarquee([point, point])
   }
 
@@ -610,17 +656,35 @@ export function AnnotateImage({
   }
 
   const hover = (e: PointerEvent<HTMLCanvasElement>, point: Point) => {
-    const box = unionBounds(picked)
     const k = scale(e)
-    const onX = box !== null && within(point, deleteXAt(box, k), X_REACH * k)
-    setTipHover(nearTip(box, point, k))
+    const layout = layoutAt(k)
+    // The mark under the pointer shows its chrome; its grips set the cursor when they are not the selection's.
+    const id = hoverTarget(items, hoverId, point, layout)
+    setHoverId(id)
+    const mine = unionBounds(picked)
+    const onX = mine !== null && within(point, deleteXAt(mine, k), X_REACH * k)
+    setTipHover(nearTip(mine, point, k))
+    const hov = id ? items.find((a) => a.id === id) : undefined
+    const grips =
+      hov &&
+      !onX &&
+      !selected.has(hov.id) &&
+      !(mine && onGrip(mine, point, layout)) &&
+      onGrip(markBounds(hov), point, layout)
+        ? markBounds(hov)
+        : null
     // Set on the element, not through state: a move over the canvas does not re-render the dialog.
-    e.currentTarget.style.cursor = onX ? 'grab' : cursorOf(partAt(box, items, point, layoutAt(k), selected))
+    e.currentTarget.style.cursor = onX
+      ? 'grab'
+      : grips
+        ? cursorOf(partAt(grips, items, point, layout, new Set([hov!.id])))
+        : cursorOf(partAt(mine, items, point, layout, selected))
   }
 
   const onPointerLeave = (e: PointerEvent<HTMLCanvasElement>) => {
     if (gesture.current) return
     e.currentTarget.style.cursor = ''
+    setHoverId(null)
     // A touch leaves the picture as it lifts, after the press that showed the X: the X stays until the next press.
     if (e.pointerType !== 'touch') setTipHover(false)
   }
@@ -684,6 +748,7 @@ export function AnnotateImage({
     if (origin.current || gesture.current) return
     setTool(next)
     setTipHover(false)
+    setHoverId(null)
     if (canvasRef.current) canvasRef.current.style.cursor = ''
   }
 

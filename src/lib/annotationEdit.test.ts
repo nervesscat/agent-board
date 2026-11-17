@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   angleAt,
   carryNotes,
+  chromeOf,
   createHistory,
   cursorOf,
   deleteAt,
@@ -10,12 +11,14 @@ import {
   fillMark,
   handleAt,
   handlePoint,
+  hoverTarget,
   isFillable,
   isTinyDrag,
   type Layout,
   markAt,
   markBounds,
   marqueeIds,
+  onGrip,
   partAt,
   pivotOf,
   RESIZE_PARTS,
@@ -805,5 +808,76 @@ describe('fillMark and isFillable', () => {
     expect(isFillable(ellipse('e', 0, 0, 1, 1))).toBe(true)
     expect(isFillable(pen('p', [[0, 0]]))).toBe(false)
     expect(isFillable(line('l', [0, 0], [1, 1]))).toBe(false)
+  })
+})
+
+describe('selection chrome', () => {
+  const a = rect('a', 100, 100, 100, 100)
+  const b = rect('b', 220, 100, 40, 40)
+  const items = [a, b]
+  // The rotate tip of `a` sits 26 above the top middle, at (150, 74).
+  const layout: Layout = { gap: 26, handleReach: 8, tipReach: 21, picture: { width: 400, height: 300 } }
+
+  describe('chromeOf', () => {
+    it('shows nothing by default: no mark selected, none hovered', () => {
+      expect(chromeOf('select', [], undefined)).toEqual({ group: [], hovered: null })
+    })
+
+    it('shows nothing with any other tool, selected or hovered', () => {
+      for (const tool of ['pen', 'rect', 'ellipse', 'arrow', 'line', 'text', 'note']) {
+        expect(chromeOf(tool, [a], b)).toEqual({ group: [], hovered: null })
+      }
+    })
+
+    it('shows the hovered mark with the Select tool when it is not selected', () => {
+      expect(chromeOf('select', [], a)).toEqual({ group: [], hovered: a })
+    })
+
+    it('shows the selection with the Select tool, hovered or not, and the hovered one too when it is another', () => {
+      expect(chromeOf('select', [a], undefined)).toEqual({ group: [a], hovered: null })
+      expect(chromeOf('select', [a], a)).toEqual({ group: [a], hovered: null })
+      expect(chromeOf('select', [a], b)).toEqual({ group: [a], hovered: b })
+    })
+
+    it('shows nothing once the selection is empty and nothing is hovered, as after Escape', () => {
+      expect(chromeOf('select', [], undefined)).toEqual({ group: [], hovered: null })
+    })
+  })
+
+  describe('onGrip', () => {
+    const box = { x: 100, y: 100, w: 100, h: 100 }
+    it('is true on a resize handle and on the rotate tip, and false elsewhere', () => {
+      expect(onGrip(box, [200, 200], layout)).toBe(true)
+      expect(onGrip(box, [150, 74], layout)).toBe(true)
+      expect(onGrip(box, [150, 150], layout)).toBe(false)
+      expect(onGrip(box, [10, 10], layout)).toBe(false)
+    })
+  })
+
+  describe('hoverTarget', () => {
+    it('is the mark under the pointer, and none over empty picture', () => {
+      expect(hoverTarget(items, null, [150, 150], layout)).toBe('a')
+      expect(hoverTarget(items, null, [240, 120], layout)).toBe('b')
+      expect(hoverTarget(items, null, [380, 280], layout)).toBeNull()
+    })
+
+    it('stays on the mark while the pointer travels to its rotate tip and corner handles outside the mark', () => {
+      expect(hoverTarget(items, 'a', [150, 74], layout)).toBe('a')
+      expect(hoverTarget(items, 'a', [90, 90], layout)).toBe('a')
+    })
+
+    it('does not hold a mark the pointer has left: beyond its grips and box it is none', () => {
+      expect(hoverTarget(items, 'a', [380, 280], layout)).toBeNull()
+    })
+
+    it('holds the mark inside its box where nothing is drawn, such as the middle of a line box', () => {
+      const diagonal = line('d', [100, 100], [200, 200])
+      expect(hoverTarget([diagonal], 'd', [190, 110], layout)).toBe('d')
+      expect(hoverTarget([diagonal], null, [190, 110], layout)).toBeNull()
+    })
+
+    it('is none for an id that is no longer on the picture', () => {
+      expect(hoverTarget(items, 'gone', [380, 280], layout)).toBeNull()
+    })
   })
 })

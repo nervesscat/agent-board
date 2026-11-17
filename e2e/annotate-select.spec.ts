@@ -1086,3 +1086,276 @@ test('Fill is unchecked by default, fills the next box, shows the fill of a sele
   expect(rose(await pixelOf(page, attached, [60, 60]))).toBe(true)
   expect(rose(await pixelOf(page, attached, [210, 210]))).toBe(true)
 })
+
+/** How much of the selection's blue is on the canvas at all: the box, handles and rotate dot, whichever show. */
+const chromeOn = (canvas: Locator) => selectionBlue(canvas, { x: 0, y: 0, w: 300, h: 300 })
+
+/** Moves the pointer off the picture, onto the page. */
+async function leave(page: Page) {
+  await page.mouse.move(1, 1)
+}
+
+test('no mark shows selection chrome by default, with nothing selected or hovered', async ({
+  page,
+  project,
+}) => {
+  const { canvas } = await openCanvas(page, project.id, 'No chrome by default')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await draw(page, canvas, 'Box', [160, 160], [260, 260])
+
+  // Right after drawing, the box is selected for its note, and the Box tool is active: nothing shows.
+  expect(await chromeOn(canvas)).toBe(0)
+
+  // With the Select tool and the pointer away, nothing is selected or hovered: nothing shows.
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [285, 20])
+  await leave(page)
+  expect(await chromeOn(canvas)).toBe(0)
+})
+
+test('with any tool but Select, a selected or hovered mark never shows chrome', async ({ page, project }) => {
+  const { canvas } = await openCanvas(page, project.id, 'Chrome only for Select')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await noteField(canvas).fill('mark')
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+
+  for (const tool of ['Pencil', 'Box', 'Arrow', 'Ellipse', 'Text', 'Note']) {
+    await control(canvas, tool).click()
+    await expect(control(canvas, tool)).toHaveAttribute('aria-pressed', 'true')
+    // The mark is still selected (its note is editable), the pointer rests on it, and no chrome shows.
+    const p = await at(canvas, [60, 60])
+    await page.mouse.move(p.x, p.y)
+    await page.mouse.move(p.x + 2, p.y + 2)
+    await expect(noteField(canvas)).toHaveValue('mark')
+    expect(await chromeOn(canvas)).toBe(0)
+    // Nor at the corner handle or the rotate tip.
+    const corner = await at(canvas, [100, 100])
+    await page.mouse.move(corner.x, corner.y)
+    expect(await chromeOn(canvas)).toBe(0)
+  }
+})
+
+test('with Select, hovering a mark shows its outline, handles and rotate dot, and leaving it hides them', async ({
+  page,
+  project,
+}) => {
+  const { canvas } = await openCanvas(page, project.id, 'Hover shows chrome')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await draw(page, canvas, 'Box', [160, 160], [260, 260])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [285, 20])
+  await leave(page)
+  expect(await chromeOn(canvas)).toBe(0)
+
+  // Hovering the first box: the far corner handle and the rotate dot below it (no room above) show, and the
+  // second box has none.
+  const p = await at(canvas, [60, 60])
+  await page.mouse.move(p.x, p.y)
+  await expect.poll(() => selectionBlue(canvas, { x: 94, y: 94, w: 12, h: 12 })).toBeGreaterThan(0)
+  expect(await selectionBlue(canvas, { x: 54, y: 120, w: 12, h: 12 })).toBeGreaterThan(0)
+  expect(await selectionBlue(canvas, { x: 0, y: 140, w: 300, h: 160 })).toBe(0)
+  // The X that deletes is not part of the hover.
+  expect(await selectionBlue(canvas, { x: 71, y: 120, w: 14, h: 12 })).toBe(0)
+
+  // The chrome follows the pointer to the other box, and goes when the pointer is over empty picture.
+  const q = await at(canvas, [210, 210])
+  await page.mouse.move(q.x, q.y)
+  await expect.poll(() => selectionBlue(canvas, { x: 254, y: 254, w: 12, h: 12 })).toBeGreaterThan(0)
+  expect(await selectionBlue(canvas, { x: 94, y: 94, w: 12, h: 12 })).toBe(0)
+  const e = await at(canvas, [285, 20])
+  await page.mouse.move(e.x, e.y)
+  await expect.poll(() => chromeOn(canvas)).toBe(0)
+
+  // Leaving the picture hides the hover chrome too.
+  await page.mouse.move(p.x, p.y)
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+  await leave(page)
+  await expect.poll(() => chromeOn(canvas)).toBe(0)
+})
+
+test('the chrome stays while the pointer travels from a hovered mark to its rotate dot and corner handle', async ({
+  page,
+  project,
+}) => {
+  const { canvas } = await openCanvas(page, project.id, 'Hover reaches the handles')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [285, 20])
+
+  const from = await at(canvas, [60, 60])
+  const tip = await at(canvas, [60, 126])
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.move(tip.x, tip.y, { steps: 12 })
+  await expect.poll(() => selectionBlue(canvas, { x: 54, y: 120, w: 12, h: 12 })).toBeGreaterThan(0)
+  expect(await cursorAt(page, canvas, [60, 126])).toBe('grab')
+
+  // Past the corner handle, a few pixels outside the box, the handle still shows and sets its cursor.
+  const corner = await at(canvas, [60, 60])
+  await page.mouse.move(corner.x, corner.y)
+  expect(await cursorAt(page, canvas, [104, 104])).toBe('nwse-resize')
+  expect(await selectionBlue(canvas, { x: 94, y: 94, w: 12, h: 12 })).toBeGreaterThan(0)
+})
+
+test('a press on the handle of a hovered, unselected mark selects it and resizes it', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Resize from hover')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await draw(page, canvas, 'Box', [160, 160], [260, 260])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [285, 20])
+  // Nothing is selected: the first box is only hovered.
+  const p = await at(canvas, [60, 60])
+  await page.mouse.move(p.x, p.y)
+  await expect(noteField(canvas)).toBeDisabled()
+  await expect.poll(() => selectionBlue(canvas, { x: 94, y: 94, w: 12, h: 12 })).toBeGreaterThan(0)
+
+  // Its far corner handle is grabbed and dragged: the box grows from its opposite corner.
+  await drag(page, canvas, [100, 100], [140, 130])
+  await expect(noteField(canvas)).toBeEnabled()
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [first, second] = storedItems(attached)
+  expect(first!.rect!.x).toBeCloseTo(20, 0)
+  expect(first!.rect!.w).toBeCloseTo(120, 0)
+  expect(first!.rect!.h).toBeCloseTo(110, 0)
+  expect(second!.rect!.w).toBeCloseTo(100, 0)
+})
+
+test('a selected mark keeps its chrome while it is moved, resized and turned, wherever the pointer goes', async ({
+  page,
+  project,
+}) => {
+  const { canvas } = await openCanvas(page, project.id, 'Chrome while dragging')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+
+  // Move: the pointer is far from the old place of the mark, and the chrome is with the mark where it now is.
+  const a = await at(canvas, [60, 60])
+  const b = await at(canvas, [200, 200])
+  await page.mouse.move(a.x, a.y)
+  await page.mouse.down()
+  await page.mouse.move(b.x, b.y, { steps: 8 })
+  // The box is now 160..240; its far corner handle is at (240, 240), and nothing is left at the old place.
+  await expect.poll(() => selectionBlue(canvas, { x: 234, y: 234, w: 12, h: 12 })).toBeGreaterThan(0)
+  expect(await selectionBlue(canvas, { x: 14, y: 14, w: 92, h: 92 })).toBe(0)
+  await page.mouse.up()
+
+  // The pointer rests away from the mark and off the picture: the selected mark's chrome stays.
+  await leave(page)
+  await expect.poll(() => selectionBlue(canvas, { x: 234, y: 234, w: 12, h: 12 })).toBeGreaterThan(0)
+
+  // Resize by its far corner, the pointer ending well outside the mark: the chrome follows the new corner.
+  const corner = await at(canvas, [240, 240])
+  const wide = await at(canvas, [290, 280])
+  await page.mouse.move(corner.x, corner.y)
+  await page.mouse.down()
+  await page.mouse.move(wide.x, wide.y, { steps: 8 })
+  await expect.poll(() => selectionBlue(canvas, { x: 284, y: 274, w: 12, h: 12 })).toBeGreaterThan(0)
+  await page.mouse.up()
+  await leave(page)
+  await expect.poll(() => selectionBlue(canvas, { x: 284, y: 274, w: 12, h: 12 })).toBeGreaterThan(0)
+
+  // Turn by the rotate dot (above the box now: 160..290 across, 160..280 down, dot at (225, 134)) and let the
+  // pointer go far from the mark: the chrome stays through the turn.
+  const dot = await at(canvas, [225, 134])
+  const far = await at(canvas, [20, 140])
+  await page.mouse.move(dot.x, dot.y)
+  await page.mouse.down()
+  await page.mouse.move(far.x, far.y, { steps: 10 })
+  expect(await chromeOn(canvas)).toBeGreaterThan(0)
+  await page.mouse.up()
+  await leave(page)
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+})
+
+test('the chrome of a selection goes with Escape, a click on empty picture and another tool, and returns on selecting', async ({
+  page,
+  project,
+}) => {
+  const { canvas } = await openCanvas(page, project.id, 'Chrome hides on deselect')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+
+  // A click picks the mark; the pointer then rests on empty picture, so only the selection keeps the chrome.
+  await click(page, canvas, [60, 60])
+  await leave(page)
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+
+  await page.keyboard.press('Escape')
+  await expect.poll(() => chromeOn(canvas)).toBe(0)
+
+  // A click on empty picture deselects.
+  await click(page, canvas, [60, 60])
+  await leave(page)
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+  await click(page, canvas, [285, 20])
+  await leave(page)
+  await expect.poll(() => chromeOn(canvas)).toBe(0)
+
+  // Another tool hides it.
+  await click(page, canvas, [60, 60])
+  await leave(page)
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+  await control(canvas, 'Pencil').click()
+  await expect.poll(() => chromeOn(canvas)).toBe(0)
+
+  // A box selection shows the chrome of the marks it selected, and Ctrl+A that of all of them.
+  await control(canvas, 'Select').click()
+  await drag(page, canvas, [10, 10], [120, 120])
+  await leave(page)
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+  await page.keyboard.press('Escape')
+  await expect.poll(() => chromeOn(canvas)).toBe(0)
+  await page.keyboard.press('Control+a')
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+})
+
+test('the attached picture has no chrome pixels when a mark was only hovered', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Hover is not in the picture')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [285, 20])
+  const p = await at(canvas, [60, 60])
+  await page.mouse.move(p.x, p.y)
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const picture = { x: 0, y: 0, w: 300, h: 300 }
+  // The render is read the way the picture tests read it: colour by colour over the whole picture.
+  const blue = await page.evaluate(
+    async ({ base64, rect }) => {
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+      const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }))
+      const c = document.createElement('canvas')
+      c.width = bitmap.width
+      c.height = bitmap.height
+      const ctx = c.getContext('2d')!
+      ctx.drawImage(bitmap, 0, 0)
+      const { data } = ctx.getImageData(rect.x, rect.y, rect.w, rect.h)
+      let n = 0
+      for (let i = 0; i < data.length; i += 4)
+        if (
+          Math.abs(data[i]! - 14) < 40 &&
+          Math.abs(data[i + 1]! - 165) < 40 &&
+          Math.abs(data[i + 2]! - 233) < 40
+        )
+          n++
+      return n
+    },
+    {
+      base64: Buffer.from(await (await page.request.get(attached.url)).body()).toString('base64'),
+      rect: picture,
+    },
+  )
+  expect(blue).toBe(0)
+})
