@@ -105,6 +105,7 @@ export const DEFAULT_AGENT_NAMES = [
   'hunt',
   'refute',
   'merge',
+  'intent',
 ] as const
 
 export const COMMENT_PARENTS = ['ticket', 'update', 'review'] as const
