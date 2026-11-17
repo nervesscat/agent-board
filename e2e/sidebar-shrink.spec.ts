@@ -514,3 +514,21 @@ test('on a wide window a pointer travelling slowly from the left edge to the sid
   await page.waitForTimeout(500)
   await expect(aside.getByRole('link', { name: 'Overview' })).toBeVisible()
 })
+
+test('a click on Hide that does not come from the keyboard or a pointer leaves the sidebar hidden', async ({
+  page,
+  project,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto(`/projects/${project.id}/prs`)
+  await page.getByRole('button', { name: 'Shrink sidebar' }).click()
+  await page.mouse.move(900, 400)
+  // A script's click (assistive tech, an extension): no focus on the toggle, no pointer in the sidebar.
+  await page.evaluate(() => {
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    document.querySelector<HTMLButtonElement>('aside button')?.click()
+  })
+  await page.waitForTimeout(1000)
+  await expect(sidebar(page)).toBeHidden()
+  expect(await isOffscreen(asideEl(page))).toBe(true)
+})

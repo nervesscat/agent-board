@@ -133,10 +133,13 @@ function ProjectLayout() {
         aria-label={SIDEBAR_TOGGLE_LABEL[mode]}
         onClick={(event) => {
           const next = nextSidebarMode(mode)
-          // Pressed by keyboard (no pointer click: detail is 0) into hidden: focus stays on this toggle, so the
-          // sidebar stays shown around it until focus moves away, instead of leaving focus on a toggle nobody sees.
-          // A pointer press hides it, and the pointer resting on it does not show it again.
-          setPeeking(next === 'hidden' && event.detail === 0)
+          // Pressed by keyboard into hidden (no pointer click: detail is 0, and the toggle holds focus): the sidebar
+          // stays shown around it until focus moves away, instead of leaving focus on a toggle nobody sees. A pointer
+          // press hides it, and the pointer resting on it does not show it again; neither does a script's click, which
+          // has no focus that would later leave and close it.
+          setPeeking(
+            next === 'hidden' && event.detail === 0 && document.activeElement === event.currentTarget,
+          )
           chooseMode(next)
         }}
       >
