@@ -133,7 +133,7 @@ difficult: that is at most high. It stops at the first round that survives, and 
 survive after the tenth goes to the human as high's does. Low has no review: its checks return the build at most twice, and after the
 second return, when the checks still fail or a criterion still has no evidence, the human decides (keep
 going or drop). Every agent the cycle starts for the ticket runs at the effort its complexity sets: low for
-low, medium for mid and high, high for max (the Agent tool's \`effort\`).`,
+low, medium for mid and high, high for max (the Agent tool's \`effort\`); the intent agent always runs at \`low\`.`,
   },
   {
     name: 'runner',

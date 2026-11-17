@@ -462,7 +462,33 @@ describe('the review texts the board ships', () => {
       expect(flat(readme)).toContain('hunt, refute, merge, intent)')
     })
 
-    it('the server instructions, the review-queue and the todo-review skills carry the intent check, its low effort and its input rule', async () => {
+    it('the context rule and the builder note carry the intent exception, and the runner passes the round on', async () => {
+      const ex =
+        "except the intent agent: it gets only the human's own words and attachments (the instructions and every post and reply by the human) and the result, never the decisions with their answers, the spec, the plan or the review's findings, and it may not read the rest of the ticket's posts itself"
+      for (const [name, text] of [
+        ['board skill', boardSkill],
+        ['AGENTS.md', agentsDoc],
+        ['server instructions', (await served()).instructions],
+      ] as const) {
+        expect(flat(text), name).toContain(ex)
+      }
+      for (const [name, text] of [
+        ['board skill', boardSkill],
+        ['AGENTS.md', agentsDoc],
+      ] as const) {
+        expect(flat(text).split(ex).length - 1, name).toBeGreaterThanOrEqual(2)
+      }
+      const { DEFAULT_AGENTS } = await import('./defaultAgents')
+      const builder = DEFAULT_AGENTS.find((a) => a.name === 'builder')!
+      expect(flat(builder.delegation)).toContain(
+        "(the Agent tool's `effort`); the intent agent always runs at `low`.",
+      )
+      const runner = flat(read(path.join(skills, 'agents', 'feature-review-runner.md')))
+      expect(runner).toContain('`round` (optional): the review round this run is')
+      expect(runner).toContain('ticket=<TICKET> round=<round> <flags>')
+    })
+
+    it('the server instructions, the review-queue and the todo-review skills carry the intent check, its low effort and the todo-review skill its input rule', async () => {
       const { instructions } = await served()
       const i = flat(instructions)
       expect(i).toContain('refute, merge, and the intent check)')
