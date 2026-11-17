@@ -14,6 +14,7 @@ import {
 import { HttpError, notFound } from './http'
 import { listAgents } from './projectAgents'
 import { getProject } from './projects'
+import { listStages } from './stages'
 import { ticketTimeline } from './workTimeline'
 
 /**
@@ -472,14 +473,25 @@ export interface MissingReviewPhase {
  * span and a report is one run. The last round is the highest round on any span or report of a review
  * phase, or 1 when the timeline has activity but names no round. Empty for a low ticket, a project with
  * no software kind, and a ticket whose timeline has no activity at all. The intent check is no round
- * phase. Enforcement is a flag, never a refusal: a move to review goes through and answers with this.
+ * phase. Only runs since the ticket last left a review stage count (a send-back restarts at round 1).
+ * Only runs since the ticket last left a review stage count: a send-back restarts the rounds at 1.
+ * Enforcement is a flag, never a refusal: a move to review goes through and answers with this.
  */
 export function missingReviewPhases(ticketId: number): MissingReviewPhase[] {
   const t = db.select().from(schema.tickets).where(eq(schema.tickets.id, ticketId)).get()
   if (!t || t.complexity === 'low') return []
   if (!hasGitSide(getProject(t.projectId).kinds)) return []
-  const { timeline } = ticketTimeline(ticketId)
+  const { timeline, events } = ticketTimeline(ticketId)
   if (!timeline.spans.length && !timeline.handoffs.length && !timeline.waits.length) return []
+  // A send-back (a move out of a review stage) starts the next round numbering over: older runs do not count.
+  const stages = listStages(t.projectId)
+  const isReview = (key: string) => stages.some((s) => s.key === key && s.kind === 'review')
+  const cut =
+    events
+      .filter((e) => e.kind === 'stage' && isReview(e.fromStage) && !isReview(e.toStage))
+      .map((e) => e.at)
+      .sort()
+      .pop() ?? ''
   const known = knownKinds(t.projectId)
   const phases = new Set<string>(REVIEW_PHASES.map((p) => p.phase))
   const spans = new Map<string, number>()
@@ -491,12 +503,17 @@ export function missingReviewPhases(ticketId: number): MissingReviewPhase[] {
     counts.set(key, (counts.get(key) ?? 0) + 1)
     if (round > last) last = round
   }
-  for (const span of timeline.spans) count(spans, runKindOf(span.agent, known), span.round ?? null)
+  for (const span of timeline.spans.filter((x) => x.start >= cut)) count(spans, runKindOf(span.agent, known), span.round ?? null)
   for (const r of db
-    .select({ agent: schema.runReports.agent, round: schema.runReports.round })
+    .select({
+      agent: schema.runReports.agent,
+      round: schema.runReports.round,
+      createdAt: schema.runReports.createdAt,
+    })
     .from(schema.runReports)
     .where(eq(schema.runReports.ticketId, ticketId))
-    .all())
+    .all()
+    .filter((x) => x.createdAt >= cut))
     count(reports, runKindOf(r.agent, known), r.round ?? null)
   const round = last || 1
   return REVIEW_PHASES.flatMap(({ phase, expected }) => {

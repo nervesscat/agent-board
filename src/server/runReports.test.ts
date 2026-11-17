@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { count, eq } from 'drizzle-orm'
+import { and, count, eq } from 'drizzle-orm'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
@@ -703,8 +703,60 @@ describe('the review phases flag', () => {
       { round: 1, phase: 'hunt', expected: 2, found: 1 },
     ])
     await tool('write_run_report', { projectId: pid, ticketId: t.id, agent: 'hunt-2', round: 1 })
-    await needs.changeTicket(t.id, { status: 'in_progress' }, HUMAN, { agent: false })
-    expect((await toReview(t.id)).missingReviewPhases).toEqual([])
+    // Read in place: a move out of review would be a send-back, which restarts the count.
+    expect(missingReviewPhases(t.id)).toEqual([])
+  })
+
+  describe('after a send-back', () => {
+    const full = ['spec', 'env', 'verify', 'hunt', 'hunt', 'refute', 'merge']
+    const sendBack = async (id: number) => {
+      await toReview(id)
+      await needs.changeTicket(id, { status: 'in_progress' }, HUMAN, { agent: false })
+      // The two moves happened 300 seconds ago: the re-run's spans start after them.
+      dbm.db
+        .update(dbm.schema.ticketEvents)
+        .set({ at: ago(300) })
+        .where(and(eq(dbm.schema.ticketEvents.ticketId, id), eq(dbm.schema.ticketEvents.kind, 'stage')))
+        .run()
+    }
+    const rerun = (pid: number, id: number, round: number, phases: string[]) =>
+      phases.forEach((phase, i) => closedSpan(pid, id, phase, round, 100 - i * 5))
+
+    it('does not let the old rounds hide a phase the re-run lacks', async () => {
+      const pid = newProject()
+      const t = ticketOf(pid, 'high')
+      for (const round of [1, 2, 3]) spans(pid, t.id, round, full)
+      await sendBack(t.id)
+      rerun(pid, t.id, 1, ['spec', 'env', 'verify', 'hunt', 'refute', 'merge'])
+      expect((await toReview(t.id)).missingReviewPhases).toEqual([
+        { round: 1, phase: 'hunt', expected: 2, found: 1 },
+      ])
+    })
+
+    it('is unchanged without a send-back: the old rounds count', async () => {
+      const pid = newProject()
+      const t = ticketOf(pid, 'high')
+      for (const round of [1, 2, 3]) spans(pid, t.id, round, full)
+      closedSpan(pid, t.id, 'hunt', 1, 50)
+      expect((await toReview(t.id)).missingReviewPhases).toEqual([])
+    })
+
+    it('does not count run reports from before the send-back', async () => {
+      const pid = newProject()
+      const t = ticketOf(pid)
+      for (const agent of ['spec', 'env', 'verify', 'hunt', 'hunt-2', 'refute', 'merge'])
+        await tool('write_run_report', { projectId: pid, ticketId: t.id, agent, round: 1 })
+      await sendBack(t.id)
+      dbm.db
+        .update(dbm.schema.runReports)
+        .set({ createdAt: ago(600) })
+        .where(eq(dbm.schema.runReports.ticketId, t.id))
+        .run()
+      rerun(pid, t.id, 1, ['spec', 'env', 'verify', 'hunt', 'hunt', 'refute'])
+      expect((await toReview(t.id)).missingReviewPhases).toEqual([
+        { round: 1, phase: 'merge', expected: 1, found: 0 },
+      ])
+    })
   })
 
   it('is empty for a low ticket, a ticket with no timeline activity and a project with no software kind', async () => {
