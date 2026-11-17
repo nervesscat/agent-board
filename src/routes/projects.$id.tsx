@@ -266,8 +266,11 @@ function ProjectLayout() {
       </div>
       {/* While the sidebar is hidden the toggle has its own column at the left edge, so it stays reachable above
           the sidebar that slides in. Its width slides open with the others. Desktop only: the phone layout has
-          no toggle. */}
+          no toggle. It sits over the peeked sidebar's first row, so the pointer on it keeps an open sidebar open
+         (it does not open one: the press that hides the sidebar leaves the pointer on this column). */}
       <div
+        onMouseEnter={showPeek ? openPeek : undefined}
+        onMouseLeave={hiddenNow ? closePeekSoon : undefined}
         className={cn(
           'hidden md:sticky md:z-50 md:flex md:shrink-0 md:justify-center md:self-start',
           STICKY_TOP,

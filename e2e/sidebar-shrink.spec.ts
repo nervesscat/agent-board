@@ -354,3 +354,26 @@ test('a remembered hidden sidebar is hidden on load, not sliding away', async ({
   const slid = await page.evaluate(() => (window as unknown as { slid: string[] }).slid)
   expect(slid.filter((property) => ['width', 'translate', 'margin-right'].includes(property))).toEqual([])
 })
+
+test('the pointer resting on the toggle keeps a peeked hidden sidebar open', async ({ page, project }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto(`/projects/${project.id}/prs`)
+  await page.getByRole('button', { name: 'Shrink sidebar' }).click()
+  await page.getByRole('button', { name: 'Hide sidebar' }).click()
+  const aside = sidebar(page)
+  await expect(aside).toBeHidden()
+
+  await page.mouse.move(640, 400)
+  await page.mouse.move(20, 400)
+  await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
+  await settled(page)
+  // Onto the toggle, which sits over the sidebar's first row, and rest there well past the close delay.
+  const box = (await page.getByRole('button', { name: 'Show sidebar' }).boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 })
+  await page.waitForTimeout(800)
+  await expect(aside.getByRole('link', { name: 'PR queue' })).toBeVisible()
+
+  // Leaving it for the page closes the sidebar.
+  await page.mouse.move(640, 400)
+  await expect(aside).toBeHidden()
+})
