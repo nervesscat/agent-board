@@ -70,6 +70,8 @@ async function openCanvas(page: Page, projectId: number, title: string) {
   })
   const canvas = canvasOf(page)
   await expect(pictureOf(canvas)).toBeVisible()
+  // The dialog zooms in as it opens: a point of the picture is only where `at` measures it once that has ended.
+  await canvas.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)))
   return { dialog, canvas }
 }
 
