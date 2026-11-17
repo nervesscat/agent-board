@@ -550,6 +550,79 @@ test.describe('touch', () => {
     expect(items[0]!.rect!.w).toBeCloseTo(110, 0)
     expect(items[0]!.rect!.h).toBeCloseTo(110, 0)
   })
+
+  test('a second finger on the Select tool does not stop the first finger from finishing its box, and the mouse draws after it', async ({
+    page,
+    project,
+  }) => {
+    const { canvas } = await openCanvas(page, project.id, 'Second finger on Select')
+    await control(canvas, 'Box').click()
+    const cdp = await page.context().newCDPSession(page)
+    const first = (p: { x: number; y: number }) => ({ x: p.x, y: p.y, id: 1 })
+    const second = (p: { x: number; y: number }) => ({ x: p.x, y: p.y, id: 2 })
+
+    const a = await at(canvas, [50, 50])
+    const b = await at(canvas, [150, 150])
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [first(a)] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [first(b)] })
+
+    // The second finger presses empty picture with the Select tool while the first finger is still drawing.
+    await control(canvas, 'Select').click()
+    const c = await at(canvas, [200, 200])
+    const d = await at(canvas, [230, 230])
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [first(b), second(c)],
+    })
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [first(b), second(d)],
+    })
+
+    // The first finger lifts first (touchEnd names the points it releases), then the second.
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [first(b)] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+
+    // With the mouse, a Box drag draws a box and selects it.
+    await control(canvas, 'Box').click()
+    await drag(page, canvas, [20, 20], [100, 100])
+    await expect(noteField(canvas)).toBeEnabled()
+
+    // Escape clears the selection and leaves the canvas open; with nothing selected, the next Escape closes it.
+    await page.keyboard.press('Escape')
+    await expect(canvas).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(canvas).toBeHidden()
+  })
+
+  test('a picture closed while a finger holds a drawing press leaves the next picture free to draw on', async ({
+    page,
+    project,
+  }) => {
+    const { dialog, canvas } = await openCanvas(page, project.id, 'Picture closed during press')
+    await control(canvas, 'Box').click()
+    const cdp = await page.context().newCDPSession(page)
+    const first = (p: { x: number; y: number }) => ({ x: p.x, y: p.y, id: 1 })
+
+    const a = await at(canvas, [50, 50])
+    const b = await at(canvas, [150, 150])
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [first(a)] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [first(b)] })
+
+    // The picture is closed with the mouse while the finger is down: the canvas goes, and the finger's release never reaches it.
+    await canvas.getByRole('button', { name: 'Close', exact: true }).click()
+    await expect(canvas).toBeHidden()
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+
+    // A new picture is attached and drawn on with the mouse.
+    await pickWith(page, dialog.getByRole('button', { name: 'attach' }), {
+      name: 'again.png',
+      buffer: png(300, [250, 250, 250]),
+    })
+    await expect(pictureOf(canvas)).toBeVisible()
+    await draw(page, canvas, 'Box', [20, 20], [100, 100])
+    await expect(noteField(canvas)).toBeEnabled()
+  })
 })
 
 test('the attached picture has no selection pixels, whatever is selected', async ({

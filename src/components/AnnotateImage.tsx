@@ -354,6 +354,10 @@ export function AnnotateImage({
   // The picture is decoded once, at its natural size: the marks and the flattened render are in its pixels.
   const decoded = useRef<ImageBitmap | null>(null)
   useEffect(() => {
+    // A picture going or coming ends the drawing press of the old one: its release may never reach the canvas.
+    origin.current = null
+    originPointer.current = null
+    held.current.clear()
     if (!file) return
     let dead = false
     setBitmap(null)
@@ -531,8 +535,8 @@ export function AnnotateImage({
     // Every press is captured, so its release reaches the canvas wherever the pointer is let go.
     e.currentTarget.setPointerCapture(e.pointerId)
     held.current.add(e.pointerId)
-    // A second pointer during a gesture (a second finger) is ignored: the first gesture owns the picture.
-    if (!bitmap || busy || gesture.current) return
+    // A second pointer during a gesture or a drawing press (a second finger) is ignored: the first owns the picture.
+    if (!bitmap || busy || gesture.current || origin.current) return
     const point = at(e)
     if (tool === 'select') return startSelect(e, point)
     if (tool === 'note') {
@@ -541,8 +545,6 @@ export function AnnotateImage({
       return
     }
     if (tool === 'text' && !text.trim()) return
-    // A drawing press already in progress keeps its pointer: a second finger does not start another box.
-    if (origin.current) return
     originPointer.current = e.pointerId
     origin.current = point
     setDraft(fresh(tool, point))
@@ -609,10 +611,33 @@ export function AnnotateImage({
     if (e.pointerType !== 'touch') setTipHover(false)
   }
 
+  // The drawing press ends on the release of the pointer that began it, whatever gesture another pointer has.
+  const finishDraw = (pointer: number) => {
+    if (!draft || pointer !== originPointer.current) return
+    const box = draft.rect
+    const line =
+      draft.from && draft.to ? Math.hypot(draft.to[0] - draft.from[0], draft.to[1] - draft.from[1]) : 0
+    const tiny = box
+      ? box.w < 3 && box.h < 3
+      : draft.kind === 'pen'
+        ? (draft.points?.length ?? 0) < 2
+        : (draft.kind === 'line' || draft.kind === 'arrow') && line < 3
+    if (!tiny) {
+      setHistory((h) => edit(h, [...h.present, draft]))
+      setSelected(new Set([draft.id]))
+    }
+    setDraft(null)
+    origin.current = null
+    originPointer.current = null
+  }
+
   const onPointerUp = (e: PointerEvent<HTMLCanvasElement>) => {
     held.current.delete(e.pointerId)
     const g = gesture.current
-    if (g && e.pointerId !== g.pointer) return
+    if (g && e.pointerId !== g.pointer) {
+      finishDraw(e.pointerId)
+      return
+    }
     if (g) {
       gesture.current = null
       if (g.mode === 'marquee') {
@@ -636,22 +661,7 @@ export function AnnotateImage({
       }
       return
     }
-    if (!draft || e.pointerId !== originPointer.current) return
-    const box = draft.rect
-    const line =
-      draft.from && draft.to ? Math.hypot(draft.to[0] - draft.from[0], draft.to[1] - draft.from[1]) : 0
-    const tiny = box
-      ? box.w < 3 && box.h < 3
-      : draft.kind === 'pen'
-        ? (draft.points?.length ?? 0) < 2
-        : (draft.kind === 'line' || draft.kind === 'arrow') && line < 3
-    if (!tiny) {
-      setHistory((h) => edit(h, [...h.present, draft]))
-      setSelected(new Set([draft.id]))
-    }
-    setDraft(null)
-    origin.current = null
-    originPointer.current = null
+    finishDraw(e.pointerId)
   }
 
   // Changing tool drops the cursor the Select tool set on the canvas, and the X.
