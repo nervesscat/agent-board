@@ -473,8 +473,7 @@ export interface MissingReviewPhase {
  * span and a report is one run. The last round is the highest round on any span or report of a review
  * phase, or 1 when the timeline has activity but names no round. Empty for a low ticket, a project with
  * no software kind, and a ticket whose timeline has no activity at all. The intent check is no round
- * phase. Only runs since the ticket last left a review stage count (a send-back restarts at round 1).
- * Only runs since the ticket last left a review stage count: a send-back restarts the rounds at 1.
+ * phase. Only runs since the ticket last left a review stage count: a send-back restarts the rounds at 1.
  * Enforcement is a flag, never a refusal: a move to review goes through and answers with this.
  */
 export function missingReviewPhases(ticketId: number): MissingReviewPhase[] {
