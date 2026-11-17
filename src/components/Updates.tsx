@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { Copy } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Badge } from '#/components/ui/badge'
@@ -11,6 +12,7 @@ import { Switch } from '#/components/ui/switch'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, type Me, patch, post } from '#/lib/api'
 import { ago } from '#/lib/format'
+import { forgetUpdateMemory, recallUpdateMemory, subscribeUpdateMemory } from '#/lib/updateCard'
 import {
   type DesktopUpdates,
   UPDATE_IN_PROGRESS,
@@ -162,6 +164,7 @@ function DesktopUpdatesSection({ state }: { state: DesktopUpdates }) {
           </div>
         </div>
       )}
+      <SkippedUpdate />
       {!unsupported && (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
@@ -198,6 +201,30 @@ function newestText(state: DesktopUpdates) {
   if (!state.checkedAt) return 'Not checked yet'
   if (state.status === 'none') return `None newer (checked ${ago(state.checkedAt)})`
   return `Unknown (checked ${ago(state.checkedAt)})`
+}
+
+/**
+ * The release this browser skipped, with the way back: Undo forgets it, so the update card may announce
+ * it again. Per browser (it is not on the server), and only under the app, which has the card.
+ */
+function SkippedUpdate() {
+  const [skipped, setSkipped] = useState<string | null>(null)
+  useEffect(() => {
+    const read = () => setSkipped(recallUpdateMemory().skippedVersion)
+    read()
+    return subscribeUpdateMemory(read)
+  }, [])
+  if (!skipped) return null
+  return (
+    <div data-testid="updates-skipped" className="flex flex-wrap items-center gap-2">
+      <span className="text-muted-foreground">
+        Skipped {skipped}: the update card will not show for it again.
+      </span>
+      <Button size="sm" variant="outline" onClick={() => forgetUpdateMemory()}>
+        Undo
+      </Button>
+    </div>
+  )
 }
 
 /** The command that installs the downloaded package, for when polkit could not. */
