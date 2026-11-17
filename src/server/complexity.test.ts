@@ -321,6 +321,200 @@ describe('the review texts the board ships', () => {
     return { instructions: init.instructions as string, tools }
   }
 
+  describe('the intent check and the full cycle', () => {
+    const intentAgent = read(path.join(skills, 'agents', 'feature-review-intent.md'))
+    const intentTemplate = read(path.join(skills, 'run-reports', 'intent.md'))
+    const intentNotes = async () => {
+      const { DEFAULT_AGENTS } = await import('./defaultAgents')
+      return DEFAULT_AGENTS.find((a) => a.name === 'intent')!
+    }
+
+    it('the intent agent runs at low effort and reads only the human’s words and the result, never the plan, spec or findings', () => {
+      const t = flat(intentAgent)
+      expect(t).toContain('You run at **low effort**')
+      expect(t).toContain("The human's own words and attachments")
+      expect(t).toContain('every post and reply by the human, newest last')
+      expect(t).toContain('The latest comment that sent the ticket back weighs most')
+      expect(t).toContain('the preview (its link), the screenshots or recordings, and the diff')
+      expect(t).toContain("You must NOT read the builder's plan, the spec, the review's findings")
+      expect(t).toContain('never asks the human, and never answers a decision (`answer_decision`)')
+      expect(t).toContain('you build and edit nothing')
+    })
+
+    it('the intent agent answers one line per ask and a verdict, with the words beside what was built', () => {
+      const t = flat(intentAgent)
+      expect(t).toContain('done as asked | done differently (<how>) | not done')
+      expect(t).toContain('Evidence: <a screenshot region, or a line of the diff')
+      expect(t).toContain('matches | does not match')
+      expect(t).toContain("the human's words next to what was built")
+      expect(intentTemplate).toContain('run-reports/intent.md')
+      expect(intentTemplate).toContain('`asked`')
+      expect(intentTemplate).toContain('`compared`')
+    })
+
+    it('the default intent agent carries both triggers, the effort, the input rule and where the verdicts go', async () => {
+      const { delegation, instructions } = await intentNotes()
+      const d = flat(delegation)
+      expect(instructions).toContain('You run at **low effort**')
+      expect(d).toContain(
+        'after the last review round passes and before every hand-off, on every ticket of any complexity',
+      )
+      expect(d).toContain('a low ticket included')
+      expect(d).toContain('again after any human comment that sent the ticket back')
+      expect(d).toContain("(the Agent tool's `effort: low`) for every complexity")
+      expect(d).toContain("Never the builder's plan, the spec or the review's findings")
+      expect(d).toContain('done as asked, done differently with how, or not done')
+      expect(d).toContain('`matches` hands off')
+      expect(d).toContain(
+        "`does not match` goes back to **builder** with the intent check's lines as the brief, then the review rounds again (above low), then the intent check again",
+      )
+      expect(d).toContain('the human is asked only when two readings of their words are both plausible')
+      expect(d).toContain('with both readings on the card (`ask_decision`)')
+    })
+
+    it('feature-review, todo-review and the ticket agent each place the intent phase, its low effort and its input rule', () => {
+      for (const [name, text] of [
+        ['feature-review', featureReview],
+        ['ticket agent', ticketAgent],
+        ['todo-review', todoReview],
+      ] as const) {
+        const t = flat(text)
+        expect(t, name).toContain('intent')
+        expect(t, name).toContain('`low` effort')
+        expect(t, name).toMatch(/builder's plan, the spec or the review's findings/i)
+        expect(t, name).toContain('`does not match`')
+        expect(t, name).toContain('`matches`')
+      }
+      const ticket = flat(between(ticketAgent, '### 6b. The intent check', '### 7. Hand off'))
+      expect(ticket).toContain(
+        'before every hand-off, on every ticket of any complexity, low included: a low ticket skips the review, never the intent check',
+      )
+      expect(ticket).toContain('again after any human comment that sent the ticket back')
+      expect(ticket).toContain('at `effort: low`, whatever the complexity')
+      expect(ticket).toContain('`done as asked`, `done differently (how)` or `not done`')
+      expect(ticket).toContain(
+        "`does not match`: back to the builder (step 3) with the intent check's lines as the brief, then your gate (step 4), then the review rounds again (mid, high and max; a low ticket has none), then the intent check again",
+      )
+      expect(ticket).toContain('both readings on the card (`ask_decision`), never otherwise')
+      expect(flat(ticketAgent)).toContain('it runs at `low` effort whatever the complexity')
+      expect(flat(between(ticketAgent, '### 7. Hand off', '## Review depth'))).toContain(
+        'Only after the intent check (step 6b) returned `matches`',
+      )
+      expect(flat(featureReview)).toContain('again after any human comment that sent the ticket back')
+      expect(flat(todoReview)).toContain(
+        'the intent agent, which runs at `low` effort whatever the complexity',
+      )
+    })
+
+    it('the board skill and AGENTS.md name the intent check in the hand-off and the cycle', () => {
+      for (const [name, text] of [
+        ['board skill', boardSkill],
+        ['AGENTS.md', agentsDoc],
+      ] as const) {
+        const t = flat(text)
+        expect(t, name).toContain(
+          'The intent check comes first, on every ticket of any complexity (low included)',
+        )
+        expect(t, name).toContain('at `low` effort whatever the complexity')
+        expect(t, name).toContain("never the builder's plan, the spec or the review's findings")
+        expect(t, name).toContain('`matches` hands off; `does not match` goes back to the builder')
+        expect(t.replaceAll('**intent**', 'intent'), name).toContain(
+          'the intent check at `low` effort (every complexity) → hand off',
+        )
+      }
+      expect(flat(readme)).toContain('hunt, refute, merge, intent)')
+    })
+
+    it('above low the full cycle is mandatory, in every text that describes a round', () => {
+      const full =
+        'every review round runs spec, env, verify, two independent hunts, refute and the merge check'
+      for (const [name, text] of [
+        ['feature-review', featureReview],
+        ['ticket agent', ticketAgent],
+        ['board skill', boardSkill],
+        ['AGENTS.md', agentsDoc],
+      ] as const) {
+        const t = flat(text)
+        expect(t.toLowerCase(), name).toContain(full)
+      }
+      const fr = flat(featureReview)
+      expect(fr).toContain(
+        'None is skipped because the findings look obvious, the change looks small or a finding was already reproduced, and each phase posts its result, so a skipped phase is visible',
+      )
+      expect(flat(ticketAgent)).toContain(
+        'None is skipped because the findings look obvious, the change looks small or a finding was already reproduced, and each phase posts its result, so a skipped phase is visible',
+      )
+      expect(flat(todoReview)).toContain(
+        'every round of a mid, high or max ticket runs spec, env, verify, two independent hunts, refute and the merge check, `light` included',
+      )
+      expect(flat(boardSkill)).toContain(
+        'None is skipped because findings look obvious, the change looks small or a finding was already reproduced',
+      )
+      expect(flat(agentsDoc)).toContain(
+        'None is skipped because findings look obvious, the change looks small or a finding was already reproduced',
+      )
+      expect(fr).toContain('Refute always runs, also when `03-all-candidates.md` has no candidate at all')
+      expect(fr).toContain('**Two independent hunts always run.**')
+      expect(fr).toContain(
+        '`light` | a depth name only: it has no effect on the phases, every round runs all of them',
+      )
+    })
+
+    it('no text lets a phase be skipped any more: no light second-hunt drop, no trust in a clean first hunt, no skipped refute', async () => {
+      const report = read(path.join(skills, 'skills', 'feature-review', 'report-template.md'))
+      const summary = read(path.join(skills, 'skills', 'feature-review', 'summary-template.md'))
+      const { DEFAULT_AGENTS } = await import('./defaultAgents')
+      const notes = flat(DEFAULT_AGENTS.map((a) => a.delegation).join('\n'))
+      const gone = [
+        'A clean first hunt is not trusted',
+        'a clean first hunt gets no second hunt',
+        'a clean first hunt gets a second hunt',
+        '**Light mode**',
+        'In light mode',
+        'light mode: no second hunt',
+        'One hunt ran (light mode)',
+        'skip Phase 3',
+        'Skip Phase 3',
+        'The one thing dropped is the second hunt',
+        'except in a light review',
+        'when there is at least one candidate',
+        'when there is at least one',
+        'at least one candidate or FAIL',
+        'one hunt, refute',
+      ]
+      const texts = [featureReview, ticketAgent, todoReview, report, summary, boardSkill, agentsDoc, notes]
+      for (const phrase of gone) for (const text of texts) expect(flat(text), phrase).not.toContain(phrase)
+      expect(flat(report)).toContain('Hunts: two (independent, always)')
+      expect(notes).toContain('Two independent hunts always run')
+      expect(notes).toContain('every round, also when there is no candidate or FAIL')
+      const depths = flat(between(ticketAgent, '| Depth | When |', 'The depth only moves up'))
+      expect(depths).toContain('with `light`: the same full cycle, no phase dropped')
+      expect(depths).not.toContain('one hunt')
+    })
+
+    it('a low ticket keeps its path: no rounds, no depth, and the intent check still runs', () => {
+      const low = flat(between(ticketAgent, '**Low: no review.**', '**Mid, high and max.**'))
+      expect(low).toContain('Run no `/feature-review`')
+      expect(flat(ticketAgent)).toContain('DEPTH: <light | standard | deep>')
+      expect(flat(ticketAgent)).toContain('none (low: no review)')
+      expect(flat(ticketAgent)).toContain('a low ticket skips the review, never the intent check')
+    })
+
+    it('the hand-off reads missingReviewPhases: the ticket agent, the board skill, AGENTS.md and the tool descriptions', async () => {
+      const step7 = flat(between(ticketAgent, '7. `update_ticket` to `review`', '## Review depth'))
+      expect(step7).toContain('read `missingReviewPhases`')
+      expect(step7).toContain('Run each missing phase, with a fix round through the builder if it needs code')
+      expect(step7).toContain('before the hand-off stands')
+      expect(flat(boardSkill)).toContain('`missingReviewPhases`')
+      expect(flat(boardSkill)).toContain('It is a flag, not a refusal: run each missing phase')
+      expect(flat(agentsDoc)).toContain('`missingReviewPhases`')
+      expect(flat(todoReview)).toContain('`missingReviewPhases` is empty')
+      const { tools } = await served()
+      for (const name of ['update_ticket', 'get_ticket'])
+        expect(tools.find((x) => x.name === name)!.description, name).toContain('missingReviewPhases')
+    })
+  })
+
   it('todo-review takes no rounds setting, and its brief to each ticket agent passes COMPLEXITY', () => {
     expect(todoReview).not.toContain('rounds=')
     expect(todoReview).not.toContain('ROUNDS=<n>')

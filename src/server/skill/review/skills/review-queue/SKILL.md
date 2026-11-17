@@ -180,7 +180,7 @@ with its origin, folder and path), the board is the queue, and the project's age
 **Read the team first.** `get_project` → `agents`: each has `instructions` (its brief) and
 `delegation` (when to call it, what to give it, what it returns, what comes next). The delegation
 notes are your routing table. An agent without them is never delegated to. The default set is
-`spec`, `builder`, `env`, `verify`, `hunt`, `refute`, `merge` and `runner`; the human may
+`spec`, `builder`, `env`, `verify`, `hunt`, `refute`, `merge`, `intent` and `runner`; the human may
 have renamed, rewritten or added some, so route by the notes, not by these names.
 
 **Reviews.** Step 1's inventory comes from `list_prs` (status `pending`, not `on_hold`), not

@@ -367,7 +367,7 @@ name>"` (e.g. `orch/builder-1`) on every board tool call, so what it posts is fi
 - One report per subagent run, written before the hand-off: it is part of finishing, not a step
   after it, and the orchestrator writes none. Its template ships with the
   review bundle as `run-reports/<agent>.md` for `spec`, `builder`, `runner`, `env`, `verify`, `hunt`,
-  `refute` and `merge`; a project agent's own is on the Team page (`get_project` →
+  `refute`, `merge` and `intent`; a project agent's own is on the Team page (`get_project` →
   `agents[].reportTemplate`, the common part until the human writes one). The report is
   `write_run_report` with structured fields (identity, start, end, duration, where the time went,
   difficulty and confidence, steps as `{name, done, note}`, counts) and its prose in named sections
@@ -377,6 +377,8 @@ name>"` (e.g. `orch/builder-1`) on every board tool call, so what it posts is fi
   Put this in every brief. `update_ticket` → `review` answers with `missingRunReports` for each run
   the work timeline records with no report — a span, a hand-off, or a second run of one agent and
   round that only one report covers: flagged, not refused; get them written before the hand-off.
+  It also answers with `missingReviewPhases` (the review phases the last round of a mid, high or max
+  ticket lacks; run them before the hand-off stands).
 
 ### Watch for feedback
 
@@ -456,6 +458,24 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    say what replaced it rather than silently removing the line. It is the ticket's one state card:
    the end of a session updates it rather than leaving a separate note.
 
+**The intent check comes first, on every ticket of any complexity (low included).** When you
+orchestrate the cycle, the last review round (none for low) passes and then the project's **intent**
+agent compares what the human asked with what was built, before any item above stands: at `low`
+effort whatever the complexity, again after any human comment that sent the ticket back. It gets only
+the human's own words and attachments (the instructions and every post and reply by the human, newest
+last, the latest comment that sent the ticket back weighing most) and the result (the preview, the
+screenshots or recordings, the diff), never the builder's plan, the spec or the review's findings. It
+returns one line per ask (`done as asked`, `done differently (how)` or `not done`, with its evidence)
+and a verdict, `matches` or `does not match`. `matches` hands off; `does not match` goes back to the
+builder with its lines as the brief, then the review rounds again (above low), then the intent check
+again. It never asks the human: the human is asked (`ask_decision`, both readings on the card) only
+when two readings of their words are both plausible and give visibly different results.
+
+**Above low, the full cycle is mandatory.** For `mid`, `high` and `max` every review round runs spec,
+env, verify, two independent hunts, refute and the merge check. None is skipped because findings look
+obvious, the change looks small or a finding was already reproduced; each phase posts its result, so a
+skipped phase is visible.
+
 `update_ticket` → `review` then answers with `open`: every task and subtask still open, the
 ticket's and its lanes' that are not cancelled, in tree order, each `{taskId, ticketId, text, auto}`.
 Merged is left out: merging is the human's, except on a ticket in Approved (below). `auto: true`
@@ -464,6 +484,13 @@ marks a phase the board ticks from its fact
 green, start the preview, rewrite the summary after your last commit), never by a tick. The move goes
 through anyway: fix each one; `open: []` means nothing is left. `get_ticket` returns the same `open`
 while the ticket is in review, and its page shows them on the Tasks card.
+
+`update_ticket` → `review` also answers with `missingReviewPhases` for a mid, high or max ticket
+whose project has a software kind and whose timeline records work: each phase its last review round
+lacks, as `{round, phase, expected, found}` (the hunt expects two; a span or a run report of that kind
+and round counts as a run). It is a flag, not a refusal: run each missing phase (with a fix round if it
+needs code) before the hand-off stands. `get_ticket` shows it in review too; it is `[]` for a low
+ticket.
 
 After that:
 
@@ -604,7 +631,7 @@ delegated to.
 The project's Team page adds a default set, the build and review cycle of the
 `/feature-review` and `/review-queue` skills (installed from the same page): **spec** (acceptance
 criteria) → **builder** (the code) → **runner** (a `/feature-review` of the branch, whose phases
-**env**, **verify**, **hunt**, **refute** and **merge** try to break it) → (a fix pass by the
+**env**, **verify**, **hunt**, **refute** and **merge** try to break it) → (every round runs all of them, two independent hunts included; a fix pass by the
 **builder** on the confirmed findings, each with the project's checks and a new review, for as many
 review rounds as the ticket's complexity allows: none for low, one for mid, three for high, up to ten
 for max (for work built from scratch: a whole site or app, a new product or standalone service; a
@@ -613,9 +640,9 @@ its review, so a mid ticket stops after its review, and a review that does not s
 round goes to a human decision; a high ticket gets two fix passes and a max ticket nine; a low ticket
 has no review, and its checks return the build at most twice; after the second return, when the checks
 still fail or a criterion still has no evidence, the human decides (keep going or drop), and the build goes
-to hand-off only with evidence for every criterion) → hand off. The agents' thinking effort follows the complexity too: `low` for a low ticket, `medium` for mid and
+to hand-off only with evidence for every criterion) → the **intent** check at `low` effort (every complexity) → hand off. The agents' thinking effort follows the complexity too: `low` for a low ticket, `medium` for mid and
 high, `high` for max; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket
-(the ticket agent, the spec agent, the builder and the review's phase agents). `/todo-review` is that
+(the ticket agent, the spec agent, the builder and the review's phase agents; the intent agent always runs at `low`). `/todo-review` is that
 orchestrator for
 the To do tickets: one agent per ticket runs the cycle, checks the proof itself (criteria seen
 working, no weakened tests, screenshots) and blocks only for what only the human can give.

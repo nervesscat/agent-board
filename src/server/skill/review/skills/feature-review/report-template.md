@@ -12,7 +12,7 @@
 - Services up: <list with ports, all started by this review>
 - Services unavailable: <list with reasons> | none
 - Refutation: blinded (separate agent) | inline (no blinding)
-- Hunts: one | two (deep mode, or a second hunt after a clean first one) | one (light mode: no second hunt)
+- Hunts: two (independent, always)
 
 ## Confirmed findings
 
@@ -22,7 +22,7 @@
 - Evidence: <test output excerpt, or repro command and output>
 - Repro: <command or steps>
 - Suggested fix: <one line, optional>
-- Stability: both hunts | one hunt (deep mode only)
+- Stability: both hunts | one hunt (deep mode)
 
 ## Plausible findings (traced, not reproduced)
 

@@ -392,10 +392,17 @@ after round 10, and there is never an eleventh round. Never start one more round
 complexity sets the budget at every review depth: a `deep` review earns no extra round, a `light` one
 loses none.
 
+**The full cycle is mandatory above low.** For `mid`, `high` and `max`, every review round runs
+spec, env, verify, TWO independent hunts, refute and the merge check. None is skipped because the
+findings look obvious, the change looks small or a finding was already reproduced, and each phase
+posts its result, so a skipped phase is visible. The board checks it at the hand-off
+(`missingReviewPhases`, step 7).
+
 **The effort** is set by the complexity too: `low` for low, `medium` for mid and high, `high` for max.
 Pass it as the
 Agent tool's `effort` on every subagent you start (the spec agent, the builder), and give it to
-`/feature-review` as `effort=<level>`, so its phase agents run at it.
+`/feature-review` as `effort=<level>`, so its phase agents run at it. The one exception is the intent
+agent (step 6b): it runs at `low` effort whatever the complexity.
 
 ### 6. Evidence
 
@@ -405,9 +412,36 @@ review folder, so its screenshots come from the preview. With
 `BROWSER=no` and a UI change, do everything else, leave the ticket in progress with its summary saying
 where you stopped, and return `STATUS: needs-browser`: the orchestrator runs you again with the browser.
 
+### 6b. The intent check
+
+After the last review round passes (a low ticket has no rounds: after its gate and evidence) and
+before every hand-off, on every ticket of any complexity, low included: a low ticket skips the review,
+never the intent check. It runs again after any human comment that sent the ticket back (a `RETRY` or a
+re-run that finds one among the ticket's posts, newest last).
+
+It is the project's `intent` agent (its `delegation` notes route it; else `feature-review-intent`),
+started with the Agent tool at `effort: low`, whatever the complexity. Brief it with only two things:
+- the human's own words and attachments: the ticket's instructions and every post and reply by the
+  human, newest last, the latest comment that sent the ticket back weighing most, with their
+  attachments;
+- the result: the preview, the screenshots or recordings, and the diff.
+
+Never give it the builder's plan, the spec or the review's findings: it must not inherit their reading.
+It returns one line per thing the human asked (`done as asked`, `done differently (how)` or `not done`,
+with the evidence) and a verdict, `matches` or `does not match`. It never asks the human, builds and
+edits nothing, and never answers a decision (`answer_decision`); it writes its run report like every
+subagent.
+- `matches`: go on to the hand-off (step 7).
+- `does not match`: back to the builder (step 3) with the intent check's lines as the brief, then your
+  gate (step 4), then the review rounds again (mid, high and max; a low ticket has none), then the
+  intent check again.
+- The human is asked only when two readings of their words are both plausible and give visibly
+  different results: both readings on the card (`ask_decision`), never otherwise.
+
 ### 7. Hand off
 
-Every item, in order, as the board skill's hand-off checklist says. The board ticks the phases
+Only after the intent check (step 6b) returned `matches` on the head being handed off. Every item, in
+order, as the board skill's hand-off checklist says. The board ticks the phases
 Pushed, PR, CI, Preview, Summary and Merged itself as their facts hold (a tick by hand is refused); you tick
 Implementation and its steps (`set_task_done`).
 1. Implementation and its subtasks ticked (`set_task_done`); the workspace registered.
@@ -481,8 +515,8 @@ Implementation and its steps (`set_task_done`).
    review round's verdict in one line, the PR link, the preview link and exactly
    what to try there, how it was tested (the checks and the e2e
    summary; for mid, high and max the review's verdict and counts, for low the builder's evidence per
-   criterion), any fake used at an edge and any contract hit you judged legitimate, with the
-   screenshots in `files`.
+   criterion), any fake used at an edge and any contract hit you judged legitimate, and the intent
+   check's verdict in one line, with the screenshots in `files`.
    "How it was tested" names the level (`low`, `mid`, `high` or `max`). For mid, high and max it also says which
    review depth ran and why: the depth, and the measure that put the change there (lines and files,
    the classes that decided it), or that the human chose it (`DEPTH`). For low it names the gate's
@@ -493,7 +527,11 @@ Implementation and its steps (`set_task_done`).
 7. `update_ticket` to `review`, and read its answer: `missingRunReports` names each subagent run the
    timeline recorded without its report — a span, a hand-off, or one run too many for the reports of
    that agent and round — so get those reports written before the hand-off stands. The phase agents
-   write theirs; you write none of your own. Then `open`: fix every task it lists and check again
+   write theirs; you write none of your own. Also read `missingReviewPhases` (mid, high and max): each
+   entry is a review phase the last round lacks (`round`, `phase`, `expected`, `found`; the hunt needs
+   two). Run each missing phase, with a fix round through the builder if it needs code, and write its
+   report, before the hand-off stands; it is a flag, never a refusal, and `[]` is the answer when
+   every phase ran. Then `open`: fix every task it lists and check again
    (Summary open: no summary written since the last commit). An open Preview may stay only when the
    summary says why.
 
@@ -516,14 +554,16 @@ Then the first row that matches, from the top:
 
 | Depth | When | `/feature-review` runs |
 |---|---|---|
-| `deep` | a big change: at least 500 lines, or at least 15 files, or the class `auth` or `data-model` | with `deep`: two independent hunts from the start, on every round, and each finding's stability in the report |
-| `light` | a tiny change: at most 50 lines in at most 3 files, and none of the classes `auth`, `data-model`, `background-job`, `dependency`, `config-infra` | with `light`: the spec, the env, verify of every acceptance criterion by execution, one hunt, refute of every hunt candidate and every verify `FAIL`, the merge check. The one thing dropped is the second hunt a clean first hunt otherwise gets |
-| `standard` | everything else | as it is today: a clean first hunt gets a second hunt |
+| `deep` | a big change: at least 500 lines, or at least 15 files, or the class `auth` or `data-model` | with `deep`: the full cycle, and each finding's stability (both hunts or one) in the report |
+| `light` | a tiny change: at most 50 lines in at most 3 files, and none of the classes `auth`, `data-model`, `background-job`, `dependency`, `config-infra` | with `light`: the same full cycle, no phase dropped: spec, env, verify, two independent hunts, refute and the merge check |
+| `standard` | everything else | the full cycle |
 
 The depth only moves up. A later round, and a `RETRY` run (it reads `WORKDIR/depth.md`), never
 runs below the deepest depth an earlier round ran, even when the fixes made the diff smaller. The
 round budget is the complexity's (step 5) at every depth.
 
+Every depth runs the full cycle: all six phases and two independent hunts, every round. The depths
+differ only in how hard the hunts look and whether each finding's stability is reported.
 The depth changes only how hard `/feature-review` hunts. Your gate (step 4), the survival rule
 (step 5), the evidence and screenshots (step 6), and the push, the CI wait and the preview (step 7)
 are the same at every depth.

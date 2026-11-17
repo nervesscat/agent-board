@@ -1,6 +1,6 @@
 ---
 name: todo-review
-description: "Works a board project's To do tickets to hand-off, several at once (same repo included): one unattended todo-review-ticket agent per ticket builds the change and runs the /feature-review cycle (verify and hunt, refute) as many rounds as the ticket's complexity sets (low none, mid one, high three, max up to ten for work built from scratch), at a depth scaled to the change, until the change survives it, then pushes, opens the PR, starts a preview and posts screenshots; a ticket is moved to blocked only for what only the human can provide, after the agent has gone as far as it can. The orchestrator schedules, checks each result against the board, and sends weak blockers back."
+description: "Works a board project's To do tickets to hand-off, several at once (same repo included): one unattended todo-review-ticket agent per ticket builds the change and runs the /feature-review cycle (spec, env, verify, two hunts, refute, merge check: all of it, every round) as many rounds as the ticket's complexity sets (low none, mid one, high three, max up to ten for work built from scratch), at a depth scaled to the change, until the change survives it, then checks the result against the human's own words (the intent check, every complexity), pushes, opens the PR, starts a preview and posts screenshots; a ticket is moved to blocked only for what only the human can provide, after the agent has gone as far as it can. The orchestrator schedules, checks each result against the board, and sends weak blockers back."
 user-invocable: true
 argument-hint: "[project=<id>] [<ticket id> ...] [parallel=N] [depth=auto|light|standard|deep] [model=<name>] [dry]"
 ---
@@ -43,7 +43,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `project=<id>` | the board project | the project of the repo in the current directory (`find_project` with its origin, folder and path) |
 | a number | work only these ticket ids, in this order | every eligible To do ticket |
 | `parallel=N` | maximum tickets in flight, 1 to N+1 (so 1 to 3 with N = 2; the cap is one more than the repo's test slots, since a ticket waiting for one still does its light work), tickets of the same repo included | 2 |
-| `depth=auto\|light\|standard\|deep` | the review depth: `auto` lets each ticket agent pick it from the size of its change (`todo-review-ticket`, "Review depth"); any other value is used for every ticket and every round | `auto` |
+| `depth=auto\|light\|standard\|deep` | the review depth: `auto` lets each ticket agent pick it from the size of its change (`todo-review-ticket`, "Review depth"); any other value is used for every ticket and every round. The depth never drops a phase: every round of a mid, high or max ticket runs spec, env, verify, two independent hunts, refute and the merge check, `light` included; the depths differ only in how hard the hunts look and the stability report | `auto` |
 | `model=<name>` | model for the ticket agents, which their own agents inherit | the session model |
 | `dry` | inventory and schedule only: write the plan, start nothing | off |
 
@@ -125,7 +125,8 @@ Loop until nothing is pending or running:
   `depth=` was given and is not `auto`, `AS=<agent name>` when the ticket is reserved, and
   `QUEUE`. Pass `model` on the Agent call when `model=` was given. Pass `effort` on the Agent call
   as the ticket's complexity sets it: `low` for low, `medium` for mid and high, `high` for max; the ticket agent passes
-  the same effort to every agent it starts (spec, builder, the review's phase agents). Tell it to
+  the same effort to every agent it starts (spec, builder, the review's phase agents), except the intent
+  agent, which runs at `low` effort whatever the complexity. Tell it to
   `get_ticket` the ticket before anything else and to carry its context — the instructions, the
   human's posts and replies, the decisions and their answers, the attachments — into every agent
   it starts (a phase agent may read the rest itself). They run in the background; do
@@ -152,7 +153,14 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
 1. **`handed-off`**: the ticket is in a `review` stage, `push.state` is `pushed`, `pr` is set,
    the PR's CI has finished and passed (`gh pr checks <number>`; still running: wait for it),
    `missingRunReports` is empty (it names the runs that still have no report; none listed means every
-   run has one: the phase agents write theirs, the orchestrator writes none), and `open` is empty, or
+   run has one: the phase agents write theirs, the orchestrator writes none), `missingReviewPhases` is
+   empty (for a mid, high or max ticket it names each phase its last review round lacks: every round
+   runs spec, env, verify, two hunts, refute and the merge check, and none is skipped), the intent
+   check ran on the head and its verdict is `matches` (it runs on every ticket, low included, after the
+   last review round and before the hand-off, and again after a human comment that sent the ticket back;
+   at `low` effort, from only the human's words and attachments and the result, never the builder's
+   plan, the spec or the review's findings; `does not match` goes back to the builder, then the review
+   rounds again, then the intent check again), and `open` is empty, or
    holds only the Preview phase with a summary saying why the change cannot be tried. The ticket's summary
    (`summary` on `get_ticket`, `fallback: false`: the hand-off is the summary the agent wrote, not a
    separate post) has screenshots in its attachments when the change has a UI, and a "Tested" part
