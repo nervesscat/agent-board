@@ -27,18 +27,21 @@ export function parseSidebarMode(value: unknown): SidebarMode {
 }
 
 /**
- * The remembered mode and a setter that remembers the choice. The stored value is read after mount, not in
+ * The remembered mode, a setter that remembers the choice, and whether the remembered mode is showing yet. The stored value is read after mount, not in
  * the first render: the server has none, so the first render must match its HTML (a returning visitor who
  * hid the sidebar sees it expanded for a moment, then hidden).
  */
 export function useSidebarMode() {
   const [mode, setMode] = useState<SidebarMode>('expanded')
+  // True from the render that shows the remembered mode (or the default, when there is none to read).
+  const [ready, setReady] = useState(false)
   useEffect(() => {
     try {
       setMode(parseSidebarMode(localStorage.getItem(SIDEBAR_STORAGE_KEY)))
     } catch {
       // Storage can be blocked (private modes, a disabled cookie setting): the sidebar then starts expanded.
     }
+    setReady(true)
   }, [])
   const choose = useCallback((next: SidebarMode) => {
     setMode(next)
@@ -48,5 +51,5 @@ export function useSidebarMode() {
       // The choice still holds for this visit; it is only not remembered.
     }
   }, [])
-  return [mode, choose] as const
+  return [mode, choose, ready] as const
 }

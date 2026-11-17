@@ -43,6 +43,15 @@ const PEEK_CLOSE_MS = 250
 /** The sidebar's place under the sticky header, shared by the sidebar and the toggle column beside it. */
 const STICKY_TOP = 'md:top-[calc(4.5rem+1px+env(safe-area-inset-top))]'
 
+/**
+ * How far left a hidden sidebar rests: its own width plus the page's left margin (the main column is centred
+ * up to 80rem with 1rem of padding), so it is fully outside the window and slides in from the left edge.
+ */
+const HIDDEN_SHIFT = 'md:-translate-x-[calc(100%+max(1rem,(100vw-80rem)/2+1rem)+1px)]'
+
+/** The slide's length and easing; the transitions themselves are `motion-safe`, so reduced motion changes at once. */
+const SLIDE = 'md:motion-safe:duration-200 md:motion-safe:ease-out'
+
 function ProjectLayout() {
   const { id } = Route.useParams()
   const navigate = Route.useNavigate()
@@ -55,7 +64,21 @@ function ProjectLayout() {
   const project = hydrated ? data : undefined
   // A link that names no project (the old `/daily`) opens this one.
   useEffect(() => rememberCurrentProject(id), [id])
-  const [mode, chooseMode] = useSidebarMode()
+  const [mode, chooseMode, modeReady] = useSidebarMode()
+  // Slides are on once the remembered mode is showing (and two frames have painted): a returning visitor
+  // whose sidebar is hidden sees it hidden, not sliding away.
+  const [animated, setAnimated] = useState(false)
+  useEffect(() => {
+    if (!modeReady) return
+    let second = 0
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => setAnimated(true))
+    })
+    return () => {
+      cancelAnimationFrame(first)
+      cancelAnimationFrame(second)
+    }
+  }, [modeReady])
   // A hidden sidebar shown over the page while the mouse is on its edge (desktop only).
   const [peeking, setPeeking] = useState(false)
   const closeTimer = useRef<number | undefined>(undefined)
@@ -124,104 +147,140 @@ function ProjectLayout() {
       </Button>
     </Tip>
   )
+  const slide = animated && SLIDE
   return (
-    <div className="flex flex-col gap-6 md:flex-row">
-      {/* While the sidebar is hidden the toggle has its own column at the left edge, above the strip that shows
-          the sidebar, so it stays reachable. Desktop only: the phone layout has no toggle. */}
-      {hiddenNow && (
-        <div
-          className={cn(
-            'hidden md:sticky md:z-40 md:flex md:w-8 md:shrink-0 md:justify-center md:self-start',
-            STICKY_TOP,
-          )}
-        >
-          {toggle}
-        </div>
-      )}
+    <div className="flex flex-col gap-6 md:flex-row md:gap-0">
       {/* From md up the sidebar sticks below the sticky header (3rem + its 1px border) and main's
           1.5rem top padding, and scrolls on its own when taller than the window. The page itself
           keeps scrolling (not the content pane), so the header, other sticky bars and the
-          browser's scroll restoration keep working as on every other page. */}
-      <aside
-        ref={asideRef}
-        onMouseEnter={hiddenNow ? openPeek : undefined}
-        onMouseLeave={hiddenNow ? closePeekSoon : undefined}
-        onClickCapture={(event) => {
-          if (hiddenNow && event.target instanceof Element && event.target.closest('a'))
-            linkClickedInPeek.current = true
-        }}
+          browser's scroll restoration keep working as on every other page.
+          The wrapper is the sidebar's place in the page: its width slides between expanded, shrunk
+          and hidden (none), and the page follows. The sidebar itself is always the same one: hidden, it
+          rests outside the window on the left and slides back in where it was while the mouse is near. */}
+      <div
         className={cn(
-          'md:max-h-[calc(100vh-6rem-1px-env(safe-area-inset-top))] md:self-start md:overflow-y-auto',
+          'md:sticky md:self-start md:shrink-0',
           STICKY_TOP,
-          mode === 'expanded' && 'md:sticky md:w-52 md:shrink-0',
-          shrunk && 'md:sticky md:w-14 md:shrink-0',
-          // Hidden: out of the page's layout, unless the mouse has shown it over the page.
-          hiddenNow && !showPeek && 'md:hidden',
-          showPeek && 'md:fixed md:left-0 md:z-40 md:w-52 md:bg-background md:shadow-lg',
+          animated && 'md:motion-safe:transition-[width,margin]',
+          slide,
+          mode === 'expanded' && 'md:mr-6 md:w-52',
+          shrunk && 'md:mr-6 md:w-14',
+          hiddenNow && 'md:z-40 md:mr-0 md:w-0',
         )}
       >
-        {/* Expanded and shrunk: the toggle is the sidebar's first row, above Overview, right-aligned when
-            expanded and centred when shrunk. Desktop only. */}
-        {!hiddenNow && (
-          <div className={cn('mb-1 hidden md:flex', shrunk ? 'md:justify-center' : 'md:justify-end')}>
-            {toggle}
+        <aside
+          ref={asideRef}
+          onMouseEnter={hiddenNow ? openPeek : undefined}
+          onMouseLeave={hiddenNow ? closePeekSoon : undefined}
+          onClickCapture={(event) => {
+            if (hiddenNow && event.target instanceof Element && event.target.closest('a'))
+              linkClickedInPeek.current = true
+          }}
+          className={cn(
+            'md:max-h-[calc(100vh-6rem-1px-env(safe-area-inset-top))] md:overflow-x-hidden md:overflow-y-auto',
+            animated && 'md:motion-safe:transition-[width,translate,visibility]',
+            slide,
+            mode === 'expanded' && 'md:w-52',
+            shrunk && 'md:w-14',
+            // Hidden: outside the window on the left, out of the tab order and out of reach once it has slid
+            // out (visibility follows the slide), and slid back in while the mouse has shown it. It keeps
+            // its look, with the page's background so the page does not show through it.
+            hiddenNow &&
+              'md:h-[calc(100vh-6rem-1px-env(safe-area-inset-top))] md:w-52 md:border-r md:bg-background',
+            hiddenNow && !showPeek && [HIDDEN_SHIFT, 'md:invisible md:[transition-delay:0s,0s,200ms]'],
+            showPeek && 'md:visible md:translate-x-0',
+          )}
+        >
+          {/* The toggle is the sidebar's first row, above Overview, right-aligned when expanded and centred when
+              shrunk. While the sidebar is hidden the toggle has its own column at the left edge (below), and
+              this row is only its place. Desktop only. */}
+          <div className={cn('mb-1 hidden h-7 md:flex', shrunk ? 'md:justify-center' : 'md:justify-end')}>
+            {!hiddenNow && toggle}
           </div>
-        )}
-        {pages.length > 0 && current && (
-          <div className="mb-2 px-2 md:hidden">
-            <Select
-              value={current}
-              onValueChange={(v) => v && navigate({ to: MODULES[v as AreaId<'nav'>], params: { id } })}
-              items={pageItems}
-            >
-              <SelectTrigger className="w-full" aria-label="Project page">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {pages.map((page) => (
-                  <SelectItem key={page} value={page}>
-                    {layoutElement(page).label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-        <nav className="hidden gap-1 md:flex md:flex-col">
-          {pages.map((page) => {
-            const Icon = LAYOUT_ICONS[page]
-            const label = layoutElement(page).label
-            const link = (
-              <Link
-                to={MODULES[page]}
-                params={{ id }}
-                // The Overview's URL starts every other page's.
-                activeOptions={{ exact: page === 'nav.overview' }}
-                // The ring is inset: the aside is the scroll container (its overflow-x becomes auto with
-                // overflow-y), so an outline drawn outside the link would be cut at its edge.
-                className={cn(
-                  'flex shrink-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset [&.active]:bg-muted [&.active]:text-foreground',
-                  shrunk && 'md:justify-center md:px-0',
-                )}
+          {pages.length > 0 && current && (
+            <div className="mb-2 px-2 md:hidden">
+              <Select
+                value={current}
+                onValueChange={(v) => v && navigate({ to: MODULES[v as AreaId<'nav'>], params: { id } })}
+                items={pageItems}
               >
-                <Icon className="size-4" />
-                {/* Shrunk: the label is for screen readers only; its tooltip shows it on hover and focus. */}
-                <span className={cn(shrunk && 'md:sr-only')}>{label}</span>
-              </Link>
-            )
-            return shrunk ? (
-              <Tip key={page} content={label}>
-                {link}
-              </Tip>
-            ) : (
-              <Fragment key={page}>{link}</Fragment>
-            )
-          })}
-        </nav>
-      </aside>
+                <SelectTrigger className="w-full" aria-label="Project page">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {pages.map((page) => (
+                    <SelectItem key={page} value={page}>
+                      {layoutElement(page).label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <nav className="hidden gap-1 md:flex md:flex-col">
+            {pages.map((page) => {
+              const Icon = LAYOUT_ICONS[page]
+              const label = layoutElement(page).label
+              const link = (
+                <Link
+                  to={MODULES[page]}
+                  params={{ id }}
+                  // The Overview's URL starts every other page's.
+                  activeOptions={{ exact: page === 'nav.overview' }}
+                  // The ring is inset: the aside is the scroll container (its overflow-x becomes auto with
+                  // overflow-y), so an outline drawn outside the link would be cut at its edge.
+                  // Shrunk: the icon moves to the middle of the narrow sidebar and the label closes up, as the
+                  // sidebar's width slides.
+                  className={cn(
+                    'flex shrink-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm whitespace-nowrap text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset [&.active]:bg-muted [&.active]:text-foreground',
+                    animated && 'md:motion-safe:transition-[padding,gap]',
+                    slide,
+                    shrunk && 'md:gap-0 md:pr-0 md:pl-5',
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" />
+                  {/* Shrunk: the label is closed up to nothing and kept for screen readers; its tooltip shows it
+                      on hover and focus. */}
+                  <span
+                    className={cn(
+                      'overflow-hidden md:max-w-40',
+                      animated && 'md:motion-safe:transition-[max-width,opacity]',
+                      slide,
+                      shrunk && 'md:max-w-0 md:opacity-0',
+                    )}
+                  >
+                    {label}
+                  </span>
+                </Link>
+              )
+              return shrunk ? (
+                <Tip key={page} content={label}>
+                  {link}
+                </Tip>
+              ) : (
+                <Fragment key={page}>{link}</Fragment>
+              )
+            })}
+          </nav>
+        </aside>
+      </div>
+      {/* While the sidebar is hidden the toggle has its own column at the left edge, so it stays reachable above
+          the sidebar that slides in. Its width slides open with the others. Desktop only: the phone layout has
+          no toggle. */}
+      <div
+        className={cn(
+          'hidden md:sticky md:z-50 md:flex md:shrink-0 md:justify-center md:self-start',
+          STICKY_TOP,
+          animated && 'md:motion-safe:transition-[width,margin]',
+          slide,
+          hiddenNow ? 'md:mr-6 md:w-8' : 'md:mr-0 md:w-0',
+        )}
+      >
+        {hiddenNow && toggle}
+      </div>
       {hiddenNow && (
         // The strip along the left border, about 40px wide, where the mouse shows the hidden sidebar. Desktop only.
-        // It sits under the toggle column (z-40), so the toggle stays clickable above it.
+        // It sits under the sidebar's wrapper and the toggle column, so the toggle stays clickable above it.
         <div
           aria-hidden="true"
           onMouseEnter={openPeek}
