@@ -21,6 +21,7 @@ import {
   rankItems,
 } from '#/lib/commandPalette'
 import { useProjects } from '#/lib/project'
+import { projectTabSearch, validateSettingsSearch } from '#/lib/settingsTabs'
 import { stageBadge, stageOf } from '#/lib/stages'
 import { keepSearchRows, ticketsQuery } from '#/lib/tickets'
 import { cn } from '#/lib/utils'
@@ -339,12 +340,16 @@ const CONNECT_SECTIONS: Section[] = [
   },
 ]
 
-/** The project and ticket the URL is on, for the pages and actions the palette offers there. */
-function where(pathname: string) {
+/**
+ * The project and ticket the URL is on, for the pages and actions the palette offers there: a project's
+ * pages, and the Settings page on its project tab.
+ */
+function where(pathname: string, search: Record<string, unknown>) {
   const project = /^\/projects\/(\d+)(?:\/(.*))?$/.exec(pathname)
   const ticket = project ? /^features\/(\d+)/.exec(project[2] ?? '') : null
+  const settings = pathname === '/settings' ? validateSettingsSearch(search) : {}
   return {
-    projectId: project ? Number(project[1]) : null,
+    projectId: project ? Number(project[1]) : settings.tab === 'project' ? (settings.project ?? null) : null,
     ticketId: ticket ? Number(ticket[1]) : null,
   }
 }
@@ -356,7 +361,8 @@ function where(pathname: string) {
  */
 export function CommandPalette() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const { projectId, ticketId } = where(pathname)
+  const search = useRouterState({ select: (s) => s.location.search }) as Record<string, unknown>
+  const { projectId, ticketId } = where(pathname, search)
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -529,11 +535,9 @@ export function CommandPalette() {
         subtitle: section.subtitle,
         keywords: section.keywords,
         run: () =>
-          navigate({
-            to: section.path ?? '/projects/$id/settings',
-            params: { id: String(projectId) },
-            hash: section.hash,
-          }),
+          section.path
+            ? navigate({ to: section.path, params: { id: String(projectId) }, hash: section.hash })
+            : navigate({ to: '/settings', search: projectTabSearch(projectId), hash: section.hash }),
       })
     }
     staticItems.push({

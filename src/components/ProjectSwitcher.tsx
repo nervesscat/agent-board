@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useLocation, useNavigate, useParams } from '@tanstack/react-router'
+import { useLocation, useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { Check, ChevronsUpDown, FolderGit2, Plus, Settings2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -32,6 +32,7 @@ import { Tip } from '#/components/ui/tooltip'
 import { del, errorMessage, patch, post, type Project, type ProjectRow } from '#/lib/api'
 import { type Kind, DEFAULT_KINDS } from '#/lib/kinds'
 import { useProjects } from '#/lib/project'
+import { projectTabSearch, validateSettingsSearch } from '#/lib/settingsTabs'
 import { useHydrated } from '#/lib/useHydrated'
 
 // The project's Overview is its own address (no module segment); the rest keep their segment.
@@ -42,8 +43,12 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 /** The project everything below the top bar is about. Switching keeps you on the same module. */
 export function ProjectSwitcher() {
   const { data: projects } = useProjects()
-  const { id } = useParams({ strict: false }) as { id?: string }
+  const params = useParams({ strict: false }) as { id?: string }
   const { pathname } = useLocation()
+  // On the Settings page's project tab the project is the address's.
+  const search = validateSettingsSearch(useSearch({ strict: false }) as Record<string, unknown>)
+  const onProjectTab = pathname === '/settings' && search.tab === 'project' && search.project !== undefined
+  const id = params.id ?? (onProjectTab ? String(search.project) : undefined)
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -52,12 +57,16 @@ export function ProjectSwitcher() {
   // from it would not match the server's "Select a project".
   const hydrated = useHydrated()
   const current = hydrated ? projects?.find((p) => String(p.id) === id) : undefined
-  const module = MODULES.find((m) => (pathname.split('/')[3] || 'overview') === m) ?? 'overview'
+  const module = onProjectTab
+    ? 'settings'
+    : (MODULES.find((m) => (pathname.split('/')[3] || 'overview') === m) ?? 'overview')
   const go = (projectId: number | string) =>
-    navigate({
-      to: module === 'overview' ? '/projects/$id' : `/projects/$id/${module}`,
-      params: { id: String(projectId) },
-    })
+    module === 'settings'
+      ? navigate({ to: '/settings', search: projectTabSearch(projectId) })
+      : navigate({
+          to: module === 'overview' ? '/projects/$id' : `/projects/$id/${module}`,
+          params: { id: String(projectId) },
+        })
   const item =
     'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground'
 

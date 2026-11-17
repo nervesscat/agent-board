@@ -23,6 +23,16 @@ const CARDS = ['Needs you', 'In progress', 'Done today', 'Next', 'Carrying over'
 const editor = (page: Page) => page.getByRole('region', { name: 'Layout' })
 const tiles = (scope: Locator, list: string) => scope.getByRole('list', { name: list }).getByRole('listitem')
 const menu = (page: Page) => page.locator('aside nav').getByRole('link')
+/** The menu as another page of the browser shows it: the Settings page has no sidebar of its own. */
+const expectMenu = async (page: Page, projectId: number, expected: string[]) => {
+  const other = await page.context().newPage()
+  try {
+    await other.goto(`/projects/${projectId}`)
+    await expect(menu(other)).toHaveText(expected)
+  } finally {
+    await other.close()
+  }
+}
 /** The Overview's card titles, in order. */
 const cardTitles = (scope: Page | Locator) => scope.locator('[data-slot="card-title"]')
 /** Titles matched by their start: "Next: To do" is Next, a count may follow. */
@@ -104,7 +114,7 @@ test('the human hides a page and reorders the menu from the keyboard; both persi
   await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Saved' })).toBeVisible()
   await expect(status).toHaveText('No changes. 1 hidden.')
   const shown = reordered.filter((n) => n !== 'Gallery')
-  await expect(menu(page)).toHaveText(shown)
+  await expectMenu(page, project.id, shown)
   const stored = await saved()
   expect(stored.find((it) => it.id === 'nav.gallery')).toEqual({
     id: 'nav.gallery',
@@ -117,7 +127,7 @@ test('the human hides a page and reorders the menu from the keyboard; both persi
   await page.reload()
   await expect(tiles(layout, 'Project menu')).toHaveText(reordered)
   await expect(gallery).not.toBeChecked()
-  await expect(menu(page)).toHaveText(shown)
+  await expectMenu(page, project.id, shown)
 
   // The hidden page still opens by its URL, without coming back to the menu.
   await page.goto(`/projects/${project.id}/gallery`)
@@ -127,7 +137,7 @@ test('the human hides a page and reorders the menu from the keyboard; both persi
   // Reset to default: the defaults stored as none, everywhere at once.
   await page.goto(`/projects/${project.id}/settings`)
   await layout.getByRole('button', { name: 'Reset to default' }).click()
-  await expect(menu(page)).toHaveText(MENU)
+  await expectMenu(page, project.id, MENU)
   await expect(tiles(layout, 'Project menu')).toHaveText(MENU)
   await expect(gallery).toBeChecked()
   await expect(status).toHaveText('No changes.')
@@ -306,7 +316,7 @@ test('every Overview card hidden leaves a note that leads to the layout', async 
   await page.goto(`/projects/${project.id}`)
   await expect(page.locator('[data-slot="card"]')).toHaveCount(0)
   await page.getByRole('link', { name: 'Show them again in the layout settings' }).click()
-  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/settings#layout$`))
+  await expect(page).toHaveURL(new RegExp(`/settings\\?tab=project&project=${project.id}#layout$`))
   // Followed in the app, not loaded afresh: the page still lands on the Layout section below the others.
   await expect(editor(page)).toBeInViewport()
 })

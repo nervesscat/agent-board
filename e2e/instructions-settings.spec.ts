@@ -27,15 +27,17 @@ test('the sidebar opens Instructions and Settings, each with only its own sectio
 
   // Settings: every settings section, and no instructions editor or history.
   await navLink(page, 'Settings').click()
-  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/settings$`))
+  await expect(page).toHaveURL(new RegExp(`/settings\\?tab=project&project=${project.id}$`))
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
   for (const name of SETTINGS) await expect(region(page, name)).toBeVisible()
   await expect(region(page, 'Project instructions')).toHaveCount(0)
   await expect(region(page, 'Instructions history')).toHaveCount(0)
   await page.screenshot({ path: test.info().outputPath('settings.png'), fullPage: true })
 
-  // Back to Instructions from the sidebar.
-  await navLink(page, 'Instructions').click()
+  // Settings is its own page now, without the project's sidebar: Back returns to Instructions, and its
+  // sidebar is there again.
+  await page.goBack()
+  await expect(navLink(page, 'Settings')).toBeVisible()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/instructions$`))
   await expect(page.getByRole('heading', { level: 1, name: 'Instructions' })).toBeVisible()
 })

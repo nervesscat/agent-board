@@ -46,6 +46,7 @@ import {
 } from '#/lib/api'
 import { ago, clock } from '#/lib/format'
 import { needKeys, undismissed, useDismissedNeeds } from '#/lib/needsYou'
+import { projectTabSearch } from '#/lib/settingsTabs'
 import { stageBadge, stageOf } from '#/lib/stages'
 import { useServerOffset } from '#/lib/useNow'
 import { lastHeard, onServerClock, type WorkTimelineLike } from '#/lib/workStatus'
@@ -135,12 +136,7 @@ function ProjectBlock({ p, now, dismiss }: CardProps) {
     return (
       <Empty>
         Every card of this overview is hidden.{' '}
-        <Link
-          to="/projects/$id/settings"
-          params={{ id: String(p.project.id) }}
-          hash="layout"
-          className="underline"
-        >
+        <Link to="/settings" search={projectTabSearch(p.project.id)} hash="layout" className="underline">
           Show them again in the layout settings
         </Link>
         .
