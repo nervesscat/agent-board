@@ -208,4 +208,19 @@ describe('matchTags', () => {
     expect(matchTags(['Café', 'Bar'], 'CAFÉ')).toEqual(['Café'])
     expect(matchTags(['cafe'], 'Cafè')).toEqual(['cafe'])
   })
+
+  it('folds a final capital sigma with the sigma of the other letters', () => {
+    // toLowerCase writes the final form ς for a word-final capital sigma, the query's σ stays.
+    expect(matchTags(['ΟΔΟΣ'], 'οδοσ')).toEqual(['ΟΔΟΣ'])
+    expect(matchTags(['ΟΔΟΣ'], 'ΟΔΟΣ')).toEqual(['ΟΔΟΣ'])
+    expect(matchTags(['ΟΔΟΣ', 'Bug'], 'οδος')).toEqual(['ΟΔΟΣ'])
+    expect(matchTags(['ΟΔΟΣ', 'Bug'], 'bug')).toEqual(['Bug'])
+  })
+
+  it('matches nothing for a query of marks only, and everything for a blank one', () => {
+    const named = ['Roadmap', 'Bug']
+    expect(matchTags(named, '́')).toEqual([])
+    expect(matchTags(named, '  ')).toEqual(named)
+    expect(matchTags(named, '')).toEqual(named)
+  })
 })

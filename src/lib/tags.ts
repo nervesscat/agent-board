@@ -121,8 +121,12 @@ export function cleanSuggestions(suggestions: readonly string[]): string[] {
   return out
 }
 
-/** A name as matched: accents removed, lower case. */
-const foldTag = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+/**
+ * A name as matched: accents removed, lower case. toLowerCase writes a capital sigma at the end of a
+ * word as the final form ς, so that is made σ too: `ΟΔΟΣ` and `οδοσ` then fold the same.
+ */
+const foldTag = (text: string) =>
+  text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/ς/g, 'σ')
 
 /** Whether the characters of `query` appear in `name` in their order, not necessarily next to each other. */
 function holdsInOrder(query: string, name: string) {
@@ -135,9 +139,12 @@ function holdsInOrder(query: string, name: string) {
 /**
  * The tags the typed `query` soft-matches: its letters in the tag's name in order, not as a prefix or
  * a whole (`rdm` holds in Roadmap, `ogfe` in Ongoing features), with case and accents set aside.
- * `query` is trimmed; none is all of them, in their order.
+ * `query` is trimmed; none (empty or blank) is all of them, in their order. A query of only accents
+ * (marks with no letter) is not none: it matches no tag.
  */
 export function matchTags(tags: readonly string[], query: string): string[] {
-  const q = foldTag(query.trim())
-  return q ? tags.filter((t) => holdsInOrder(q, foldTag(t))) : [...tags]
+  const typed = query.trim()
+  if (!typed) return [...tags]
+  const q = foldTag(typed)
+  return q ? tags.filter((t) => holdsInOrder(q, foldTag(t))) : []
 }
