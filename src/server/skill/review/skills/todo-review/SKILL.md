@@ -129,7 +129,10 @@ Loop until nothing is pending or running:
   agent, which runs at `low` effort whatever the complexity. Tell it to
   `get_ticket` the ticket before anything else and to carry its context — the instructions, the
   human's posts and replies, the decisions and their answers, the attachments — into every agent
-  it starts (a phase agent may read the rest itself). They run in the background; do
+  it starts (a phase agent may read the rest itself), except the intent agent: it gets only the human's own
+  words and attachments (the instructions and every post and reply by the human) and the result, never the
+  decisions with their answers, the spec, the plan or the review's findings, and it may not read the rest of
+  the ticket's posts itself. They run in the background; do
   not poll. Continue when a completion notification arrives. Record each start on the ticket's work
   timeline: `handoff` with `projectId`, `ticketId` and `to` the ticket agent's name.
 - While runs are in flight, the ticket agents keep their tickets' work timelines (a `heartbeat`

@@ -462,6 +462,22 @@ describe('the review texts the board ships', () => {
       expect(flat(readme)).toContain('hunt, refute, merge, intent)')
     })
 
+    it('the server instructions, the review-queue and the todo-review skills carry the intent check, its low effort and its input rule', async () => {
+      const { instructions } = await served()
+      const i = flat(instructions)
+      expect(i).toContain('refute, merge, and the intent check)')
+      expect(i).toContain('→ the intent check at low effort (every complexity) → hand off')
+      expect(i).toContain("the builder and the review's phase agents; the intent agent always runs at low)")
+      const queue = flat(between(reviewQueue, '**Building**', '## Notes'))
+      expect(queue).toContain('until the change survives → the intent check → hand-off)')
+      expect(queue).toContain('except the intent agent, which runs at `low` effort whatever the complexity')
+      const todo = flat(todoReview)
+      expect(todo).toContain('except the intent agent, which runs at `low` effort whatever the complexity')
+      expect(todo).toContain(
+        "except the intent agent: it gets only the human's own words and attachments (the instructions and every post and reply by the human) and the result, never the decisions with their answers, the spec, the plan or the review's findings, and it may not read the rest of the ticket's posts itself",
+      )
+    })
+
     it('above low the full cycle is mandatory, in every text that describes a round', () => {
       const full =
         'every review round runs spec, env, verify, two independent hunts, refute and the merge check'
