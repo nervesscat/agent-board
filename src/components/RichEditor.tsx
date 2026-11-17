@@ -732,7 +732,8 @@ export function applyBlockStyle(tr: Transaction, style: BlockStyle, active: bool
         )
       }
   } else {
-    for (const block of blocks) {
+    // A block inside a node with invalid content stays where it is, as in the other styles (see `insideValid`).
+    for (const block of blocks.filter((b) => insideValid(tr.doc, b))) {
       const pos = at(block)
       const node = tr.doc.nodeAt(pos)
       if (!node) continue

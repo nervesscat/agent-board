@@ -1032,6 +1032,35 @@ describe('RichEditor quote on the whole document with a heading in a list item',
   })
 })
 
+describe('RichEditor bullet list on text in a list item with two headings', () => {
+  it('does not throw, and reloads to the editor document', () => {
+    const editor = new Editor({
+      extensions,
+      content: '- ## a\n  ## c',
+      contentType: 'markdown',
+    })
+    try {
+      // Select the text from the first heading to the end of the second one.
+      let from = -1
+      let to = -1
+      editor.state.doc.descendants((node, pos) => {
+        if (!node.isText) return true
+        if (node.text === 'a') from = pos
+        if (node.text === 'c') to = pos + node.nodeSize
+        return true
+      })
+      expect(from).toBeGreaterThan(-1)
+      expect(to).toBeGreaterThan(from)
+      editor.commands.setTextSelection({ from, to })
+      expect(() => toggleBlock(editor, 'bulletList')).not.toThrow()
+      const reloaded = Node.fromJSON(schema, markdown.parse(tidy(editor.getMarkdown())))
+      expect(reloaded.textContent).toBe(editor.state.doc.textContent)
+    } finally {
+      editor.destroy()
+    }
+  })
+})
+
 describe('RichEditor numbered items with code blocks', () => {
   it('reads two code blocks of one numbered item back as both', () => {
     const md = '1. x\n   ```\n   code\n   ```\n   ```\n   code\n   ```'
