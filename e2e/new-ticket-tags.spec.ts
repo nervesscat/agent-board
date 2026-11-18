@@ -419,10 +419,13 @@ test('a click in the Tags field around its chips goes to the text, and keeps the
   await page.mouse.click(at.x, at.y)
   await expect(input).toBeFocused()
 
-  // Mid-word, it ends no tag: the caret goes to the end of the text and the word goes on.
+  // Mid-word, it ends no tag: the caret goes to the end of the text and the word goes on. The chips
+  // offered narrow to none as the word is typed, and the dialog, centred, moves the field: the click
+  // is where the field is now.
   await page.keyboard.type('Fron')
   await page.keyboard.press('Home')
-  await page.mouse.click(at.x, at.y)
+  const moved = (await field.boundingBox())!
+  await page.mouse.click(moved.x + 4, moved.y + moved.height / 2)
   await expect(input).toBeFocused()
   await page.keyboard.type('tend')
   await expect(chips).toHaveText(['High'])

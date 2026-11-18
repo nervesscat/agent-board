@@ -6,7 +6,14 @@ import { z } from 'zod'
 import { db, schema } from '#/db'
 import { cleanKinds, DEFAULT_KINDS, hasGitSide, KINDS, type Kind, presetPhases } from '#/lib/kinds'
 import { LAYOUT_AREAS, LAYOUT_ELEMENTS, mergeLayout } from '#/lib/layout'
-import { MAX_TAG_LENGTH, cleanSuggestions, matchTags, tagChoices, usedTags } from '#/lib/tags'
+import {
+  MAX_TAG_LENGTH,
+  cleanSuggestions,
+  matchTags,
+  recentTagCounts,
+  tagChoices,
+  usedTags,
+} from '#/lib/tags'
 import { logActivity } from './activity'
 import { hostToolsForAgents } from './hostTools'
 import { assertMayChangeInstructions, type Changer, setInstructions } from './instructionsHistory'
@@ -83,16 +90,20 @@ export function getProject(id: number) {
 /**
  * The project plus its repos, its stages in board order and its agents (name, picture, instructions):
  * what agents read before working on it. `usedTags` are the tags its tickets carry (archived and lanes
- * too), most used first, each once in the casing used most: the ones to reuse. `hostTools` is the last
- check of the tools on this machine the board runs (null before the first one ends).
+ * too), most used first, each once in the casing used most: the ones to reuse. `tagWeek` counts the
+ * tickets updated in the last week per tag (`recentTagCounts`): the order the tags field offers them.
+ * `hostTools` is the last check of the tools on this machine the board runs (null before the first
+ * one ends).
  */
 export function getProjectFull(id: number) {
   const project = getProject(id)
+  const tickets = projectTagRows(id)
   return {
     ...project,
     // Where the work of a project with no git side is kept: a plain folder, no repo.
     workFolder: hasGitSide(project.kinds) ? null : ensureProjectWorkFolder(id),
-    usedTags: projectUsedTags(id),
+    usedTags: usedTags(tickets.map((t) => t.tags)),
+    tagWeek: recentTagCounts(tickets, new Date()),
     repos: listRepos(id),
     stages: listStages(id),
     agents: listAgents(id),
@@ -101,14 +112,13 @@ export function getProjectFull(id: number) {
   }
 }
 
-function projectUsedTags(projectId: number) {
-  const rows = db
-    .select({ tags: schema.tickets.tags })
+function projectTagRows(projectId: number) {
+  return db
+    .select({ tags: schema.tickets.tags, updatedAt: schema.tickets.updatedAt })
     .from(schema.tickets)
     .where(eq(schema.tickets.projectId, projectId))
     .orderBy(asc(schema.tickets.id))
     .all()
-  return usedTags(rows.map((r) => r.tags))
 }
 
 export type ProjectFull = ReturnType<typeof getProjectFull>
@@ -160,9 +170,10 @@ export type TagsQuery = z.input<typeof TagsQuery>
 
 /**
  * One page of the tags the project offers to filter by, as the tag filter lists them: its suggestions,
- * then the tags its tickets carry (most used first), each once in the casing to reuse (`tagChoices`).
- * `include`, a tag none of those is in any casing (one from a link), goes first. `q` keeps the tags
- * holding it in any casing (`matchTags`). `next` is the cursor of the page after, null after the last.
+ * then the tags its tickets carry, each once in the casing to reuse, most used in the last week first
+ * (`tagChoices`). `include`, a tag none of those is in any casing (one from a link), goes first. `q`
+ * keeps the tags it soft-matches (`matchTags`). `next` is the cursor of the page after, null after
+ * the last.
  *
  * The list is built again for every page, and its order moves when a ticket's tags change, so a page
  * is not a slice at an offset (that would give a tag that moved down again and miss one that moved
@@ -174,7 +185,13 @@ export function projectTags(
   { q, include, cursor: sent, limit }: z.output<typeof TagsQuery>,
 ) {
   const project = getProject(projectId)
-  const tags = tagChoices(project.tagSuggestions, projectUsedTags(projectId), [])
+  const tickets = projectTagRows(projectId)
+  const tags = tagChoices(
+    project.tagSuggestions,
+    usedTags(tickets.map((t) => t.tags)),
+    [],
+    recentTagCounts(tickets, new Date()),
+  )
   const extra = include.trim()
   const known = !extra || tags.some((t) => t.toLowerCase() === extra.toLowerCase())
   const rest = matchTags(known ? tags : [extra, ...tags], q).filter((t) => !sent.has(t.toLowerCase()))
