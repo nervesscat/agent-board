@@ -222,14 +222,19 @@ test('a project made from the switcher on the project tab becomes its tab', asyn
 test('a project list that fails to load leaves the address as it is', async ({ page, project }) => {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
-  await page.route('**/api/projects', (route) =>
-    route.request().method() === 'GET' ? route.abort() : route.continue(),
-  )
+  let attempts = 0
+  await page.route('**/api/projects', (route) => {
+    if (route.request().method() !== 'GET') return route.continue()
+    attempts++
+    return route.abort()
+  })
   const address = `/settings?tab=project&project=${project.id}#stages`
   await page.goto(address)
   await expect(tab(page, 'Board')).toBeVisible()
-  // Past the query's retry, so the failure is what the page has to go by.
-  await page.waitForTimeout(4000)
+  // Past the query's retry, so the failure is what the page has to go by: the list was asked for twice,
+  // and the page has painted since.
+  await expect.poll(() => attempts).toBeGreaterThanOrEqual(2)
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))))
   await expect(page.locator('#theme')).toBeVisible()
   expect(new URL(page.url()).pathname + new URL(page.url()).search + new URL(page.url()).hash).toBe(address)
   expect(errors).toEqual([])
