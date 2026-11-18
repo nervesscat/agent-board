@@ -55,6 +55,7 @@ function Settings() {
       ? null
       : 'board'
   const correct = resolved?.correct
+  const dropHash = resolved?.dropHash === true
   // The project the address names is the browser's current one from now on: the Board tab, whose address
   // names none, keeps offering it.
   const named = resolved?.project != null && search.project === resolved.project ? resolved.project : null
@@ -62,13 +63,18 @@ function Settings() {
     if (named !== null) rememberCurrentProject(named)
   }, [named])
   // An address that says what is not so (a project that is gone, a section of the other tab) is put right,
-  // keeping its #section.
+  // keeping its #section (unless that is a section of a project the address names that is gone).
   useEffect(() => {
     if (!correct) return
     return whenArrived(router, () => {
-      void navigate({ to: '/settings', search: correct, hash: hash || undefined, replace: true })
+      void navigate({
+        to: '/settings',
+        search: correct,
+        hash: dropHash ? undefined : hash || undefined,
+        replace: true,
+      })
     })
-  }, [correct, hash, navigate, router])
+  }, [correct, dropHash, hash, navigate, router])
   return (
     <div className="max-w-3xl space-y-6">
       <h1 className="text-xl font-semibold tracking-tight">Settings</h1>

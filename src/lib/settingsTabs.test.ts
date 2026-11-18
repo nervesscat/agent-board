@@ -103,4 +103,16 @@ describe('resolveSettings', () => {
       tab: 'board',
     })
   })
+
+  it('never opens another project for an address that names a project that is not there', () => {
+    const first = resolveSettings(projectTabSearch(999), 'stages', 2, ids)
+    expect(first).toEqual({ tab: 'board', project: null, correct: {}, dropHash: true })
+    expect(resolveSettings({ tab: 'project', project: 999 }, 'stages', 2, ids).dropHash).toBe(true)
+    // The corrected address (no project, no hash) stays on the board tab, a remembered project or not.
+    expect(resolveSettings(first.correct!, '', 2, ids)).toMatchObject({ tab: 'board', correct: null })
+    // A board section keeps its hash; a project section with no project in the address still opens the
+    // remembered project's tab.
+    expect(resolveSettings(projectTabSearch(999), 'theme', 2, ids).dropHash).toBeUndefined()
+    expect(resolveSettings({}, 'stages', 2, ids)).toMatchObject({ tab: 'project', project: 2 })
+  })
 })

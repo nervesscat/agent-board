@@ -101,6 +101,24 @@ test('the project tab without a usable project falls back to the Board tab', asy
   await expect(page.locator('#theme')).toBeVisible()
 })
 
+test('an address naming a project that is gone lands on the Board tab, even with a project section', async ({
+  page,
+  project,
+  human,
+}) => {
+  const other = await seedProject(human, `Other ${project.name}`)
+  // The browser's remembered project is the second one.
+  await page.goto(`/settings?tab=project&project=${other.id}`)
+  await expect(projectTab(page, other.name)).toHaveAttribute('aria-selected', 'true')
+  for (const address of ['/projects/999/settings#stages', '/settings?tab=project&project=999#stages']) {
+    await page.goto(address)
+    await expect(tab(page, 'Board')).toHaveAttribute('aria-selected', 'true')
+    await expect(page).toHaveURL(/\/settings$/)
+    await expect(page.locator('#theme')).toBeVisible()
+    for (const id of PROJECT_IDS) await expect(page.locator(`#${id}`)).toHaveCount(0)
+  }
+})
+
 test('an old project settings address opens the project tab, keeping its section', async ({
   page,
   project,

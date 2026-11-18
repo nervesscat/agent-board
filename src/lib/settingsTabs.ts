@@ -61,12 +61,15 @@ export interface ResolvedSettings {
   project: number | null
   /** The search the address should have instead of the one it has (replacing it), or null when it is right. */
   correct: SettingsSearch | null
+  /** Set when the correction also drops the #hash: a section of a project the address names but is not there. */
+  dropHash?: true
 }
 
 /**
  * Which tab shows. The project is the address's when it is one of `projectIds`, else (when the address
  * names none) the remembered one. A section of the other tab's in the #hash opens that tab when it is
- * there. The project tab without a project falls back to the board's.
+ * there. The project tab without a project falls back to the board's. An address that names a project
+ * that is not there never opens another project's tab: a project section in its #hash is dropped too.
  */
 export function resolveSettings(
   search: SettingsSearch,
@@ -85,5 +88,7 @@ export function resolveSettings(
         ? { tab }
         : {}
   const same = search.tab === right.tab && search.project === right.project
-  return { tab, project, correct: same ? null : right }
+  const dropHash =
+    search.project !== undefined && project === null && tabOwning(hash) === 'project' ? true : undefined
+  return { tab, project, correct: same ? null : right, ...(dropHash ? { dropHash } : {}) }
 }
