@@ -332,6 +332,24 @@ describe('the general rules in the served skill texts', () => {
     expect(todoReview()).toContain('never move a ticket the human just moved')
   })
 
+  it('keeps the non-blocking requests out of every question blocks, and ends the run last', () => {
+    expect(board()).toContain(
+      "are not questions you wait on: they keep the ticket where it is and work goes on, because nothing in the ticket's own work depends on the answer",
+    )
+    expect(ticketAgent()).toContain('is not a question you wait on: the ticket stays where it is')
+    const para = ticketAgent().slice(ticketAgent().indexOf('When you do block, and whenever'))
+    const order = [
+      'post the ask',
+      'move the ticket to `blocked` right after posting',
+      '`set_ticket_summary`',
+      'then end your run',
+    ]
+    const at = order.map((s) => para.indexOf(s))
+    expect(at.every((i) => i >= 0)).toBe(true)
+    expect(at).toEqual([...at].sort((x, y) => x - y))
+    expect(para.indexOf('then end your run')).toBeLessThan(para.indexOf('you are relaunched briefed'))
+  })
+
   it('makes every question block the ticket, in the session, board and ticket agent texts', () => {
     expect(session()).toContain('moves its ticket to blocked and ends its work')
     expect(board()).toContain('**Every question blocks:**')

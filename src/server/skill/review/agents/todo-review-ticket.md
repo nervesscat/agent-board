@@ -55,7 +55,8 @@ earned.
    however clear the answer looks: a question for the human goes to the card with `ask_decision`,
    and the BLOCKER line of your result carries it. Every question blocks: right after you post a
    card or a post that asks the human something, move the ticket to `blocked` and end your run; never
-   go on past an open question on your own guess.
+   go on past an open question on your own guess. (An `add_repo` or `request_archive` card, or an
+   `ask_decision` with `block: false`, is not a question you wait on: the ticket stays where it is.)
 
 Never merge, approve, force-push, or comment on GitHub. Never touch `REPO`'s working tree: all work
 happens in the ticket's worktree. Never two builders on one branch.
@@ -618,13 +619,16 @@ they must do) and keep going. It shows in the human's Needs you; ticking the tas
 question to the human is not that: it blocks the ticket right after it is posted (see below); the
 "only when nothing else can go on" limit is for a step that needs a human action, not a question.
 
-When you do block, and whenever you post anything that asks the human a question: move the ticket to
-`blocked` right after posting (an `ask_decision` card does it for you; a plain asking post needs
-`update_ticket` with `status: blocked`), end your run, and post the ask: what is needed, why, what you tried (at least two things), and what you will do once it is
-given. When the human answers, or comments and moves the ticket back to In progress, you are
-relaunched briefed with it and reply under that post (plan first, then the result). A decision card stays open for the human: this agent never answers a decision, and the
-BLOCKER line of your result names the question. Then update the ticket's summary (`set_ticket_summary`) with the state, the next steps and how to
-resume (branch, worktree, commands). A blocker the orchestrator finds weak comes back to you as `RETRY`.
+When you do block, and whenever you post anything that asks the human a question, in this order:
+post the ask (what is needed, why, what you tried (at least two things), and what you will do once
+it is given); move the ticket to `blocked` right after posting (an `ask_decision` card does it for
+you; a plain asking post needs `update_ticket` with `status: blocked`); update the ticket's summary
+(`set_ticket_summary`) with the state, the next steps and how to resume (branch, worktree,
+commands); then end your run. When the human answers, or comments and moves the ticket back to In
+progress, you are relaunched briefed with it and reply under that post (plan first, then the
+result). A decision card stays open for the human: this agent never answers a decision, and the
+BLOCKER line of your result names the question. A blocker the orchestrator finds weak comes back to
+you as `RETRY`.
 
 ## Output
 

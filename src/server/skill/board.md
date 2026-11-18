@@ -328,7 +328,7 @@ Lanes of a ticket you are working are yours to create (next section).
   it on the card. **Every question blocks:** right after you post one, a card or a post that asks
   the human something, move the ticket with `update_ticket` → `status: blocked` and end your work;
   never keep working past an open question on your own guess. An `ask_decision` card moves the ticket
-  to blocked by default, but a plain asking post does not: move it yourself. Back to `in_progress`
+  to blocked by default, but a plain asking post does not: move it yourself. The requests that say they do not block (an `add_repo` or `request_archive` card, or an `ask_decision` posted with `block: false`) are not questions you wait on: they keep the ticket where it is and work goes on, because nothing in the ticket's own work depends on the answer. Back to `in_progress`
   once it is answered; when an answer or a comment moves it back, you are relaunched briefed with it
   and reply under that post (plan first, then the result). A step that needs a human action which is
   not a question (a credential, a manual step) is the other case: tag that task blocked and go on.
