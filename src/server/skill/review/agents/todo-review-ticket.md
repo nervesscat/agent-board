@@ -53,7 +53,9 @@ earned.
    (Escalation, below).
 7. **The human answers a decision, not you.** This agent runs unattended and never answers a decision (`answer_decision`),
    however clear the answer looks: a question for the human goes to the card with `ask_decision`,
-   and the BLOCKER line of your result carries it.
+   and the BLOCKER line of your result carries it. Every question blocks: right after you post a
+   card or a post that asks the human something, move the ticket to `blocked` and end your run; never
+   go on past an open question on your own guess.
 
 Never merge, approve, force-push, or comment on GitHub. Never touch `REPO`'s working tree: all work
 happens in the ticket's worktree. Never two builders on one branch.
@@ -166,8 +168,9 @@ error, the human interrupts you, or you decide the work is not worth continuing)
 that it was stopped and why: a `comment`, and a `set_ticket_summary` whose state line says stopped
 and the reason. The next reader must be able to tell a deliberate stop from a crash.
 
-**Clean up what you started when the work ends.** Stop the processes you started (servers, dev
-servers, test boards, watchers), remove your temporary files and folders, and release `LOCK` when
+**Clean up what you started, per round and at the hand-off.** Stop the processes you and your
+subagents started (servers, dev servers, test boards, watchers) by their process id after each review
+round and at the hand-off, not only when the work ends; remove your temporary files and folders, and release `LOCK` when
 its `holder.txt` names your ticket. This review's own scratch worktree under
 `~/.claude/feature-review/` may go. The ticket's worktrees and its branches on origin are the
 human's: list them, never delete them; `cleanup_delete` covers only closed tickets' landed local
@@ -372,7 +375,9 @@ commits in a worktree of its own, posts its phases on the ticket, and writes `re
 round this run is (1 for the first, then counting on, continuing after an intent return, step 6b): its
 phase agents put it on their spans and run reports, and the board counts a phase only when it is there.
 When it returns, however it ended, release any slot folder under `SLOTS` whose `holder.txt` names this
-ticket.
+ticket. Then stop, by process id, every server, test board, dev
+server or watcher you or your subagents started for the round (the preview of step 6 is the one that
+keeps running): clean up after each round, not only at the hand-off.
 
 The change **survives** when the verdict is `SHIP`, the "works" check is `YES`, the base check is
 `NO` (no issue with the latest base), and every acceptance criterion is `PASS` by execution or
@@ -611,9 +616,11 @@ only they make): tag that task blocked (`update_task` with `blocked: true` and `
 they must do) and keep going. It shows in the human's Needs you; ticking the task clears it. Block
 the ticket only when nothing else can go on.
 
-When you do block: move the ticket to `blocked` (an `ask_decision` card does it for you), and post
-the ask: what is needed, why, what you tried (at least two things), and what you will do once it is
-given. A decision card stays open for the human: this agent never answers a decision, and the
+When you do block, and whenever you post anything that asks the human a question: move the ticket to
+`blocked` right after posting (an `ask_decision` card does it for you; a plain asking post needs
+`update_ticket` with `status: blocked`), end your run, and post the ask: what is needed, why, what you tried (at least two things), and what you will do once it is
+given. When the human answers, or comments and moves the ticket back to In progress, you are
+relaunched briefed with it and reply under that post (plan first, then the result). A decision card stays open for the human: this agent never answers a decision, and the
 BLOCKER line of your result names the question. Then update the ticket's summary (`set_ticket_summary`) with the state, the next steps and how to
 resume (branch, worktree, commands). A blocker the orchestrator finds weak comes back to you as `RETRY`.
 

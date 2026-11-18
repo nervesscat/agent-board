@@ -310,6 +310,100 @@ describe('the default agents', () => {
   })
 })
 
+describe('the general rules in the served skill texts', () => {
+  const review = (p: string) =>
+    fs.readFileSync(path.join(import.meta.dirname, 'skill', 'review', p), 'utf8').replace(/\r\n/g, '\n')
+  const flat = (t: string) => t.replace(/\s+/g, ' ')
+  const session = () => flat(agents.sessionSkill())
+  const board = () => flat(agents.renderSkill('claude'))
+  const ticketAgent = () => flat(review('agents/todo-review-ticket.md'))
+  const todoReview = () => flat(review('skills/todo-review/SKILL.md'))
+
+  it('has the session skill restart the work on an answer or a comment that moved the ticket', () => {
+    for (const text of [
+      "relaunch that ticket's agent at once, briefed with the answer or the comment",
+      'replies under the post: its plan first, then the result',
+      'check for answered cards and new human comments',
+      'never move a ticket the human just moved',
+      "is already the human's yes",
+    ])
+      expect(session()).toContain(text)
+    expect(todoReview()).toContain('check for answered cards and new human comments')
+    expect(todoReview()).toContain('never move a ticket the human just moved')
+  })
+
+  it('makes every question block the ticket, in the session, board and ticket agent texts', () => {
+    expect(session()).toContain('moves its ticket to blocked and ends its work')
+    expect(board()).toContain('**Every question blocks:**')
+    expect(board()).toContain('never keep working past an open question on your own guess')
+    expect(board()).toContain('a plain asking post does not: move it yourself')
+    expect(board()).not.toContain('If you cannot go on without the answer, also')
+    expect(board()).toContain('tag that task blocked and go on')
+    expect(ticketAgent()).toContain('Every question blocks:')
+    expect(ticketAgent()).toContain('a plain asking post needs `update_ticket` with `status: blocked`')
+    expect(ticketAgent()).toContain('never go on past an open question on your own guess')
+  })
+
+  it('has the session skill confirm a short UI comment before delegating', () => {
+    const skill = session()
+    for (const text of [
+      'look at what the branch does now',
+      'write the concrete reading in two or three bullets',
+      'ask the human ONE question to confirm it',
+      "the confirmed reading and the human's own words both go into the agent's brief",
+    ])
+      expect(skill).toContain(text)
+    expect(skill.indexOf('Short UI comments: confirm first')).toBeLessThan(
+      skill.indexOf('Quiet about delegated work'),
+    )
+  })
+
+  it('cleans up per ticket and per review round, by process id, in every text', () => {
+    expect(board()).toContain('Clean up what you started per ticket, not only at the close')
+    expect(board()).toContain('after each review round and at the hand-off')
+    expect(ticketAgent()).toContain('Clean up what you started, per round and at the hand-off.')
+    expect(ticketAgent()).toContain('clean up after each round, not only at the hand-off')
+    expect(todoReview()).toContain('Clean up what you started, per ticket.')
+    expect(todoReview()).toContain('check that nothing the agent started is still running')
+    expect(session()).toContain('After each agent ends, check that nothing it started is still running')
+    expect(session()).toContain('not only here')
+    for (const text of [board(), ticketAgent(), todoReview(), session()]) expect(text).toContain('process id')
+  })
+
+  it('has the session skill notice each agent ending, from the project or the client', () => {
+    const skill = session()
+    expect(skill).toContain('You notice every delegated agent ending without the human asking')
+    expect(skill).toContain('one line to the human if it changes something for them')
+    expect(skill).toContain('a relaunch if it failed')
+    expect(skill).toContain("the client's own agent-finished notification")
+    expect(skill).toContain("comes from the project's instructions when they give one")
+    expect(skill).toContain('## One message shape')
+  })
+
+  it('keeps project-specific words out of the served texts', () => {
+    const denied = [
+      /VPS/i,
+      /main-vps/i,
+      /opencode run/i,
+      /haiku/i,
+      /systemd/i,
+      /\bssh\b/i,
+      /tunnel/i,
+      /\/home\//,
+      /ticket 9\d\d/i,
+      /ticket-9\d\d/i,
+    ]
+    const texts = {
+      session: agents.sessionSkill(),
+      board: agents.renderSkill('claude'),
+      ticketAgent: review('agents/todo-review-ticket.md'),
+      todoReview: review('skills/todo-review/SKILL.md'),
+    }
+    for (const [name, text] of Object.entries(texts))
+      for (const word of denied) expect(text, `${name}: ${word}`).not.toMatch(word)
+  })
+})
+
 describe('the review skills bundle', () => {
   it('is a tar that extracts to both skills and their agents, byte for byte', async () => {
     const { execFileSync } = await import('node:child_process')

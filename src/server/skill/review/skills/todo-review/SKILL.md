@@ -146,7 +146,9 @@ Loop until nothing is pending or running:
   `tests-<repo id>-full`), and nothing else. The agent releases its own right after each heavy
   run; this covers a run that ended any other way, and clears a slot a dead run left behind. You
   are the only one besides the holder who clears a dead run's slot, and only when its
-  `holder.txt` names that ticket. Then check the result (Step 4) and fill the slot again.
+  `holder.txt` names that ticket. Then check that nothing the agent started is still running (servers, test boards,
+  dev servers, watchers, by process id), stop what is, check the result (Step 4) and fill the slot
+  again.
 
 ## Step 4: Check each result
 
@@ -223,7 +225,8 @@ returns `error`, or you stop it at the human's word or your own), record on ever
 that it was stopped and why: a `comment`, and a `set_ticket_summary` whose state says stopped and the
 reason. The next reader must be able to tell a deliberate stop from a failure.
 
-**Clean up what you started when the work ends.** Stop what you or your agents started (the review's
+**Clean up what you started, per ticket.** After each ticket agent ends, check that nothing it started
+is still running and stop what is, by process id. Stop what you or your agents started (the review's
 servers, test boards, watchers), remove this run's temporary files and folders, and release the test
 lock when its `holder.txt` names a ticket whose run returned. The review's own scratch worktree may
 go; the tickets' worktrees and their branches on origin are the human's: list them, never delete
@@ -246,7 +249,10 @@ them.
   runs `/feature-review`, whose phase agents (env, verify, hunt, refute, merge) are its own. Do not
   add a level, and never do a ticket agent's work yourself.
 - Never two ticket agents on one ticket or one branch. Never move a ticket yourself except to leave
-  a comment on an error; the ticket agents own their tickets' stages.
+  a comment on an error; the ticket agents own their tickets' stages. Before you call a ticket blocked
+  or send one back, check for answered cards and new human comments, and never move a ticket the human
+  just moved: an answer, or a comment that moved it back to In progress, relaunches its agent
+  (`RETRY`), briefed with it.
 - The orchestrator never changes a ticket's complexity: it passes the level on, and the ticket agent
   never changes its own.
 - Where posts go on a ticket: progress posts and anything posted `as` one of the project's agents

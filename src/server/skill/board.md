@@ -176,8 +176,10 @@ Lanes of a ticket you are working are yours to create (next section).
   close your spans and waits, and rewrite the summary when you stop or hand off. You are not
   finished while the board is behind what you did. If you stop a ticket before the end, at the
   human's word or your own, record on the ticket that it was stopped and why (a `comment` and a line
-  in the summary), so the next reader can tell a stop from a failure. When the work ends, clean up
-  what you started: processes, temporary files, locks, and any scratch worktree of your own. A
+  in the summary), so the next reader can tell a stop from a failure. Clean up
+  what you started per ticket, not only at the close: every server, test board, dev server, watcher
+  or lock you or your subagents start is stopped by you, by its process id, after each review round
+  and at the hand-off, together with temporary files and any scratch worktree of your own. A
   ticket's worktrees and origin branches are the human's: list them and never delete them.
 - A step that needs the human (a credential, a manual action, a call only they can make): tag
   that task or subtask blocked, `update_task` with `blocked: true` and `blockedReason` saying what
@@ -320,9 +322,14 @@ Lanes of a ticket you are working are yours to create (next section).
   `answer_decision` records their answer on the card: the option's index and their words as they
   gave them. Only that session does it, never a subagent, never with `as`, never unattended. A
   relay is refused on a card already decided, by the human or an earlier relay: the human changes
-  it on the card. If you cannot go on
-  without the answer, also `update_ticket` → `status: blocked`, and back to `in_progress` once it
-  is answered. When only one step waits on the human, tag that task blocked instead and go on. On resuming, and between steps, `list_my_threads` shows what is waiting on you.
+  it on the card. **Every question blocks:** right after you post one, a card or a post that asks
+  the human something, move the ticket with `update_ticket` → `status: blocked` and end your work;
+  never keep working past an open question on your own guess. An `ask_decision` card moves the ticket
+  to blocked by default, but a plain asking post does not: move it yourself. Back to `in_progress`
+  once it is answered; when an answer or a comment moves it back, you are relaunched briefed with it
+  and reply under that post (plan first, then the result). A step that needs a human action which is
+  not a question (a credential, a manual step) is the other case: tag that task blocked and go on.
+  On resuming, and between steps, `list_my_threads` shows what is waiting on you.
 - Files the human attaches (screenshots on a post or reply) come with `path` (and
   `windowsPath` when the board runs in WSL): open that file directly. `get_attachment` looks one
   up by id. To find a file again, `list_gallery` lists the project's files (posts, replies under
@@ -554,8 +561,9 @@ for `post_report` on the current period: use `post_report`.
 Finished work leaves worktrees and branches behind. The rule, for every ticket and lane you
 worked:
 
-- What you started goes too: stop the processes you or your agents started (previews, dev servers,
-  test boards, watchers), remove your temporary files and folders, and release any test lock you
+- What you started goes too, per ticket and not only at the close: stop the processes you or your
+  agents started (previews, dev servers, test boards, watchers) by their process id after each review
+  round and at the hand-off, remove your temporary files and folders, and release any test lock you
   hold. The review's own scratch worktree under `~/.claude/feature-review/` may go; the ticket's
   worktrees and origin branches stay the human's, listed below.
 
