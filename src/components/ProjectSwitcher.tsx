@@ -160,8 +160,10 @@ export function NewProject({
   const [kinds, setKinds] = useState<Kind[]>([...DEFAULT_KINDS])
   const create = useMutation({
     mutationFn: () => post<Project>('/api/projects', { name, kinds }),
-    onSuccess: (p) => {
-      qc.invalidateQueries({ queryKey: ['projects'] })
+    onSuccess: async (p) => {
+      // The list holds the new project before anything navigates to it: a page that checks the address's
+      // project against the list (Settings) would take it for a project that is gone.
+      await qc.invalidateQueries({ queryKey: ['projects'] })
       onOpenChange(false)
       setName('')
       setKinds([...DEFAULT_KINDS])

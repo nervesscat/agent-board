@@ -44,10 +44,11 @@ function Settings() {
       )
     : null
   const project = list.find((p) => p.id === resolved?.project)
-  // Until the projects are known the board's tab shows, unless the address asks for the project's.
+  // Until the projects are known the board's tab shows, unless the address asks for the project's. The
+  // first render goes by the search alone (the server never sees the #hash); the hash counts after mount.
   const tab: SettingsTab | null = resolved
     ? resolved.tab
-    : search.tab === 'project' || tabOwning(hash) === 'project'
+    : search.tab === 'project' || (hydrated && tabOwning(hash) === 'project')
       ? null
       : 'board'
   const correct = resolved?.correct

@@ -164,3 +164,57 @@ test('an agent sees no human-only section on the Board tab', async ({ browser, b
     await expect(page.locator(`#${id}`)).toHaveCount(0)
   await context.close()
 })
+
+test('a fresh load of a section link hydrates cleanly, with or without a remembered project', async ({
+  browser,
+  baseURL,
+  project,
+}) => {
+  for (const remembered of [false, true]) {
+    for (const [hash, open] of [
+      ['stages', 'Stages'],
+      ['theme', null],
+    ] as const) {
+      const context = await browser.newContext({ baseURL })
+      const page = await context.newPage()
+      const errors: string[] = []
+      page.on('pageerror', (e) => errors.push(e.message))
+      page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+      if (remembered) {
+        await page.goto(`/settings?tab=project&project=${project.id}`)
+        await expect(region(page, 'Stages')).toBeVisible()
+      }
+      errors.length = 0
+      await page.goto(`/settings#${hash}`)
+      if (open && !remembered) {
+        // No project is current: the section's tab is not there, the Board tab shows.
+        await expect(tab(page, 'Board')).toHaveAttribute('aria-selected', 'true')
+        await expect(tab(page, /This project/)).toHaveCount(0)
+      } else if (open) {
+        await expect(region(page, open)).toBeVisible()
+        await expect(projectTab(page, project.name)).toHaveAttribute('aria-selected', 'true')
+      } else {
+        await expect(page.locator('#theme')).toBeVisible()
+        await expect(tab(page, 'Board')).toHaveAttribute('aria-selected', 'true')
+      }
+      expect(errors, `#${hash}, remembered ${remembered}`).toEqual([])
+      await context.close()
+    }
+  }
+})
+
+test('a project made from the switcher on the project tab becomes its tab', async ({ page, project }) => {
+  await page.goto(`/settings?tab=project&project=${project.id}`)
+  await expect(projectTab(page, project.name)).toHaveAttribute('aria-selected', 'true')
+  const urls: string[] = []
+  page.on('framenavigated', (f) => f === page.mainFrame() && urls.push(f.url()))
+  const name = `Made ${project.name}`
+  await page.getByRole('button', { name: 'Project', exact: true }).click()
+  await page.getByRole('button', { name: /New project/ }).click()
+  await page.getByPlaceholder('Name').fill(name)
+  await page.getByRole('button', { name: 'Create' }).click()
+  await expect(projectTab(page, name)).toHaveAttribute('aria-selected', 'true')
+  await expect(page).toHaveURL(/\/settings\?tab=project&project=\d+$/)
+  expect(new URL(page.url()).searchParams.get('project')).not.toBe(String(project.id))
+  expect(urls.filter((u) => /\/settings(#.*)?$/.test(u))).toEqual([])
+})
