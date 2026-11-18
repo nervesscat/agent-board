@@ -218,3 +218,60 @@ test('a project made from the switcher on the project tab becomes its tab', asyn
   expect(new URL(page.url()).searchParams.get('project')).not.toBe(String(project.id))
   expect(urls.filter((u) => /\/settings(#.*)?$/.test(u))).toEqual([])
 })
+
+test('a project list that fails to load leaves the address as it is', async ({ page, project }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.route('**/api/projects', (route) =>
+    route.request().method() === 'GET' ? route.abort() : route.continue(),
+  )
+  const address = `/settings?tab=project&project=${project.id}#stages`
+  await page.goto(address)
+  await expect(tab(page, 'Board')).toBeVisible()
+  // Past the query's retry, so the failure is what the page has to go by.
+  await page.waitForTimeout(4000)
+  await expect(page.locator('#theme')).toBeVisible()
+  expect(new URL(page.url()).pathname + new URL(page.url()).search + new URL(page.url()).hash).toBe(address)
+  expect(errors).toEqual([])
+})
+
+for (const size of [
+  { width: 1280, height: 800 },
+  { width: 390, height: 800 },
+]) {
+  test(`the project tab shows its whole label at ${size.width}px, and a long name stays inside the page`, async ({
+    page,
+    human,
+  }) => {
+    await page.setViewportSize(size)
+    const project = await seedProject(human, `Shorty ${size.width}`)
+    await page.goto(`/settings?tab=project&project=${project.id}`)
+    const trigger = projectTab(page, project.name)
+    await expect(trigger).toBeVisible()
+    const short = await trigger.evaluate((el) => {
+      const name = el.querySelector('span')!
+      const box = el.getBoundingClientRect()
+      return {
+        nameFits: name.scrollWidth <= name.clientWidth,
+        triggerFits: el.scrollWidth <= el.clientWidth,
+        right: box.right,
+        left: box.left,
+      }
+    })
+    expect(short.nameFits).toBe(true)
+    expect(short.triggerFits).toBe(true)
+    expect(short.left).toBeGreaterThanOrEqual(0)
+    expect(short.right).toBeLessThanOrEqual(size.width)
+
+    const long = await seedProject(human, `Long ${'very-long-project-name '.repeat(4)}`.trim())
+    await page.goto(`/settings?tab=project&project=${long.id}`)
+    await expect(projectTab(page, long.name)).toBeVisible()
+    const widths = await page.evaluate(() => ({
+      page: document.documentElement.scrollWidth,
+      view: document.documentElement.clientWidth,
+    }))
+    expect(widths.page).toBeLessThanOrEqual(widths.view)
+    const box = await projectTab(page, long.name).boundingBox()
+    expect(box!.x + box!.width).toBeLessThanOrEqual(size.width)
+  })
+}

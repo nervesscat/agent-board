@@ -30,10 +30,13 @@ function Settings() {
   const navigate = useNavigate()
   const router = useRouter()
   const hash = useLocation({ select: (l) => l.hash })
-  const { data: projects, isPending } = useProjects()
+  const { data: projects, isPending, isError } = useProjects()
   // The remembered project is the browser's: read after mount, so the first render matches the server's.
   const hydrated = useHydrated()
-  const ready = hydrated && !isPending
+  // A list that failed to load says nothing about which projects there are: the address is left as it is
+  // (not corrected as if the project were gone), and the Board tab shows until a retry brings the list.
+  const failed = isError && projects === undefined
+  const ready = hydrated && !isPending && !failed
   const list = projects ?? []
   const resolved = ready
     ? resolveSettings(
@@ -48,7 +51,7 @@ function Settings() {
   // first render goes by the search alone (the server never sees the #hash); the hash counts after mount.
   const tab: SettingsTab | null = resolved
     ? resolved.tab
-    : search.tab === 'project' || (hydrated && tabOwning(hash) === 'project')
+    : !failed && (search.tab === 'project' || (hydrated && tabOwning(hash) === 'project'))
       ? null
       : 'board'
   const correct = resolved?.correct
@@ -80,8 +83,11 @@ function Settings() {
         <TabsList aria-label="Settings" activateOnFocus className="max-w-full">
           <TabsTrigger value="board">Board</TabsTrigger>
           {project && (
-            <TabsTrigger value="project" className="min-w-0">
-              <span className="truncate">This project: {project.name}</span>
+            <TabsTrigger value="project" aria-label={`This project: ${project.name}`}>
+              This project:
+              <span title={project.name} className="max-w-40 truncate sm:max-w-64">
+                {project.name}
+              </span>
             </TabsTrigger>
           )}
         </TabsList>
