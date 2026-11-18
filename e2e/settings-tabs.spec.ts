@@ -8,6 +8,9 @@ const tab = (page: Page, name: string | RegExp) =>
   tabs(page).getByRole('tab', { name, exact: typeof name === 'string' })
 const region = (page: Page, name: string) => page.getByRole('region', { name })
 const projectTab = (page: Page, name: string) => tab(page, `This project: ${name}`)
+/** The project the browser remembers is written after the page mounts: wait for it before leaving. */
+const remembered = (page: Page, id: number) =>
+  expect.poll(() => page.evaluate(() => localStorage.getItem('current-project'))).toBe(String(id))
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 const BOARD_IDS = ['default-agent', 'theme', 'previews']
@@ -91,6 +94,7 @@ test('the project tab without a usable project falls back to the Board tab', asy
   await expect(page.locator('#theme')).toBeVisible()
 
   await page.goto(`/projects/${project.id}`)
+  await remembered(page, project.id)
   await page.goto('/settings?tab=project&project=999999')
   await expect(tab(page, 'Board')).toHaveAttribute('aria-selected', 'true')
   await expect(page).not.toHaveURL(/project=/)
@@ -110,6 +114,7 @@ test('an address naming a project that is gone lands on the Board tab, even with
   // The browser's remembered project is the second one.
   await page.goto(`/settings?tab=project&project=${other.id}`)
   await expect(projectTab(page, other.name)).toHaveAttribute('aria-selected', 'true')
+  await remembered(page, other.id)
   for (const address of ['/projects/999/settings#stages', '/settings?tab=project&project=999#stages']) {
     await page.goto(address)
     await expect(tab(page, 'Board')).toHaveAttribute('aria-selected', 'true')
@@ -131,6 +136,7 @@ test('an old project settings address opens the project tab, keeping its section
 
 test('a section of the other tab in the address opens the tab that has it', async ({ page, project }) => {
   await page.goto(`/projects/${project.id}`)
+  await remembered(page, project.id)
   await page.goto('/settings#stages')
   await expect(projectTab(page, project.name)).toHaveAttribute('aria-selected', 'true')
   await expect(region(page, 'Stages')).toBeInViewport()
