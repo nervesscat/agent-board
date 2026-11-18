@@ -8,6 +8,7 @@ import {
   MAX_TAGS,
   normalizeTag,
   overTagLimits,
+  recentTagCounts,
   tagChoices,
   tagTooLong,
   usedTags,
@@ -104,8 +105,67 @@ describe('usedTags', () => {
 })
 
 describe('tagChoices', () => {
-  it('offers the suggestions, then the used tags, each once in any casing', () => {
-    expect(tagChoices(['Bug', 'UI'], ['Forms', 'bug'], [])).toEqual(['bug', 'UI', 'Forms'])
+  it('offers the suggestions and the used tags, each once in any casing, by name when none is recent', () => {
+    expect(tagChoices(['Bug', 'UI'], ['Forms', 'bug'], [])).toEqual(['bug', 'Forms', 'UI'])
+  })
+
+  it('offers the tags used most in the last week first, then the rest by name, case-insensitive', () => {
+    const recent = { '#ui': 3, '#forms': 1, '#bug': 1 }
+    expect(tagChoices(['Bug', 'UI', 'Implementation'], ['Forms', 'Zeta', 'api'], [], recent)).toEqual([
+      'UI',
+      'Bug',
+      'Forms',
+      'api',
+      'Implementation',
+      'Zeta',
+    ])
+    // Ties of the count by name: a lower case one sorts where its letters do.
+    expect(tagChoices([], ['beta', 'Alpha'], [], { '#beta': 2, '#alpha': 2 })).toEqual(['Alpha', 'beta'])
+  })
+
+  it('orders a tag named like an object property by its weekly count', () => {
+    const now = new Date('2026-11-17T12:00:00.000Z')
+    const tickets = (protoCount: number, bugCount: number) => [
+      ...Array.from({ length: protoCount }, () => ({ tags: ['__proto__'], updatedAt: now.toISOString() })),
+      ...Array.from({ length: bugCount }, () => ({ tags: ['bug'], updatedAt: now.toISOString() })),
+    ]
+    const more = recentTagCounts(tickets(2, 1), now)
+    expect(tagChoices(['__proto__', 'bug'], [], [], more)).toEqual(['__proto__', 'bug'])
+    const less = recentTagCounts(tickets(1, 2), now)
+    expect(tagChoices(['__proto__', 'bug'], [], [], less)).toEqual(['bug', '__proto__'])
+    const ctor = recentTagCounts(
+      [
+        { tags: ['constructor'], updatedAt: now.toISOString() },
+        { tags: ['constructor'], updatedAt: now.toISOString() },
+        { tags: ['bug'], updatedAt: now.toISOString() },
+      ],
+      now,
+    )
+    expect(tagChoices(['bug', 'constructor'], [], [], ctor)).toEqual(['constructor', 'bug'])
+  })
+
+  it('keeps the weekly count of a tag named like an object property through a plain copy', () => {
+    const now = new Date('2026-11-17T12:00:00.000Z')
+    const recent = recentTagCounts(
+      [
+        { tags: ['__proto__'], updatedAt: now.toISOString() },
+        { tags: ['__proto__'], updatedAt: now.toISOString() },
+        { tags: ['bug'], updatedAt: now.toISOString() },
+      ],
+      now,
+    )
+    // The key-by-key copy is what structural sharing does: it drops a bare `__proto__` key.
+    const assigned: Record<string, number> = {}
+    for (const key of Object.keys(recent)) assigned[key] = recent[key]!
+    const copies = [JSON.parse(JSON.stringify(recent)), { ...recent }, assigned]
+    for (const copy of copies) {
+      expect(tagChoices(['bug', '__proto__'], [], [], copy)).toEqual(['__proto__', 'bug'])
+    }
+  })
+
+  it('keeps every tag offered whatever the counts are, a count of none being none', () => {
+    expect(tagChoices(['Bug'], ['UI'], [], { '#constructor': 2 })).toEqual(['Bug', 'UI'])
+    expect(tagChoices(['Bug'], ['UI'], ['bug'], { '#ui': 1 })).toEqual(['UI'])
   })
 
   it('offers a suggestion in the casing the tickets already use', () => {
@@ -131,10 +191,46 @@ describe('cleanSuggestions', () => {
   })
 })
 
+describe('recentTagCounts', () => {
+  const now = new Date('2026-11-17T12:00:00.000Z')
+  const at = (days: number) => new Date(now.getTime() - days * 86_400_000).toISOString()
+
+  it('counts each tag, in lower case, of the tickets updated in the last 7 days', () => {
+    const tickets = [
+      { tags: ['UI', 'Bug'], updatedAt: at(0) },
+      { tags: ['ui', 'ui'], updatedAt: at(6.9) },
+      { tags: ['Bug'], updatedAt: at(1) },
+      { tags: ['Old'], updatedAt: at(10) },
+    ]
+    expect(recentTagCounts(tickets, now)).toEqual({ '#ui': 2, '#bug': 2 })
+  })
+
+  it('takes a ticket updated exactly 7 days ago, and not one updated before', () => {
+    expect(recentTagCounts([{ tags: ['A'], updatedAt: at(7) }], now)).toEqual({ '#a': 1 })
+    expect(recentTagCounts([{ tags: ['A'], updatedAt: at(7.001) }], now)).toEqual({})
+  })
+
+  it('is empty for no tickets', () => {
+    expect(recentTagCounts([], now)).toEqual({})
+  })
+
+  it('keys a tag named like an object property with the prefix, so it survives a plain copy', () => {
+    const counts = recentTagCounts(
+      [
+        { tags: ['__proto__'], updatedAt: at(0) },
+        { tags: ['constructor'], updatedAt: at(0) },
+      ],
+      now,
+    )
+    expect(counts).toEqual({ '#__proto__': 1, '#constructor': 1 })
+    expect(Object.keys(JSON.parse(JSON.stringify(counts))).sort()).toEqual(['#__proto__', '#constructor'])
+  })
+})
+
 describe('matchTags', () => {
   const tags = ['Bug', 'UI', 'Module 1', 'module 2', 'Submodule']
 
-  it('keeps the tags holding the text in any casing, in their order', () => {
+  it('keeps the tags the text soft-matches, in any casing, in their order', () => {
     expect(matchTags(tags, 'mod')).toEqual(['Module 1', 'module 2', 'Submodule'])
     expect(matchTags(tags, 'MOD')).toEqual(['Module 1', 'module 2', 'Submodule'])
     expect(matchTags(tags, 'ule 2')).toEqual(['module 2'])
@@ -148,5 +244,35 @@ describe('matchTags', () => {
 
   it('keeps none when nothing holds the text', () => {
     expect(matchTags(tags, 'zzzz')).toEqual([])
+    expect(matchTags(tags, 'zz')).toEqual([])
+  })
+
+  it('matches the letters in order, not as a prefix and not next to each other', () => {
+    const named = ['Roadmap', 'Ongoing features', 'Bug']
+    expect(matchTags(named, 'rdm')).toEqual(['Roadmap'])
+    expect(matchTags(named, 'ogfe')).toEqual(['Ongoing features'])
+    expect(matchTags(named, 'pad')).toEqual([])
+    expect(matchTags(named, 'mr')).toEqual([])
+  })
+
+  it('sets the accents and the case aside', () => {
+    expect(matchTags(['Café', 'Bar'], 'cafe')).toEqual(['Café'])
+    expect(matchTags(['Café', 'Bar'], 'CAFÉ')).toEqual(['Café'])
+    expect(matchTags(['cafe'], 'Cafè')).toEqual(['cafe'])
+  })
+
+  it('folds a final capital sigma with the sigma of the other letters', () => {
+    // toLowerCase writes the final form ς for a word-final capital sigma, the query's σ stays.
+    expect(matchTags(['ΟΔΟΣ'], 'οδοσ')).toEqual(['ΟΔΟΣ'])
+    expect(matchTags(['ΟΔΟΣ'], 'ΟΔΟΣ')).toEqual(['ΟΔΟΣ'])
+    expect(matchTags(['ΟΔΟΣ', 'Bug'], 'οδος')).toEqual(['ΟΔΟΣ'])
+    expect(matchTags(['ΟΔΟΣ', 'Bug'], 'bug')).toEqual(['Bug'])
+  })
+
+  it('matches nothing for a query of marks only, and everything for a blank one', () => {
+    const named = ['Roadmap', 'Bug']
+    expect(matchTags(named, '́')).toEqual([])
+    expect(matchTags(named, '  ')).toEqual(named)
+    expect(matchTags(named, '')).toEqual(named)
   })
 })

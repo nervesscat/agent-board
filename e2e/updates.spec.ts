@@ -314,6 +314,8 @@ test('no card for an agent, nor on a checkout board, nor when the updates route 
   await page.goto('/')
   await answered
   await expect(card(page)).toHaveCount(0)
+  // The human's own page may still be asking for updates when it has loaded: let that finish before the route is watched.
+  await page.waitForLoadState('networkidle')
 
   // An agent is never asked about updates: the page renders no card, and the route stays untouched.
   const asked: string[] = []

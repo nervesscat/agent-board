@@ -73,8 +73,9 @@ test('chips under the Tags field offer the suggestions and the tags in use, in t
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByLabel('Stage')).toBeVisible()
   const chips = dialog.getByRole('group', { name: 'Suggested tags' }).getByRole('button')
-  // The suggestions first (UI in the casing the tickets use), then the other tags in use; no "UI" twice.
-  await expect(chips).toHaveText(['Bug', 'ui', 'Implementation', 'Report', 'Forms'])
+  // The tags used in the last week first, most used first (UI in the casing the tickets use), then
+  // the suggestions by name; no "UI" twice.
+  await expect(chips).toHaveText(['ui', 'Forms', 'Bug', 'Implementation', 'Report'])
 
   await dialog.getByRole('button', { name: 'Add tag ui' }).click()
   await dialog.getByRole('button', { name: 'Add tag Forms' }).click()
@@ -226,14 +227,15 @@ test('many suggested chips stay two rows tall and scroll, in the New ticket dial
   await expect(inlineField).toBeFocused()
   await addLastChip(inline, inlineField, page)
   await inlineField.press('Enter')
-  await expect.poll(async () => (await api.getTicket(created.id)).tags).toEqual(['Module 50'])
+  // The suggestions no ticket used lately are offered by name, so the last of them is Module 9.
+  await expect.poll(async () => (await api.getTicket(created.id)).tags).toEqual(['Module 9'])
 })
 
 test('a few suggested chips take their own height, with no scroll', async ({ page, project }) => {
   await page.goto(`/projects/${project.id}/features?view=board`)
   await page.getByRole('button', { name: 'New ticket' }).click()
   const group = page.getByRole('dialog').getByRole('group', { name: 'Suggested tags' })
-  await expect(group.getByRole('button')).toHaveText(DEFAULTS)
+  await expect(group.getByRole('button')).toHaveText(['Bug', 'Implementation', 'Report', 'UI'])
   const box = await chipBox(group)
   expect(box.scroll).toBe(box.client)
   // As tall as the rows its chips take and its padding, no room left empty.
@@ -368,7 +370,8 @@ test.describe('at 390px', () => {
     await last.scrollIntoViewIfNeeded()
     await expect(last).toBeInViewport()
     await last.tap()
-    await expect(dialog.getByRole('button', { name: 'Remove Module 50' })).toBeVisible()
+    // The last by name: the suggestions no ticket used lately are offered in that order.
+    await expect(dialog.getByRole('button', { name: 'Remove Module 9' })).toBeVisible()
     expect(await scrollsSideways(page)).toBe(false)
   })
 })
