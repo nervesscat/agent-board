@@ -426,6 +426,10 @@ screenshots and the diff. With
 `BROWSER=no` and a UI change, do everything else, leave the ticket in progress with its summary saying
 where you stopped, and return `STATUS: needs-browser`: the orchestrator runs you again with the browser.
 
+The preview comes before the move to review, never after it: start it first whenever the project has a
+preview setup and the change can be previewed; when it cannot (no preview setup, or nothing to try),
+the hand-off says why (step 7 item 5).
+
 ### 6b. The intent check
 
 After the last review round passes (a low ticket has no rounds: after its gate and evidence) and
@@ -530,8 +534,10 @@ Implementation and its steps (`set_task_done`).
    summary. In the summary say which of the three ran (the artifact through the board's run, the
    board's own build, or a hand start) and how many times this head was built. Keep the preview
    running while the ticket is in review; once it is merged or dropped, stop a hand-started
-   process and clear the link (`set_preview` with `""`), and the board stops its own. When the
-   change cannot be tried (docs, a script), say why in the summary instead.
+   process and clear the link (`set_preview` with `""`), and the board stops its own. The preview
+   is started before the ticket moves to review (item 7), whenever the project has a preview setup
+   and the change can be previewed; when it cannot (the project has no preview setup, or the
+   change has nothing to try: docs, a script), say why in the summary instead.
    A preview build you start here is a heavy run, in a test slot like any other (holder
    `#<TICKET> preview <ISO time>`): take the first free one before the start and release it once
    the preview runs or has failed.

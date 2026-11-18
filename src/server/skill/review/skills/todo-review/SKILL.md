@@ -168,8 +168,10 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    at `low` effort, from only the human's words (their answers on decision cards included) and attachments and the result, never the builder's
    plan, the spec, the review's findings or the options an agent put on a card; `does not match` goes back to the builder, then the gate, then one more full review round
    (outside the round budget; after the second one the ticket agent asks the human), then the intent check
-   again; it runs on the preview started before it, and again on any new head), and `open` is empty, or
-   holds only the Preview phase with a summary saying why the change cannot be tried. The ticket's summary
+   again; it runs on the preview started before it, and again on any new head), the preview was started
+   before the move to review whenever the project has a preview setup and the change can be previewed,
+   and `open` is empty, or holds only the Preview phase with a summary saying why the change cannot be
+   previewed (no preview setup, or nothing to try). The ticket's summary
    (`summary` on `get_ticket`, `fallback: false`: the hand-off is the summary the agent wrote, not a
    separate post) has screenshots in its attachments when the change has a UI, and a "Tested" part
    that names the level and what checked it (for mid, high and max, the review depth and why). Unless `depth=` was given

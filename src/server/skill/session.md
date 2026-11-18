@@ -95,7 +95,10 @@ When the human names a ticket to start ("start with 859", "work on the notificat
 You never run `todo-review` in your own context and wait for it, and you work in no worktree. The
 agent you start runs the project's protocol: its ticket agent writes the spec, starts the builder,
 and runs `/feature-review` for the rounds the ticket's complexity allows, with `/feature-review`'s
-phases trying to break the change before the hand-off.
+phases trying to break the change before the hand-off. Whoever moves a ticket to review starts its
+preview first, whenever the project has a preview setup and the change can be previewed; when it
+cannot, the hand-off says why. A ticket that reached review without its preview and
+without that reason is not handed off: send its agent back to start it.
 
 ## Short UI comments: confirm first
 

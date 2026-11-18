@@ -279,8 +279,8 @@ Lanes of a ticket you are working are yours to create (next section).
   new top-level post: first a reply with your plan, then, once done, a reply with the result and
   its proofs. A reply brings their post back to the top of Main.
 - **Previews:** when the change can be tried (a page, an API), give the human a preview and put
-  its link with what to try in the summary; say that what they post there stays in the copy. Keep
-  it running while the ticket is in `review`.
+  its link with what to try in the summary; say that what they post there stays in the copy. Start
+  it before you move the ticket to `review`, and keep it running while the ticket is there.
   - A repo with runs (configured per repo, by the human in the project's settings or by you with
     `add_run` / `update_run` / `delete_run`: previews with a link, jobs without; a checkout of the
     board has its `Preview`): the board runs them. `add_workspace` with your worktree's `path` and
@@ -456,11 +456,12 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    While GitHub's checks do not run, comment on the PR `CI run locally: green on <sha>` with the
    head commit the checks of item 2 passed on (`gh pr comment`): that ticks CI. Comment again after
    each push.
-6. **Preview running**: `start_run` (or `start_preview`), then `list_runs` until it is `running`
-   (`failed`: read the log lines and fix). For a repo with no runs configured, start one the
-   project's way and `set_preview` (see Previews in
-   [While working](#3-while-working)). Required whenever the change can be tried; when it cannot
-   (docs only, a script), say why in the summary.
+6. **Preview running, started before the move to review.** Whenever the project has a preview
+   setup and the change can be previewed, start the preview first: `start_run` (or
+   `start_preview`), then `list_runs` until it is `running` (`failed`: read the log lines and fix).
+   For a repo with no runs configured, start one the project's way and `set_preview` (see Previews
+   in [While working](#3-while-working)). When it cannot be previewed (the project has no preview
+   setup, or the change has nothing to try: docs only, a script), say why in the summary instead.
 7. The summary, up to date (`set_ticket_summary`, never a new hand-off post): the PR link, **the
    preview link and what to try there**, how it was tested, the e2e result (its summary, or its
    report when something failed), each review round's verdict and, for a UI change, the latest

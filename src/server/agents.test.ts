@@ -431,6 +431,22 @@ describe('the general rules in the served skill texts', () => {
     for (const text of [board(), ticketAgent(), todoReview(), session()]) expect(text).toContain('process id')
   })
 
+  it('starts the preview before a ticket moves to review, or says why it cannot', () => {
+    const rule = 'the project has a preview setup and the change can be previewed'
+    for (const text of [board(), ticketAgent(), todoReview(), session()]) expect(text).toContain(rule)
+    expect(board()).toContain('Preview running, started before the move to review.')
+    expect(board()).toContain('Start it before you move the ticket to `review`')
+    expect(board()).toContain('say why in the summary instead')
+    expect(ticketAgent()).toContain('The preview comes before the move to review, never after it')
+    expect(ticketAgent()).toContain('is started before the ticket moves to review')
+    expect(ticketAgent()).toContain('say why in the summary instead')
+    expect(todoReview()).toContain('the preview was started before the move to review')
+    expect(session()).toContain('Whoever moves a ticket to review starts its preview first')
+    expect(session()).toContain('the hand-off says why')
+    const mcp = flat(fs.readFileSync(path.join(import.meta.dirname, 'mcp.ts'), 'utf8'))
+    expect(mcp).toContain('started before the move to review whenever the project has a preview setup')
+  })
+
   it('keeps the ticket preview up through the per-ticket cleanup', () => {
     const keep =
       "except the ticket's preview, which stays up while it is in review and is stopped once it is merged or dropped"
