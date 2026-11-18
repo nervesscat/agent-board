@@ -10,7 +10,8 @@ const ticket = (human: APIRequestContext, project: Project, title: string, branc
   )
 
 /** The indicator in the Daily page's header. */
-const header = (page: Page) => page.locator('aside + section').getByRole('button', { name: /^Pushed today/ })
+const header = (page: Page) =>
+  page.locator('div:has(> aside) ~ section').getByRole('button', { name: /^Pushed today/ })
 
 /** The Daily page's subtitle, which the indicator sits under at every width. */
 const subtitle = (page: Page) => page.getByText(/^The period's report, and what got done hour by hour\.$/)
