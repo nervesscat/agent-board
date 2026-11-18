@@ -274,15 +274,16 @@
 }
 
 /* Inline code in rendered markdown and the editor: the typography plugin wraps it in literal
-   backticks, which read as part of the text (a path shows as `F:…`). A tinted chip instead; code
-   blocks keep their own look. */
+   backticks, which read as part of the text (a path shows as `F:…`). A chip instead, in the code
+   block's own background and text colour, so it reads as code in both themes. */
 .prose :where(code):not(:where(pre *))::before,
 .prose :where(code):not(:where(pre *))::after {
   content: none;
 }
 .prose :where(code):not(:where(pre *)) {
   border-radius: 0.25rem;
-  background-color: var(--muted);
+  background-color: var(--tw-prose-pre-bg);
+  color: var(--tw-prose-pre-code);
   padding: 0.1em 0.35em;
   font-weight: 500;
 }
