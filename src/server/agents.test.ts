@@ -466,7 +466,6 @@ describe('the general rules in the served skill texts', () => {
   it('keeps project-specific words out of the served texts', () => {
     const denied = [
       /VPS/i,
-      /main-vps/i,
       /opencode run/i,
       /haiku/i,
       /systemd/i,
