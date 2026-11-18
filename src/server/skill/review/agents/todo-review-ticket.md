@@ -360,7 +360,7 @@ or is the base its merge check used; and `RETRY` does not name that review, its 
 findings. Then go on to step 6 with that review.
 
 Otherwise run `/feature-review` through the Skill tool, unattended:
-`repo=<REPO> <branch> ticket=<TICKET> ports=<PORTS> browser=<BROWSER> effort=<the effort>`, `slots=<SLOTS> build=<WORKDIR/02-build.md> repoId=<REPO_ID>`, then `scoped`, plus `light` when the depth
+`repo=<REPO> <branch> ticket=<TICKET> round=<n> ports=<PORTS> browser=<BROWSER> effort=<the effort>`, `slots=<SLOTS> build=<WORKDIR/02-build.md> repoId=<REPO_ID>`, then `scoped`, plus `light` when the depth
 is `light` and `deep` when it is `deep` (nothing more for `standard`). With `scoped`, its phases
 run only the scoped checks, since CI runs the full suites on the PR. With `slots=`, its verify
 phase takes a test slot around the end-to-end run and the full suite and its merge check around
@@ -368,8 +368,10 @@ a heavy test run; its typecheck, lint and scoped unit runs and the hunt's and re
 unit and probe tests take none, so hold no slot while you wait for it. With `build=`, its env phase copies the
 gate's artifact at the same head instead of building it again. It reviews the branch's
 commits in a worktree of its own, posts its phases on the ticket, and writes `review.md` and
-`summary.md`. When it would ask a question, go on with the spec's assumption and note it. When it
-returns, however it ended, release any slot folder under `SLOTS` whose `holder.txt` names this
+`summary.md`. When it would ask a question, go on with the spec's assumption and note it. `round=<n>` is the review
+round this run is (1 for the first, then counting on, continuing after an intent return, step 6b): its
+phase agents put it on their spans and run reports, and the board counts a phase only when it is there.
+When it returns, however it ended, release any slot folder under `SLOTS` whose `holder.txt` names this
 ticket.
 
 The change **survives** when the verdict is `SHIP`, the "works" check is `YES`, the base check is
@@ -390,24 +392,72 @@ round ends the cycle at every level. When a round does not survive and no round 
 still open, `ask_decision` (ship as is, keep going, drop) and stop: `BLOCKER: decision`. On max that is
 after round 10, and there is never an eleventh round. Never start one more round on your own. The
 complexity sets the budget at every review depth: a `deep` review earns no extra round, a `light` one
-loses none.
+loses none. An intent return (`does not match`, step 6b) is not a gate return and is outside this
+budget: it gets its own fix pass and one more review (step 6b), so "never start one more round on
+your own" does not apply to it.
+
+**The full cycle is mandatory above low.** For `mid`, `high` and `max`, every review round runs
+spec, env, verify, TWO independent hunts, refute and the merge check. None is skipped because the
+findings look obvious, the change looks small or a finding was already reproduced, and each phase
+posts its result, so a skipped phase is visible. The board checks it at the hand-off
+(`missingReviewPhases`, step 7).
 
 **The effort** is set by the complexity too: `low` for low, `medium` for mid and high, `high` for max.
 Pass it as the
 Agent tool's `effort` on every subagent you start (the spec agent, the builder), and give it to
-`/feature-review` as `effort=<level>`, so its phase agents run at it.
+`/feature-review` as `effort=<level>`, so its phase agents run at it. The one exception is the intent
+agent (step 6b): it runs at `low` effort whatever the complexity.
 
 ### 6. Evidence
 
-The review's `shots/` folder has the verify phase's screenshots. For a UI change you also need one
-of the finished thing in the preview (step 7) at the state the ticket is about. A low ticket has no
-review folder, so its screenshots come from the preview. With
+Start the preview here, before the intent check: it is the one build of this head for the preview
+(step 7 item 5 says how, from the pushed or the local worktree under the preview rules), and it keeps
+running. The review's `shots/` folder has the verify phase's screenshots. For a UI change you also need
+one of the finished thing in that preview at the state the ticket is about. A low ticket has no review
+folder, so its screenshots come from the preview. The intent check (6b) is given this preview, these
+screenshots and the diff. With
 `BROWSER=no` and a UI change, do everything else, leave the ticket in progress with its summary saying
 where you stopped, and return `STATUS: needs-browser`: the orchestrator runs you again with the browser.
 
+### 6b. The intent check
+
+After the last review round passes (a low ticket has no rounds: after its gate and evidence) and
+before every hand-off, on every ticket of any complexity, low included: a low ticket skips the review,
+never the intent check. It runs again after any human comment that sent the ticket back (a `RETRY` or a
+re-run that finds one among the ticket's posts, newest last).
+
+It is the project's `intent` agent (its `delegation` notes route it; else `feature-review-intent`),
+started with the Agent tool at `effort: low`, whatever the complexity. Brief it with only two things:
+- the human's own words and attachments: the ticket's instructions and every post and reply by the
+  human, newest last, and the human's own answer on each decision card (the option they picked and
+  their words, as the human's own reply), the latest comment that sent the ticket back weighing most,
+  with their attachments;
+- the result: the preview link (started in step 6), its screenshots or recordings, and the diff at the
+  current head.
+
+Never give it the builder's plan, the spec, the review's findings or the options an agent put on a card: it must not inherit their reading.
+It returns one line per thing the human asked (`done as asked`, `done differently (how)` or `not done`,
+with the evidence) and a verdict, `matches` or `does not match`. It never asks the human, builds and
+edits nothing, and never answers a decision (`answer_decision`); it writes its run report like every
+subagent.
+- `matches`: go on to the hand-off (step 7). Any commit after a `matches` (a CI fix, a rebase or a merge
+  of the base) changes the head, so the intent check runs again on the new head before the hand-off
+  stands.
+- Before every re-run of the intent check (after a `does not match` fix round or any new commit) go through step 6 again at the head being handed off: the preview for that head runs (build it only when none runs for this head, step 7 item 5) and fresh screenshots of the changed state are taken; brief the check with those, never the old head's.
+- `does not match`: back to the builder (step 3) with the intent check's lines as the brief, then your
+  gate (step 4), then ONE more full review round (mid, high and max; numbering continues from the last
+  round, all six phases run again with two hunts; a low ticket has no review, only the gate), then the
+  intent check again. A `does not match` is not a gate return and is outside the complexity's round
+  budget (step 5). After the SECOND `does not match` on one ticket, stop and ask the human with
+  `ask_decision` (keep going, ship as is, drop), with the intent check's lines and the human's words
+  on the card.
+- Earlier than that the human is asked only when two readings of their words are both plausible and
+  give visibly different results: both readings on the card (`ask_decision`), never otherwise.
+
 ### 7. Hand off
 
-Every item, in order, as the board skill's hand-off checklist says. The board ticks the phases
+Only after the intent check (step 6b) returned `matches` on the head being handed off. Every item, in
+order, as the board skill's hand-off checklist says. The board ticks the phases
 Pushed, PR, CI, Preview, Summary and Merged itself as their facts hold (a tick by hand is refused); you tick
 Implementation and its steps (`set_task_done`).
 1. Implementation and its subtasks ticked (`set_task_done`); the workspace registered.
@@ -422,7 +472,9 @@ Implementation and its steps (`set_task_done`).
    calls under the Bash tool's 10-minute limit): CI runs the full unit and end-to-end suites, the
    part your scoped gate left out, on another platform than yours. CI green on the final head is
    required before hand-off. A failure there goes back to the builder like a gate failure (step 4),
-   fixed before you hand off, never waved through as flaky without a rerun that passes. Only when a review ran (mid, high or max) and the PR's head SHA is the SHA whose review survived,
+   fixed before you hand off, never waved through as flaky without a rerun that passes. A fix commit
+   changes the head, so the intent check (step 6b) runs again on the new head before the hand-off
+   stands. Only when a review ran (mid, high or max) and the PR's head SHA is the SHA whose review survived,
    record that review on the PR's ticket so the review queue does not run it again: `post_review_result`
    with its verdict, its `summary.md` as `summaryMd`, the `sha`, its checks and counts, and `repoId` when
    the project has several repos. It also posts the summary there as a progress post, on the PR's ticket
@@ -441,7 +493,9 @@ Implementation and its steps (`set_task_done`).
    like a gate failure. When it passes, comment on the PR `CI run locally: green on <sha>` with
    that head SHA (`gh pr comment`): that ticks CI. After each later push, run it again and comment
    again.
-5. The preview, from at most one build of this head for the preview. Prefer the board's own
+5. The preview, from at most one build of this head for the preview: the one step 6 already started
+   and kept running, reused here, not built again; build only when none runs for this head (a new
+   commit since changes the head). Prefer the board's own
    preview run: `start_run` it (or `start_preview` on the workspace), wait for `running` (on
    `failed`, read its log tail and fix). Its build is the preview's one build for this head, it
    carries the preview base the board serves under, it lives on after your session, and the board
@@ -481,8 +535,8 @@ Implementation and its steps (`set_task_done`).
    review round's verdict in one line, the PR link, the preview link and exactly
    what to try there, how it was tested (the checks and the e2e
    summary; for mid, high and max the review's verdict and counts, for low the builder's evidence per
-   criterion), any fake used at an edge and any contract hit you judged legitimate, with the
-   screenshots in `files`.
+   criterion), any fake used at an edge and any contract hit you judged legitimate, and the intent
+   check's verdict in one line, with the screenshots in `files`.
    "How it was tested" names the level (`low`, `mid`, `high` or `max`). For mid, high and max it also says which
    review depth ran and why: the depth, and the measure that put the change there (lines and files,
    the classes that decided it), or that the human chose it (`DEPTH`). For low it names the gate's
@@ -493,7 +547,14 @@ Implementation and its steps (`set_task_done`).
 7. `update_ticket` to `review`, and read its answer: `missingRunReports` names each subagent run the
    timeline recorded without its report — a span, a hand-off, or one run too many for the reports of
    that agent and round — so get those reports written before the hand-off stands. The phase agents
-   write theirs; you write none of your own. Then `open`: fix every task it lists and check again
+   write theirs; you write none of your own. Also read `missingReviewPhases` (mid, high and max): each
+   entry is a review phase the last round lacks (`round`, `phase`, `expected`, `found`; the hunt needs
+   two). Run each missing phase, with a fix round through the builder if it needs code, and write its
+   report, before the hand-off stands, while the ticket stays in review: moving it out of a review
+   stage, to any other stage, restarts the count (only runs after the move count, from round 1). It
+   is a flag, never a refusal, and `[]` is the answer when every phase ran. Exception: when the flag names phases of a round that step 5 skipped because the
+   head SHA's review had already survived (a send-back with no new commit), do not run it again: say in
+   the summary which head SHA and which review it reuses, and go on; any other missing phase is run. Then `open`: fix every task it lists and check again
    (Summary open: no summary written since the last commit). An open Preview may stay only when the
    summary says why.
 
@@ -516,14 +577,16 @@ Then the first row that matches, from the top:
 
 | Depth | When | `/feature-review` runs |
 |---|---|---|
-| `deep` | a big change: at least 500 lines, or at least 15 files, or the class `auth` or `data-model` | with `deep`: two independent hunts from the start, on every round, and each finding's stability in the report |
-| `light` | a tiny change: at most 50 lines in at most 3 files, and none of the classes `auth`, `data-model`, `background-job`, `dependency`, `config-infra` | with `light`: the spec, the env, verify of every acceptance criterion by execution, one hunt, refute of every hunt candidate and every verify `FAIL`, the merge check. The one thing dropped is the second hunt a clean first hunt otherwise gets |
-| `standard` | everything else | as it is today: a clean first hunt gets a second hunt |
+| `deep` | a big change: at least 500 lines, or at least 15 files, or the class `auth` or `data-model` | with `deep`: the full cycle, and each finding's stability (both hunts or one) in the report |
+| `light` | a tiny change: at most 50 lines in at most 3 files, and none of the classes `auth`, `data-model`, `background-job`, `dependency`, `config-infra` | with `light`: the same full cycle, no phase dropped: spec, env, verify, two independent hunts, refute and the merge check |
+| `standard` | everything else | the full cycle |
 
 The depth only moves up. A later round, and a `RETRY` run (it reads `WORKDIR/depth.md`), never
 runs below the deepest depth an earlier round ran, even when the fixes made the diff smaller. The
 round budget is the complexity's (step 5) at every depth.
 
+Every depth runs the full cycle: all six phases and two independent hunts, every round. The depths
+differ only in how hard the hunts look and whether each finding's stability is reported.
 The depth changes only how hard `/feature-review` hunts. Your gate (step 4), the survival rule
 (step 5), the evidence and screenshots (step 6), and the push, the CI wait and the preview (step 7)
 are the same at every depth.

@@ -122,7 +122,7 @@ each with its scenario.
 anything left open.
 
 **Next:** **runner** on the branch, except for a low ticket: its build goes to hand-off on the project's
-checks and the builder's evidence, with no runner. A question it returns → \`ask_decision\`. The review
+checks and the builder's evidence, with no runner (after the **intent** check, which every build gets). A question it returns → \`ask_decision\`. The review
 rounds its ticket's complexity allows are none for low, one for mid, three for high, up to ten for max,
 round 1 being the first build and its review. Mid has one: a review that does not survive then goes to the
 human (ship as is, keep going, or drop). High has three: two fix passes follow the first build, each with
@@ -133,7 +133,7 @@ difficult: that is at most high. It stops at the first round that survives, and 
 survive after the tenth goes to the human as high's does. Low has no review: its checks return the build at most twice, and after the
 second return, when the checks still fail or a criterion still has no evidence, the human decides (keep
 going or drop). Every agent the cycle starts for the ticket runs at the effort its complexity sets: low for
-low, medium for mid and high, high for max (the Agent tool's \`effort\`).`,
+low, medium for mid and high, high for max (the Agent tool's \`effort\`); the intent agent always runs at \`low\`.`,
   },
   {
     name: 'runner',
@@ -146,13 +146,14 @@ port or browser.
 
 **Give it:** \`REPO\` (the main checkout), \`TARGET\` (the PR number or the branch), \`ticket=<id>\` (for a PR: its \`ticket\` in \`list_prs\`, the feature ticket that names the PR or else the PR's own ticket),
 the ticket's context (its instructions, the human's posts and replies, the decisions and their
-answers, the attachments), its port range and whether it may use the browser.
+answers, the attachments), its port range, whether it may use the browser and the review round
+(\`round=<n>\`, 1 for the first; it passes it on to /feature-review and its phases).
 
 **Returns:** eight lines: status, verdict, the three checks, counts, SHA and the paths of
 \`review.md\` and \`summary.md\`. Its phases post on the ticket themselves, in its Agents tab.
 
 **Next:** a PR → the result is recorded (\`post_review_result\`; record it from the summary if it
-is missing). A build → SHIP hands off (the ticket's summary rewritten to where it stands, never a new hand-off post); anything else goes back to **builder** with the findings while
+is missing). A build → SHIP goes to the **intent** check, and then hands off (the ticket's summary rewritten to where it stands, never a new hand-off post); anything else goes back to **builder** with the findings while
 the ticket has a round left, and with none left the human decides (ship as is, keep going, or drop).
 Error or STALE → run it again once, alone.`,
   },
@@ -186,9 +187,9 @@ browser criteria), and the test suite's result.
   {
     name: 'hunt',
     instructions: brief('hunt'),
-    delegation: `**When:** in a review, once **env** is up, in parallel with **verify**. A clean first
-hunt is not trusted alone: a second hunt runs, starting from the guard analysis, except in a light
-review (\`light\`, which the todo-review skill gives a tiny change).
+    delegation: `**When:** in a review, once **env** is up, in parallel with **verify**. Two independent hunts always
+run, from the start, in every round and at every depth (\`light\` included): a hunt is never skipped
+because the other found nothing.
 
 **Give it:** the spec, the environment, the diff and context, the checklists, the browser flag and
 its file prefix. Never the other hunt's notes.
@@ -200,8 +201,8 @@ its file prefix. Never the other hunt's notes.
   {
     name: 'refute',
     instructions: brief('refute'),
-    delegation: `**When:** in a review, after **verify** and **hunt**, when there is at least one
-candidate or FAIL.
+    delegation: `**When:** in a review, after **verify** and the two **hunt**s, every round, also when there is no
+candidate or FAIL: it then verifies that nothing is left to refute and records that.
 
 **Give it:** the spec, the environment, the diff, the verification and the candidates, renumbered.
 Never the hunt's reasoning.
@@ -233,6 +234,34 @@ conflict.
 
 **Next:** the report. CONFLICTS or new failures in a build → **builder** merges the base in and
 fixes them while the ticket has a round left.`,
+  },
+  {
+    name: 'intent',
+    instructions: brief('intent'),
+    delegation: `**When:** after the last review round passes and before every hand-off, on every ticket of any
+complexity (a low ticket included: it has no review rounds, never skips this), and again after any
+human comment that sent the ticket back. Run it at effort low (the Agent tool's \`effort: low\`) for
+every complexity.
+
+**Give it:** only the human's own words and attachments (the ticket's instructions, and every post and
+reply by the human, newest last, and the human's own answer on a decision card, the latest comment that sent the ticket back weighing most) and the
+result (the preview link, its screenshots or recordings, the diff at the current head). The preview
+is started, and its screenshots taken, before this check. A commit after a \`matches\` (a CI fix, a
+rebase or a merge of the base) changes the head, so it runs again on the new head, with the preview of that head and fresh screenshots. Never the builder's plan, the spec, the
+review's findings or the options an agent put on a card: it must not inherit their reading.
+
+**Returns:** one line per thing the human asked (done as asked, done differently with how, or not
+done, each with its evidence) and a verdict: matches, or does not match with the human's words next
+to what was built.
+
+**Next:** \`matches\` hands off. \`does not match\` goes back to **builder** with the intent check's
+lines as the brief, then the gate, then one more full review round (above low; numbering continues, all
+six phases run again), then the intent check again. A \`does not match\` is outside the complexity's
+round budget; after the second one on a ticket the ticket agent stops and asks the human
+(\`ask_decision\`: keep going, ship as is, drop) with the intent check's lines and the human's words on
+the card. It never asks the human earlier: the human is asked only when two readings of their words are both plausible and give
+visibly different results, with both readings on the card (\`ask_decision\`). It never answers a
+decision (\`answer_decision\`).`,
   },
 ]
 
