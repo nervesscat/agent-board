@@ -82,7 +82,8 @@ test('many tags scroll inside the tag filter, a page at a time from the server, 
   // "All tags" and the first page of 20, not the 50.
   await expect(options(page)).toHaveCount(21)
   await expect(options(page).first()).toHaveText('All tags')
-  await expect(options(page).last()).toHaveText('Module 20')
+  // By name, the suggestions no ticket used lately: the 20th of them is Module 27.
+  await expect(options(page).last()).toHaveText('Module 27')
   expect(asked).toEqual([''])
   await expectBoundedAndScrolling(page)
   // The tags come in with an animation.
@@ -119,7 +120,7 @@ test('many tags scroll inside the tag filter, a page at a time from the server, 
 test('a few tags show at once, with no loading', async ({ page, project }) => {
   await page.goto(`/projects/${project.id}/features?view=board`)
   await filter(page).click()
-  await expect(options(page)).toHaveText(['All tags', 'Bug', 'UI', 'Implementation', 'Report'])
+  await expect(options(page)).toHaveText(['All tags', 'Bug', 'Implementation', 'Report', 'UI'])
   await expect(page.locator('[data-slot="more-tags"]')).toHaveCount(0)
   const b = await box(scroller(page))
   expect(b.scroll).toBe(b.client)
@@ -146,14 +147,14 @@ test('the search narrows the tags in any casing, over every tag, and says when n
   human,
 }) => {
   await ok(human.patch(`/api/projects/${project.id}`, { data: { tagSuggestions: MANY } }))
-  // Bug and UI are carried by tickets: offered after the 50 suggestions, past the first page.
+  // Bug and UI are used by a ticket this week: offered first, on the first page.
   await api.ticket({ title: 'Tagged', status: 'todo', tags: ['Bug', 'UI'] })
   await page.goto(`/projects/${project.id}/features?view=board`)
   await filter(page).click()
   await expect(search(page)).toBeFocused()
-  await expect(page.getByRole('option', { name: 'Bug' })).toHaveCount(0)
+  await expect(page.getByRole('option', { name: 'Bug' })).toHaveCount(1)
 
-  // A tag past the first page is found.
+  // A tag found by the search.
   await search(page).fill('bug')
   await expect(options(page)).toHaveText(['All tags', 'Bug'])
 
@@ -193,7 +194,7 @@ test('a search longer than any tag says none match, without asking the server', 
   })
   await page.goto(`/projects/${project.id}/features?view=board`)
   await filter(page).click()
-  await expect(options(page)).toHaveText(['All tags', 'Bug', 'UI', 'Implementation', 'Report'])
+  await expect(options(page)).toHaveText(['All tags', 'Bug', 'Implementation', 'Report', 'UI'])
   await search(page).fill(long)
   await expect(search(page)).toHaveValue(long)
   await expect(page.getByText('No tags match')).toBeVisible()
@@ -249,7 +250,7 @@ test('a page the server does not give is said quietly, and asked for again on Re
   await expect(options(page)).toHaveText(['All tags'])
   failing = false
   await failed.getByRole('button', { name: 'Retry' }).click()
-  await expect(options(page)).toHaveText(['All tags', 'Bug', 'UI', 'Implementation', 'Report'])
+  await expect(options(page)).toHaveText(['All tags', 'Bug', 'Implementation', 'Report', 'UI'])
   await expect(failed).toHaveCount(0)
   // The filter still works.
   await page.getByRole('option', { name: 'UI' }).click()
@@ -300,7 +301,7 @@ test('a tag from a link that no ticket carries is offered first, and is the one 
   await page.goto(`/projects/${project.id}/features?view=board&tag=Zeta`)
   await expect(filter(page).locator('[data-slot="combobox-value"]')).toHaveText('Zeta')
   await filter(page).click()
-  await expect(options(page)).toHaveText(['All tags', 'Zeta', 'Bug', 'UI', 'Implementation', 'Report'])
+  await expect(options(page)).toHaveText(['All tags', 'Zeta', 'Bug', 'Implementation', 'Report', 'UI'])
   await expect(page.getByRole('option', { name: 'Zeta' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('option', { name: 'All tags' })).not.toHaveAttribute('aria-selected', 'true')
 })

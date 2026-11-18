@@ -4,7 +4,15 @@ import { useEffect, useId, useRef } from 'react'
 import { Tag } from '#/components/Tag'
 import { Tip } from '#/components/ui/tooltip'
 import { useProject } from '#/lib/project'
-import { addTags, MAX_TAG_LENGTH, MAX_TAGS, overTagLimits, tagChoices, tagTooLong } from '#/lib/tags'
+import {
+  addTags,
+  MAX_TAG_LENGTH,
+  MAX_TAGS,
+  matchTags,
+  overTagLimits,
+  tagChoices,
+  tagTooLong,
+} from '#/lib/tags'
 import { cn } from '#/lib/utils'
 
 /**
@@ -19,9 +27,10 @@ import { cn } from '#/lib/utils'
  * an `aria-invalid` input does, a line under it says which limit, and a chip too long is marked. The
  * form is the one to hold back its submit meanwhile.
  *
- * `choices` show as chips under the field (`useTagChoices`): a click adds that tag as it is spelled
- * there, and the chip goes. Pressing one keeps the focus where it is, and one taken from the keyboard
- * gives it back to the text, so the field is not left.
+ * `choices` show as chips under the field (`useTagChoices`), those the text being typed soft-matches
+ * (`matchTags`): a click adds that tag as it is spelled there, and the chip goes. Pressing one keeps
+ * the focus where it is, and one taken from the keyboard gives it back to the text, so the field is
+ * not left.
  */
 export function TagsInput({
   id,
@@ -49,6 +58,7 @@ export function TagsInput({
   const input = useRef<HTMLInputElement>(null)
   const over = overTagLimits(value, text)
   const invalid = over.tooMany || over.tooLong
+  const offered = matchTags(choices, text)
   const messageId = useId()
   // The latest props, for a commit that runs after the render that scheduled it (after a reset too).
   const latest = useRef({ value, text, onChange, onTextChange })
@@ -166,7 +176,7 @@ export function TagsInput({
           className="h-6 min-w-16 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
         />
       </div>
-      {choices.length > 0 && value.length < MAX_TAGS && (
+      {offered.length > 0 && value.length < MAX_TAGS && (
         // At most two rows of chips, the rest a scroll away, so that many suggestions do not stretch the
         // form. A chip is 1rem of text-xs line, 0.25rem of padding and 2px of border; two of them, the
         // 0.25rem gap and the 0.125rem padding each side make the height. The padding keeps a focused
@@ -177,7 +187,7 @@ export function TagsInput({
           aria-label="Suggested tags"
           className="-mx-0.5 -mt-0.5 flex max-h-[calc(2*(1rem+0.25rem+2px)+0.25rem+0.25rem)] min-w-0 flex-wrap gap-1 overflow-y-auto p-0.5 last:-mb-0.5"
         >
-          {choices.map((tag) => (
+          {offered.map((tag) => (
             <button
               key={tag}
               type="button"
@@ -219,7 +229,7 @@ export function TagsInput({
 export function useTagChoices(projectId: string | number, value: string[]) {
   const { data: project } = useProject(projectId)
   if (!project) return []
-  return tagChoices(project.tagSuggestions, project.usedTags, value)
+  return tagChoices(project.tagSuggestions, project.usedTags, value, project.tagWeek)
 }
 
 /**
