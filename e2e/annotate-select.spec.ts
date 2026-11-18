@@ -1,0 +1,1456 @@
+import type { APIRequestContext, CDPSession, Locator, Page } from '@playwright/test'
+
+import type { TicketFull, TicketRow } from '#/lib/api'
+import { canvasOf, png } from './files'
+import { expect, ok, test } from './fixtures'
+
+/** An attachment as the server returns it on a ticket. */
+type Stored = TicketFull['attachments'][number]
+
+/** The picture the canvas draws on, by its own accessible name. */
+const pictureOf = (canvas: Locator) => canvas.getByRole('img', { name: 'Picture to annotate' })
+const noteField = (canvas: Locator) => canvas.getByRole('textbox', { name: 'Note', exact: true })
+const control = (canvas: Locator, name: string) => canvas.getByRole('button', { name, exact: true })
+
+/**
+ * A point of the picture, in the picture's own pixels, as a page position. The canvas maps a pointer
+ * back the same way (through its border box), so a drag from here to there moves exactly that far.
+ */
+async function at(canvas: Locator, [x, y]: [number, number]) {
+  const el = pictureOf(canvas)
+  const box = (await el.boundingBox())!
+  const size = await el.evaluate((c: HTMLCanvasElement) => ({ w: c.width, h: c.height }))
+  return { x: box.x + (x * box.width) / size.w, y: box.y + (y * box.height) / size.h }
+}
+
+async function drag(page: Page, canvas: Locator, from: [number, number], to: [number, number]) {
+  const a = await at(canvas, from)
+  const b = await at(canvas, to)
+  await page.mouse.move(a.x, a.y)
+  await page.mouse.down()
+  await page.mouse.move(b.x, b.y, { steps: 8 })
+  await page.mouse.up()
+}
+
+async function click(page: Page, canvas: Locator, point: [number, number], shift = false) {
+  const p = await at(canvas, point)
+  if (shift) await page.keyboard.down('Shift')
+  await page.mouse.click(p.x, p.y)
+  if (shift) await page.keyboard.up('Shift')
+}
+
+/** Picks one of the canvas's drawing tools and drags it from `from` to `to`, in the picture's pixels. */
+async function draw(page: Page, canvas: Locator, tool: string, from: [number, number], to: [number, number]) {
+  await control(canvas, tool).click()
+  await drag(page, canvas, from, to)
+}
+
+/** Opens the New ticket dialog on the project's features page. */
+async function openNewTicket(page: Page, projectId: number, title: string) {
+  await page.goto(`/projects/${projectId}/features`)
+  await page.getByRole('button', { name: 'New ticket' }).click()
+  const dialog = page.getByRole('dialog', { name: 'New ticket' })
+  await dialog.getByLabel('Title').fill(title)
+  return dialog
+}
+
+/** Picks a picture with the dialog's attach button, the way a person does. */
+async function pickWith(page: Page, button: Locator, file: { name: string; buffer: Buffer }) {
+  const chooser = page.waitForEvent('filechooser')
+  await button.click()
+  await (await chooser).setFiles({ name: file.name, mimeType: 'image/png', buffer: file.buffer })
+}
+
+/** A new ticket with a 300-pixel picture on the canvas, ready to draw on. */
+async function openCanvas(page: Page, projectId: number, title: string) {
+  const dialog = await openNewTicket(page, projectId, title)
+  await pickWith(page, dialog.getByRole('button', { name: 'attach' }), {
+    name: 'select.png',
+    buffer: png(300, [250, 250, 250]),
+  })
+  const canvas = canvasOf(page)
+  await expect(pictureOf(canvas)).toBeVisible()
+  // The dialog zooms in as it opens: a point of the picture is only where `at` measures it once that has ended.
+  await canvas.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)))
+  return { dialog, canvas }
+}
+
+/** Creates the ticket the picture was attached to, and returns the attachment the server stored. */
+async function createTicket(human: APIRequestContext, projectId: number, dialog: Locator): Promise<Stored> {
+  await dialog.getByRole('button', { name: 'Create' }).click()
+  await expect(dialog).toBeHidden()
+  const [row] = await ok<TicketRow[]>(human.get(`/api/projects/${projectId}/tickets`))
+  const ticket = await ok<TicketFull>(human.get(`/api/tickets/${row!.id}`))
+  expect(ticket.attachments).toHaveLength(1)
+  return ticket.attachments[0]!
+}
+
+/** Attaches the picture as drawn, then creates the ticket with it. */
+async function attachAndCreate(
+  human: APIRequestContext,
+  projectId: number,
+  dialog: Locator,
+  canvas: Locator,
+): Promise<Stored> {
+  await canvas.getByRole('button', { name: 'Attach', exact: true }).click()
+  await expect(canvas).toBeHidden()
+  return createTicket(human, projectId, dialog)
+}
+
+/** The marks the server stored with the picture. */
+function storedItems(attached: Stored) {
+  expect(attached.annotations).toBeTruthy()
+  return attached.annotations!.items
+}
+
+test('the Select tool picks one mark, adds and takes away with Shift, and a drag box selects several', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Select by clicking')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await noteField(canvas).fill('first')
+  await draw(page, canvas, 'Box', [160, 160], [260, 260])
+  await noteField(canvas).fill('second')
+
+  await control(canvas, 'Select').click()
+  await expect(control(canvas, 'Select')).toHaveAttribute('aria-pressed', 'true')
+  // The toolbar has no Delete button: the Delete key and Clear are the ways to remove marks.
+  await expect(control(canvas, 'Delete')).toHaveCount(0)
+
+  // A click on a mark picks it: its note is editable and the Delete button follows the selection.
+  await click(page, canvas, [60, 60])
+  await expect(noteField(canvas)).toHaveValue('first')
+
+  // A click on empty picture clears it.
+  await click(page, canvas, [285, 20])
+  await expect(noteField(canvas)).toBeDisabled()
+
+  // Shift-click adds the second mark: two selected, so the note field is off.
+  await click(page, canvas, [60, 60])
+  await click(page, canvas, [210, 210], true)
+  await expect(noteField(canvas)).toBeDisabled()
+  // Shift-click again takes it away: one left, and its note is shown again.
+  await click(page, canvas, [210, 210], true)
+  await expect(noteField(canvas)).toHaveValue('first')
+
+  // A drag from empty picture selects every mark its box meets, and draws nothing.
+  await drag(page, canvas, [285, 285], [5, 5])
+  await expect(noteField(canvas)).toBeDisabled()
+  await expect(canvas.getByRole('listitem')).toHaveCount(2)
+
+  // Escape clears the selection and leaves the canvas open.
+  await page.keyboard.press('Escape')
+  await expect(canvas).toBeVisible()
+  await expect(noteField(canvas)).toBeDisabled()
+
+  // The select tool drew nothing: the stored document holds the two boxes as they were drawn.
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const items = storedItems(attached)
+  expect(items).toHaveLength(2)
+  expect(items[0]).toMatchObject({ kind: 'rect', note: 'first' })
+  expect(items[1]).toMatchObject({ kind: 'rect', note: 'second' })
+})
+
+test('a drag moves the selection, and the rotate handle turns it about the centre of its box', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Move and turn')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await draw(page, canvas, 'Box', [160, 160], [260, 260])
+
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+  // Dragging the picked mark moves it by the same distance in the picture's pixels: 40 right, 80 down.
+  await drag(page, canvas, [60, 60], [100, 140])
+
+  // The selection's box is now 60..140 by 100..180, so its rotate handle sits 26 above the top middle.
+  // Turning the pointer from above the centre (100, 140) to its right is a quarter turn clockwise.
+  await drag(page, canvas, [100, 74], [180, 140])
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [moved, other] = storedItems(attached)
+  expect(moved!.rect!.x).toBeCloseTo(60, 0)
+  expect(moved!.rect!.y).toBeCloseTo(100, 0)
+  expect(moved!.rect!.w).toBeCloseTo(80, 0)
+  expect(moved!.rotation).toBeCloseTo(Math.PI / 2, 2)
+  // The mark nobody touched keeps its place and has no rotation key at all.
+  expect(other!.rect!.x).toBeCloseTo(160, 0)
+  expect(other!.rect!.y).toBeCloseTo(160, 0)
+  expect(other!.rect!.w).toBeCloseTo(100, 0)
+  expect(other!.rect!.h).toBeCloseTo(100, 0)
+  expect('rotation' in other!).toBe(false)
+})
+
+test('a press on empty picture inside the selection box moves the selected marks and keeps the selection', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Move from inside the box')
+  await draw(page, canvas, 'Box', [20, 20], [60, 60])
+  await draw(page, canvas, 'Box', [140, 140], [180, 180])
+  await control(canvas, 'Select').click()
+  // A drag from empty picture selects both boxes.
+  await drag(page, canvas, [285, 285], [5, 5])
+  await expect(noteField(canvas)).toBeDisabled()
+
+  // The press is between the two boxes: inside the selection's box, on no mark and no handle, so it moves them.
+  await drag(page, canvas, [100, 100], [140, 120])
+  // The selection is still there: its box is drawn around both marks at their new place, top edge at y 34.
+  await expect.poll(() => selectionBlue(canvas, { x: 70, y: 32, w: 40, h: 4 })).toBeGreaterThan(0)
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [first, second] = storedItems(attached)
+  expect(first!.rect!.x).toBeCloseTo(60, 0)
+  expect(first!.rect!.y).toBeCloseTo(40, 0)
+  expect(second!.rect!.x).toBeCloseTo(180, 0)
+  expect(second!.rect!.y).toBeCloseTo(160, 0)
+})
+
+test('Escape while a mouse button is held on a selected mark leaves the canvas open and the drag finishes', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Escape during drag')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+
+  const from = await at(canvas, [60, 60])
+  const to = await at(canvas, [70, 60])
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  await page.mouse.move(to.x, to.y, { steps: 4 })
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(300)
+  await expect(canvas).toBeVisible()
+  await page.mouse.up()
+
+  await expect(canvas).toBeVisible()
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [moved] = storedItems(attached)
+  expect(moved!.rect!.x).toBeCloseTo(30, 0)
+})
+
+test('Escape while a mouse button is held on a drawing tool, with nothing selected, leaves the canvas open and the box finishes', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Escape during draw')
+  await control(canvas, 'Box').click()
+
+  const from = await at(canvas, [40, 40])
+  const to = await at(canvas, [120, 120])
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  await page.mouse.move(to.x, to.y, { steps: 4 })
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(300)
+  await expect(canvas).toBeVisible()
+  await page.mouse.up()
+
+  await expect(canvas).toBeVisible()
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [drawn] = storedItems(attached)
+  expect(drawn!.rect!.x).toBeCloseTo(40, 0)
+  expect(drawn!.rect!.w).toBeCloseTo(80, 0)
+})
+
+test('Escape while a mouse button is held on empty picture with the Note tool leaves the canvas open', async ({
+  page,
+  project,
+}) => {
+  const { canvas } = await openCanvas(page, project.id, 'Escape during note press')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Note').click()
+
+  const empty = await at(canvas, [220, 220])
+  await page.mouse.move(empty.x, empty.y)
+  await page.mouse.down()
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(300)
+  await expect(canvas).toBeVisible()
+  await page.mouse.up()
+
+  await expect(canvas).toBeVisible()
+})
+
+test('a click on a mark in the band under the rotate handle picks that mark, not the handle', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Mark under the handle')
+  // A small box whose middle sits 8 pixels above the rotate handle of the box drawn after it.
+  await draw(page, canvas, 'Box', [118, 60], [132, 80])
+  await noteField(canvas).fill('under')
+  await draw(page, canvas, 'Box', [100, 100], [150, 150])
+  await control(canvas, 'Select').click()
+
+  await click(page, canvas, [125, 66])
+  await expect(noteField(canvas)).toHaveValue('under')
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [under, drawn] = storedItems(attached)
+  expect(under!.note).toBe('under')
+  expect(drawn!.rect!.x).toBeCloseTo(100, 0)
+  expect(drawn!.rotation).toBeUndefined()
+})
+
+test('a Shift-click on a selected mark under the rotate tip removes it from the selection and does not turn it', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Shift-click under the tip')
+  await canvas.getByLabel('Stroke width').fill('20')
+  await draw(page, canvas, 'Box', [120, 220], [180, 260])
+  await noteField(canvas).fill('below')
+  await draw(page, canvas, 'Box', [100, 100], [200, 200])
+  await noteField(canvas).fill('thick')
+
+  // Both boxes are selected: the selection's box starts at the thick box's top edge, so its rotate tip sits at
+  // (150, 74), inside the reach of the thick box's own stroke.
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [150, 150])
+  await click(page, canvas, [150, 240], true)
+  await expect(noteField(canvas)).toBeDisabled()
+
+  // Shift-click on the tip's spot takes the thick box out of the selection; the lower box is left, its note shown.
+  await click(page, canvas, [150, 74], true)
+  await expect(noteField(canvas)).toHaveValue('below')
+
+  // Nothing turned: the thick box keeps its place and has no rotation, and the lower box is where it was drawn.
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [below, thick] = storedItems(attached)
+  expect(thick!.note).toBe('thick')
+  expect(thick!.rotation).toBeUndefined()
+  expect(thick!.rect!.x).toBeCloseTo(100, 0)
+  expect(thick!.rect!.y).toBeCloseTo(100, 0)
+  expect(thick!.rect!.w).toBeCloseTo(100, 0)
+  expect(below!.rotation).toBeUndefined()
+  expect(below!.rect!.x).toBeCloseTo(120, 0)
+  expect(below!.rect!.y).toBeCloseTo(220, 0)
+})
+
+test('Delete removes the selection, and undo and redo bring it back and take it away again', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Delete and undo')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await noteField(canvas).fill('gone')
+  await draw(page, canvas, 'Box', [160, 160], [260, 260])
+  await noteField(canvas).fill('kept')
+
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+  // The Delete key, with focus in the canvas dialog, removes the picked mark and its note.
+  await page.keyboard.press('Delete')
+  await expect(canvas.getByRole('listitem')).toHaveText(['1. kept'])
+
+  // Undo brings it back in its place in the order; redo takes it away again.
+  await control(canvas, 'Undo').click()
+  await expect(canvas.getByRole('listitem')).toHaveText(['1. gone', '2. kept'])
+  await control(canvas, 'Redo').click()
+  await expect(canvas.getByRole('listitem')).toHaveText(['1. kept'])
+
+  // The keyboard shortcuts: Ctrl+Z undoes, Ctrl+Shift+Z and Ctrl+Y redo.
+  await page.keyboard.press('Control+z')
+  await expect(canvas.getByRole('listitem')).toHaveText(['1. gone', '2. kept'])
+  await page.keyboard.press('Control+Shift+z')
+  await expect(canvas.getByRole('listitem')).toHaveText(['1. kept'])
+  await page.keyboard.press('Control+z')
+  await page.keyboard.press('Control+y')
+  await expect(canvas.getByRole('listitem')).toHaveText(['1. kept'])
+
+  // The Delete key removes the one left; undo brings it back with its note.
+  await click(page, canvas, [210, 210])
+  await page.keyboard.press('Delete')
+  await expect(canvas.getByRole('listitem')).toHaveCount(0)
+  await control(canvas, 'Undo').click()
+  await expect(canvas.getByRole('listitem')).toHaveText(['1. kept'])
+
+  // Clear is one step too: undo brings back what it removed.
+  await control(canvas, 'Clear').click()
+  await expect(canvas.getByRole('listitem')).toHaveCount(0)
+  await control(canvas, 'Undo').click()
+  await expect(canvas.getByRole('listitem')).toHaveText(['1. kept'])
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  expect(storedItems(attached)).toHaveLength(1)
+  expect(storedItems(attached)[0]).toMatchObject({ kind: 'rect', note: 'kept' })
+})
+
+test('the selection works from the keyboard alone once the marks are drawn', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Keyboard only')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await noteField(canvas).fill('a')
+  await draw(page, canvas, 'Box', [160, 160], [260, 260])
+  await noteField(canvas).fill('b')
+
+  // Tab reaches Clear from Undo (Redo is skipped while there is nothing to redo, and there is no Delete button).
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+  await control(canvas, 'Undo').focus()
+  await page.keyboard.press('Tab')
+  await expect(control(canvas, 'Clear')).toBeFocused()
+
+  // Keyboard only from here: Select is focused, and Ctrl+A selects every mark.
+  await control(canvas, 'Select').focus()
+  await page.keyboard.press('Control+a')
+  await expect(noteField(canvas)).toBeDisabled()
+  await page.keyboard.press('Delete')
+  await expect(canvas.getByRole('listitem')).toHaveCount(0)
+
+  await page.keyboard.press('Control+z')
+  await expect(canvas.getByRole('listitem')).toHaveText(['1. a', '2. b'])
+  await page.keyboard.press('Control+Shift+z')
+  await expect(canvas.getByRole('listitem')).toHaveCount(0)
+  await page.keyboard.press('Control+y')
+  await page.keyboard.press('Control+z')
+  await expect(canvas.getByRole('listitem')).toHaveText(['1. a', '2. b'])
+
+  // Escape clears a selection without closing the canvas.
+  await page.keyboard.press('Control+a')
+  await page.keyboard.press('Escape')
+  await expect(canvas).toBeVisible()
+  await expect(noteField(canvas)).toBeDisabled()
+
+  // Backspace removes a selection too.
+  await page.keyboard.press('Control+a')
+  await page.keyboard.press('Backspace')
+  await expect(canvas.getByRole('listitem')).toHaveCount(0)
+
+  await attachAndCreate(human, project.id, dialog, canvas)
+})
+
+test.describe('touch', () => {
+  test.use({ hasTouch: true })
+
+  /** One finger on the screen, moved along `path` (page positions), then lifted. */
+  async function touchPath(cdp: CDPSession, path: { x: number; y: number }[]) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [path[0]!] })
+    for (const p of path.slice(1))
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [p] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  }
+
+  /** A straight touch drag across the picture, from one picture pixel to another, in ten steps. */
+  async function touchDrag(cdp: CDPSession, canvas: Locator, from: [number, number], to: [number, number]) {
+    const a = await at(canvas, from)
+    const b = await at(canvas, to)
+    const steps = 10
+    const path = Array.from({ length: steps + 1 }, (_, i) => ({
+      x: a.x + ((b.x - a.x) * i) / steps,
+      y: a.y + ((b.y - a.y) * i) / steps,
+    }))
+    await touchPath(cdp, path)
+  }
+
+  test('a tap selects a mark, a touch drag moves it, and the rotate handle turns it', async ({
+    page,
+    project,
+    human,
+  }) => {
+    const { dialog, canvas } = await openCanvas(page, project.id, 'Touch')
+    await draw(page, canvas, 'Box', [20, 20], [100, 100])
+    await draw(page, canvas, 'Box', [160, 160], [260, 260])
+    await control(canvas, 'Select').click()
+    const cdp = await page.context().newCDPSession(page)
+
+    await touchPath(cdp, [await at(canvas, [60, 60])])
+    await expect(noteField(canvas)).toBeEnabled()
+
+    await touchDrag(cdp, canvas, [60, 60], [100, 140])
+    await touchDrag(cdp, canvas, [100, 74], [180, 140])
+
+    const attached = await attachAndCreate(human, project.id, dialog, canvas)
+    const [moved] = storedItems(attached)
+    expect(moved!.rect!.x).toBeCloseTo(60, 0)
+    expect(moved!.rect!.y).toBeCloseTo(100, 0)
+    expect(moved!.rotation).toBeCloseTo(Math.PI / 2, 2)
+  })
+
+  test('a tap on an unselected mark where the X would be picks the mark, and the selection is not deleted', async ({
+    page,
+    project,
+    human,
+  }) => {
+    const { dialog, canvas } = await openCanvas(page, project.id, 'Touch on the X')
+    await draw(page, canvas, 'Box', [20, 20], [100, 100])
+    await noteField(canvas).fill('box')
+    // The box's rotate tip sits at (60, 126) and its X 16 pixels right of it, at (76, 126). A pencil stroke lies over it.
+    await draw(page, canvas, 'Pencil', [76, 111], [76, 141])
+    await noteField(canvas).fill('pencil')
+
+    await control(canvas, 'Select').click()
+    await click(page, canvas, [60, 60])
+    await expect(noteField(canvas)).toHaveValue('box')
+
+    // Touch sends no pointer move before its press, so the X is not shown: the tap reaches the pencil.
+    // The page is measured after the selection, as the layout moves when a mark is picked.
+    const tip = await at(canvas, [60, 126])
+    const cdp = await page.context().newCDPSession(page)
+    await touchPath(cdp, [{ x: tip.x + 16, y: tip.y }])
+    await expect(noteField(canvas)).toHaveValue('pencil')
+
+    const attached = await attachAndCreate(human, project.id, dialog, canvas)
+    expect(storedItems(attached)).toHaveLength(2)
+  })
+
+  test('a second finger on a drawing press does not replace the box the first finger is drawing', async ({
+    page,
+    project,
+    human,
+  }) => {
+    const { dialog, canvas } = await openCanvas(page, project.id, 'Second finger')
+    await control(canvas, 'Box').click()
+    const cdp = await page.context().newCDPSession(page)
+    const first = (p: { x: number; y: number }) => ({ x: p.x, y: p.y, id: 1 })
+    const second = (p: { x: number; y: number }) => ({ x: p.x, y: p.y, id: 2 })
+
+    const a = await at(canvas, [50, 50])
+    const b = await at(canvas, [150, 150])
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [first(a)] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [first(b)] })
+
+    // A second finger lands and moves, then lifts, while the first finger is still down.
+    const c = await at(canvas, [200, 200])
+    const d = await at(canvas, [220, 220])
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [first(b), second(c)],
+    })
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [first(b), second(d)],
+    })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [second(d)] })
+
+    // The first finger keeps drawing: its box grows to where it is now, and it is the box that is kept.
+    const e = await at(canvas, [160, 160])
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [first(e)] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+
+    const attached = await attachAndCreate(human, project.id, dialog, canvas)
+    const items = storedItems(attached)
+    expect(items).toHaveLength(1)
+    expect(items[0]!.rect!.x).toBeCloseTo(50, 0)
+    expect(items[0]!.rect!.y).toBeCloseTo(50, 0)
+    expect(items[0]!.rect!.w).toBeCloseTo(110, 0)
+    expect(items[0]!.rect!.h).toBeCloseTo(110, 0)
+  })
+
+  test('a second finger on the Select tool does not stop the first finger from finishing its box, and the mouse draws after it', async ({
+    page,
+    project,
+  }) => {
+    const { canvas } = await openCanvas(page, project.id, 'Second finger on Select')
+    await control(canvas, 'Box').click()
+    const cdp = await page.context().newCDPSession(page)
+    const first = (p: { x: number; y: number }) => ({ x: p.x, y: p.y, id: 1 })
+    const second = (p: { x: number; y: number }) => ({ x: p.x, y: p.y, id: 2 })
+
+    const a = await at(canvas, [50, 50])
+    const b = await at(canvas, [150, 150])
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [first(a)] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [first(b)] })
+
+    // The second finger presses empty picture with the Select tool while the first finger is still drawing.
+    await control(canvas, 'Select').click()
+    const c = await at(canvas, [200, 200])
+    const d = await at(canvas, [230, 230])
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [first(b), second(c)],
+    })
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [first(b), second(d)],
+    })
+
+    // The first finger lifts first (touchEnd names the points it releases), then the second.
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [first(b)] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+
+    // With the mouse, a Box drag draws a box and selects it.
+    await control(canvas, 'Box').click()
+    await drag(page, canvas, [20, 20], [100, 100])
+    await expect(noteField(canvas)).toBeEnabled()
+
+    // Escape clears the selection and leaves the canvas open; with nothing selected, the next Escape closes it.
+    await page.keyboard.press('Escape')
+    await expect(canvas).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(canvas).toBeHidden()
+  })
+
+  test('a tool tap while a finger holds a drawing press leaves the box to the finger, which finishes it', async ({
+    page,
+    project,
+    human,
+  }) => {
+    const { dialog, canvas } = await openCanvas(page, project.id, 'Tool tap during press')
+    await control(canvas, 'Box').click()
+    const cdp = await page.context().newCDPSession(page)
+    const first = (p: { x: number; y: number }) => ({ x: p.x, y: p.y, id: 1 })
+
+    const a = await at(canvas, [50, 50])
+    const b = await at(canvas, [150, 150])
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [first(a)] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [first(b)] })
+
+    // A second pointer taps the Select tool while the first finger is still drawing: the tool does not change.
+    await control(canvas, 'Select').click()
+
+    // The first finger keeps drawing: its box grows to where it ends, and it is the box that is kept.
+    const c = await at(canvas, [200, 200])
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [first(c)] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+
+    const attached = await attachAndCreate(human, project.id, dialog, canvas)
+    const items = storedItems(attached)
+    expect(items).toHaveLength(1)
+    expect(items[0]!.rect!.x).toBeCloseTo(50, 0)
+    expect(items[0]!.rect!.y).toBeCloseTo(50, 0)
+    expect(items[0]!.rect!.w).toBeCloseTo(150, 0)
+    expect(items[0]!.rect!.h).toBeCloseTo(150, 0)
+  })
+
+  test('a picture closed while a finger holds a drawing press leaves the next picture free to draw on', async ({
+    page,
+    project,
+  }) => {
+    const { dialog, canvas } = await openCanvas(page, project.id, 'Picture closed during press')
+    await control(canvas, 'Box').click()
+    const cdp = await page.context().newCDPSession(page)
+    const first = (p: { x: number; y: number }) => ({ x: p.x, y: p.y, id: 1 })
+
+    const a = await at(canvas, [50, 50])
+    const b = await at(canvas, [150, 150])
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [first(a)] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [first(b)] })
+
+    // The picture is closed with the mouse while the finger is down: the canvas goes, and the finger's release never reaches it.
+    await canvas.getByRole('button', { name: 'Close', exact: true }).click()
+    await expect(canvas).toBeHidden()
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+
+    // A new picture is attached and drawn on with the mouse.
+    await pickWith(page, dialog.getByRole('button', { name: 'attach' }), {
+      name: 'again.png',
+      buffer: png(300, [250, 250, 250]),
+    })
+    await expect(pictureOf(canvas)).toBeVisible()
+    await draw(page, canvas, 'Box', [20, 20], [100, 100])
+    await expect(noteField(canvas)).toBeEnabled()
+  })
+})
+
+test('a selected mark keeps its note number on top of the selection handles', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Note number under selection')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await noteField(canvas).fill('first')
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+
+  // The selection's handles are on screen: one sits on the box's far corner, where no note number is.
+  await expect.poll(() => selectionBlue(canvas, { x: 94, y: 94, w: 12, h: 12 })).toBeGreaterThan(0)
+  // The number badge sits on the box's top-left corner, where a corner handle is: the handle does not cover it.
+  expect(await selectionBlue(canvas, { x: 16, y: 16, w: 8, h: 8 })).toBe(0)
+
+  // The attached picture is unaffected: the badge is there, painted as before, with no selection colour.
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const rose = ({ r, g, b }: { r: number; g: number; b: number }) => r > 180 && g < 90 && b < 120
+  expect(rose(await pixelOf(page, attached, [20, 14]))).toBe(true)
+})
+
+test('the attached picture has no selection pixels, whatever is selected', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Selection is not in the picture')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+
+  // The outline colour (#0ea5e9) is on screen while the mark is selected: the check below means something.
+  const outline = (c: HTMLCanvasElement) => {
+    const data = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data
+    let n = 0
+    for (let i = 0; i < data.length; i += 4)
+      if (
+        Math.abs(data[i]! - 14) <= 12 &&
+        Math.abs(data[i + 1]! - 165) <= 12 &&
+        Math.abs(data[i + 2]! - 233) <= 12
+      )
+        n++
+    return n
+  }
+  await expect.poll(() => pictureOf(canvas).evaluate(outline)).toBeGreaterThan(0)
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const res = await page.request.get(attached.url)
+  expect(res.ok()).toBe(true)
+  const counts = await page.evaluate(
+    async (base64) => {
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+      const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }))
+      const c = document.createElement('canvas')
+      c.width = bitmap.width
+      c.height = bitmap.height
+      const ctx = c.getContext('2d')!
+      ctx.drawImage(bitmap, 0, 0)
+      const { data } = ctx.getImageData(0, 0, c.width, c.height)
+      let selection = 0
+      let rose = 0
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i]!
+        const g = data[i + 1]!
+        const b = data[i + 2]!
+        if (Math.abs(r - 14) <= 12 && Math.abs(g - 165) <= 12 && Math.abs(b - 233) <= 12) selection++
+        if (r > 180 && g < 90 && b < 120) rose++
+      }
+      return { selection, rose }
+    },
+    Buffer.from(await res.body()).toString('base64'),
+  )
+  expect(counts.selection).toBe(0)
+  // The render decodes and carries the mark, so the count above is a real count.
+  expect(counts.rose).toBeGreaterThan(0)
+})
+
+test('a picture drawn on and never selected stores its marks with no rotation key', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Drawing only')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await noteField(canvas).fill('the button is cut off')
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+
+  const doc = attached.annotations!
+  expect(Object.keys(doc).sort()).toEqual(['height', 'items', 'version', 'width'])
+  expect(doc).toMatchObject({ version: 1, width: 300, height: 300 })
+  expect(doc.items).toHaveLength(1)
+  const [mark] = doc.items
+  // The keys the canvas writes for a box, and nothing else.
+  expect(Object.keys(mark!).sort()).toEqual(['color', 'id', 'kind', 'note', 'rect', 'width'])
+  expect(mark!.rect!.x).toBeCloseTo(20, 0)
+  expect(mark!.rect!.w).toBeCloseTo(80, 0)
+  expect('rotation' in mark!).toBe(false)
+})
+
+test('the select controls lock while the picture attaches', async ({ page, project, human }) => {
+  // The encode is held so the button reads "Attaching…" long enough to try every control.
+  await page.addInitScript(() => {
+    const toBlob = HTMLCanvasElement.prototype.toBlob
+    HTMLCanvasElement.prototype.toBlob = function (
+      this: HTMLCanvasElement,
+      callback: BlobCallback,
+      ...rest: [string?, number?]
+    ) {
+      setTimeout(() => toBlob.call(this, callback, ...rest), 4_000)
+    }
+  })
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Locked while attaching')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+  await canvas.getByRole('button', { name: 'Attach', exact: true }).click()
+  await expect(canvas.getByRole('button', { name: 'Attaching…' })).toBeVisible()
+
+  for (const name of ['Select', 'Pencil', 'Undo', 'Redo', 'Clear'])
+    await expect(control(canvas, name)).toBeDisabled()
+  // A pointer on the picture does nothing while it attaches: no move, no new mark.
+  await drag(page, canvas, [60, 60], [200, 200])
+  await expect(noteField(canvas)).toBeDisabled()
+
+  await expect(canvas).toBeHidden()
+  const attached = await createTicket(human, project.id, dialog)
+  const items = storedItems(attached)
+  expect(items).toHaveLength(1)
+  expect(items[0]!.rect!.x).toBeCloseTo(20, 0)
+  expect('rotation' in items[0]!).toBe(false)
+})
+
+/** The cursor the canvas shows once the pointer is at `point` (a picture pixel), read from the element's style. */
+async function cursorAt(page: Page, canvas: Locator, point: [number, number]) {
+  const p = await at(canvas, point)
+  await page.mouse.move(p.x, p.y)
+  return pictureOf(canvas).evaluate((c: HTMLCanvasElement) => c.style.cursor)
+}
+
+/** How many pixels of the picture on screen, inside a rectangle of picture pixels, are the selection's blue. */
+async function selectionBlue(canvas: Locator, rect: { x: number; y: number; w: number; h: number }) {
+  return pictureOf(canvas).evaluate(
+    (c: HTMLCanvasElement, r: { x: number; y: number; w: number; h: number }) => {
+      const data = c.getContext('2d')!.getImageData(r.x, r.y, r.w, r.h).data
+      let n = 0
+      for (let i = 0; i < data.length; i += 4) {
+        if (
+          Math.abs(data[i]! - 14) < 40 &&
+          Math.abs(data[i + 1]! - 165) < 40 &&
+          Math.abs(data[i + 2]! - 233) < 40
+        )
+          n++
+      }
+      return n
+    },
+    rect,
+  )
+}
+
+/** The colour of one pixel of a stored picture, read the way the flattened-picture test reads it. */
+async function pixelOf(page: Page, attached: Stored, [x, y]: [number, number]) {
+  const res = await page.request.get(attached.url)
+  expect(res.ok()).toBe(true)
+  return page.evaluate(
+    async ({ base64, x, y }) => {
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+      const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }))
+      const c = document.createElement('canvas')
+      c.width = bitmap.width
+      c.height = bitmap.height
+      const ctx = c.getContext('2d')!
+      ctx.drawImage(bitmap, 0, 0)
+      const [r, g, b] = ctx.getImageData(x, y, 1, 1).data
+      return { r: r!, g: g!, b: b! }
+    },
+    { base64: Buffer.from(await res.body()).toString('base64'), x, y },
+  )
+}
+
+test('dragging a corner handle resizes both sides, and a side handle one side, from the opposite edge', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Resize corner and side')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+
+  // The south-east corner handle sits on the box's corner (100, 100): dragged to (140, 130), the top-left stays put.
+  await drag(page, canvas, [100, 100], [140, 130])
+  // The box is now 20..140 by 20..130; its east side handle sits at (140, 75). Dragged to 150, only the width changes.
+  await drag(page, canvas, [140, 75], [150, 75])
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [mark] = storedItems(attached)
+  expect(mark!.rect!.x).toBeCloseTo(20, 0)
+  expect(mark!.rect!.y).toBeCloseTo(20, 0)
+  expect(mark!.rect!.w).toBeCloseTo(130, 0)
+  expect(mark!.rect!.h).toBeCloseTo(110, 0)
+  expect('rotation' in mark!).toBe(false)
+})
+
+test('each resize is one undo step, and redo brings back only the step that was undone', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Resize undo and redo')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+  await drag(page, canvas, [100, 100], [140, 130])
+  await drag(page, canvas, [140, 75], [150, 75])
+
+  // Two undo steps take both resizes back; the box drawn before them stays, so Undo is still there.
+  await control(canvas, 'Undo').click()
+  await control(canvas, 'Undo').click()
+  await expect(control(canvas, 'Undo')).toBeEnabled()
+  // One redo puts back only the corner resize.
+  await control(canvas, 'Redo').click()
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [mark] = storedItems(attached)
+  expect(mark!.rect!.x).toBeCloseTo(20, 0)
+  expect(mark!.rect!.y).toBeCloseTo(20, 0)
+  expect(mark!.rect!.w).toBeCloseTo(120, 0)
+  expect(mark!.rect!.h).toBeCloseTo(110, 0)
+})
+
+test('a vertical line has no side handles on its zero width: a drag sideways moves it and does not resize it', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Zero width')
+  await draw(page, canvas, 'Pencil', [100, 20], [100, 120])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [100, 70])
+
+  // The line's middle is where its east and west handles would sit. With no width there is no such handle,
+  // so the press moves the line 40 right: every point shifts by 40 and its length (100 tall) stays.
+  await drag(page, canvas, [100, 70], [140, 70])
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [line] = storedItems(attached)
+  expect(line!.kind).toBe('pen')
+  for (const [x] of line!.points!) expect(x).toBeCloseTo(140, 0)
+  const ys = line!.points!.map(([, y]) => y)
+  expect(Math.min(...ys)).toBeCloseTo(20, 0)
+  expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(100, 0)
+})
+
+test('a drag along a vertical line from its middle moves it along its length', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Move along the line')
+  await draw(page, canvas, 'Pencil', [100, 20], [100, 120])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [100, 70])
+
+  // Dragged 40 down: the line now runs from 60 to 160, and it stays at x 100.
+  await drag(page, canvas, [100, 70], [100, 110])
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [line] = storedItems(attached)
+  for (const [x] of line!.points!) expect(x).toBeCloseTo(100, 0)
+  const ys = line!.points!.map(([, y]) => y)
+  expect(Math.min(...ys)).toBeCloseTo(60, 0)
+  expect(Math.max(...ys)).toBeCloseTo(160, 0)
+})
+
+test('a press in the middle of a near-vertical line moves it sideways, and does not resize it by its west side', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Thin line middle')
+  // Ten pixels across: its west and east sides are five pixels from its middle, too near for a side handle there.
+  await draw(page, canvas, 'Pencil', [100, 60], [110, 240])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [105, 150])
+
+  // Dragged 40 right: every point shifts by 40, so the line runs from 140 to 150 and keeps its length.
+  await drag(page, canvas, [105, 150], [145, 150])
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [line] = storedItems(attached)
+  const xs = line!.points!.map(([x]) => x)
+  expect(Math.min(...xs)).toBeCloseTo(140, 0)
+  expect(Math.max(...xs)).toBeCloseTo(150, 0)
+  const ys = line!.points!.map(([, y]) => y)
+  expect(Math.min(...ys)).toBeCloseTo(60, 0)
+  expect(Math.max(...ys)).toBeCloseTo(240, 0)
+})
+
+test('a press on the rotate tip of a box drawn with a 20 pixel stroke turns the box and does not move it', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Thick box turn')
+  await canvas.getByLabel('Stroke width').fill('20')
+  await draw(page, canvas, 'Box', [100, 100], [200, 200])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [150, 150])
+
+  // The rotate tip sits 26 above the top middle, (150, 74), inside the reach of the box's own 20 pixel stroke.
+  // Turned from above the centre to its right: a quarter turn clockwise, with the box's centre where it was.
+  await drag(page, canvas, [150, 74], [226, 150])
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [box] = storedItems(attached)
+  expect(box!.rotation).toBeCloseTo(Math.PI / 2, 2)
+  expect(box!.rect!.x).toBeCloseTo(100, 0)
+  expect(box!.rect!.y).toBeCloseTo(100, 0)
+  expect(box!.rect!.w).toBeCloseTo(100, 0)
+})
+
+test('the cursor shows the resize arrow on each side and corner, grab on the rotate tip, move inside, and default elsewhere', async ({
+  page,
+  project,
+}) => {
+  const { canvas } = await openCanvas(page, project.id, 'Cursor by part')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+
+  expect(await cursorAt(page, canvas, [100, 60])).toBe('ew-resize')
+  expect(await cursorAt(page, canvas, [60, 20])).toBe('ns-resize')
+  expect(await cursorAt(page, canvas, [100, 100])).toBe('nwse-resize')
+  expect(await cursorAt(page, canvas, [20, 100])).toBe('nesw-resize')
+  // The rotate tip sits below the box here, since there is no room above it.
+  expect(await cursorAt(page, canvas, [60, 126])).toBe('grab')
+  expect(await cursorAt(page, canvas, [60, 60])).toBe('move')
+  expect(await cursorAt(page, canvas, [285, 285])).toBe('default')
+})
+
+test('the X beside the rotate tip deletes the selection as one step, and undo brings it back', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Delete with the X')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await noteField(canvas).fill('gone')
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+
+  // Hovering the rotate tip shows the X beside it; the X is 16 css pixels to the right of the tip.
+  await cursorAt(page, canvas, [60, 126])
+  const tip = await at(canvas, [60, 126])
+  await page.mouse.click(tip.x + 16, tip.y)
+  await expect(canvas.getByRole('listitem')).toHaveCount(0)
+
+  await control(canvas, 'Undo').click()
+  await expect(canvas.getByRole('listitem')).toHaveText(['1. gone'])
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  expect(storedItems(attached)).toHaveLength(1)
+})
+
+test('the X stops being drawn at the old tip when Ctrl+A moves the selection, and shows again near the new tip', async ({
+  page,
+  project,
+}) => {
+  const { canvas } = await openCanvas(page, project.id, 'X after select all')
+  await draw(page, canvas, 'Box', [100, 100], [160, 160])
+  await draw(page, canvas, 'Box', [200, 200], [240, 240])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [130, 130])
+
+  // The pointer rests on the tip of the picked box (130, 74): the X beside it is drawn at (146, 74).
+  await cursorAt(page, canvas, [130, 74])
+  await expect.poll(() => selectionBlue(canvas, { x: 139, y: 66, w: 14, h: 16 })).toBeGreaterThan(0)
+
+  // Ctrl+A selects both boxes: the tip moves to (170, 74), and the pointer has not moved.
+  await page.keyboard.press('Control+a')
+  await expect(noteField(canvas)).toBeDisabled()
+  await expect.poll(() => selectionBlue(canvas, { x: 180, y: 66, w: 14, h: 16 })).toBe(0)
+
+  // Once the pointer is near the new tip, the X is drawn beside it.
+  await cursorAt(page, canvas, [170, 74])
+  await expect.poll(() => selectionBlue(canvas, { x: 180, y: 66, w: 14, h: 16 })).toBeGreaterThan(0)
+})
+
+test('Fill is unchecked by default, fills the next box, shows the fill of a selected box, and undo and redo set it on the selection', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Fill')
+  const fillBox = canvas.getByRole('checkbox', { name: 'Fill' })
+  await expect(fillBox).not.toBeChecked()
+
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  // A drawn mark is selected: Escape clears it, so the Fill click below is for the next box, not this one.
+  await page.keyboard.press('Escape')
+  await fillBox.click()
+  await expect(fillBox).toBeChecked()
+  await draw(page, canvas, 'Box', [160, 160], [260, 260])
+
+  // A single selected filled box shows Fill checked; the unfilled one shows it unchecked.
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [210, 210])
+  await expect(fillBox).toBeChecked()
+  await click(page, canvas, [60, 60])
+  await expect(fillBox).not.toBeChecked()
+
+  // Fill on for the selected unfilled box is one step: undo takes it off, redo puts it on.
+  await fillBox.click()
+  await expect(fillBox).toBeChecked()
+  await control(canvas, 'Undo').click()
+  await expect(fillBox).not.toBeChecked()
+  await control(canvas, 'Redo').click()
+  await expect(fillBox).toBeChecked()
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [first, second] = storedItems(attached)
+  expect(first).toMatchObject({ kind: 'rect', fill: true })
+  expect(second).toMatchObject({ kind: 'rect', fill: true })
+  // The flattened picture paints both boxes filled in the mark's colour, at their middles.
+  const rose = ({ r, g, b }: { r: number; g: number; b: number }) => r > 180 && g < 90 && b < 120
+  expect(rose(await pixelOf(page, attached, [60, 60]))).toBe(true)
+  expect(rose(await pixelOf(page, attached, [210, 210]))).toBe(true)
+})
+
+/** How much of the selection's blue is on the canvas at all: the box, handles and rotate dot, whichever show. */
+const chromeOn = (canvas: Locator) => selectionBlue(canvas, { x: 0, y: 0, w: 300, h: 300 })
+
+/** Moves the pointer off the picture, onto the page. */
+async function leave(page: Page) {
+  await page.mouse.move(1, 1)
+}
+
+test('no mark shows selection chrome by default, with nothing selected or hovered', async ({
+  page,
+  project,
+}) => {
+  const { canvas } = await openCanvas(page, project.id, 'No chrome by default')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await draw(page, canvas, 'Box', [160, 160], [260, 260])
+
+  // Right after drawing, the box is selected for its note, and the Box tool is active: nothing shows.
+  expect(await chromeOn(canvas)).toBe(0)
+
+  // With the Select tool and the pointer away, nothing is selected or hovered: nothing shows.
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [285, 20])
+  await leave(page)
+  expect(await chromeOn(canvas)).toBe(0)
+})
+
+test('with any tool but Select, a selected or hovered mark never shows chrome', async ({ page, project }) => {
+  const { canvas } = await openCanvas(page, project.id, 'Chrome only for Select')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await noteField(canvas).fill('mark')
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+
+  for (const tool of ['Pencil', 'Box', 'Arrow', 'Ellipse', 'Text', 'Note']) {
+    await control(canvas, tool).click()
+    await expect(control(canvas, tool)).toHaveAttribute('aria-pressed', 'true')
+    // The mark is still selected (its note is editable), the pointer rests on it, and no chrome shows.
+    const p = await at(canvas, [60, 60])
+    await page.mouse.move(p.x, p.y)
+    await page.mouse.move(p.x + 2, p.y + 2)
+    await expect(noteField(canvas)).toHaveValue('mark')
+    expect(await chromeOn(canvas)).toBe(0)
+    // Nor at the corner handle or the rotate tip.
+    const corner = await at(canvas, [100, 100])
+    await page.mouse.move(corner.x, corner.y)
+    expect(await chromeOn(canvas)).toBe(0)
+  }
+})
+
+test('with Select, hovering a mark shows its outline, handles and rotate dot, and leaving it hides them', async ({
+  page,
+  project,
+}) => {
+  const { canvas } = await openCanvas(page, project.id, 'Hover shows chrome')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await draw(page, canvas, 'Box', [160, 160], [260, 260])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [285, 20])
+  await leave(page)
+  expect(await chromeOn(canvas)).toBe(0)
+
+  // Hovering the first box: the far corner handle and the rotate dot below it (no room above) show, and the
+  // second box has none.
+  const p = await at(canvas, [60, 60])
+  await page.mouse.move(p.x, p.y)
+  await expect.poll(() => selectionBlue(canvas, { x: 94, y: 94, w: 12, h: 12 })).toBeGreaterThan(0)
+  expect(await selectionBlue(canvas, { x: 54, y: 120, w: 12, h: 12 })).toBeGreaterThan(0)
+  expect(await selectionBlue(canvas, { x: 0, y: 140, w: 300, h: 160 })).toBe(0)
+  // The X that deletes is not part of the hover.
+  expect(await selectionBlue(canvas, { x: 71, y: 120, w: 14, h: 12 })).toBe(0)
+
+  // The chrome follows the pointer to the other box, and goes when the pointer is over empty picture.
+  const q = await at(canvas, [210, 210])
+  await page.mouse.move(q.x, q.y)
+  await expect.poll(() => selectionBlue(canvas, { x: 254, y: 254, w: 12, h: 12 })).toBeGreaterThan(0)
+  expect(await selectionBlue(canvas, { x: 94, y: 94, w: 12, h: 12 })).toBe(0)
+  const e = await at(canvas, [285, 20])
+  await page.mouse.move(e.x, e.y)
+  await expect.poll(() => chromeOn(canvas)).toBe(0)
+
+  // Leaving the picture hides the hover chrome too.
+  await page.mouse.move(p.x, p.y)
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+  await leave(page)
+  await expect.poll(() => chromeOn(canvas)).toBe(0)
+})
+
+test('the chrome stays while the pointer travels from a hovered mark to its rotate dot and corner handle', async ({
+  page,
+  project,
+}) => {
+  const { canvas } = await openCanvas(page, project.id, 'Hover reaches the handles')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [285, 20])
+
+  const from = await at(canvas, [60, 60])
+  const tip = await at(canvas, [60, 126])
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.move(tip.x, tip.y, { steps: 12 })
+  await expect.poll(() => selectionBlue(canvas, { x: 54, y: 120, w: 12, h: 12 })).toBeGreaterThan(0)
+  expect(await cursorAt(page, canvas, [60, 126])).toBe('grab')
+
+  // Past the corner handle, a few pixels outside the box, the handle still shows and sets its cursor.
+  const corner = await at(canvas, [60, 60])
+  await page.mouse.move(corner.x, corner.y)
+  expect(await cursorAt(page, canvas, [104, 104])).toBe('nwse-resize')
+  expect(await selectionBlue(canvas, { x: 94, y: 94, w: 12, h: 12 })).toBeGreaterThan(0)
+})
+
+test('a press on the handle of a hovered, unselected mark selects it and resizes it', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Resize from hover')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await draw(page, canvas, 'Box', [160, 160], [260, 260])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [285, 20])
+  // Nothing is selected: the first box is only hovered.
+  const p = await at(canvas, [60, 60])
+  await page.mouse.move(p.x, p.y)
+  await expect(noteField(canvas)).toBeDisabled()
+  await expect.poll(() => selectionBlue(canvas, { x: 94, y: 94, w: 12, h: 12 })).toBeGreaterThan(0)
+
+  // Its far corner handle is grabbed and dragged: the box grows from its opposite corner.
+  await drag(page, canvas, [100, 100], [140, 130])
+  await expect(noteField(canvas)).toBeEnabled()
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [first, second] = storedItems(attached)
+  expect(first!.rect!.x).toBeCloseTo(20, 0)
+  expect(first!.rect!.w).toBeCloseTo(120, 0)
+  expect(first!.rect!.h).toBeCloseTo(110, 0)
+  expect(second!.rect!.w).toBeCloseTo(100, 0)
+})
+
+test('a selected mark keeps its chrome while it is moved, resized and turned, wherever the pointer goes', async ({
+  page,
+  project,
+}) => {
+  const { canvas } = await openCanvas(page, project.id, 'Chrome while dragging')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [60, 60])
+
+  // Move: the pointer is far from the old place of the mark, and the chrome is with the mark where it now is.
+  const a = await at(canvas, [60, 60])
+  const b = await at(canvas, [200, 200])
+  await page.mouse.move(a.x, a.y)
+  await page.mouse.down()
+  await page.mouse.move(b.x, b.y, { steps: 8 })
+  // The box is now 160..240; its far corner handle is at (240, 240), and nothing is left at the old place.
+  await expect.poll(() => selectionBlue(canvas, { x: 234, y: 234, w: 12, h: 12 })).toBeGreaterThan(0)
+  expect(await selectionBlue(canvas, { x: 14, y: 14, w: 92, h: 92 })).toBe(0)
+  await page.mouse.up()
+
+  // The pointer rests away from the mark and off the picture: the selected mark's chrome stays.
+  await leave(page)
+  await expect.poll(() => selectionBlue(canvas, { x: 234, y: 234, w: 12, h: 12 })).toBeGreaterThan(0)
+
+  // Resize by its far corner, the pointer ending well outside the mark: the chrome follows the new corner.
+  const corner = await at(canvas, [240, 240])
+  const wide = await at(canvas, [290, 280])
+  await page.mouse.move(corner.x, corner.y)
+  await page.mouse.down()
+  await page.mouse.move(wide.x, wide.y, { steps: 8 })
+  await expect.poll(() => selectionBlue(canvas, { x: 284, y: 274, w: 12, h: 12 })).toBeGreaterThan(0)
+  await page.mouse.up()
+  await leave(page)
+  await expect.poll(() => selectionBlue(canvas, { x: 284, y: 274, w: 12, h: 12 })).toBeGreaterThan(0)
+
+  // Turn by the rotate dot (above the box now: 160..290 across, 160..280 down, dot at (225, 134)) and let the
+  // pointer go far from the mark: the chrome stays through the turn.
+  const dot = await at(canvas, [225, 134])
+  const far = await at(canvas, [20, 140])
+  await page.mouse.move(dot.x, dot.y)
+  await page.mouse.down()
+  await page.mouse.move(far.x, far.y, { steps: 10 })
+  expect(await chromeOn(canvas)).toBeGreaterThan(0)
+  await page.mouse.up()
+  await leave(page)
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+})
+
+test('the chrome of a selection goes with Escape, a click on empty picture and another tool, and returns on selecting', async ({
+  page,
+  project,
+}) => {
+  const { canvas } = await openCanvas(page, project.id, 'Chrome hides on deselect')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+
+  // A click picks the mark; the pointer then rests on empty picture, so only the selection keeps the chrome.
+  await click(page, canvas, [60, 60])
+  await leave(page)
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+
+  await page.keyboard.press('Escape')
+  await expect.poll(() => chromeOn(canvas)).toBe(0)
+
+  // A click on empty picture deselects.
+  await click(page, canvas, [60, 60])
+  await leave(page)
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+  await click(page, canvas, [285, 20])
+  await leave(page)
+  await expect.poll(() => chromeOn(canvas)).toBe(0)
+
+  // Another tool hides it.
+  await click(page, canvas, [60, 60])
+  await leave(page)
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+  await control(canvas, 'Pencil').click()
+  await expect.poll(() => chromeOn(canvas)).toBe(0)
+
+  // A box selection shows the chrome of the marks it selected, and Ctrl+A that of all of them.
+  await control(canvas, 'Select').click()
+  await drag(page, canvas, [10, 10], [120, 120])
+  await leave(page)
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+  await page.keyboard.press('Escape')
+  await expect.poll(() => chromeOn(canvas)).toBe(0)
+  await page.keyboard.press('Control+a')
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+})
+
+test('the attached picture has no chrome pixels when a mark was only hovered', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Hover is not in the picture')
+  await draw(page, canvas, 'Box', [20, 20], [100, 100])
+  await control(canvas, 'Select').click()
+  await click(page, canvas, [285, 20])
+  const p = await at(canvas, [60, 60])
+  await page.mouse.move(p.x, p.y)
+  await expect.poll(() => chromeOn(canvas)).toBeGreaterThan(0)
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const picture = { x: 0, y: 0, w: 300, h: 300 }
+  // The render is read the way the picture tests read it: colour by colour over the whole picture.
+  const blue = await page.evaluate(
+    async ({ base64, rect }) => {
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+      const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }))
+      const c = document.createElement('canvas')
+      c.width = bitmap.width
+      c.height = bitmap.height
+      const ctx = c.getContext('2d')!
+      ctx.drawImage(bitmap, 0, 0)
+      const { data } = ctx.getImageData(rect.x, rect.y, rect.w, rect.h)
+      let n = 0
+      for (let i = 0; i < data.length; i += 4)
+        if (
+          Math.abs(data[i]! - 14) < 40 &&
+          Math.abs(data[i + 1]! - 165) < 40 &&
+          Math.abs(data[i + 2]! - 233) < 40
+        )
+          n++
+      return n
+    },
+    {
+      base64: Buffer.from(await (await page.request.get(attached.url)).body()).toString('base64'),
+      rect: picture,
+    },
+  )
+  expect(blue).toBe(0)
+})
+
+test('the X beside the selection tip deletes it even where another hovered mark has a handle under the X', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'X over another handle')
+  await draw(page, canvas, 'Box', [83, 124], [140, 180])
+  await draw(page, canvas, 'Box', [20, 150], [100, 250])
+  await control(canvas, 'Select').click()
+
+  // The second box is selected: its rotate tip is at (60, 124) and the X beside it at (76, 124). The pointer on the
+  // first box's corner (83, 124) is inside the X's reach and outside the tip's, so the X shows and sets its cursor.
+  expect(await cursorAt(page, canvas, [83, 124])).toBe('grab')
+  await page.mouse.down()
+  await page.mouse.up()
+
+  // The X took the press: the selection is deleted, and the first box is left as it was.
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const items = storedItems(attached)
+  expect(items).toHaveLength(1)
+  expect(items[0]!.rect!.x).toBeCloseTo(83, 0)
+  expect(items[0]!.rect!.w).toBeCloseTo(57, 0)
+})
+
+test('a box keeps the last move before its release, even when both arrive before the canvas has redrawn', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Last move kept')
+  await control(canvas, 'Box').click()
+  const a = await at(canvas, [50, 50])
+  const b = await at(canvas, [150, 150])
+  const c = await at(canvas, [160, 160])
+  await page.mouse.move(a.x, a.y)
+  await page.mouse.down()
+  await page.mouse.move(b.x, b.y)
+  // The last move and the release land in one task, as on a busy page: nothing renders between them.
+  await pictureOf(canvas).evaluate(
+    (el, p) => {
+      const init = { pointerId: 1, pointerType: 'mouse', bubbles: true, clientX: p.x, clientY: p.y }
+      el.dispatchEvent(new PointerEvent('pointermove', init))
+      el.dispatchEvent(new PointerEvent('pointerup', init))
+    },
+    { x: c.x, y: c.y },
+  )
+  await page.mouse.up()
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [mark] = storedItems(attached)
+  expect(mark!.rect!.x).toBeCloseTo(50, 0)
+  expect(mark!.rect!.w).toBeCloseTo(110, 0)
+  expect(mark!.rect!.h).toBeCloseTo(110, 0)
+})
+
+test('a pencil stroke keeps every point of moves that arrive before the canvas has redrawn', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { dialog, canvas } = await openCanvas(page, project.id, 'Stroke points kept')
+  await control(canvas, 'Pencil').click()
+  const a = await at(canvas, [50, 50])
+  const b = await at(canvas, [100, 100])
+  const c = await at(canvas, [150, 60])
+  await page.mouse.move(a.x, a.y)
+  await page.mouse.down()
+  await pictureOf(canvas).evaluate(
+    (el, points) => {
+      for (const p of points)
+        el.dispatchEvent(
+          new PointerEvent('pointermove', {
+            pointerId: 1,
+            pointerType: 'mouse',
+            bubbles: true,
+            clientX: p.x,
+            clientY: p.y,
+          }),
+        )
+    },
+    [b, c],
+  )
+  await page.mouse.up()
+
+  const attached = await attachAndCreate(human, project.id, dialog, canvas)
+  const [mark] = storedItems(attached)
+  const points = mark!.points!
+  // The press point and both moves are on the stroke (the release adds none).
+  expect(points.length).toBeGreaterThanOrEqual(3)
+  expect(points.some(([x, y]) => Math.abs(x - 100) < 1 && Math.abs(y - 100) < 1)).toBe(true)
+  expect(points.some(([x, y]) => Math.abs(x - 150) < 1 && Math.abs(y - 60) < 1)).toBe(true)
+})
