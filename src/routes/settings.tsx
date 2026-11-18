@@ -1,120 +1,111 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createFileRoute, Link } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
-import { toast } from 'sonner'
+import { createFileRoute, useLocation, useNavigate, useRouter } from '@tanstack/react-router'
+import { useEffect } from 'react'
 
-import { AgentIdentities } from '#/components/AgentIdentities'
-import { AgentPicker } from '#/components/AgentPicker'
-import { Devices } from '#/components/Devices'
-import { TailnetEntrance } from '#/components/TailnetEntrance'
-import { PreviewLimitEditor } from '#/components/Preview'
-import { Updates } from '#/components/Updates'
-import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
-import { errorMessage, get, type Me, patch } from '#/lib/api'
-import { useAnchor, useReveal } from '#/lib/reveal'
-import { THEMES, THEME_LABEL, readTheme, setTheme, type Theme } from '#/lib/theme'
-import type { Settings } from '#/server/agents'
+import { BoardSettings } from '#/components/BoardSettings'
+import { ProjectSettings } from '#/components/ProjectSettings'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs'
+import { currentProjectId, rememberCurrentProject, useProjects } from '#/lib/project'
+import { whenArrived } from '#/lib/remembered'
+import {
+  type SettingsTab,
+  projectTabSearch,
+  resolveSettings,
+  tabOwning,
+  validateSettingsSearch,
+} from '#/lib/settingsTabs'
+import { useHydrated } from '#/lib/useHydrated'
 
-export const Route = createFileRoute('/settings')({ component: BoardSettings })
+export const Route = createFileRoute('/settings')({
+  validateSearch: validateSettingsSearch,
+  component: Settings,
+})
 
-/** Board-wide preferences; each project's own settings live under the project. */
-function BoardSettings() {
-  const qc = useQueryClient()
-  const { data } = useQuery({ queryKey: ['settings'], queryFn: () => get<Settings>('/api/settings') })
-  const { data: me } = useQuery({ queryKey: ['me'], queryFn: () => get<Me>('/api/me'), staleTime: Infinity })
-  // A link into a section (#theme, #previews …) lands on it on an in-app navigation too.
-  useReveal(useAnchor(), { ready: data !== undefined && me !== undefined })
-  const save = useMutation({
-    mutationFn: (p: Partial<Settings>) => patch<Settings>('/api/settings', p),
-    onSuccess: (s) => {
-      qc.setQueryData(['settings'], s)
-      qc.invalidateQueries({ queryKey: ['agent-setup'] })
-      toast.success('Saved')
-    },
-    onError: (err) => toast.error(errorMessage(err)),
-  })
-  if (!data) return null
+/**
+ * The one Settings page: the board's own settings, and (when there is a current project: the one in
+ * the address, else the one this browser was last in) that project's, each in a tab. The tab is in the
+ * address, and so is the project of the project tab.
+ */
+function Settings() {
+  const search = Route.useSearch()
+  const navigate = useNavigate()
+  const router = useRouter()
+  const hash = useLocation({ select: (l) => l.hash })
+  const { data: projects, isPending, isError } = useProjects()
+  // The remembered project is the browser's: read after mount, so the first render matches the server's.
+  const hydrated = useHydrated()
+  // A list that failed to load says nothing about which projects there are: the address is left as it is
+  // (not corrected as if the project were gone), and the Board tab shows until a retry brings the list.
+  const failed = isError && projects === undefined
+  const ready = hydrated && !isPending && !failed
+  const list = projects ?? []
+  const resolved = ready
+    ? resolveSettings(
+        search,
+        hash,
+        Number(currentProjectId(list.map((p) => p.id))) || undefined,
+        list.map((p) => p.id),
+      )
+    : null
+  const project = list.find((p) => p.id === resolved?.project)
+  // Until the projects are known the board's tab shows, unless the address asks for the project's. The
+  // first render goes by the search alone (the server never sees the #hash); the hash counts after mount.
+  const tab: SettingsTab | null = resolved
+    ? resolved.tab
+    : !failed && (search.tab === 'project' || (hydrated && tabOwning(hash) === 'project'))
+      ? null
+      : 'board'
+  const correct = resolved?.correct
+  const dropHash = resolved?.dropHash === true
+  // The project the address names is the browser's current one from now on: the Board tab, whose address
+  // names none, keeps offering it.
+  const named = resolved?.project != null && search.project === resolved.project ? resolved.project : null
+  useEffect(() => {
+    if (named !== null) rememberCurrentProject(named)
+  }, [named])
+  // An address that says what is not so (a project that is gone, a section of the other tab) is put right,
+  // keeping its #section (unless that is a section of a project the address names that is gone).
+  useEffect(() => {
+    if (!correct) return
+    return whenArrived(router, () => {
+      void navigate({
+        to: '/settings',
+        search: correct,
+        hash: dropHash ? undefined : hash || undefined,
+        replace: true,
+      })
+    })
+  }, [correct, dropHash, hash, navigate, router])
   return (
     <div className="max-w-3xl space-y-6">
       <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
-      <section id="default-agent" className="scroll-mt-16 space-y-2">
-        <h2 className="text-sm font-medium">Default agent CLI</h2>
-        <p className="text-sm text-muted-foreground">
-          The one{' '}
-          <Link to="/agents" className="underline hover:text-foreground">
-            Connect an agent
-          </Link>{' '}
-          opens on, showing only its commands.
-        </p>
-        <AgentPicker value={data.defaultAgent} onChange={(defaultAgent) => save.mutate({ defaultAgent })} />
-      </section>
-      <Theme />
-      <section id="previews" className="scroll-mt-16 space-y-2">
-        <h2 className="text-sm font-medium">Previews</h2>
-        <p className="text-sm text-muted-foreground">
-          How many previews the board builds and runs at once, in every project (1 to 32). Each is a whole
-          board with its own copy of the data; a start beyond the limit is refused. A project's Previews page
-          shows how many are in use.
-        </p>
-        <PreviewLimitEditor key={data.previewLimit} id="settings-preview-limit" limit={data.previewLimit} />
-      </section>
-      {/* The app's updates are the human's: an agent never sees them here, and their routes refuse one. */}
-      {me && !me.agent && <Updates />}
-      {/* The agents' roles are the human's call: an agent never sees them here. */}
-      {me && !me.agent && (
-        <div id="agent-roles" className="scroll-mt-16">
-          <AgentIdentities />
-        </div>
-      )}
-      {/* The tailnet entrance is the human's; with sign-in off it shows why it cannot be saved there. */}
-      {me && !me.agent && (
-        <div id="tailnet" className="scroll-mt-16">
-          <TailnetEntrance />
-        </div>
-      )}
-      {/* With sign-in off (test mode, AUTH=off) there are no passkeys to show. */}
-      {me && !me.authOff && !me.agent && (
-        <div id="devices" className="scroll-mt-16">
-          <Devices />
-        </div>
-      )}
-    </div>
-  )
-}
-
-/**
- * The board's colour scheme: the system's unless this browser picked light or dark. It follows the
- * system's changes while the system's is picked (src/lib/theme.ts).
- */
-function Theme() {
-  const [theme, pick] = useState<Theme>('system')
-  useEffect(() => {
-    const saved = readTheme()
-    pick(saved)
-    setTheme(saved)
-  }, [])
-  return (
-    <section id="theme" className="scroll-mt-16 space-y-2">
-      <h2 className="text-sm font-medium">Theme</h2>
-      <p className="text-sm text-muted-foreground">
-        Follows your system by default. The choice is kept in this browser, not on the board.
-      </p>
       <Tabs
-        value={theme}
+        value={tab ?? 'board'}
         onValueChange={(value) => {
-          const next = THEMES.find((t) => t === value) ?? 'system'
-          pick(next)
-          setTheme(next)
+          if (value === 'project' && project)
+            void navigate({ to: '/settings', search: projectTabSearch(project.id) })
+          else if (value === 'board') void navigate({ to: '/settings', search: {} })
         }}
       >
-        <TabsList aria-label="Theme">
-          {THEMES.map((value) => (
-            <TabsTrigger key={value} value={value}>
-              {THEME_LABEL[value]}
+        <TabsList aria-label="Settings" activateOnFocus className="max-w-full">
+          <TabsTrigger value="board">Board</TabsTrigger>
+          {project && (
+            <TabsTrigger value="project" aria-label={`This project: ${project.name}`}>
+              This project:
+              <span className="max-w-40 truncate sm:max-w-64">{project.name}</span>
             </TabsTrigger>
-          ))}
+          )}
         </TabsList>
+        {tab === 'board' && (
+          <TabsContent value="board">
+            <BoardSettings />
+          </TabsContent>
+        )}
+        {tab === 'project' && project && (
+          <TabsContent value="project">
+            <ProjectSettings id={String(project.id)} />
+          </TabsContent>
+        )}
       </Tabs>
-    </section>
+    </div>
   )
 }

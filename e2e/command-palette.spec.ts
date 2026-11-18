@@ -56,7 +56,7 @@ test('pages, settings and actions are searchable, recents come back when the box
   const stages = page.getByRole('option').filter({ hasText: 'Stages' }).first()
   await expect(stages).toBeVisible()
   await page.keyboard.press('Enter')
-  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/settings#stages$`))
+  await expect(page).toHaveURL(new RegExp(`/settings\\?tab=project&project=${project.id}#stages$`))
   await expect(page.locator('#stages')).toBeInViewport()
 
   // Opened again with nothing typed, the last pick is first.

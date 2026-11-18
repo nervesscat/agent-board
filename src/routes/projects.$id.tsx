@@ -10,13 +10,14 @@ import { Tip } from '#/components/ui/tooltip'
 import { visibleNavPages } from '#/lib/kinds'
 import { type AreaId, defaultLayout, layoutElement, shownIn } from '#/lib/layout'
 import { rememberCurrentProject, useProject } from '#/lib/project'
+import { projectTabSearch } from '#/lib/settingsTabs'
 import { SIDEBAR_TOGGLE_LABEL, nextSidebarMode, useSidebarMode } from '#/lib/sidebar'
 import { useHydrated } from '#/lib/useHydrated'
 
 export const Route = createFileRoute('/projects/$id')({ component: ProjectLayout })
 
 /**
- * Where each page of the project's menu goes. Which pages show, in what order, with what label and
+ * Where each page of the project's menu goes (Settings is the Settings page, on this project's tab). Which pages show, in what order, with what label and
  * icon is the project's layout (`#/lib/layout`); a hidden page still opens by its URL.
  */
 const MODULES = {
@@ -32,7 +33,7 @@ const MODULES = {
   'nav.cleanup': '/projects/$id/cleanup',
   'nav.repositories': '/projects/$id/repositories',
   'nav.instructions': '/projects/$id/instructions',
-  'nav.settings': '/projects/$id/settings',
+  'nav.settings': '/settings',
 } as const satisfies Record<AreaId<'nav'>, string>
 
 /** The toggle's icon: the sidebar as it is now, and what the next press shows. */
@@ -275,7 +276,12 @@ function ProjectLayout() {
             <div className="mb-2 px-2 md:hidden">
               <Select
                 value={current}
-                onValueChange={(v) => v && navigate({ to: MODULES[v as AreaId<'nav'>], params: { id } })}
+                onValueChange={(v) =>
+                  v === 'nav.settings'
+                    ? navigate({ to: '/settings', search: projectTabSearch(id) })
+                    : v &&
+                      navigate({ to: MODULES[v as Exclude<AreaId<'nav'>, 'nav.settings'>], params: { id } })
+                }
                 items={pageItems}
               >
                 <SelectTrigger className="w-full" aria-label="Project page">
@@ -297,8 +303,9 @@ function ProjectLayout() {
               const label = layoutElement(page).label
               const link = (
                 <Link
-                  to={MODULES[page]}
-                  params={{ id }}
+                  {...(page === 'nav.settings'
+                    ? { to: '/settings', search: projectTabSearch(id) }
+                    : { to: MODULES[page], params: { id } })}
                   // The Overview's URL starts every other page's.
                   activeOptions={{ exact: page === 'nav.overview' }}
                   // The ring is inset: the aside is the scroll container (its overflow-x becomes auto with

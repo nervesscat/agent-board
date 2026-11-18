@@ -981,14 +981,14 @@ casing). Agents tag each ticket with the module it touches, a short name (`Auth`
 reusing an existing tag's casing rather than a new spelling: `get_project` (and GET
 `/api/projects/:id`) returns the project's `tagSuggestions` and `usedTags` (the tags its tickets
 carry, most used first, in the casing to reuse). The suggestions are offered as chips under every
-ticket's tags field; the human edits them on the project's Settings page, and an agent with the MCP
+ticket's tags field; the human edits them on the Settings page's project tab, and an agent with the MCP
 tool `set_tag_suggestions` (`projectId`, `tags`) or PATCH `/api/projects/:id` `{tagSuggestions}`.
 The Board's tag filter lists both a page at a time, with a search over all of them, from GET
 `/api/projects/:id/tags`, each tag written in its chip's colour.
 
 ## Layout
 
-The Layout section of a project's Settings page arranges what the project shows: the pages of its
+The Layout section of the Settings page's project tab arranges what the project shows: the pages of its
 menu, the cards of its Overview (and of its block on Home) and the sections of a ticket's page, in
 its main or its side column. Each is a tile on a small picture of those pages: its switch hides it,
 dragging it or its arrows move it, and Save applies it to everyone; Reset to default goes back to the
