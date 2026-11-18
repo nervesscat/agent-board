@@ -209,7 +209,8 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
 check found>` added. It resumes from the ticket's summary and posts, not from scratch. It goes
 back in the queue and starts like any other ticket, only after the previous run of that ticket has
 returned (`ticket:<id>`). Each ticket is sent back or re-queued at most once; after that its result
-is recorded as it is.
+is recorded as it is. A relaunch after the human's answer, or after a comment that moved the ticket back
+to In progress, is not a send-back and does not count toward that limit.
 
 Record the row: ticket, title, repo, status, verdict, rounds, depth, PR, preview, blocker, notes.
 

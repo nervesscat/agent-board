@@ -381,6 +381,22 @@ describe('the general rules in the served skill texts', () => {
       'The tag is for one step that needs a human action that is not a question; a question to the human blocks the whole ticket right after it is posted (update_ticket to blocked, or an ask_decision card), and the work ends.',
     )
     expect(mcp).not.toContain('or ask_decision only when nothing else can go on')
+    const kind = flat(fs.readFileSync(path.join(import.meta.dirname, 'kindText.ts'), 'utf8'))
+    const kindAt = kind.indexOf('Reword a task or a subtask, tick / untick it')
+    expect(kindAt).toBeGreaterThanOrEqual(0)
+    const kindTool = kind.slice(kindAt, kind.indexOf("',", kindAt))
+    expect(kindTool.length).toBeGreaterThan(0)
+    expect(kindTool).toContain('or tag it blocked on the human and clear that')
+    expect(kindTool).toContain(
+      'The tag is for one step that needs a human action that is not a question; a question to the human blocks the whole ticket right after it is posted (update_ticket to blocked, or an ask_decision card), and the work ends.',
+    )
+    expect(kind).not.toContain('or ask_decision only when nothing else can go on')
+  })
+
+  it('does not count a relaunch after the human answers as a send-back', () => {
+    expect(todoReview()).toContain(
+      "A relaunch after the human's answer, or after a comment that moved the ticket back to In progress, is not a send-back and does not count toward that limit.",
+    )
   })
 
   it('cleans up per ticket and per review round, by process id, in every text', () => {
