@@ -104,6 +104,10 @@ you start an agent on it: look at what the branch does now, write the concrete r
 three bullets, and ask the human ONE question to confirm it. Only then delegate: the confirmed
 reading and the human's own words both go into the agent's brief.
 
+This comes before a relaunch: a short UI comment that also moved the ticket back to In progress
+does not relaunch the agent until the human has confirmed the reading ([Answers restart the
+work](#answers-restart-the-work)).
+
 ## Quiet about delegated work
 
 Most of what the agents do is not news. With several running, the human does not want a report from
@@ -134,6 +138,10 @@ the close below keeps its own cleanup.
 When the human answers a decision card, or comments on a ticket and moves it back to In progress,
 relaunch that ticket's agent at once, briefed with the answer or the comment. The agent replies under
 the post: its plan first, then the result. A comment with no stage move does not relaunch by itself.
+
+A short UI comment is the exception: the human confirms the reading first ([Short UI comments:
+confirm first](#short-ui-comments-confirm-first)); once they have, relaunch at once, briefed with the
+confirmed reading and their own words.
 
 Before you call anything blocked or move a ticket, check for answered cards and new human comments,
 and never move a ticket the human just moved.
@@ -218,7 +226,8 @@ the ticket's summary and its last posts first.
 In both cases the human agrees first: propose, and never restart without the human's yes. A ticket is
 sometimes left to stall because the human no longer wants it finished. An answer or a comment that
 moved the ticket back to In progress is already the human's yes ([Answers restart the
-work](#answers-restart-the-work)).
+work](#answers-restart-the-work)), except that a short UI comment still needs its reading confirmed
+first.
 
 ## Closing the session
 

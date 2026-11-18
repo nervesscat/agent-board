@@ -353,9 +353,34 @@ describe('the general rules in the served skill texts', () => {
       "the confirmed reading and the human's own words both go into the agent's brief",
     ])
       expect(skill).toContain(text)
-    expect(skill.indexOf('Short UI comments: confirm first')).toBeLessThan(
-      skill.indexOf('Quiet about delegated work'),
+    const confirm = skill.indexOf('Short UI comments: confirm first')
+    const quiet = skill.indexOf('Quiet about delegated work')
+    expect(confirm).toBeGreaterThanOrEqual(0)
+    expect(quiet).toBeGreaterThanOrEqual(0)
+    expect(confirm).toBeLessThan(quiet)
+  })
+
+  it('has the confirmation of a short UI comment come before a relaunch', () => {
+    const skill = session()
+    expect(skill).toContain(
+      'a short UI comment that also moved the ticket back to In progress does not relaunch the agent until the human has confirmed the reading',
     )
+    expect(skill).toContain('A short UI comment is the exception: the human confirms the reading first')
+    expect(skill).toContain('relaunch at once, briefed with the confirmed reading and their own words')
+    expect(skill).toContain('except that a short UI comment still needs its reading confirmed first')
+  })
+
+  it('keeps the update_task description from limiting a question to "nothing else can go on"', () => {
+    const mcp = flat(fs.readFileSync(path.join(import.meta.dirname, 'mcp.ts'), 'utf8'))
+    const at = mcp.indexOf('Reword a task or a subtask, tick / untick it')
+    expect(at).toBeGreaterThanOrEqual(0)
+    const tool = mcp.slice(at, mcp.indexOf('${BLOCKED}', at))
+    expect(tool.length).toBeGreaterThan(0)
+    expect(tool).toContain('or tag it blocked on the human and clear that')
+    expect(tool).toContain(
+      'The tag is for one step that needs a human action that is not a question; a question to the human blocks the whole ticket right after it is posted (update_ticket to blocked, or an ask_decision card), and the work ends.',
+    )
+    expect(mcp).not.toContain('or ask_decision only when nothing else can go on')
   })
 
   it('cleans up per ticket and per review round, by process id, in every text', () => {
@@ -440,6 +465,13 @@ describe('the general rules in the served skill texts', () => {
       board: agents.renderSkill('claude'),
       ticketAgent: review('agents/todo-review-ticket.md'),
       todoReview: review('skills/todo-review/SKILL.md'),
+      featureReview: review('skills/feature-review/SKILL.md'),
+      mcpInstructions: (() => {
+        const mcp = fs.readFileSync(path.join(import.meta.dirname, 'mcp.ts'), 'utf8')
+        const slice = mcp.slice(mcp.indexOf('const INSTRUCTIONS'), mcp.indexOf('const STATUS'))
+        expect(slice).toContain('The rhythm:')
+        return slice
+      })(),
     }
     for (const [name, text] of Object.entries(texts))
       for (const word of denied) expect(text, `${name}: ${word}`).not.toMatch(word)
