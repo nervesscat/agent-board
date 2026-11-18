@@ -125,8 +125,9 @@ A failure the human's next step depends on is news; a finding a round already fi
 you act on it: one line to the human if it changes something for them, a relaunch if it failed. The
 mechanism comes from the project's instructions when they give one; otherwise it is the client's own
 agent-finished notification. After each agent ends, check that nothing it started is still running
-(servers, test boards, dev servers, watchers, locks, by process id) and stop what is: the close
-below keeps its own cleanup.
+(servers, test boards, dev servers, watchers, locks, by process id) and stop what is, except the
+ticket's preview, which stays up while it is in review and is stopped once it is merged or dropped:
+the close below keeps its own cleanup.
 
 ## Answers restart the work
 
@@ -231,7 +232,7 @@ For every finished ticket (its PR merged, or cancelled), nothing may be left beh
 `cleanup_report`, then:
 
 - the same check runs after each agent ends, not only here: what it started is stopped by process id
-  as soon as it is done;
+  as soon as it is done (the ticket's preview stays up while it is in review);
 - stop what you may: `stop_run` and `stop_preview` for the board's runs, and any process, watcher,
   test board or test lock that you or your agents started;
 - delete the landed local branches of closed tickets with `cleanup_delete`, as the report gives them;

@@ -445,8 +445,9 @@ plan first, then the result with its proofs.
    same way. The AskUserQuestion step applies only in an interactive session. An unattended run (the
    runner, a todo-review run, or any run with no human to ask) never asks in the chat and never
    relays a decision: it leaves the card open for the human. A phase never answers a decision
-   (`answer_decision`), not even one you run inline. Continue with the assumption until the human
-   answers, and say so in the report.
+   (`answer_decision`), not even one you run inline. Finish the read-only phases with the
+   assumption, marked unconfirmed in the report; the card stays open, and the caller (a ticket
+   agent) blocks its ticket and ends its work on it rather than building on that guess.
 4. **The result** goes to the board. For a PR: `post_review_result` (the verdict, `summary.md` as
    `summaryMd`, the commit SHA, the three checks and the counts, `repoId` when the project has
    several repos), which also posts the summary on the PR's ticket. For a branch with no PR yet: a `post_update` on the ticket with the verdict line

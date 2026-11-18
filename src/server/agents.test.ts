@@ -360,7 +360,9 @@ describe('the general rules in the served skill texts', () => {
 
   it('cleans up per ticket and per review round, by process id, in every text', () => {
     expect(board()).toContain('Clean up what you started per ticket, not only at the close')
-    expect(board()).toContain('after each review round and at the hand-off')
+    expect(board().split('after each review round and at the hand-off').length - 1).toBeGreaterThanOrEqual(2)
+    expect(board()).toContain('by its process id, after each review round and at the hand-off (except')
+    expect(board()).toContain('by their process id after each review round and at the hand-off (except')
     expect(ticketAgent()).toContain('Clean up what you started, per round and at the hand-off.')
     expect(ticketAgent()).toContain('clean up after each round, not only at the hand-off')
     expect(todoReview()).toContain('Clean up what you started, per ticket.')
@@ -368,6 +370,46 @@ describe('the general rules in the served skill texts', () => {
     expect(session()).toContain('After each agent ends, check that nothing it started is still running')
     expect(session()).toContain('not only here')
     for (const text of [board(), ticketAgent(), todoReview(), session()]) expect(text).toContain('process id')
+  })
+
+  it('keeps the ticket preview up through the per-ticket cleanup', () => {
+    const keep =
+      "except the ticket's preview, which stays up while it is in review and is stopped once it is merged or dropped"
+    expect(board().split(keep).length - 1).toBeGreaterThanOrEqual(2)
+    expect(session()).toContain(keep)
+    expect(session()).toContain("(the ticket's preview stays up while it is in review)")
+    expect(todoReview().split(keep).length - 1).toBeGreaterThanOrEqual(2)
+    expect(ticketAgent()).toContain(keep)
+  })
+
+  it('never builds on an open question, and limits "nothing else can go on" to a human action', () => {
+    expect(ticketAgent()).not.toContain('keep going on it')
+    expect(ticketAgent()).toContain('never building on the assumption past the open card')
+    expect(ticketAgent()).toContain('A question that is not decisive takes the spec')
+    expect(ticketAgent()).toContain(
+      "it finishes its read-only phases with the spec's assumption marked unconfirmed",
+    )
+    expect(flat(review('skills/feature-review/SKILL.md'))).not.toContain(
+      'Continue with the assumption until the human',
+    )
+    expect(flat(review('skills/feature-review/SKILL.md'))).toContain(
+      'the caller (a ticket agent) blocks its ticket and ends its work on it rather than building on that guess',
+    )
+    expect(board()).toContain(
+      'A question to the human always moves the whole ticket to `blocked` right after it is posted',
+    )
+    expect(board()).not.toContain('only when nothing else can go on.')
+    expect(ticketAgent()).toContain(
+      'A question to the human is not that: it blocks the ticket right after it is posted',
+    )
+    expect(ticketAgent()).not.toContain('the ticket only when nothing else can go on.')
+    const mcp = fs.readFileSync(path.join(import.meta.dirname, 'mcp.ts'), 'utf8')
+    const instructions = flat(mcp.slice(mcp.indexOf('const INSTRUCTIONS'), mcp.indexOf('const STATUS')))
+    expect(instructions).toContain(
+      'A question always blocks the ticket right after you post it, and you end your work',
+    )
+    expect(instructions).toContain('a step that needs a human action that is not a question')
+    expect(instructions).not.toContain('That is for when nothing else can go on')
   })
 
   it('has the session skill notice each agent ending, from the project or the client', () => {

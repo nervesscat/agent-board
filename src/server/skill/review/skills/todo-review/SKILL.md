@@ -147,7 +147,7 @@ Loop until nothing is pending or running:
   run; this covers a run that ended any other way, and clears a slot a dead run left behind. You
   are the only one besides the holder who clears a dead run's slot, and only when its
   `holder.txt` names that ticket. Then check that nothing the agent started is still running (servers, test boards,
-  dev servers, watchers, by process id), stop what is, check the result (Step 4) and fill the slot
+  dev servers, watchers, by process id), stop what is (except the ticket's preview, which stays up while it is in review and is stopped once it is merged or dropped), check the result (Step 4) and fill the slot
   again.
 
 ## Step 4: Check each result
@@ -226,7 +226,7 @@ that it was stopped and why: a `comment`, and a `set_ticket_summary` whose state
 reason. The next reader must be able to tell a deliberate stop from a failure.
 
 **Clean up what you started, per ticket.** After each ticket agent ends, check that nothing it started
-is still running and stop what is, by process id. Stop what you or your agents started (the review's
+is still running and stop what is, by process id, except the ticket's preview, which stays up while it is in review and is stopped once it is merged or dropped. Stop what you or your agents started (the review's
 servers, test boards, watchers), remove this run's temporary files and folders, and release the test
 lock when its `holder.txt` names a ticket whose run returned. The review's own scratch worktree may
 go; the tickets' worktrees and their branches on origin are the human's: list them, never delete

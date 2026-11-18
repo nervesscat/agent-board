@@ -170,7 +170,7 @@ and the reason. The next reader must be able to tell a deliberate stop from a cr
 
 **Clean up what you started, per round and at the hand-off.** Stop the processes you and your
 subagents started (servers, dev servers, test boards, watchers) by their process id after each review
-round and at the hand-off, not only when the work ends; remove your temporary files and folders, and release `LOCK` when
+round and at the hand-off (except the ticket's preview, which stays up while it is in review and is stopped once it is merged or dropped), not only when the work ends; remove your temporary files and folders, and release `LOCK` when
 its `holder.txt` names your ticket. This review's own scratch worktree under
 `~/.claude/feature-review/` may go. The ticket's worktrees and its branches on origin are the
 human's: list them, never delete them; `cleanup_delete` covers only closed tickets' landed local
@@ -262,10 +262,11 @@ is no diff yet). Then:
   (`comment` with `replyTo` = its id), never with a new top-level post: a reply with the plan now,
   and a reply with the result and its proofs once it is built (step 7).
 - A **decisive** open question (the answer changes what counts as correct): `ask_decision` with the
-  readings as options and the spec's assumption recommended. If building on the assumption is cheap
-  to undo, keep going on it and say so in the post; otherwise stop: `BLOCKER: decision`. The card
-  is the human's: this agent never answers it (`answer_decision`), and the BLOCKER line names the
-  question.
+  readings as options and the spec's assumption recommended. The card blocks the ticket: move it to
+  `blocked` and end the run (`BLOCKER: decision`), never building on the assumption past the open
+  card. The card is the human's: this agent never answers it (`answer_decision`), and the BLOCKER
+  line names the question. A question that is not decisive takes the spec's assumption, noted in the
+  hand-off.
 
 ### 3. Build
 
@@ -371,7 +372,7 @@ a heavy test run; its typecheck, lint and scoped unit runs and the hunt's and re
 unit and probe tests take none, so hold no slot while you wait for it. With `build=`, its env phase copies the
 gate's artifact at the same head instead of building it again. It reviews the branch's
 commits in a worktree of its own, posts its phases on the ticket, and writes `review.md` and
-`summary.md`. When it would ask a question, go on with the spec's assumption and note it. `round=<n>` is the review
+`summary.md`. When it would ask a question, it finishes its read-only phases with the spec's assumption marked unconfirmed; once the card is open you block the ticket and end the run (step 2), never building on that guess. `round=<n>` is the review
 round this run is (1 for the first, then counting on, continuing after an intent return, step 6b): its
 phase agents put it on their spans and run reports, and the board counts a phase only when it is there.
 When it returns, however it ended, release any slot folder under `SLOTS` whose `holder.txt` names this
@@ -613,8 +614,9 @@ obstacle you hit, try what applies, and keep a list of what you tried:
 
 One step only the human can do, while the rest can go on (a credential, a manual action, a call
 only they make): tag that task blocked (`update_task` with `blocked: true` and `blockedReason`: what
-they must do) and keep going. It shows in the human's Needs you; ticking the task clears it. Block
-the ticket only when nothing else can go on.
+they must do) and keep going. It shows in the human's Needs you; ticking the task clears it. A
+question to the human is not that: it blocks the ticket right after it is posted (see below); the
+"only when nothing else can go on" limit is for a step that needs a human action, not a question.
 
 When you do block, and whenever you post anything that asks the human a question: move the ticket to
 `blocked` right after posting (an `ask_decision` card does it for you; a plain asking post needs

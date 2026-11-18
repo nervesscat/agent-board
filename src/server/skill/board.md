@@ -179,7 +179,8 @@ Lanes of a ticket you are working are yours to create (next section).
   in the summary), so the next reader can tell a stop from a failure. Clean up
   what you started per ticket, not only at the close: every server, test board, dev server, watcher
   or lock you or your subagents start is stopped by you, by its process id, after each review round
-  and at the hand-off, together with temporary files and any scratch worktree of your own. A
+  and at the hand-off (except the ticket's preview, which stays up while it is in review and is
+  stopped once it is merged or dropped), together with temporary files and any scratch worktree of your own. A
   ticket's worktrees and origin branches are the human's: list them and never delete them.
 - A step that needs the human (a credential, a manual action, a call only they can make): tag
   that task or subtask blocked, `update_task` with `blocked: true` and `blockedReason` saying what
@@ -193,8 +194,10 @@ Lanes of a ticket you are working are yours to create (next section).
   lined-up, done or cancelled ticket, nor one under such a ticket, asks nothing. It still counts as open and does not move the
   ticket. A blocked step further
   down the order surfaces once the steps before it are done.
-  Ticking the task done clears the tag; `blocked: false` clears it once resolved. Move the whole
-  ticket to `blocked` (or `ask_decision`) only when nothing else can go on.
+  Ticking the task done clears the tag; `blocked: false` clears it once resolved. A question
+  to the human always moves the whole ticket to `blocked` right after it is posted (an `ask_decision`
+  card or an asking post), and you end your work; "only when nothing else can go on" is for a step
+  that needs a human action that is not a question, which is tagged blocked on the task while work goes on.
 - Parallel work goes in lanes. When parts of the ticket run at once (subagents, worktrees, another
   agent), `create_ticket` for each part with `parentId` = the ticket, a short title, the part's
   brief as `body` ([Delegating](#delegating)), its own `branch`, `assignee` and `tasks`. Its repo
@@ -563,7 +566,8 @@ worked:
 
 - What you started goes too, per ticket and not only at the close: stop the processes you or your
   agents started (previews, dev servers, test boards, watchers) by their process id after each review
-  round and at the hand-off, remove your temporary files and folders, and release any test lock you
+  round and at the hand-off (except the ticket's preview, which stays up while it is in review and
+  is stopped once it is merged or dropped), remove your temporary files and folders, and release any test lock you
   hold. The review's own scratch worktree under `~/.claude/feature-review/` may go; the ticket's
   worktrees and origin branches stay the human's, listed below.
 
