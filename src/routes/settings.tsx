@@ -85,9 +85,7 @@ function Settings() {
           {project && (
             <TabsTrigger value="project" aria-label={`This project: ${project.name}`}>
               This project:
-              <span className="max-w-40 truncate sm:max-w-64">
-                {project.name}
-              </span>
+              <span className="max-w-40 truncate sm:max-w-64">{project.name}</span>
             </TabsTrigger>
           )}
         </TabsList>
