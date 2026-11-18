@@ -12,7 +12,7 @@ import { type OpenTask, openTasks } from './openTasks'
 import { HttpError } from './http'
 import { getProject } from './projects'
 import { listRepos } from './repos'
-import { missingReports, ticketReports } from './runReports'
+import { missingReports, missingReviewPhases, ticketReports } from './runReports'
 import {
   deleteStage,
   firstOfKind,
@@ -250,6 +250,7 @@ export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {
     // The reports of each subagent run, newest first; in review, the runs the timeline records with none.
     runReports: ticketReports(full.id),
     missingRunReports: inReview && !full.prId ? missingReports(full.id) : [],
+    missingReviewPhases: inReview && !full.prId ? missingReviewPhases(full.id) : [],
     stalled: timeline.stalled,
     lastSignalAt: timeline.lastSignalAt,
     liveness: timeline.liveness,
@@ -501,9 +502,14 @@ export async function changeTicket(
   // subagent runs the timeline records with no run report are flagged here, never refused.
   if (patch.status && !row.prId && kindOf(listStages(row.projectId), row.status) === 'review') {
     await features.getTicketWithPush(id)
-    return { ...row, open: openTasks(id), missingRunReports: missingReports(id) }
+    return {
+      ...row,
+      open: openTasks(id),
+      missingRunReports: missingReports(id),
+      missingReviewPhases: missingReviewPhases(id),
+    }
   }
-  return { ...row, missingRunReports: [] }
+  return { ...row, missingRunReports: [], missingReviewPhases: [] }
 }
 
 /**

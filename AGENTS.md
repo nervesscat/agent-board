@@ -173,7 +173,7 @@ short message shape with the numbered list of what needs the human. Its line is
    earlier results); **Done when**; **Return** (the exact shape of the answer). It also carries the
    ticket's context, not just its title: `get_ticket` first, and include its instructions, the
    human's posts and replies, the decisions and their answers, and the attachments; say the
-   subagent may read the rest itself with `get_ticket` and `list_comments`.
+   subagent may read the rest itself with `get_ticket` and `list_comments`, except the intent agent: it gets only the human's own words and attachments (the instructions, every post and reply by the human, and the human's own answer on a decision card) and the result, never the spec, the plan, the review's findings or the options an agent put on a card, and it may not read the rest of the ticket's posts itself.
 5. **Report as you go** with `post_update`: short markdown, what you did and what is next, and
    attach evidence with `files` (absolute paths to screenshots, recordings, logs on this machine —
    the board copies them). One update per meaningful step, not per keystroke. A ticket's feed of
@@ -366,6 +366,25 @@ short message shape with the numbered list of what needs the human. Its line is
       The summary is the ticket's one state card: the end of a session updates it rather than leaving
       a separate note.
 
+   **The intent check comes first, on every ticket of any complexity (low included).** When you
+   orchestrate the cycle, the last review round (none for low) passes and then the project's **intent**
+   agent compares what the human asked with what was built, before any item above stands (the preview
+   is started first, with its screenshots, and the check reads it at the current head; a commit after a
+   `matches`, such as a CI fix, changes the head, so the check runs again on it): at `low`
+   effort whatever the complexity, again after any human comment that sent the ticket back. It gets only
+   the human's own words and attachments (the instructions, every post and reply by the human and the human's own answer on a decision card, newest
+   last, the latest comment that sent the ticket back weighing most) and the result (the preview link,
+   its screenshots or recordings, the diff at the current head), never the builder's plan, the spec, the review's findings or the options an agent put on a card. It
+   returns one line per ask (`done as asked`, `done differently (how)` or `not done`, with its evidence)
+   and a verdict, `matches` or `does not match`. `matches` hands off; `does not match` goes back to the
+   builder with its lines as the brief, then the gate, then one more full review round (above low; the numbering continues, all six phases run again), then the intent check again. A `does not match` is outside the complexity's round budget; after the second one on a ticket the ticket agent stops and asks the human (`ask_decision`: keep going, ship as is, drop) with the intent check's lines and the human's words on the card. It never asks the human earlier: the human is asked (`ask_decision`, both readings on the card) only
+   when two readings of their words are both plausible and give visibly different results.
+
+   **Above low, the full cycle is mandatory.** For `mid`, `high` and `max` every review round runs spec,
+   env, verify, two independent hunts, refute and the merge check. None is skipped because findings look
+   obvious, the change looks small or a finding was already reproduced; each phase posts its result, so a
+   skipped phase is visible.
+
    `update_ticket` to `review` answers with `open`: every task and subtask still open, the
    ticket's and its lanes' that are not cancelled, in tree order, each `{taskId, ticketId, text,
    auto}`. Merged is left out: merging is the human's, except on a ticket in Approved (below).
@@ -455,10 +474,10 @@ githubRepo, baseBranch?, as?}`, agents only) posts one decision card, "Add repo 
 11. **Run reports**: one report per subagent run, written before the hand-off: it is part of
     finishing, not a step after it, and the orchestrator writes none (nor a ticket agent that only
     drives rounds). The subagents are the project's `spec`, `builder` and `runner`,
-    and the review's `env`, `verify`, `hunt`, `refute` and `merge`; a ticket with three review rounds
+    and the review's `env`, `verify`, `hunt`, `refute`, `merge` and the intent check; a ticket with three review rounds
     has three `hunt` reports, one per round. Each template ships with the review bundle as
     `run-reports/<agent>.md` (`spec`, `builder`, `runner`, `env`, `verify`, `hunt`, `refute`,
-    `merge`), carries the common part (identity, time, brief, what it read and ran, steps against
+    `merge`, `intent`), carries the common part (identity, time, brief, what it read and ran, steps against
     its instructions, ratings, problems, gaps, suggestions) and adds what that agent does; a
     project agent's own template is on the Team page (`get_project` → `agents[].reportTemplate`).
     The run writes it with `write_run_report` (structured fields: times, duration, ratings, steps,
@@ -466,7 +485,13 @@ githubRepo, baseBranch?, as?}`, agents only) posts one decision card, "Add repo 
     `get_run_report`. Both the ticket's Agents side and `list_run_reports` (one kind of agent across
     tickets) show them. `update_ticket` → `review` answers with `missingRunReports` for each
     subagent run the work timeline records with no report: that is a flag, not a refusal — get them
-    written before the hand-off. Put the rule in every subagent's brief.
+    written before the hand-off. It also answers with `missingReviewPhases`: for a mid, high or max ticket,
+    each phase its last review round lacks (`{round, phase, expected, found}`), another flag to clear before
+    the hand-off stands, except a round the build skipped because its head SHA's review had already
+    survived (reused, named in the summary). A phase counts only when its span or run report carries the
+    round (and the last segment of the agent name names the phase agent), so a run with no round is not counted.
+    Moving the ticket out of a review stage, to any other stage, restarts the count (only runs after the move
+    count, from round 1): run a missing phase while the ticket stays in review. Put the rule in every subagent's brief.
 
 ## Notifications: tracked requests and important notices
 
@@ -498,7 +523,7 @@ personas the human sets up on the board's Team page (the project's agents). A ti
 
 - `claim_ticket` with `as: <its name>`, brief a subagent with the agent's instructions plus the
   ticket's context (its instructions, the human's posts and replies, the decisions and their
-  answers, the attachments), and post that work with `post_update` / `comment` using `as: <its name>`. It shows
+  answers, the attachments; except the intent agent: it gets only the human's own words and attachments (the instructions, every post and reply by the human, and the human's own answer on a decision card) and the result, never the spec, the plan, the review's findings or the options an agent put on a card, and it may not read the rest of the ticket's posts itself), and post that work with `post_update` / `comment` using `as: <its name>`. It shows
   under the agent's name, via your token name, in the ticket's Agents tab; what the human must
   read goes in the summary (`set_ticket_summary`, `as` too) or a reply under their post.
 - Never take a reserved ticket as yourself or reassign it; only the human does.
@@ -512,13 +537,13 @@ personas the human sets up on the board's Team page (the project's agents). A ti
 call it, what to give it, what it returns, what comes next. With them you can work a ticket as its
 orchestrator instead of doing the work yourself: each step runs as a subagent briefed with that
 agent's instructions, the project's, the ticket's context (`get_ticket`: its instructions, the
-human's posts and replies, the decisions and their answers, the attachments) and a five-part brief
+human's posts and replies, the decisions and their answers, the attachments; except the intent agent: it gets only the human's own words and attachments (the instructions, every post and reply by the human, and the human's own answer on a decision card) and the result, never the spec, the plan, the review's findings or the options an agent put on a card, and it may not read the rest of the ticket's posts itself) and a five-part brief
 (step 4) holding the ticket's step and
 the hand-off checklist (step 7), and with the `agentName` it passes on every board call
 (`<your whoami name>/<its name>`, Identity and auth above); its result is posted on the ticket as
 that agent; the notes pick the next agent. Before moving the ticket to
 `review`, check every item of that checklist yourself. The Team page adds a default set (spec, builder, runner, and
-the review phases env, verify, hunt, refute, merge): spec → build → a review that tries to break it
+the review phases env, verify, hunt, refute, merge, and the intent check): spec → build → a review that tries to break it, every round running all its phases with two independent hunts
 → (a fix pass by the builder on the confirmed findings, each with the project's checks and a new
 review, for as many review rounds as the ticket's complexity allows: none for low, one for mid, three
 for high, up to ten for max (for work built from scratch, a whole site or app or a new product; a
@@ -527,9 +552,9 @@ its review, so a mid ticket stops after its review, and a review that does not s
 round goes to a human decision; a high ticket gets two fix passes and a max ticket nine; a low ticket
 has no review, and its checks return the build at most twice; after the second return,
 when the checks still fail or a criterion still has no evidence, the human decides (keep going or drop), and
-the build goes to hand-off only with evidence for every criterion) → hand off. The agents' thinking effort follows the complexity too: `low` for a low ticket, `medium` for mid and
+the build goes to hand-off only with evidence for every criterion) → the intent check at `low` effort (every complexity) → hand off. The agents' thinking effort follows the complexity too: `low` for a low ticket, `medium` for mid and
 high, `high` for max; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket
-(the ticket agent, the spec agent, the builder and the review's phase agents). The `/review-queue`
+(the ticket agent, the spec agent, the builder and the review's phase agents; the intent agent always runs at `low`). The `/review-queue`
 skill is that orchestrator and `/feature-review` its review; the same page installs both. Ask with
 `ask_decision` instead of guessing; never two builders on one branch. The board skill has the full
 routine.

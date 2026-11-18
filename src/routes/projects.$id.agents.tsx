@@ -130,8 +130,8 @@ function DefaultAgents({
               <strong>builder</strong> writes the code, <strong>runner</strong> reviews it, and the
               review&apos;s phases (<strong>env</strong>, <strong>verify</strong>, <strong>hunt</strong>,{' '}
               <strong>refute</strong>, <strong>merge</strong>) try to break it; findings go back to the
-              builder. Each comes with its instructions and the notes the orchestrator delegates by. Edit any
-              of them after.
+              builder. <strong>intent</strong> then checks the result against the human&apos;s own words. Each
+              comes with its instructions and the notes the orchestrator delegates by. Edit any of them after.
             </p>
           )}
         </div>

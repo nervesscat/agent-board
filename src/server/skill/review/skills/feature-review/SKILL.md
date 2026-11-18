@@ -79,8 +79,8 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `repo=<path>` | the repository's main checkout | current working directory |
 | a number | a GitHub PR | |
 | a branch name, `diff`, `staged`, or a path | the change to review | see Setup |
-| `deep` | run two independent hunts and report finding stability | off |
-| `light` | for a tiny change: a clean first hunt gets no second hunt (Phase 2); every other phase runs as usual. Ignored when `deep` is given | off |
+| `deep` | the two independent hunts also report each finding's stability (both hunts or one) | off |
+| `light` | a depth name only: it has no effect on the phases, every round runs all of them (two hunts included) | off |
 | `keep` | keep the worktree and servers after the report, for debugging | off |
 | `ports=<from>-<to>` | range to allocate from when a default port is busy | `8100-8199` |
 | `browser=yes\|no` | whether browser automation may be used | `yes` |
@@ -91,6 +91,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `repoId=<id>` | the repo id the test slot folders are named with (`tests-<id>-1` … `-N`, `tests-<id>-full`), passed to every phase; the env phase writes the exact folders into `00-env.md` | none |
 | `post` | post the report as a PR comment when the target is a PR | off |
 | `effort=<low\|medium\|high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`; a board cycle sets it from the ticket's complexity (`low` for low, `medium` for mid and high, `high` for max) | the session's |
+| `round=<n>` | the review round this run is: every phase span (`start_span` / `end_span` with `agent` = the phase's agent name, e.g. `spec`, `env`, `verify`, `hunt-1`, `hunt-2`, `refute`, `merge`, and `round`) and every phase's run report (`write_run_report` with `round`) carry it, because the board counts a phase only when its span or report carries the round | `1` when a board ticket is given and no round is |
 | `ticket=<id>` | the board ticket this change belongs to: turns on **On the board** below | found from the PR's `ticket` in `list_prs` when the board is connected |
 
 ## Setup
@@ -182,7 +183,7 @@ phase reads it: spec, env, verify, hunt, refute and merge), the `SLOTS` director
 was given (its record is the `Test slots:` line in `00-env.md`), the repo id (`repoId`) the slot
 folders are named with, the ticket id (`TICKET`) when
 the review is on a ticket — every phase that takes a test slot writes it in its `holder.txt` —
-the full text of the contract,
+the review round (`ROUND`, from `round=`, 1 when not given), the full text of the contract,
 and the path of
 `00-focus.md` with this rule: start from it; read outside it only to follow a reference from it.
 With `scoped`, it also includes the word `scoped`. Agents treat `WORKTREE` as the repo root.
@@ -240,7 +241,7 @@ Read `00-env.md`. If nothing could be started, continue: the verify agent will r
 runtime criteria as `UNVERIFIED` and the hunt still runs on the code. Do not start
 anything yourself, and do not reuse anything that was already running.
 
-## Phase 2: Verify and hunt (2 agents in parallel; 3 in deep mode)
+## Phase 2: Verify and two hunts (3 agents in parallel)
 
 Spawn in a single message:
 
@@ -248,7 +249,7 @@ Spawn in a single message:
 |---|---|---|
 | `feature-review-verify` | `_frv_` | `02-verification.md` |
 | `feature-review-hunt` | `_frh_` | `03-candidates.md`, `03-hunt-notes.md` |
-| `feature-review-hunt` (deep mode only, second instance) | `_frh2_` | `03-candidates-b.md`, `03-hunt-notes-b.md` |
+| `feature-review-hunt` (second, independent instance) | `_frh2_` | `03-candidates-b.md`, `03-hunt-notes-b.md` |
 
 Each prompt includes paths to `01-spec.md`, `00-env.md`, `00-diff.patch`, `00-context.md`,
 `00-focus.md`, `checklists.md`, its output paths, the `SLOTS` directory when `slots=` was given,
@@ -272,7 +273,7 @@ end-to-end run, so it takes a slot the same way, released right after it. With `
 in `00-env.md`, verify's end-to-end command reuses the caller's build instead of building again.
 
 Wait for all. Then build the refutation input, `03-all-candidates.md`:
-- every candidate from `03-candidates.md` (and `03-candidates-b.md` in deep mode,
+- every candidate from `03-candidates.md` (and `03-candidates-b.md`,
   de-duplicated by location and claim; keep a private note of which hunt found which,
   the refute agent must not see it);
 - every `FAIL` row from `02-verification.md`, rewritten as a candidate in the same format;
@@ -280,22 +281,18 @@ Wait for all. Then build the refutation input, `03-all-candidates.md`:
 
 Renumber candidates C1..Cn.
 
-**A clean first hunt is not trusted on its own.** If `03-candidates.md` says `None.` and
-deep mode is off (and `light` was not given), spawn a second `feature-review-hunt` (prefix
-`_frh2_`, outputs `03-candidates-b.md` and `03-hunt-notes-b.md`) with the same inputs plus this
-sentence: "A first hunt found no candidates. Start from the guard analysis and the author's tests'
-blind spots, not from the checklists." Merge as in deep mode. A missed blocker costs far
-more than twenty minutes, and the second hunt is the only adversarial pass a clean
-result gets. If both hunts are clean, skip Phase 3 and say in the report that two
-independent hunts ran.
-
-**Light mode** (`light` without `deep`) is for a change too small to need that second pass: the
-second hunt is not spawned. Nothing else is dropped: the spec, the env, verify of every
-acceptance criterion, refute of every hunt candidate and every verify `FAIL`, and the merge check
-all run. Skip Phase 3 only when `03-all-candidates.md` has no candidate at all. The report never
-says that two hunts ran: it says one hunt ran, in light mode (Phase 4).
+**Two independent hunts always run.** Every review spawns both hunts, in parallel with verify and
+never sharing notes, whatever the depth: a clean hunt is no reason to run one hunt, and `light` does
+not drop the second. A missed blocker costs far more than twenty minutes. Merge their candidates as
+above. For a change on a ticket above low (`mid`, `high`, `max`), every review round runs spec, env, verify,
+two independent hunts, refute and the merge check. None is skipped because the findings look
+obvious, the change looks small or a finding was already reproduced, and each phase posts its
+result, so a skipped phase is visible.
 
 ## Phase 3: Refute (1 agent)
+
+Refute always runs, also when `03-all-candidates.md` has no candidate at all: it then verifies that
+nothing is left to refute and records that.
 
 Spawn `feature-review-refute` with temp-file prefix `_frr_` and paths to `01-spec.md`,
 `00-env.md`, `00-diff.patch`, `00-context.md`, `00-focus.md`, `02-verification.md`,
@@ -342,10 +339,10 @@ without spawning the agent.
      path, environment summary from `00-env.md` (reused or fresh dependencies, the caller's
      build reused at this head with `E2E_SKIP_BUILD=1` or a build here, services
      up, services unavailable).
-   - In light mode the Freshness block's `Hunts` line says `one (light mode: no second hunt)`.
+   - The Freshness block's `Hunts` line says `two`.
    - Findings are the candidates with verdict `CONFIRMED` or `PLAUSIBLE` in
      `04-verdicts.md`, using the refute agent's final severity. In deep mode add
-     `Stability: both hunts` or `one hunt` to each.
+     `Stability: both hunts` or `one hunt` to each (the finding's hunts, both of which ran).
    - Verdict line: `DO NOT SHIP` if any confirmed blocker. `SHIP AFTER FIXES` if any
      confirmed bug or any plausible blocker. `COULD NOT VERIFY` if there are no findings
      and more than half the criteria are `UNVERIFIED`. Otherwise `SHIP`.
@@ -363,8 +360,7 @@ without spawning the agent.
    plain. *What it does* comes from the spec's Intent. *How to test it* comes from the
    runbook and the commands the verify agent actually ran. *Findings* lists only
    confirmed and plausible findings, one bullet each, with why it matters. *Evidence*
-   references the screenshots in `WORKDIR/shots/` if any. In light mode *Findings* ends with
-   "One hunt ran (light mode)." The three checks are decided by these rules, each with a
+   references the screenshots in `WORKDIR/shots/` if any. The three checks are decided by these rules, each with a
    one-line reason, conservative when something was not verified:
    | Check | YES when | otherwise NO, reason says |
    |---|---|---|
@@ -420,7 +416,7 @@ and the review answers them, it replies under their post, never with a new top-l
 plan first, then the result with its proofs.
 
 1. **The project's agents brief the phases.** `get_project` → `agents`. For each phase, when the
-   project has an agent with that name (`spec`, `env`, `verify`, `hunt`, `refute`, `merge`)
+   project has an agent with that name (`spec`, `env`, `verify`, `hunt`, `refute`, `merge`, `intent`)
    and instructions, spawn a general-purpose subagent whose prompt is that agent's `instructions`
    followed by everything this skill gives the phase (paths, the contract, its inputs). The human
    edits those on the board, so they win over the `feature-review-*` agent files; a phase with no
@@ -433,7 +429,11 @@ plan first, then the result with its proofs.
    to Main (no summary, no new top-level post for the human), and the ticket's summary is the
    job of whoever hands the ticket off. Every phase agent also fills in its run report with
    `write_run_report` before it hands back: one report per run, from its own template,
-   `run-reports/<agent>.md` in this skill's bundle. Put that in its brief.
+   `run-reports/<agent>.md` in this skill's bundle. Put that in its brief. Each phase agent's span
+   (`start_span`, with the phase's agent name and `round`) and its report carry `ROUND`: the board
+   counts a phase only when its span or report carries the round and the last segment of its agent
+   name names the phase. When a phase agent cannot reach the board tools, the orchestrator of the
+   review records the span with the phase agent's name and the round.
 3. **Decisive open questions** from the spec go to the human with `ask_decision` on the ticket (the
    interpretations as options, the spec's assumption marked recommended). If Phase 1 already asked
    the human this question in the chat, step 3 never asks it again, whatever the human did. If they
@@ -452,6 +452,26 @@ plan first, then the result with its proofs.
    several repos), which also posts the summary on the PR's ticket. For a branch with no PR yet: a `post_update` on the ticket with the verdict line
    and `summary.md` (it goes to Agents; the verdict's one line goes in the ticket's summary when
    the ticket is handed off). Never post it to GitHub unless `post` was given.
+
+5. **The intent check** is the phase after the last review round and before the ticket is handed
+   off; the review itself never runs it, the orchestrator that hands the ticket off does (the
+   todo-review skill's ticket agent). It runs on every ticket, of any complexity (low included, which
+   has no review rounds), and again after any human comment that sent the ticket back. It runs the
+   project's `intent` agent (or `feature-review-intent`) at `low` effort, whatever the complexity,
+   and gives it only the human's own words and attachments (the ticket's instructions, every post
+   and reply by the human, newest last, and the human's own answer on a decision card, the latest comment that sent the ticket back weighing most)
+   and the result (the preview, the screenshots or recordings, the diff). It never gets the
+   builder's plan, the spec, the review's findings or the options an agent put on a card, so it cannot inherit their reading. It returns
+   one line per thing the human asked (`done as asked`, `done differently (how)` or `not done`, with
+   the evidence) and a verdict, `matches` or `does not match`. `matches` hands off. `does not match`
+   goes back to the builder with the intent check's lines as the brief, then the gate, then ONE more
+   full review round above low (numbering continues from the last round, all six phases, two hunts; a
+   low ticket has no review, only the gate), then the intent check again. A `does not match` is
+   outside the complexity's round budget. After the SECOND `does not match` on one ticket, the ticket
+   agent asks the human with `ask_decision` (keep going, ship as is, drop), with the intent check's
+   lines and the human's words on the card. Earlier than that the human is asked only when two
+   readings of their words are both plausible and give visibly different results, with both readings
+   on the card (`ask_decision`).
 
 ## Delegation
 

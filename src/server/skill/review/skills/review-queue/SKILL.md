@@ -180,7 +180,7 @@ with its origin, folder and path), the board is the queue, and the project's age
 **Read the team first.** `get_project` → `agents`: each has `instructions` (its brief) and
 `delegation` (when to call it, what to give it, what it returns, what comes next). The delegation
 notes are your routing table. An agent without them is never delegated to. The default set is
-`spec`, `builder`, `env`, `verify`, `hunt`, `refute`, `merge` and `runner`; the human may
+`spec`, `builder`, `env`, `verify`, `hunt`, `refute`, `merge`, `intent` and `runner`; the human may
 have renamed, rewritten or added some, so route by the notes, not by these names.
 
 **Reviews.** Step 1's inventory comes from `list_prs` (status `pending`, not `on_hold`), not
@@ -195,13 +195,13 @@ summary if not.
 
 **Building** (`build` only). After the reviews and their report, run the `todo-review` skill through
 the Skill tool for the same project, passing `parallel` and `model` through. It works the To do
-tickets through the build cycle (spec → builder → `/feature-review` until the change survives →
-hand-off), one `todo-review-ticket` agent per ticket, with its own scheduling and report. The cycle
+tickets through the build cycle (spec → builder → `/feature-review` until the change survives → the
+intent check → hand-off), one `todo-review-ticket` agent per ticket, with its own scheduling and report. The cycle
 follows each ticket's complexity: a low ticket has no spec agent and no review, so it leaves no review
 record; a mid ticket gets one review round, a high ticket up to three, a max ticket up to ten (for work
 built from scratch, a whole site or app or a new product; a feature in an existing codebase is at most
 high). Every agent it starts for a ticket runs at the effort the complexity sets (the Agent tool's
-`effort`): `low` for low, `medium` for mid and high, `high` for max. Do not
+`effort`): `low` for low, `medium` for mid and high, `high` for max, except the intent agent, which runs at `low` effort whatever the complexity. Do not
 work tickets yourself.
 
 ## Notes

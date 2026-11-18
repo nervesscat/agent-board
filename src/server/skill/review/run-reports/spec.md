@@ -7,7 +7,7 @@ This template is `run-reports/spec.md`: fill it in, with `write_run_report`, bef
 ## The rule
 
 Every run of a default agent — `spec`, `builder`, `runner`, `env`, `verify`, `hunt`, `refute`,
-`merge` — and of a project's own agent ends with one run report: one report per subagent run, written before it hands back. The
+`merge` and `intent` — and of a project's own agent ends with one run report: one report per subagent run, written before it hands back. The
 report is part of finishing: a run that hands back without one has not finished. The orchestrator
 writes none (nor does a ticket agent that only drives rounds); a ticket with three review rounds has
 three reports of an agent, one per round.

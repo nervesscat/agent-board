@@ -17,6 +17,7 @@ export const RUN_REPORT_AGENTS = [
   'hunt',
   'refute',
   'merge',
+  'intent',
 ] as const
 export type RunReportAgent = (typeof RUN_REPORT_AGENTS)[number]
 
@@ -59,6 +60,7 @@ export const AGENT_SECTIONS: Record<RunReportAgent, readonly string[]> = {
   hunt: ['techniques', 'surfaces', 'candidates'],
   refute: ['disproof', 'unsettled'],
   merge: ['conflicts'],
+  intent: ['asked', 'compared'],
 }
 
 const COMMON_LABELS: Record<string, string> = {
@@ -86,6 +88,8 @@ const COMMON_LABELS: Record<string, string> = {
   candidates: 'How candidates were produced, and what was dropped',
   disproof: 'How it tried to disprove each finding',
   unsettled: 'Findings it could not settle, and why',
+  asked: 'What the human asked, in their words',
+  compared: 'How each ask was compared with the result',
   conflicts: 'The merge, its conflicts, and how they were read',
 }
 

@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { count, eq } from 'drizzle-orm'
+import { and, count, eq } from 'drizzle-orm'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
@@ -11,11 +11,12 @@ process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-run-re
 const HUMAN = 'enrique'
 const AGENT = 'claude'
 const MIN = 60_000
-const AGENTS = ['spec', 'builder', 'runner', 'env', 'verify', 'hunt', 'refute', 'merge'] as const
+const AGENTS = ['spec', 'builder', 'runner', 'env', 'verify', 'hunt', 'refute', 'merge', 'intent'] as const
 
 let dbm: typeof import('#/db')
 let features: typeof import('./features')
 let needs: typeof import('./needs')
+let missingReviewPhases: typeof import('./runReports').missingReviewPhases
 let work: typeof import('./workTimeline')
 let agentsModule: typeof import('./agents')
 let projectAgents: typeof import('./projectAgents')
@@ -25,6 +26,7 @@ beforeAll(async () => {
   dbm = await import('#/db')
   features = await import('./features')
   needs = await import('./needs')
+  missingReviewPhases = (await import('./runReports')).missingReviewPhases
   work = await import('./workTimeline')
   agentsModule = await import('./agents')
   projectAgents = await import('./projectAgents')
@@ -659,6 +661,153 @@ describe('the hand-off flag', () => {
   })
 })
 
+describe('the review phases flag', () => {
+  const ticketOf = (pid: number, complexity: 'low' | 'mid' | 'high' | 'max' = 'mid') =>
+    features.createTicket(pid, { title: 'work', status: 'in_progress', complexity }, HUMAN)
+  const toReview = (id: number) => needs.changeTicket(id, { status: 'review' }, HUMAN, { agent: false })
+  const spans = (pid: number, id: number, round: number, phases: string[]) =>
+    phases.forEach((phase, i) => closedSpan(pid, id, phase, round, 600 - i * 10))
+
+  it('names the phase the last round lacks and the hunt that ran once, and the move still succeeds', async () => {
+    const pid = newProject()
+    const t = ticketOf(pid)
+    spans(pid, t.id, 1, ['spec', 'env', 'verify', 'hunt', 'hunt', 'refute', 'merge'])
+    spans(pid, t.id, 2, ['spec', 'env', 'verify', 'hunt', 'refute'])
+    const moved = await toReview(t.id)
+    expect(moved.status).toBe('review')
+    expect(moved.missingReviewPhases).toEqual([
+      { round: 2, phase: 'hunt', expected: 2, found: 1 },
+      { round: 2, phase: 'merge', expected: 1, found: 0 },
+    ])
+    // The ticket page carries the same flag in a review stage.
+    expect((await call('GET', `/api/tickets/${t.id}`)).body.missingReviewPhases).toEqual(
+      moved.missingReviewPhases,
+    )
+  })
+
+  it('is empty when every phase ran in the last round, a numbered hunt worker counting as a hunt', async () => {
+    const pid = newProject()
+    const t = ticketOf(pid, 'high')
+    spans(pid, t.id, 1, ['spec', 'env', 'verify', 'hunt-1', 'hunt-2', 'refute', 'merge'])
+    expect((await toReview(t.id)).missingReviewPhases).toEqual([])
+  })
+
+  it('credits a phase with a run report alone, and counts one run with a span and a report once', async () => {
+    const pid = newProject()
+    const t = ticketOf(pid)
+    spans(pid, t.id, 1, ['spec', 'env', 'verify', 'hunt', 'refute'])
+    // A report with no span credits merge; the second hunt has a report for the same run as its span.
+    await tool('write_run_report', { projectId: pid, ticketId: t.id, agent: 'merge', round: 1 })
+    await tool('write_run_report', { projectId: pid, ticketId: t.id, agent: 'hunt', round: 1 })
+    expect((await toReview(t.id)).missingReviewPhases).toEqual([
+      { round: 1, phase: 'hunt', expected: 2, found: 1 },
+    ])
+    await tool('write_run_report', { projectId: pid, ticketId: t.id, agent: 'hunt-2', round: 1 })
+    // Read in place: a move out of review would be a send-back, which restarts the count.
+    expect(missingReviewPhases(t.id)).toEqual([])
+  })
+
+  describe('after a send-back', () => {
+    const full = ['spec', 'env', 'verify', 'hunt', 'hunt', 'refute', 'merge']
+    const sendBack = async (id: number) => {
+      await toReview(id)
+      await needs.changeTicket(id, { status: 'in_progress' }, HUMAN, { agent: false })
+      // The two moves happened 300 seconds ago: the re-run's spans start after them.
+      dbm.db
+        .update(dbm.schema.ticketEvents)
+        .set({ at: ago(300) })
+        .where(and(eq(dbm.schema.ticketEvents.ticketId, id), eq(dbm.schema.ticketEvents.kind, 'stage')))
+        .run()
+    }
+    const rerun = (pid: number, id: number, round: number, phases: string[]) =>
+      phases.forEach((phase, i) => closedSpan(pid, id, phase, round, 100 - i * 5))
+
+    it('does not let the old rounds hide a phase the re-run lacks', async () => {
+      const pid = newProject()
+      const t = ticketOf(pid, 'high')
+      for (const round of [1, 2, 3]) spans(pid, t.id, round, full)
+      await sendBack(t.id)
+      rerun(pid, t.id, 1, ['spec', 'env', 'verify', 'hunt', 'refute', 'merge'])
+      expect((await toReview(t.id)).missingReviewPhases).toEqual([
+        { round: 1, phase: 'hunt', expected: 2, found: 1 },
+      ])
+    })
+
+    it('is unchanged without a send-back: the old rounds count', async () => {
+      const pid = newProject()
+      const t = ticketOf(pid, 'high')
+      for (const round of [1, 2, 3]) spans(pid, t.id, round, full)
+      closedSpan(pid, t.id, 'hunt', 1, 50)
+      expect((await toReview(t.id)).missingReviewPhases).toEqual([])
+    })
+
+    it('does not count run reports from before the send-back', async () => {
+      const pid = newProject()
+      const t = ticketOf(pid)
+      for (const agent of ['spec', 'env', 'verify', 'hunt', 'hunt-2', 'refute', 'merge'])
+        await tool('write_run_report', { projectId: pid, ticketId: t.id, agent, round: 1 })
+      await sendBack(t.id)
+      dbm.db
+        .update(dbm.schema.runReports)
+        .set({ createdAt: ago(600) })
+        .where(eq(dbm.schema.runReports.ticketId, t.id))
+        .run()
+      rerun(pid, t.id, 1, ['spec', 'env', 'verify', 'hunt', 'hunt', 'refute'])
+      expect((await toReview(t.id)).missingReviewPhases).toEqual([
+        { round: 1, phase: 'merge', expected: 1, found: 0 },
+      ])
+    })
+  })
+
+  it('is empty for a low ticket, a ticket with no timeline activity and a project with no software kind', async () => {
+    const pid = newProject()
+    const low = ticketOf(pid, 'low')
+    spans(pid, low.id, 1, ['spec'])
+    expect((await toReview(low.id)).missingReviewPhases).toEqual([])
+    const quiet = ticketOf(pid)
+    expect((await toReview(quiet.id)).missingReviewPhases).toEqual([])
+    const music = dbm.db
+      .insert(dbm.schema.projects)
+      .values({ name: 'songs', kinds: ['music'] })
+      .returning()
+      .get().id
+    const song = features.createTicket(music, { title: 'song', status: 'in_progress' }, HUMAN)
+    spans(music, song.id, 1, ['spec'])
+    expect(missingReviewPhases(song.id)).toEqual([])
+  })
+
+  it('counts activity with no round as round 1, and flags every phase of it', async () => {
+    const pid = newProject()
+    const t = ticketOf(pid)
+    work.handoff(pid, t.id, { to: 'builder' }, AGENT)
+    expect((await toReview(t.id)).missingReviewPhases.map((m: { phase: string }) => m.phase)).toEqual([
+      'spec',
+      'env',
+      'verify',
+      'hunt',
+      'refute',
+      'merge',
+    ])
+  })
+
+  it('checks only the last round: an earlier gap is not flagged once the last one is complete', async () => {
+    const pid = newProject()
+    const t = ticketOf(pid)
+    spans(pid, t.id, 1, ['spec', 'env'])
+    spans(pid, t.id, 2, ['spec', 'env', 'verify', 'hunt', 'hunt', 'refute', 'merge'])
+    expect((await toReview(t.id)).missingReviewPhases).toEqual([])
+  })
+
+  it('is [] outside review: a move to another stage, and the view of a ticket in progress', async () => {
+    const pid = newProject()
+    const t = ticketOf(pid)
+    spans(pid, t.id, 1, ['spec'])
+    const moved = await needs.changeTicket(t.id, { title: 'renamed' }, HUMAN, { agent: false })
+    expect(moved.missingReviewPhases).toEqual([])
+    expect((await call('GET', `/api/tickets/${t.id}`)).body.missingReviewPhases).toEqual([])
+  })
+})
+
 describe('the templates', () => {
   const templateDir = path.join(import.meta.dirname, 'skill', 'review', 'run-reports')
   const template = (agent: string) => fs.readFileSync(path.join(templateDir, `${agent}.md`), 'utf8')
@@ -695,6 +844,7 @@ describe('the templates', () => {
     hunt: ['techniques', 'surfaces', 'candidates'],
     refute: ['disproof', 'unsettled'],
     merge: ['conflicts'],
+    intent: ['asked', 'compared'],
   }
 
   it('ships one per default agent, in the review bundle, each different and carrying its own part', () => {
@@ -713,7 +863,7 @@ describe('the templates', () => {
     expect(fs.existsSync(path.join(templateDir, 'common.md'))).toBe(true)
   })
 
-  it('carries the whole common part in every one of the eight', () => {
+  it('carries the whole common part in every one of the nine', () => {
     for (const agent of AGENTS) {
       const text = template(agent)
       for (const part of commonPart) expect(text, `${agent}: ${part}`).toContain(part)
