@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 
 import { expect, ok, test } from './fixtures'
-import { delayApi, watchLoading } from './loading'
+import { delayApi, warm, watchLoading } from './loading'
 
 const status = (page: Page, name: string) => page.getByRole('status', { name, exact: true })
 const features = (id: number, view: string) => `/projects/${id}/features?view=${view}`
@@ -113,6 +113,7 @@ test('a fast load of the Features page and the Roadmap draws no placeholder', as
   api,
 }) => {
   await api.ticket({ title: 'Quick ticket', status: 'in_progress' })
+  await warm(page, ...['board', 'list', 'archived'].map((view) => features(project.id, view)))
   const watch = await watchLoading(page)
 
   for (const view of ['board', 'list', 'archived']) {

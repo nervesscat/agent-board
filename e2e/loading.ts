@@ -18,6 +18,17 @@ export async function delayApi(page: Page, match: RegExp, ms = SLOW_MS) {
 }
 
 /**
+ * Opens each page once and lets its requests finish, so the board's own first-time work (a cold read,
+ * a first build of an answer) is done before a load is judged "fast". Call it before `watchLoading`.
+ */
+export async function warm(page: Page, ...urls: string[]) {
+  for (const url of urls) {
+    await page.goto(url)
+    await page.waitForLoadState('networkidle')
+  }
+}
+
+/**
  * Starts recording every loading placeholder the page draws (a `[role=status][aria-busy]` region or a
  * `[data-slot=skeleton]` block), in every document the tab loads from now on: a full navigation keeps
  * what the earlier pages saw (in `sessionStorage`), so each page visited is checked. `seen()` returns

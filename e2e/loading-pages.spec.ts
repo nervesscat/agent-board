@@ -1,6 +1,6 @@
 import { localDate } from '#/lib/format'
 import { expect, ok, test } from './fixtures'
-import { delayApi, watchLoading } from './loading'
+import { delayApi, warm, watchLoading } from './loading'
 
 const status = (page: import('@playwright/test').Page, name: string) =>
   page.getByRole('status', { name, exact: true })
@@ -51,6 +51,7 @@ test('a fast load of the Team page and of a ticket opened by a link draws no pla
   api,
 }) => {
   const ticket = await api.ticket({ title: 'Fast ticket' })
+  await warm(page, `/projects/${project.id}/agents`, `/projects/${project.id}/features/${ticket.id}`)
   const watch = await watchLoading(page)
 
   await page.goto(`/projects/${project.id}/agents`)

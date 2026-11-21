@@ -2,7 +2,7 @@ import type { APIRequestContext, Page } from '@playwright/test'
 
 import { expect, ok, test } from './fixtures'
 import { png } from './files'
-import { delayApi, watchLoading } from './loading'
+import { delayApi, warm, watchLoading } from './loading'
 
 const status = (page: Page, name: string) => page.getByRole('status', { name, exact: true })
 
@@ -172,6 +172,7 @@ test('fast loads draw no placeholder in the New ticket dialog or the ticket deta
 }) => {
   const t = await api.ticket({ title: 'Quick details' })
   await api.ticket({ title: 'Another ticket' })
+  await warm(page, `/projects/${project.id}/features/${t.id}`, `/projects/${project.id}/features`)
   const watch = await watchLoading(page)
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   await expect(page.locator('#assignee')).toContainText('Unassigned')

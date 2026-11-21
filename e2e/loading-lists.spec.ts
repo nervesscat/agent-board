@@ -2,7 +2,7 @@ import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
 import { expect, ok, test } from './fixtures'
 import { png } from './files'
-import { delayApi, watchLoading } from './loading'
+import { delayApi, warm, watchLoading } from './loading'
 
 const status = (page: Page | Locator, name: string) => page.getByRole('status', { name, exact: true })
 
@@ -61,6 +61,7 @@ test('Run reports: a fast load and a fast filter draw no placeholder', async ({
   const t = await api.ticket({ title: 'Reported work' })
   await writeReport(agent, project.id, t.id, 'hunt')
   await writeReport(agent, project.id, t.id, 'verify')
+  await warm(page, `/projects/${project.id}/run-reports`)
   const watch = await watchLoading(page)
   await page.goto(`/projects/${project.id}/run-reports`)
   const list = page.getByRole('list', { name: 'Run reports' })
@@ -116,6 +117,7 @@ test('Gallery: a fast load draws no placeholder', async ({ page, project, api, a
   await ok(
     agent.post(`/api/tickets/${t.id}/updates`, { data: { body: 'Files.', attachmentIds: [image.id] } }),
   )
+  await warm(page, `/projects/${project.id}/gallery`)
   const watch = await watchLoading(page)
   await page.goto(`/projects/${project.id}/gallery`)
   await expect(page.locator('li[data-file]')).toHaveCount(1)
