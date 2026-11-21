@@ -32,6 +32,18 @@ const overflow = (chart: Locator) =>
     }
   })
 
+/** Whether an axis label touches another label, a break mark or the now label. */
+const crowded = (chart: Locator) =>
+  chart.evaluate((root) => {
+    const marks = [
+      ...root.querySelectorAll('span.tabular-nums:not([class*="pointer"]), [data-kind="axis-break"]'),
+      ...[...root.querySelectorAll('span[aria-hidden]')].filter((el) => el.textContent === 'now'),
+    ]
+      .map((el) => el.getBoundingClientRect())
+      .sort((a, b) => a.left - b.left)
+    return marks.some((r, i) => i > 0 && r.left < marks[i - 1]!.right)
+  })
+
 /** Work, blocked for days, work again, then days in review: both kinds of block in the middle of the work. */
 async function longTicket(
   human: Parameters<typeof create>[0],
@@ -78,6 +90,7 @@ test('a ticket with days blocked fits the card at any width, on the ticket page 
       await expect(chart.locator('[data-kind="span"]').first()).toBeVisible()
       const o = await overflow(chart)
       expect(o, `ticket ${id} at ${width}px`).toMatchObject({ outside: [], scrollers: 0, wider: false })
+      expect(await crowded(chart), `axis labels of ticket ${id} at ${width}px`).toBe(false)
       expect(await scrollsSideways(page), `page at ${width}px`).toBe(false)
       if (id === t.id) {
         expect(o.chips.length).toBe(2)
@@ -152,5 +165,11 @@ test('a ticket that was only ever blocked shows a small fixed block, not a bar o
     expect(o.chips).toHaveLength(1)
     expect(o.chips[0]!).toBeLessThanOrEqual(73)
     expect(o.chips[0]!).toBeLessThan(o.width)
+    // Now is where the block ends, not at the far end of the empty track.
+    const [block, now] = await Promise.all([
+      chart.locator('[data-kind="blocked"]').boundingBox(),
+      chart.getByText('now', { exact: true }).boundingBox(),
+    ])
+    expect(Math.abs(block!.x + block!.width - (now!.x + now!.width)), `${width}px`).toBeLessThan(3)
   }
 })

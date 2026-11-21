@@ -401,7 +401,9 @@ export function WorkTimelineBar({
   const chart = buildChart(timeline, now, win, width)
   const { axis, rows, marks, bands } = chart
   const h = lanePx(compact)
-  const shownBreaks = chart.breaks.filter((k) => !(live && k.left > 0.92))
+  // Where now is on the track: its right end, or earlier when the axis ends in empty track (nothing but collapsed blocks).
+  const nowLeft = share(axis, axis.end)
+  const shownBreaks = chart.breaks.filter((k) => !(live && k.left > nowLeft * 0.92))
   // The labels that fit: not within reach of the now label, a break mark or the track's edge, nor of the
   // label before them (a long one, with its date, takes room for more). A dropped label keeps its gridline.
   const tickLabels: typeof axis.ticks = []
@@ -412,8 +414,9 @@ export function WorkTimelineBar({
     const x = share(axis, t.at) * width
     const from = first ? x : x - need / 2
     const to = first ? x + need : x + need / 2
-    if (to > width - (live ? 30 : 0) || from < 0 || from < taken + 8) continue
-    if (shownBreaks.some((k) => Math.abs(k.left * width - x) < 44)) continue
+    if (to > (live ? nowLeft * width - 30 : width) || from < 0 || from < taken + 8) continue
+    // A break mark is about 10 px wide: no label runs under it, whichever way the label extends from its tick.
+    if (shownBreaks.some((k) => from < k.left * width + 9 && to > k.left * width - 9)) continue
     tickLabels.push(t)
     taken = to
   }
@@ -439,7 +442,8 @@ export function WorkTimelineBar({
         <span
           aria-hidden
           data-kind="now"
-          className={`pointer-events-none absolute inset-y-0 right-0 w-0.5 ${NOW_LINE}`}
+          className={`pointer-events-none absolute inset-y-0 w-0.5 ${NOW_LINE}`}
+          style={{ right: `${(1 - nowLeft) * 100}%` }}
         />
       )}
     </>
@@ -582,7 +586,11 @@ export function WorkTimelineBar({
             </span>
           ))}
           {live && (
-            <span aria-hidden className="absolute top-0 right-0 text-[10.5px] text-muted-foreground">
+            <span
+              aria-hidden
+              className="absolute top-0 text-[10.5px] text-muted-foreground"
+              style={{ right: `${(1 - nowLeft) * 100}%` }}
+            >
               now
             </span>
           )}
