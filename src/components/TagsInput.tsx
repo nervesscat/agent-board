@@ -1,5 +1,6 @@
 import { Plus, X } from 'lucide-react'
 import { useEffect, useId, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Tag } from '#/components/Tag'
 import { Tip } from '#/components/ui/tooltip'
@@ -55,6 +56,7 @@ export function TagsInput({
   choices?: string[]
   'aria-label'?: string
 }) {
+  const { t } = useTranslation()
   const input = useRef<HTMLInputElement>(null)
   const over = overTagLimits(value, text)
   const invalid = over.tooMany || over.tooLong
@@ -106,13 +108,13 @@ export function TagsInput({
         {value.map((tag) => {
           const tooLong = tagTooLong(tag)
           return (
-            <Tip key={tag} content={tooLong ? `More than ${MAX_TAG_LENGTH} characters` : undefined}>
+            <Tip key={tag} content={tooLong ? t('tagsInput.tooLong', { max: MAX_TAG_LENGTH }) : undefined}>
               <Tag
                 tag={tag}
                 data-invalid={tooLong || undefined}
                 className="max-w-full cursor-default items-center gap-0.5 pr-0.5 break-all data-invalid:ring-1 data-invalid:ring-destructive"
               >
-                <Tip content="Remove">
+                <Tip content={t('tagsInput.remove')}>
                   <button
                     type="button"
                     // Out of the Tab order, so Tab reaches the text as in any field; Backspace removes
@@ -121,7 +123,7 @@ export function TagsInput({
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => onChange(value.filter((t) => t !== tag))}
                     className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-sm opacity-60 hover:bg-foreground/10 hover:opacity-100"
-                    aria-label={`Remove ${tag}`}
+                    aria-label={t('tagsInput.removeTag', { tag })}
                   >
                     <X className="size-3" />
                   </button>
@@ -184,7 +186,7 @@ export function TagsInput({
         // bottom one only when nothing follows, so a parent's `space-y` gap below is kept).
         <div
           role="group"
-          aria-label="Suggested tags"
+          aria-label={t('tagsInput.suggested')}
           className="-mx-0.5 -mt-0.5 flex max-h-[calc(2*(1rem+0.25rem+2px)+0.25rem+0.25rem)] min-w-0 flex-wrap gap-1 overflow-y-auto p-0.5 last:-mb-0.5"
         >
           {offered.map((tag) => (
@@ -199,7 +201,7 @@ export function TagsInput({
                 // focus, which stays where it was (in the title being typed, say).
                 if (document.activeElement === e.currentTarget) input.current?.focus()
               }}
-              aria-label={`Add tag ${tag}`}
+              aria-label={t('tagsInput.addTag', { tag })}
               className="inline-flex max-w-full items-center gap-0.5 rounded-md border border-dashed px-1.5 py-0.5 text-xs break-all text-muted-foreground hover:border-solid hover:text-foreground"
             >
               <Plus className="size-3 shrink-0" />
@@ -211,8 +213,8 @@ export function TagsInput({
       {invalid && (
         <p id={messageId} className="text-xs text-destructive">
           {[
-            over.tooMany && `At most ${MAX_TAGS} tags.`,
-            over.tooLong && `A tag can have at most ${MAX_TAG_LENGTH} characters.`,
+            over.tooMany && t('tagsInput.tooMany', { max: MAX_TAGS }),
+            over.tooLong && t('tagsInput.tooLongTag', { max: MAX_TAG_LENGTH }),
           ]
             .filter(Boolean)
             .join(' ')}

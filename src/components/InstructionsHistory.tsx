@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
@@ -20,12 +21,6 @@ import { ago, stamp } from '#/lib/format'
 /** A change of the project's instructions, with whether the human can revert it now. */
 export type InstructionChangeRow = ProjectInstructionChange & { revertable: boolean }
 
-const STATE: Record<ProjectInstructionChange['state'], string> = {
-  pending: 'waiting on you',
-  accepted: 'reviewed',
-  reverted: 'reverted',
-}
-
 export const instructionChangesKey = (projectId: number | string) => [
   'instruction-changes',
   String(projectId),
@@ -36,12 +31,13 @@ export const instructionChangesKey = (projectId: number | string) => [
  * refreshes the history, the project (its instructions) and Needs you.
  */
 export function useSettleInstructions(projectId: number | string) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, action }: { id: number; action: 'review' | 'revert' }) =>
       post<RevertedInstructions | ProjectInstructionChange>(`/api/instructions/changes/${id}/${action}`),
     onSuccess: (_, { action }) => {
-      toast.success(action === 'review' ? 'Marked reviewed' : 'Reverted the project instructions')
+      toast.success(action === 'review' ? t('instructions.markedReviewed') : t('instructions.reverted'))
       void qc.invalidateQueries({ queryKey: instructionChangesKey(projectId) })
       void qc.invalidateQueries({ queryKey: ['project', String(projectId)] })
       void qc.invalidateQueries({ queryKey: ['projects'] })
@@ -57,6 +53,7 @@ export function useSettleInstructions(projectId: number | string) {
  * whose text still stands (a later one is reverted first).
  */
 export function InstructionsHistory({ projectId }: { projectId: string }) {
+  const { t } = useTranslation()
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: () => get<Me>('/api/me'), staleTime: Infinity })
   const { data, error } = useQuery({
     queryKey: instructionChangesKey(projectId),
@@ -67,14 +64,11 @@ export function InstructionsHistory({ projectId }: { projectId: string }) {
   const settle = useSettleInstructions(projectId)
   const human = me ? !me.agent : false
   return (
-    <section id="instructions-history" aria-label="Instructions history" className="space-y-2">
-      <h2 className="text-sm font-medium">Instructions history</h2>
-      <p className="text-xs text-muted-foreground">
-        Every change, by you or an orchestrator, with the text before it. An orchestrator&apos;s change
-        applies at once and waits on your review.
-      </p>
+    <section id="instructions-history" aria-label={t('instructions.historyTitle')} className="space-y-2">
+      <h2 className="text-sm font-medium">{t('instructions.historyTitle')}</h2>
+      <p className="text-xs text-muted-foreground">{t('instructions.historyDescription')}</p>
       {error && <p className="text-xs text-destructive">{errorMessage(error)}</p>}
-      {data?.length === 0 && <p className="text-xs text-muted-foreground">No changes yet.</p>}
+      {data?.length === 0 && <p className="text-xs text-muted-foreground">{t('instructions.noChanges')}</p>}
       {!!data?.length && (
         <ol className="space-y-3">
           {data.map((c, i) => (
@@ -106,11 +100,12 @@ function Entry({
   busy: boolean
   onSettle: (action: 'review' | 'revert') => void
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(openAtFirst)
   const reverted = change.state === 'reverted'
   return (
     <li
-      aria-label={`Change by ${change.changedBy}`}
+      aria-label={t('instructions.changeBy', { name: change.changedBy })}
       className="space-y-2 rounded-md border p-3 text-sm"
       data-state={change.state}
     >
@@ -119,16 +114,23 @@ function Entry({
         <Tip content={stamp(change.createdAt)}>
           <span className="text-xs text-muted-foreground">{ago(change.createdAt)}</span>
         </Tip>
-        <Badge variant={change.state === 'pending' ? 'default' : 'secondary'}>{STATE[change.state]}</Badge>
-        {change.revertOf !== null && <span className="text-xs text-muted-foreground">a revert</span>}
+        <Badge variant={change.state === 'pending' ? 'default' : 'secondary'}>
+          {t(`instructions.state.${change.state}`)}
+        </Badge>
+        {change.revertOf !== null && (
+          <span className="text-xs text-muted-foreground">{t('instructions.aRevert')}</span>
+        )}
         {change.resolvedBy && change.resolvedAt && (
           <span className="text-xs text-muted-foreground">
-            {reverted ? 'reverted' : 'reviewed'} by {change.resolvedBy} {ago(change.resolvedAt)}
+            {t(reverted ? 'instructions.revertedBy' : 'instructions.reviewedBy', {
+              name: change.resolvedBy,
+              when: ago(change.resolvedAt),
+            })}
           </span>
         )}
         <div className="ml-auto flex flex-wrap gap-1.5">
           <Button type="button" variant="ghost" size="sm" aria-expanded={open} onClick={() => setOpen(!open)}>
-            {open ? 'Hide the change' : 'Show the change'}
+            {open ? t('instructions.hideChange') : t('instructions.showChange')}
           </Button>
           {human && change.state === 'pending' && (
             <Button
@@ -138,17 +140,11 @@ function Entry({
               disabled={busy}
               onClick={() => onSettle('review')}
             >
-              Reviewed
+              {t('instructions.reviewed')}
             </Button>
           )}
           {human && !reverted && (
-            <Tip
-              content={
-                change.revertable
-                  ? 'Put the instructions back as they were before this change'
-                  : 'The instructions changed again since: revert the later change first'
-              }
-            >
+            <Tip content={change.revertable ? t('instructions.revertTip') : t('instructions.revertBlocked')}>
               <span className="inline-flex">
                 <Button
                   type="button"
@@ -157,14 +153,14 @@ function Entry({
                   disabled={busy || !change.revertable}
                   onClick={() => onSettle('revert')}
                 >
-                  Revert
+                  {t('instructions.revert')}
                 </Button>
               </span>
             </Tip>
           )}
         </div>
       </div>
-      {open && <ChangeDiff change={change} label="What changed in the instructions" />}
+      {open && <ChangeDiff change={change} label={t('instructions.diffLabel')} />}
     </li>
   )
 }
