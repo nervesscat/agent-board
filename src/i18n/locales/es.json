@@ -1982,7 +1982,7 @@
   },
   "ticketBoard": {
     "stage": "Etapa",
-    "mergeAfter": "merge después de {{list}}",
+    "mergeAfter": "fusionar después de {{list}}",
     "archiveTip_one": "Archivar {{count}} ticket de {{stage}}",
     "archiveTip_other": "Archivar {{count}} tickets de {{stage}}",
     "archiveAll": "Archivar todos",
@@ -2041,7 +2041,7 @@
   },
   "needs": {
     "titleIn": "#{{id}} {{title}}: {{branch}} está en {{into}}",
-    "titleNotIn": "#{{id}} {{title}}: {{branch}} no está fusionada en {{into}}",
+    "titleNotIn": "#{{id}} {{title}}: {{branch}} no está fusionado en {{into}}",
     "titleDone": "#{{id}} {{title}}: hecho",
     "titleNotDone": "#{{id}} {{title}}: sin hacer, sin branch",
     "markDoneAnyway": "Marcar como hecho igualmente",
