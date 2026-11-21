@@ -584,7 +584,8 @@ const MERGED_DAYS = 14
 const mergedSince = () => new Date(Date.now() - MERGED_DAYS * 86_400_000).toISOString()
 
 /**
- * Pull my PRs from GitHub, open and recently merged, and upsert the snapshot; board-side fields (hold)
+ * Pull the repo's open PRs from GitHub (flagged `involvesMe` when one of my searches finds them) and
+ * my recently merged ones, and upsert the snapshot; board-side fields (hold)
  * are kept. Returns the rows that were stored before and changed.
  */
 async function refreshRepoPrs(repo: schema.Repo): Promise<RowChange[]> {
@@ -618,6 +619,7 @@ async function refreshRepoPrs(repo: schema.Repo): Promise<RowChange[]> {
       reviewDecision: pr.reviewDecision || null,
       myReview: mine ? mine.state.toLowerCase() : 'none',
       requested: pr.requested,
+      involvesMe: pr.involvesMe,
       waitingOn: prWaitingOn(pr, me),
       reviewStage: reviewStage(pr, me),
       mergeable: pr.mergeable,
@@ -648,8 +650,8 @@ async function refreshRepoPrs(repo: schema.Repo): Promise<RowChange[]> {
         .values({ ...values, projectId, repoId: repo.id, number: pr.number })
         .run()
   }
-  // A PR that left every search was closed, unassigned, or merged out of the merged searches' reach:
-  // keep the row, mark it closed, and keep what GitHub says it became (null when it cannot say).
+  // A PR that left every list was closed, merged, or beyond the open list's 100 most recent (and no
+  // longer one of mine): keep the row, mark it closed, and keep what GitHub says it became (null when it cannot say).
   const goneOpen = db
     .select()
     .from(schema.prs)

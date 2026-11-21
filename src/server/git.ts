@@ -169,6 +169,8 @@ export interface MyGhPr extends GhPr {
   requested: boolean
   /** I am one of its assignees. */
   assigned: boolean
+  /** One of the four searches found it; false for a PR only the plain list of open PRs found. */
+  involvesMe: boolean
 }
 
 const PR_FIELDS =
@@ -182,7 +184,10 @@ const MERGED_LIMIT = 30
  * The PRs I am in: the ones I authored (agents push with my account), the ones where my review was
  * requested, the ones I already reviewed, and the ones assigned to me. Open ones, and the ones of the
  * same searches merged on or after `mergedSince` (a date, YYYY-MM-DD), at most `MERGED_LIMIT` per
- * search: the queue keeps them a while after they land, never the repo's whole history.
+ * search: the queue keeps them a while after they land, never the repo's whole history. One more call
+ * lists the repo's open PRs without a search (All PRs): one only that call finds is not mine
+ * (`involvesMe` false). It returns the `OPEN_LIMIT` most recent, so beyond that an older open PR
+ * of someone else is not in All PRs; the ones that involve me are still found by the searches.
  */
 export async function listMyPrs(repoPath: string, opts: { mergedSince: string }): Promise<MyGhPr[]> {
   const searches = ['author:@me', 'review-requested:@me', 'reviewed-by:@me', 'assignee:@me'] as const
@@ -195,31 +200,46 @@ export async function listMyPrs(repoPath: string, opts: { mergedSince: string })
       query: `${search} merged:>=${opts.mergedSince}`,
     })),
   ]
-  const found = await Promise.all(
-    queries.map((q) =>
-      gh<GhPr[]>(repoPath, [
-        'pr',
-        'list',
-        '--state',
-        q.state,
-        '--limit',
-        String(q.limit),
-        '--search',
-        q.query,
-        '--json',
-        PR_FIELDS,
-      ]),
+  const [found, everyOpen] = await Promise.all([
+    Promise.all(
+      queries.map((q) =>
+        gh<GhPr[]>(repoPath, [
+          'pr',
+          'list',
+          '--state',
+          q.state,
+          '--limit',
+          String(q.limit),
+          '--search',
+          q.query,
+          '--json',
+          PR_FIELDS,
+        ]),
+      ),
     ),
-  )
+    gh<GhPr[]>(repoPath, [
+      'pr',
+      'list',
+      '--state',
+      'open',
+      '--limit',
+      String(OPEN_LIMIT),
+      '--json',
+      PR_FIELDS,
+    ]),
+  ])
   const byNumber = new Map<number, MyGhPr>()
   found.forEach((prs, i) => {
     for (const pr of prs) {
-      const seen = byNumber.get(pr.number) ?? { ...pr, requested: false, assigned: false }
+      const seen = byNumber.get(pr.number) ?? { ...pr, requested: false, assigned: false, involvesMe: true }
       if (queries[i]!.search === 'review-requested:@me') seen.requested = true
       if (queries[i]!.search === 'assignee:@me') seen.assigned = true
       byNumber.set(pr.number, seen)
     }
   })
+  for (const pr of everyOpen)
+    if (!byNumber.has(pr.number))
+      byNumber.set(pr.number, { ...pr, requested: false, assigned: false, involvesMe: false })
   return [...byNumber.values()]
 }
 
