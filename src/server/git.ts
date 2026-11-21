@@ -1058,7 +1058,8 @@ export async function hasOwnCommits(
  * strict ancestor of `ref`'s (equal tips could be either one's), and `other` has commits of its own
  * (`hasOwnCommits`). The topology then says who owns them. Two branches that only share a commit below
  * both tips, or a copy of the commits with other shas (rebased), are not certain. Both are full shas, `bases` those of the
- * bases of the branch at `ref`.
+ * bases of the branch at `ref`. Without bases nothing can be told, as in `holdsWorkOf`: `other` may be
+ * the base itself, whose whole history would count as its own commits.
  */
 export async function holdsOwnWork(
   repoPath: string,
@@ -1067,7 +1068,7 @@ export async function holdsOwnWork(
   otherOwn: string[],
   bases: string[],
 ): Promise<boolean> {
-  if (ref === other || !(await isAncestor(repoPath, other, ref))) return false
+  if (!bases.length || ref === other || !(await isAncestor(repoPath, other, ref))) return false
   return hasOwnCommits(repoPath, other, otherOwn, bases)
 }
 

@@ -225,6 +225,25 @@ describe('what is not added', () => {
     }
   })
 
+  it('adds nothing for a ticket on the base branch itself, and still adds a stack beside it', async () => {
+    const p = project()
+    // A ticket whose branch is the repo's base, and one cut from it: the base is nobody's unmerged work.
+    const onBase = p.ticket('on base', 'main')
+    branch('base6/c', 'main')
+    const c = p.ticket('c', 'base6/c')
+    branch('base6/a', 'main')
+    branch('base6/b', 'base6/a')
+    const a = p.ticket('a', 'base6/a')
+    const b = p.ticket('b', 'base6/b')
+    await p.sweep()
+    expect(needIds(c.id)).toEqual([])
+    expect(lines(c.id)).toEqual([])
+    expect(await includes(c.id)).toEqual([])
+    expect(needIds(onBase.id)).toEqual([])
+    // The guard is not over-broad: the stacked pair still gets its need.
+    expect(needIds(b.id)).toEqual([a.id])
+  })
+
   it('adds nothing for equal tips, and only hints at a stack whose lower branch moved on', async () => {
     const p = project()
     branch('eq/a', 'main')

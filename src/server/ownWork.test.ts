@@ -155,6 +155,18 @@ describe('holdsOwnWork', () => {
     expect(await holds('equal/a', 'empty/b')).toBe(false)
   })
 
+  it('is not certain without bases, even where the other tip is an ancestor with commits', async () => {
+    branch('nobase/a', 'main')
+    branch('nobase/b', 'nobase/a')
+    const own = (b: string) => [`refs/heads/${b}`, `refs/remotes/origin/${b}`]
+    // With the base known it holds; without one nothing can be told (main itself would count whole).
+    expect(await holdsOwnWork(repo, sha('nobase/b'), sha('nobase/a'), own('nobase/a'), [sha('main')])).toBe(
+      true,
+    )
+    expect(await holdsOwnWork(repo, sha('nobase/b'), sha('nobase/a'), own('nobase/a'), [])).toBe(false)
+    expect(await holdsOwnWork(repo, sha('nobase/a'), sha('main'), own('main'), [])).toBe(false)
+  })
+
   it('is not certain for a copy of the commits (patch-equivalent), which only the hint can name', async () => {
     branch('copy/a', 'main')
     const a = sha('copy/a')
