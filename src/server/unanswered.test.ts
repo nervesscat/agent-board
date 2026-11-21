@@ -191,6 +191,30 @@ describe('the human’s comments no agent has addressed', () => {
     expect(await ids(pid)).toEqual([])
   })
 
+  it('does not list the human’s answer to a decision card, nor a changed answer, but lists a comment they add under it', async () => {
+    const pid = newProject('answers')
+    const t = features.createTicket(pid, { title: 'answers', assignee: AGENT }, HUMAN)
+    const card = said(
+      features.askDecision(t.id, { body: 'which?', options: [{ label: 'a' }, { label: 'b' }] }, AGENT),
+      T(9),
+    )
+    // The answer is a comment by the human under the card, written at the time it is decided.
+    features.decide(card.id, 0, 'go with a', HUMAN)
+    const answer = features.listComments('update', card.id).find((c) => c.author === HUMAN)!
+    expect(answer.body).toMatch(/^Decided: \*\*a\*\*/)
+    said(answer, T(10))
+    expect(await ids(pid)).toEqual([])
+    features.decide(card.id, 1, '', HUMAN)
+    const changed = features.listComments('update', card.id).filter((c) => c.author === HUMAN)
+    expect(changed).toHaveLength(2)
+    expect(changed[1]!.body).toMatch(/^Changed the decision to: \*\*b\*\*/)
+    said(changed[1]!, T(11))
+    expect(await ids(pid)).toEqual([])
+    // Their own words under the card are a comment like any other.
+    const ask = humanReply(card.id, 'why not c?', T(12))
+    expect(await ids(pid)).toEqual([ask.id])
+  })
+
   it('carries a comment’s attachments with a local path, and is an MCP tool', async () => {
     const pid = newProject('files')
     const t = features.createTicket(pid, { title: 'pics' }, HUMAN)

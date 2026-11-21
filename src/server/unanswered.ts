@@ -123,6 +123,7 @@ export function unansweredHumanComments(
     const list = repliesOf.get(p.id) ?? []
     for (const r of list) {
       if (!isHuman(r.author)) continue
+      if (isDecisionAnswer(p, r)) continue
       if (list.some((q) => !isHuman(q.author) && later(q, r))) continue
       found.push({
         ticketId: p.ticketId,
@@ -177,6 +178,23 @@ export function unansweredHumanComments(
       }
     })
   return { count: comments.length, comments }
+}
+
+/**
+ * The reply the board writes under a decision card when the human answers it ("Decided: **<option>**",
+ * or "Changed the decision to: ..."), by the one who decided. It is the answer to the card, which resumes
+ * the work by itself, not a comment waiting for a reply. (features.decide writes the words; its test
+ * pins them here.)
+ */
+function isDecisionAnswer(
+  post: Pick<schema.Update, 'decision' | 'decidedBy'>,
+  reply: Pick<schema.Comment, 'author' | 'body'>,
+) {
+  return (
+    post.decision !== null &&
+    reply.author === post.decidedBy &&
+    /^(?:Decided|Changed the decision to): \*\*/.test(reply.body)
+  )
 }
 
 export type UnansweredComment = {
