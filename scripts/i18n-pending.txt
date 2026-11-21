@@ -1,5 +1,3 @@
 # Component files that still hold English text, not yet moved into src/i18n/locales (pnpm check:i18n).
 # A file comes off this list when it is extracted; the list never grows.
-src/components/NotificationCenter.tsx
-src/components/Summary.tsx
 src/routes/projects.$id.features.$ticketId.tsx

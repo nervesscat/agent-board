@@ -2352,5 +2352,111 @@
       "later": "later",
       "blocked": "blocked"
     }
+  },
+  "overview": {
+    "loadError": "Could not load the summary: {{error}}",
+    "projectOverview": "{{name}}: overview",
+    "headline": {
+      "waiting": "{{count}} waiting on you",
+      "inProgress": "{{count}} in progress",
+      "doneToday": "{{count}} done today"
+    },
+    "allHidden": "Every card of this overview is hidden. <goto>Show them again in the layout settings</goto>.",
+    "showFewer": "Show fewer",
+    "viewAll": "View all {{count}}",
+    "unassigned": "unassigned",
+    "projectAgent": "{{name}} (one of the project's agents)",
+    "sinceDate": "since {{date}}",
+    "laneOf": "lane of #{{id}}",
+    "draft": "draft",
+    "pr": "PR #{{number}}",
+    "prTitle": "PR #{{number}} {{title}}",
+    "openOnGithub": "Open on GitHub",
+    "option_one": "{{count}} option",
+    "option_other": "{{count}} options",
+    "lane_one": "{{count}} lane",
+    "lane_other": "{{count}} lanes",
+    "previewOf": "Preview of {{workspace}}",
+    "preview": "Preview",
+    "needsYou": {
+      "title": "Needs you",
+      "empty": "Nothing waiting on you.",
+      "decide": "Decide: {{question}}",
+      "asked": "{{options}} · asked by {{author}} {{ago}}",
+      "waitingOnYou": "Waiting on you {{since}} · {{agent}}",
+      "reviewPr": "Review PR #{{number}} {{title}}",
+      "prBy": "by {{author}} · updated {{ago}}",
+      "newReplies": "{{count}} new · ",
+      "blocked": "blocked",
+      "instructionsChanged": "Project instructions changed",
+      "changedBy": "by <actor/>",
+      "reviewed": "Reviewed",
+      "revertTip": "Put the instructions back as they were before this change",
+      "revertBlockedTip": "The instructions changed again since: revert the later change first",
+      "revert": "Revert",
+      "last": "last"
+    },
+    "lost": {
+      "title": "Lost contact",
+      "link": "Lost contact: <id>#{{id}}</id> {{title}}",
+      "detail": "{{agent}} · {{phase}} · {{since}} · last word {{minutes}} min ago"
+    },
+    "inProgress": {
+      "title": "In progress",
+      "empty": "Nothing in progress."
+    },
+    "doneToday": {
+      "title": "Done today",
+      "empty": "Nothing finished yet today.",
+      "closedTip": "Merged or closed: it left the review queue",
+      "closed": "closed {{time}}",
+      "activity_one": "{{count}} thing happened today: Daily",
+      "activity_other": "{{count}} things happened today: Daily"
+    },
+    "next": {
+      "title": "Next",
+      "titleStage": "Next: {{stage}}",
+      "empty": "Nothing lined up.",
+      "emptyStage": "Nothing lined up in {{stage}}.",
+      "tasks": "{{done}}/{{total}} tasks",
+      "more": "{{count}} more",
+      "blocked": "{{count}} blocked",
+      "backlog": "{{count}} in the backlog",
+      "board": "Board"
+    },
+    "carryingOver": {
+      "title": "Carrying over",
+      "empty": "Nothing carried over from before today.",
+      "startedTip": "Work on it started {{when}}",
+      "days_one": "{{count}} day in progress",
+      "days_other": "{{count}} days in progress"
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "clearFinished": "Clear finished",
+    "empty": "Nothing running",
+    "dismiss": "Dismiss {{label}}",
+    "of": "{{done}} of {{total}}",
+    "starting": "Starting…",
+    "noReason": "no reason given",
+    "failed": "{{title}} failed",
+    "finished": "{{title}} finished",
+    "finishedWith": "{{title}} finished · {{summary}}",
+    "failedLine": "Failed · {{elapsed}} · {{reason}}",
+    "succeededLine": "Succeeded · {{elapsed}}",
+    "retryKept": "Retry kept items",
+    "youAsked": "{{actor}} · You asked: {{request}}",
+    "stale": "No update for {{since}} · it may have stopped",
+    "trackedFailed": "Failed · {{reason}}",
+    "succeeded": "Succeeded",
+    "notice": "Notice",
+    "cannotWait": "Cannot wait: {{reason}}",
+    "unit": {
+      "s": "{{value}} s",
+      "min": "{{value}} min",
+      "h": "{{value}} h",
+      "d": "{{value}} d"
+    }
   }
 }

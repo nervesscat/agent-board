@@ -2352,5 +2352,111 @@
       "later": "después",
       "blocked": "bloqueada"
     }
+  },
+  "overview": {
+    "loadError": "No se pudo cargar el resumen: {{error}}",
+    "projectOverview": "{{name}}: resumen",
+    "headline": {
+      "waiting": "{{count}} te esperan",
+      "inProgress": "{{count}} en curso",
+      "doneToday": "{{count}} hechos hoy"
+    },
+    "allHidden": "Todas las tarjetas de este resumen están ocultas. <goto>Muéstralas de nuevo en los ajustes de diseño</goto>.",
+    "showFewer": "Mostrar menos",
+    "viewAll": "Ver las {{count}}",
+    "unassigned": "sin asignar",
+    "projectAgent": "{{name}} (uno de los agentes del proyecto)",
+    "sinceDate": "desde el {{date}}",
+    "laneOf": "lane de #{{id}}",
+    "draft": "borrador",
+    "pr": "PR #{{number}}",
+    "prTitle": "PR #{{number}} {{title}}",
+    "openOnGithub": "Abrir en GitHub",
+    "option_one": "{{count}} opción",
+    "option_other": "{{count}} opciones",
+    "lane_one": "{{count}} lane",
+    "lane_other": "{{count}} lanes",
+    "previewOf": "Preview de {{workspace}}",
+    "preview": "Preview",
+    "needsYou": {
+      "title": "Te necesita",
+      "empty": "Nada te está esperando.",
+      "decide": "Decide: {{question}}",
+      "asked": "{{options}} · preguntó {{author}} {{ago}}",
+      "waitingOnYou": "Te espera {{since}} · {{agent}}",
+      "reviewPr": "Revisa el PR #{{number}} {{title}}",
+      "prBy": "de {{author}} · actualizado {{ago}}",
+      "newReplies": "{{count}} nuevas · ",
+      "blocked": "bloqueada",
+      "instructionsChanged": "Instrucciones del proyecto cambiadas",
+      "changedBy": "por <actor/>",
+      "reviewed": "Revisadas",
+      "revertTip": "Dejar las instrucciones como estaban antes de este cambio",
+      "revertBlockedTip": "Las instrucciones cambiaron de nuevo desde entonces: revierte primero el cambio posterior",
+      "revert": "Revertir",
+      "last": "último:"
+    },
+    "lost": {
+      "title": "Contacto perdido",
+      "link": "Contacto perdido: <id>#{{id}}</id> {{title}}",
+      "detail": "{{agent}} · {{phase}} · {{since}} · última noticia hace {{minutes}} min"
+    },
+    "inProgress": {
+      "title": "En curso",
+      "empty": "Nada en curso."
+    },
+    "doneToday": {
+      "title": "Hecho hoy",
+      "empty": "Nada terminado todavía hoy.",
+      "closedTip": "Fusionado o cerrado: salió de la cola de revisión",
+      "closed": "cerrado {{time}}",
+      "activity_one": "Ha pasado {{count}} cosa hoy: Diario",
+      "activity_other": "Han pasado {{count}} cosas hoy: Diario"
+    },
+    "next": {
+      "title": "Siguiente",
+      "titleStage": "Siguiente: {{stage}}",
+      "empty": "Nada preparado.",
+      "emptyStage": "Nada preparado en {{stage}}.",
+      "tasks": "{{done}}/{{total}} tareas",
+      "more": "{{count}} más",
+      "blocked": "{{count}} bloqueados",
+      "backlog": "{{count}} en el backlog",
+      "board": "Tablero"
+    },
+    "carryingOver": {
+      "title": "Pendiente de antes",
+      "empty": "Nada pendiente de antes de hoy.",
+      "startedTip": "El trabajo empezó {{when}}",
+      "days_one": "{{count}} día en curso",
+      "days_other": "{{count}} días en curso"
+    }
+  },
+  "notifications": {
+    "title": "Notificaciones",
+    "clearFinished": "Quitar terminadas",
+    "empty": "Nada en marcha",
+    "dismiss": "Descartar {{label}}",
+    "of": "{{done}} de {{total}}",
+    "starting": "Empezando…",
+    "noReason": "sin motivo",
+    "failed": "{{title}} falló",
+    "finished": "{{title}} terminó",
+    "finishedWith": "{{title}} terminó · {{summary}}",
+    "failedLine": "Falló · {{elapsed}} · {{reason}}",
+    "succeededLine": "Correcto · {{elapsed}}",
+    "retryKept": "Reintentar los elementos conservados",
+    "youAsked": "{{actor}} · Pediste: {{request}}",
+    "stale": "Sin novedades desde hace {{since}} · puede que se haya detenido",
+    "trackedFailed": "Falló · {{reason}}",
+    "succeeded": "Correcto",
+    "notice": "Aviso",
+    "cannotWait": "No puede esperar: {{reason}}",
+    "unit": {
+      "s": "{{value}} s",
+      "min": "{{value}} min",
+      "h": "{{value}} h",
+      "d": "{{value}} d"
+    }
   }
 }
