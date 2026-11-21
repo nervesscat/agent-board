@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { AppWindow, ExternalLink, Loader2, Play, RotateCw, Square } from 'lucide-react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { openPreview } from '#/components/PreviewWindow'
@@ -272,6 +273,7 @@ export function ManagedLine({ m, workspaceId }: { m: ManagedPreview; workspaceId
  * not a whole number, the board refuses it and the toast says why.
  */
 export function PreviewLimitEditor({ id, limit }: { id: string; limit: number }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [value, setValue] = useState(String(limit))
   const save = useMutation({
@@ -279,7 +281,7 @@ export function PreviewLimitEditor({ id, limit }: { id: string; limit: number })
     onSuccess: (s) => {
       qc.setQueryData(['settings'], s)
       void qc.invalidateQueries({ queryKey: ['previews'] })
-      toast.success('Saved')
+      toast.success(t('common.saved'))
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
@@ -294,7 +296,7 @@ export function PreviewLimitEditor({ id, limit }: { id: string; limit: number })
       }}
     >
       <Label htmlFor={id} className="text-xs whitespace-nowrap">
-        Preview limit
+        {t('previewLimit.label')}
       </Label>
       <Input
         id={id}
@@ -308,7 +310,7 @@ export function PreviewLimitEditor({ id, limit }: { id: string; limit: number })
         className="w-20"
       />
       <Button type="submit" variant="outline" size="sm" disabled={save.isPending || value === String(limit)}>
-        {save.isPending ? 'Saving…' : 'Save'}
+        {save.isPending ? t('previewLimit.saving') : t('connect.save')}
       </Button>
     </form>
   )

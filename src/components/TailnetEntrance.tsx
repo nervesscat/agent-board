@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import {
@@ -27,6 +28,7 @@ import type { EntranceCheck, EntranceState } from '#/server/tailnetEntrance'
  * its own tailnet name. The board never runs `tailscale serve` or Funnel itself.
  */
 export function TailnetEntrance() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const query = useQuery({ queryKey: ['tailnet'], queryFn: () => get<EntranceState>('/api/tailnet') })
   // The address being typed, until it is saved or dropped: null shows the saved one.
@@ -39,7 +41,7 @@ export function TailnetEntrance() {
       qc.setQueryData(['tailnet'], state)
       setDraft(null)
       setCheck(null)
-      toast.success(origin === null ? 'The entrance is off' : 'Saved')
+      toast.success(origin === null ? t('tailnet.entranceOff') : t('common.saved'))
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
@@ -51,84 +53,104 @@ export function TailnetEntrance() {
 
   if (!query.data) return null
   const s = query.data
-  const t = s.tailscale
+  const ts = s.tailscale
   // Read-only while the environment sets the entrance; with sign-in off or Funnel on the board refuses a save
   // and says why, so the field stays usable for the human to see that.
   const locked = s.fromEnv !== null
   const value = draft ?? s.saved ?? ''
-  const name = t.name
+  const name = ts.name
 
   return (
     <section className="min-w-0 space-y-3" aria-labelledby="tailnet-title">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
         <h2 id="tailnet-title" className="text-sm font-medium">
-          Other devices (tailnet)
+          {t('tailnet.title')}
         </h2>
         <Button size="sm" variant="outline" onClick={recheck} disabled={query.isFetching}>
-          <RefreshCw /> Check again
+          <RefreshCw /> {t('connect.checkAgain')}
         </Button>
       </div>
-      <p className="text-sm text-muted-foreground">
-        Open the board from your other devices and cloud agents over your tailnet, with HTTPS. Turn it on
-        here; no file to edit. Your devices then sign in with passkeys of their own (Devices, below).
-      </p>
+      <p className="text-sm text-muted-foreground">{t('tailnet.text')}</p>
 
       {s.signInOff && (
         <p role="status" className="rounded-md border p-3 text-sm">
-          Sign-in is off on this board (BOARD_ENV={s.boardEnv}): it answers on this machine only, never
-          through the tailnet, so the entrance cannot be saved here.
+          {t('tailnet.signInOff', { env: s.boardEnv })}
         </p>
       )}
       {s.fromEnv && (
         <p role="status" className="rounded-md border p-3 text-sm">
-          Set in config.env (or .env): <code className="break-words">PUBLIC_ORIGIN={s.fromEnv}</code>. It wins
-          over this setting, so the entrance is read-only here. Remove that line there to set it in Settings.
+          <Trans
+            i18nKey="tailnet.fromEnv"
+            values={{ origin: s.fromEnv }}
+            components={{ code: <code className="break-words" /> }}
+          />
         </p>
       )}
-      {t.funnel && (
+      {ts.funnel && (
         <p role="alert" className="rounded-md border border-destructive/50 p-3 text-sm text-destructive">
-          Tailscale Funnel is on: it puts the board on the internet, which the board refuses. Turn it off (
-          <code>tailscale funnel off</code>, or <code>tailscale serve reset</code>); saving is refused until
-          then.
+          <Trans i18nKey="tailnet.funnel" components={{ code: <code /> }} />
         </p>
       )}
       {s.unserved && !s.fromEnv && (
         <p role="status" className="text-sm text-muted-foreground">
-          The saved entrance is not served: {s.unserved}.
+          {t('tailnet.unserved', { reason: s.unserved })}
         </p>
       )}
 
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 rounded-md border p-3 text-sm">
-        <dt className="text-muted-foreground">Tailscale</dt>
-        <dd>{t.installed ? (t.version ? `version ${t.version}` : 'installed') : 'not installed'}</dd>
-        <dt className="text-muted-foreground">Signed in</dt>
-        <dd>{t.installed ? (t.signedIn ? 'yes' : `no (${t.backend ?? 'not running'})`) : '-'}</dd>
-        <dt className="text-muted-foreground">This machine</dt>
-        <dd className="min-w-0 break-all">{name ?? (t.installed && t.signedIn ? 'no tailnet name' : '-')}</dd>
-        <dt className="text-muted-foreground">HTTPS</dt>
-        <dd>{name ? (t.https ? 'certificates on' : 'certificates off') : '-'}</dd>
-        <dt className="text-muted-foreground">Serve on 443</dt>
-        <dd className="min-w-0 break-all">
-          {t.serve.state === 'board'
-            ? `the board (${t.serve.target})`
-            : t.serve.state === 'other'
-              ? `${t.serve.target}`
-              : 'nothing'}
+        <dt className="text-muted-foreground">{t('tailnet.tailscale')}</dt>
+        <dd>
+          {ts.installed
+            ? ts.version
+              ? t('tailnet.version', { version: ts.version })
+              : t('tailnet.installed')
+            : t('tailnet.notInstalled')}
         </dd>
-        <dt className="text-muted-foreground">Funnel</dt>
-        <dd>{!t.funnelKnown ? 'could not read Funnel' : t.funnel ? 'on (refused)' : 'off'}</dd>
+        <dt className="text-muted-foreground">{t('tailnet.signedIn')}</dt>
+        <dd>
+          {ts.installed
+            ? ts.signedIn
+              ? t('tailnet.yes')
+              : t('tailnet.no', { state: ts.backend ?? t('tailnet.notRunning') })
+            : '-'}
+        </dd>
+        <dt className="text-muted-foreground">{t('tailnet.thisMachine')}</dt>
+        <dd className="min-w-0 break-all">
+          {name ?? (ts.installed && ts.signedIn ? t('tailnet.noName') : '-')}
+        </dd>
+        <dt className="text-muted-foreground">{t('tailnet.https')}</dt>
+        <dd>{name ? (ts.https ? t('tailnet.certsOn') : t('tailnet.certsOff')) : '-'}</dd>
+        <dt className="text-muted-foreground">{t('tailnet.serve')}</dt>
+        <dd className="min-w-0 break-all">
+          {ts.serve.state === 'board'
+            ? t('tailnet.serveBoard', { target: ts.serve.target })
+            : ts.serve.state === 'other'
+              ? `${ts.serve.target}`
+              : t('tailnet.serveNothing')}
+        </dd>
+        <dt className="text-muted-foreground">{t('tailnet.funnelLabel')}</dt>
+        <dd>
+          {!ts.funnelKnown
+            ? t('tailnet.funnelUnknown')
+            : ts.funnel
+              ? t('tailnet.funnelOn')
+              : t('tailnet.funnelOff')}
+        </dd>
       </dl>
-      {t.error && <p className="text-xs text-muted-foreground break-all">Tailscale said: {t.error}</p>}
+      {ts.error && (
+        <p className="text-xs text-muted-foreground break-all">{t('tailnet.said', { error: ts.error })}</p>
+      )}
 
       <NextStep state={s} />
       <ServeStatus state={s} />
 
       <div className="space-y-2">
-        <Label htmlFor="tailnet-origin">Entrance</Label>
+        <Label htmlFor="tailnet-origin">{t('tailnet.entrance')}</Label>
         <div className="flex min-w-0 flex-wrap gap-2">
           <Input
             id="tailnet-origin"
             className="min-w-0 flex-1"
+            // i18n-ignore: an address pattern, not language
             placeholder="https://<machine>.<tailnet>.ts.net"
             value={value}
             disabled={locked}
@@ -140,7 +162,7 @@ export function TailnetEntrance() {
         <div className="flex flex-wrap gap-2">
           {name && !locked && (
             <Button variant="outline" size="sm" onClick={() => setDraft(`https://${name}`)}>
-              Use https://{name}
+              {t('tailnet.use', { name })}
             </Button>
           )}
           <Button
@@ -148,48 +170,49 @@ export function TailnetEntrance() {
             onClick={() => save.mutate(value.trim())}
             disabled={locked || save.isPending || value.trim() === (s.saved ?? '')}
           >
-            Save
+            {t('connect.save')}
           </Button>
           {s.saved && (
             <AlertDialog>
               <AlertDialogTrigger
                 render={<Button size="sm" variant="ghost" disabled={locked || save.isPending} />}
               >
-                Turn off
+                {t('connect.turnOff')}
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Turn the tailnet entrance off?</AlertDialogTitle>
+                  <AlertDialogTitle>{t('tailnet.turnOffTitle')}</AlertDialogTitle>
                   <AlertDialogDescription>
-                    The board stops answering on {s.saved}. Browsers signed in through that name are signed
-                    out (their passkeys stay listed).
+                    {t('tailnet.turnOffText', { origin: s.saved })}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Keep</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => save.mutate(null)}>Turn off</AlertDialogAction>
+                  <AlertDialogCancel>{t('connect.keep')}</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => save.mutate(null)}>
+                    {t('connect.turnOff')}
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          Only https, a host name, no port and no path. Saved in the board&apos;s database and applied at
-          once, without a restart.{' '}
+          {t('tailnet.hint')}{' '}
           {s.served
-            ? `Served now: ${s.served.origin} (${s.served.from === 'config' ? 'set in config.env' : 'from this setting'}).`
-            : 'Served now: nothing; the board answers on this machine only.'}
+            ? t(s.served.from === 'config' ? 'tailnet.servedConfig' : 'tailnet.servedSetting', {
+                origin: s.served.origin,
+              })
+            : t('tailnet.servedNone')}
         </p>
       </div>
 
       <div className="space-y-2">
         <Button variant="outline" size="sm" onClick={() => test.mutate()} disabled={test.isPending}>
-          Test the entrance
+          {t('tailnet.test')}
         </Button>
         {check && (
           <p role="status" className={`text-sm ${check.ok ? '' : 'text-destructive'}`}>
-            {check.ok ? 'Works. ' : 'Not yet. '}
-            {check.message}
+            {check.ok ? t('tailnet.works') : t('tailnet.notYet')} {check.message}
           </p>
         )}
       </div>
@@ -199,17 +222,18 @@ export function TailnetEntrance() {
 
 /** What this machine's Tailscale needs before the entrance can work, or that it is ready. */
 function NextStep({ state }: { state: EntranceState }) {
-  const t = state.tailscale
-  const text = !t.installed
-    ? 'Tailscale is not installed on this machine: install it and sign in, then check again (README: Using it from other devices).'
-    : !t.signedIn
-      ? `Tailscale is ${t.backend ?? 'not running'} on this machine: run tailscale up and sign in, then check again.`
-      : t.name === null
-        ? 'This machine has no tailnet name: turn on MagicDNS in the Tailscale admin console, then check again.'
-        : !t.https
-          ? `HTTPS certificates are off for ${t.name}: turn them on in the Tailscale admin console, then check again.`
-          : t.serve.state === 'board'
-            ? `Ready: this machine is ${t.name} on your tailnet, and serve sends it to the board.`
+  const { t } = useTranslation()
+  const ts = state.tailscale
+  const text = !ts.installed
+    ? t('tailnet.next.notInstalled')
+    : !ts.signedIn
+      ? t('tailnet.next.notSignedIn', { state: ts.backend ?? t('tailnet.notRunning') })
+      : ts.name === null
+        ? t('tailnet.next.noName')
+        : !ts.https
+          ? t('tailnet.next.httpsOff', { name: ts.name })
+          : ts.serve.state === 'board'
+            ? t('tailnet.next.ready', { name: ts.name })
             : null
   if (!text) return null
   return <p className="text-sm">{text}</p>
@@ -217,26 +241,27 @@ function NextStep({ state }: { state: EntranceState }) {
 
 /** Whether `tailscale serve` sends 443 to the board, and the command to run when it does not. */
 function ServeStatus({ state }: { state: EntranceState }) {
-  const t = state.tailscale
-  if (!t.installed || !t.signedIn || t.name === null || t.serve.state === 'board') return null
-  const other = t.serve.state === 'other'
+  const { t } = useTranslation()
+  const ts = state.tailscale
+  if (!ts.installed || !ts.signedIn || ts.name === null || ts.serve.state === 'board') return null
+  const other = ts.serve.state === 'other'
   return (
     <div className="space-y-2 rounded-md border p-3 text-sm">
       <p>
         {other
-          ? `Port 443 of this machine serves ${t.serve.target} now. To send https://${t.name} to the board instead, run this here:`
-          : `Serve is not set up yet. To open the board at https://${t.name} run this here:`}
+          ? t('tailnet.serveOther', { target: ts.serve.target, name: ts.name })
+          : t('tailnet.serveNotSet', { name: ts.name })}
       </p>
       <div className="flex min-w-0 items-start gap-2">
         <code className="min-w-0 flex-1 break-words rounded bg-muted px-2 py-1 text-xs">{state.command}</code>
         <Button
           size="icon-sm"
           variant="ghost"
-          aria-label="Copy the serve command"
+          aria-label={t('tailnet.copyServe')}
           onClick={() =>
             navigator.clipboard.writeText(state.command).then(
-              () => toast.success('Copied'),
-              () => toast.error('Could not copy'),
+              () => toast.success(t('connect.copied')),
+              () => toast.error(t('connect.couldNotCopy')),
             )
           }
         >
@@ -244,7 +269,7 @@ function ServeStatus({ state }: { state: EntranceState }) {
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        The board never runs it. Then check again. To stop: <code>tailscale serve --https=443 off</code>.
+        <Trans i18nKey="tailnet.neverRuns" components={{ code: <code /> }} />
       </p>
     </div>
   )

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { Copy } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Badge } from '#/components/ui/badge'
@@ -11,6 +12,7 @@ import { Progress } from '#/components/ui/progress'
 import { Switch } from '#/components/ui/switch'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, type Me, patch, post } from '#/lib/api'
+import { shared } from '#/i18n'
 import { ago } from '#/lib/format'
 import { forgetUpdateMemory, recallUpdateMemory, subscribeUpdateMemory } from '#/lib/updateCard'
 import {
@@ -44,14 +46,15 @@ export function useUpdates() {
 
 /** The top bar's word that a newer version of the app is there, to its Updates section. */
 export function UpdateBadge() {
+  const { t } = useTranslation()
   const { data } = useUpdates()
   // Read after mount: the update can be found before React has hydrated the top bar.
   const hydrated = useHydrated()
   if (!hydrated || !updateOffered(data)) return null
   return (
-    <Tip content={`CrossBoard ${data.newest.version} is available (${data.installed} installed)`}>
-      <Link to="/settings" hash="updates" className="shrink-0" aria-label="Update available">
-        <Badge variant="secondary">Update</Badge>
+    <Tip content={t('updates.badgeTip', { version: data.newest.version, installed: data.installed })}>
+      <Link to="/settings" hash="updates" className="shrink-0" aria-label={t('updates.badgeAria')}>
+        <Badge variant="secondary">{t('updates.badge')}</Badge>
       </Link>
     </Tip>
   )
@@ -59,12 +62,13 @@ export function UpdateBadge() {
 
 /** The Updates section of Settings: under the desktop app its updater, from a checkout how to update. */
 export function Updates() {
+  const { t } = useTranslation()
   const { data } = useUpdates()
   if (!data) return null
   return (
     <section id="updates" className="scroll-mt-16 space-y-3" aria-labelledby="updates-title">
       <h2 id="updates-title" className="text-sm font-medium">
-        Updates
+        {t('updates.title')}
       </h2>
       {data.mode === 'checkout' ? <CheckoutUpdates /> : <DesktopUpdatesSection state={data} />}
     </section>
@@ -74,14 +78,13 @@ export function Updates() {
 function CheckoutUpdates() {
   return (
     <p className="text-sm text-muted-foreground">
-      This board runs from a checkout, which has no updater. To update it, run <code>git pull</code> on{' '}
-      <code>main</code> in that checkout, then <code>pnpm start</code> (README: "Running it"). Only the
-      desktop app checks for and installs new versions from here.
+      <Trans i18nKey="updates.checkout" components={{ code: <code /> }} />
     </p>
   )
 }
 
 function DesktopUpdatesSection({ state }: { state: DesktopUpdates }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const onState = (s: UpdatesState) => qc.setQueryData(['updates'], s)
   const onError = (err: unknown) => toast.error(errorMessage(err))
@@ -107,16 +110,13 @@ function DesktopUpdatesSection({ state }: { state: DesktopUpdates }) {
   return (
     <div className="space-y-3 text-sm">
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-        <dt className="text-muted-foreground">Installed</dt>
-        <dd data-testid="updates-installed">CrossBoard {state.installed}</dd>
-        <dt className="text-muted-foreground">Newest release</dt>
+        <dt className="text-muted-foreground">{t('updates.installed')}</dt>
+        <dd data-testid="updates-installed">{t('updates.installedValue', { version: state.installed })}</dd>
+        <dt className="text-muted-foreground">{t('updates.newestRelease')}</dt>
         <dd data-testid="updates-newest">{newestText(state)}</dd>
       </dl>
       {unsupported ? (
-        <p className="text-muted-foreground">
-          This copy of the app cannot update itself: it runs from an unpacked folder, not from its installer
-          or a package. Install a release from GitHub to get updates here.
-        </p>
+        <p className="text-muted-foreground">{t('updates.unsupported')}</p>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -125,27 +125,27 @@ function DesktopUpdatesSection({ state }: { state: DesktopUpdates }) {
             onClick={() => check.mutate()}
             disabled={busy || check.isPending}
           >
-            {state.status === 'checking' ? 'Checking…' : 'Check now'}
+            {state.status === 'checking' ? t('updates.checking') : t('updates.checkNow')}
           </Button>
           {offered && (
             <Button size="sm" onClick={() => install.mutate()} disabled={install.isPending}>
-              Download and install
+              {t('updates.install')}
             </Button>
           )}
         </div>
       )}
       {state.status === 'downloading' && (
-        <Progress value={state.progress?.percent ?? 0} aria-label="Download">
+        <Progress value={state.progress?.percent ?? 0} aria-label={t('updates.downloadAria')}>
           <span className="text-muted-foreground">
-            Downloading {state.newest?.version}… {state.progress?.percent ?? 0}%
+            {t('updates.downloading', {
+              version: state.newest?.version,
+              percent: state.progress?.percent ?? 0,
+            })}
           </span>
         </Progress>
       )}
       {state.status === 'installing' && (
-        <p role="status">
-          Installing {state.newest?.version}: the board stops for a moment and the app starts again as the new
-          version.
-        </p>
+        <p role="status">{t('updates.installing', { version: state.newest?.version })}</p>
       )}
       {state.error && (
         <p role="alert" className="text-destructive [overflow-wrap:anywhere]">
@@ -155,7 +155,9 @@ function DesktopUpdatesSection({ state }: { state: DesktopUpdates }) {
       {state.manual && <ManualCommand command={state.manual.command} />}
       {updateOffered(state) && state.newest.notes && (
         <div className="space-y-1">
-          <h3 className="text-xs font-medium text-muted-foreground">What's new in {state.newest.version}</h3>
+          <h3 className="text-xs font-medium text-muted-foreground">
+            {t('updates.whatsNew', { version: state.newest.version })}
+          </h3>
           <div
             data-testid="updates-notes"
             className="max-h-64 overflow-auto rounded-md border bg-muted/30 p-3 text-xs whitespace-pre-wrap [overflow-wrap:anywhere]"
@@ -174,7 +176,7 @@ function DesktopUpdatesSection({ state }: { state: DesktopUpdates }) {
               onCheckedChange={(autoCheck) => settings.mutate({ autoCheck })}
               disabled={settings.isPending}
             />
-            <Label htmlFor="updates-auto-check">Check for updates at start and every six hours</Label>
+            <Label htmlFor="updates-auto-check">{t('updates.autoCheck')}</Label>
           </div>
           <div className="flex items-center gap-2">
             <Switch
@@ -183,12 +185,9 @@ function DesktopUpdatesSection({ state }: { state: DesktopUpdates }) {
               onCheckedChange={(prereleases) => settings.mutate({ prereleases })}
               disabled={settings.isPending}
             />
-            <Label htmlFor="updates-prereleases">Include pre-releases (0.3.0-beta.1 and the like)</Label>
+            <Label htmlFor="updates-prereleases">{t('updates.prereleases')}</Label>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Nothing is downloaded or installed until you press Download and install. Each download is checked
-            against the sha512 in the release's metadata first.
-          </p>
+          <p className="text-xs text-muted-foreground">{t('updates.note')}</p>
         </div>
       )}
     </div>
@@ -196,11 +195,11 @@ function DesktopUpdatesSection({ state }: { state: DesktopUpdates }) {
 }
 
 function newestText(state: DesktopUpdates) {
-  if (state.newest) return `CrossBoard ${state.newest.version}`
-  if (state.status === 'checking') return 'Checking…'
-  if (!state.checkedAt) return 'Not checked yet'
-  if (state.status === 'none') return `None newer (checked ${ago(state.checkedAt)})`
-  return `Unknown (checked ${ago(state.checkedAt)})`
+  if (state.newest) return shared.t('updates.installedValue', { version: state.newest.version })
+  if (state.status === 'checking') return shared.t('updates.checking')
+  if (!state.checkedAt) return shared.t('updates.notChecked')
+  if (state.status === 'none') return shared.t('updates.none', { when: ago(state.checkedAt) })
+  return shared.t('updates.unknown', { when: ago(state.checkedAt) })
 }
 
 /**
@@ -208,6 +207,7 @@ function newestText(state: DesktopUpdates) {
  * it again. Per browser (it is not on the server), and only under the app, which has the card.
  */
 function SkippedUpdate() {
+  const { t } = useTranslation()
   const [skipped, setSkipped] = useState<string | null>(null)
   useEffect(() => {
     const read = () => setSkipped(recallUpdateMemory().skippedVersion)
@@ -217,11 +217,9 @@ function SkippedUpdate() {
   if (!skipped) return null
   return (
     <div data-testid="updates-skipped" className="flex flex-wrap items-center gap-2">
-      <span className="text-muted-foreground">
-        Skipped {skipped}: the update card will not show for it again.
-      </span>
+      <span className="text-muted-foreground">{t('updates.skipped', { version: skipped })}</span>
       <Button size="sm" variant="outline" onClick={() => forgetUpdateMemory()}>
-        Undo
+        {t('updates.undo')}
       </Button>
     </div>
   )
@@ -229,9 +227,10 @@ function SkippedUpdate() {
 
 /** The command that installs the downloaded package, for when polkit could not. */
 function ManualCommand({ command }: { command: string }) {
+  const { t } = useTranslation()
   return (
     <div className="space-y-1">
-      <p>Run this in a terminal to install it, then start the app again:</p>
+      <p>{t('updates.manual')}</p>
       <div className="flex items-start gap-2">
         <code
           data-testid="updates-command"
@@ -242,11 +241,11 @@ function ManualCommand({ command }: { command: string }) {
         <Button
           size="icon-sm"
           variant="ghost"
-          aria-label="Copy the command"
+          aria-label={t('updates.copyCommand')}
           onClick={() =>
             navigator.clipboard.writeText(command).then(
-              () => toast.success('Copied'),
-              () => toast.error('Could not copy'),
+              () => toast.success(t('connect.copied')),
+              () => toast.error(t('connect.couldNotCopy')),
             )
           }
         >

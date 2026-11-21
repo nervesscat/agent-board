@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { X } from 'lucide-react'
 import { useEffect, useId, useState, useSyncExternalStore } from 'react'
+import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { toast } from 'sonner'
@@ -131,6 +132,7 @@ function UpdateCardPanel({
   onSkip: () => void
   onInstall: () => void
 }) {
+  const { t } = useTranslation()
   const titleId = useId()
   const dark = useDark()
   const [broken, setBroken] = useState<string[]>([])
@@ -170,15 +172,15 @@ function UpdateCardPanel({
             >
               <CrossBoardMark className="size-9 text-muted-foreground" />
               <p className="text-sm font-medium">CrossBoard {version}</p>
-              <p className="text-xs text-muted-foreground">Release artwork</p>
+              <p className="text-xs text-muted-foreground">{t('updates.card.artwork')}</p>
             </div>
           )}
         </div>
         <div className="flex items-start justify-between gap-3 px-4 pt-3">
           <h2 id={titleId} className="text-base leading-snug font-semibold">
-            CrossBoard {version} is available
+            {t('updates.card.available', { version })}
           </h2>
-          <Button size="icon-sm" variant="ghost" aria-label="Close" onClick={onClose}>
+          <Button size="icon-sm" variant="ghost" aria-label={t('common.close')} onClick={onClose}>
             <X />
           </Button>
         </div>
@@ -201,10 +203,10 @@ function UpdateCardPanel({
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2 border-t px-4 py-3">
           <Button size="sm" variant="outline" onClick={onSkip}>
-            Skip this version
+            {t('updates.card.skip')}
           </Button>
           <Button size="sm" onClick={onInstall}>
-            Install now
+            {t('updates.card.installNow')}
           </Button>
         </div>
       </div>
