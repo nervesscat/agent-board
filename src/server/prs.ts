@@ -713,7 +713,12 @@ async function stopMergedPreviews(repo: schema.Repo, left: schema.Pr[]) {
   }
 }
 
-export async function listPrs(projectId: number, opts: { refresh?: boolean } = {}) {
+/**
+ * The queue's rows. `involvingMe` leaves out the open PRs only the repos' plain open list found (what
+ * All PRs adds to the rest): a reader that acts on the queue, such as an agent picking PRs to review,
+ * asks for it; the page gets every row and narrows by choice.
+ */
+export async function listPrs(projectId: number, opts: { refresh?: boolean; involvingMe?: boolean } = {}) {
   getProject(projectId)
   const stale = Date.now() - (lastRefresh.get(projectId) ?? 0) > REFRESH_MS
   if (opts.refresh || stale) await refreshPrs(projectId)
@@ -725,6 +730,7 @@ export async function listPrs(projectId: number, opts: { refresh?: boolean } = {
       and(
         eq(schema.prs.projectId, projectId),
         or(eq(schema.prs.open, true), gte(schema.prs.mergedAt, mergedSince())),
+        ...(opts.involvingMe ? [eq(schema.prs.involvesMe, true)] : []),
       ),
     )
     .orderBy(desc(schema.prs.updatedAt))

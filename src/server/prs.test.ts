@@ -1135,6 +1135,15 @@ describe('PRs that involve me not (All PRs)', () => {
     expect((await storedPr(projectId, 1)).row).toMatchObject({ open: true, involvesMe: false, leftAs: null })
   })
 
+  it("narrows to the PRs that involve me for a reader that acts on the queue (an agent's list_prs)", async () => {
+    const { projectId } = await queueProject('all-prs-involving')
+    found = [theirs(1), stranger(2), ghPr(3)]
+    const everyone = await prs.listPrs(projectId, { refresh: true })
+    expect(everyone.map((p) => p.number).sort()).toEqual([1, 2, 3])
+    const mine = await prs.listPrs(projectId, { involvingMe: true })
+    expect(mine.map((p) => p.number).sort()).toEqual([1, 3])
+  })
+
   it('keeps the readers on the PRs that involve me: the summary, the project count, the PR tickets', async () => {
     const { db, schema } = await import('#/db')
     const summary = await import('./summary')
