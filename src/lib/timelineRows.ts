@@ -288,20 +288,27 @@ export function axisFor(t: WorkTimeline, now: number, win?: Window, width?: numb
   const agentAt = agentStarts(t)
   const stretches = stretchesOf(t, now)
   // Waiting to start is part of the axis: it begins at the ticket's creation, not at its first worker step.
-  const lead = stretches.find((s) => s.kind === 'start')
   if (win) {
     start = Date.parse(win.start)
     end = Date.parse(win.end)
   } else {
-    start = lead ? lead.start : agentAt.length ? Math.min(...agentAt) : t.start ? Date.parse(t.start) : now
+    // From the first worker step, or earlier where the ticket was waiting before it: waiting to start, and
+    // a stage it sat in from its creation.
+    start = Math.min(
+      agentAt.length ? Math.min(...agentAt) : t.start ? Date.parse(t.start) : now,
+      ...stretches.map((s) => s.start),
+    )
     end = t.end ? Date.parse(t.end) : now
     if (t.live) end = Math.max(end, now)
   }
   const merges = t.marks.filter((m) => m.kind === 'merge').map((m) => Date.parse(m.at))
   const latest = merges.length ? Math.max(...merges) : null
+  // A window reaches back over what the ticket waited, so a merge counts when it is after the ticket's first
+  // event, not only after the window's own start.
+  const floor = win && t.start ? Math.min(start, Date.parse(t.start)) : start
   const plan = planPieces({
     stretches,
-    merge: latest !== null && latest > start && latest <= end ? latest : null,
+    merge: latest !== null && latest > floor && latest <= end ? latest : null,
     work: agentWork(t, now),
     carve: agentCarve(t),
   })
@@ -586,7 +593,7 @@ export function buildChart(timeline: WorkTimeline, now: number, win?: Window, wi
     // A merge is never hidden: inside a block it is drawn at the block's end edge, not on its chip.
     const block =
       m.kind === 'merge'
-        ? axis.pieces.find((p) => (p.kind === 'blocked' || p.kind === 'review') && at > p.start && at < p.end)
+        ? axis.pieces.find((p) => p.kind !== 'gap' && p.kind !== 'tail' && at > p.start && at < p.end)
         : undefined
     marks.push({ mark: m, left: share(axis, block ? block.end : at) })
   }
@@ -606,7 +613,7 @@ export function buildChart(timeline: WorkTimeline, now: number, win?: Window, wi
     bands,
     breaks,
     created:
-      createdAt !== null && lead >= 1 && createdShare <= 1 && !bands.some((b) => b.kind === 'start')
+      createdAt !== null && lead >= 1 && createdShare < 0 && !bands.some((b) => b.kind === 'start')
         ? { minutes: lead, left: Math.max(0, createdShare) }
         : null,
     summary: summarize(t, rows, axis),

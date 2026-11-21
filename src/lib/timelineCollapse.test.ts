@@ -656,3 +656,66 @@ describe('waits on the human', () => {
     ])
   })
 })
+
+describe('what a review round found', () => {
+  it('ends a merged ticket at its merge in a window that starts after the merge, as in a wider one', () => {
+    const mergedAt = m(180) + 2 * DAY
+    const build = (ageMs: number) => {
+      const now = mergedAt + ageMs
+      return {
+        now,
+        t: timeline({
+          spans: [span(1, m(0), m(60)), span(2, m(100), m(180))],
+          reviewStretches: [{ ...stretch(m(180), now), name: 'Release' }],
+          marks: [merge(9, mergedAt)],
+          live: true,
+          end: iso(now),
+          now: iso(now),
+        }),
+      }
+    }
+    for (const age of [10 * HOUR, 30 * HOUR, 60 * HOUR, 10 * DAY]) {
+      const { t, now } = build(age)
+      const chart = buildChart(t, now, { start: iso(now - DAY), end: iso(now) }, 700)
+      expect(chart.axis.end, `${age / HOUR} h after the merge`).toBe(mergedAt)
+      expect(chart.live).toBe(false)
+      expect(chart.marks[0]!.left).toBeCloseTo(1, 6)
+      expect(chart.rows.flatMap((r) => r.items)).toHaveLength(2)
+    }
+  })
+
+  it('draws a ticket that sat blocked from its creation until its first work as a block', () => {
+    const t = timeline({
+      start: iso(m(0)),
+      spans: [span(1, m(0) + 2 * DAY, m(60) + 2 * DAY)],
+      blockedStretches: [stretch(m(0), m(0) + 2 * DAY)],
+      end: iso(m(60) + 2 * DAY),
+    })
+    const chart = buildChart(t, m(0), undefined, 700)
+    expect(chart.axis.start).toBe(m(0))
+    expect(chart.bands.map((b) => b.label)).toEqual(['Blocked'])
+    expect(chart.created).toBeNull()
+    expect(chart.rows[0]!.items).toHaveLength(1)
+  })
+
+  it('puts a merge inside a wait on the human at the end of its block, as in a stage', () => {
+    const at = (k: 'human' | 'blocked' | 'review') =>
+      timeline({
+        spans: [span(1, m(0), m(60)), span(2, m(90 * 60), m(91 * 60))],
+        ...(k === 'human'
+          ? { humanStretches: [{ start: iso(m(60 * 60)), end: iso(m(80 * 60)), card: false }] }
+          : k === 'blocked'
+            ? { blockedStretches: [stretch(m(60 * 60), m(80 * 60))] }
+            : { reviewStretches: [stretch(m(60 * 60), m(80 * 60))] }),
+        marks: [merge(9, m(70 * 60))],
+        end: iso(m(91 * 60)),
+      })
+    const ends = (['human', 'blocked', 'review'] as const).map((k) => {
+      const chart = buildChart(at(k), m(0))
+      const band = chart.bands.find((b) => b.kind === k)!
+      expect(chart.marks[0]!.left, k).toBeCloseTo(band.seg.left + band.seg.width, 6)
+      return band.seg.left + band.seg.width
+    })
+    expect(ends[0]).toBeCloseTo(ends[1]!, 6)
+  })
+})
