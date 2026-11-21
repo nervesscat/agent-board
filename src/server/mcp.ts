@@ -98,7 +98,7 @@ Keep the board out of the repo. The board and any other personal tracking tool a
 
 const STATUS = `a stage key from get_project, a stage name, or a kind (open, active, blocked, review, done, cancelled; todo and in_progress also work): ${KIND_RULE}`
 const COMPLEXITY =
-  "how much review the ticket gets: low none (the builder verifies itself), mid one review round, high three, max up to ten for work built from scratch (a whole site or app, a new product or standalone service; a feature in an existing codebase is never max, however difficult). Mid when left out; a lane without one copies its parent's."
+  "how much review the ticket gets: the review rounds its project's workflow sets for the level (get_workflow with the ticket's id; the Standard workflow gives low none, the builder verifying itself, mid one, high three, max up to ten), max being for work built from scratch (a whole site or app, a new product or standalone service; a feature in an existing codebase is never max, however difficult). Mid when left out; a lane without one copies its parent's."
 const WORKFLOW_PRESET =
   "the workflow preset this ticket follows instead of its project's (get_project's workflowPreset): light, standard, thorough or maximum; null follows the project's again. A lane created without one copies its parent's. get_workflow with the ticket's id answers the steps it has to follow"
 const AS = z
@@ -567,7 +567,7 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
   )
   tool(
     'create_ticket',
-    "Create a ticket (a feature or piece of work) with optional initial tasks. A top-level ticket starts with its project's default phases (get_project's defaultPhases: Implementation, Pushed, PR, CI, Preview, Summary, Merged unless the project changed them): tasks given as plain texts become the steps under the first phase, and {text, subtasks} items are phases of yours that go right after it. With parentId it is a lane of that ticket: a parallel piece of it with its own assignee, branch, tasks and updates, which starts without phases unless defaultPhases is true. defaultPhases false stores the tasks exactly as given. complexity sets how much review the ticket gets (low, mid, high or max: low none, mid one review round, high three, max up to ten for work built from scratch; mid by default, and a lane without one copies its parent's).",
+    "Create a ticket (a feature or piece of work) with optional initial tasks. A top-level ticket starts with its project's default phases (get_project's defaultPhases: Implementation, Pushed, PR, CI, Preview, Summary, Merged unless the project changed them): tasks given as plain texts become the steps under the first phase, and {text, subtasks} items are phases of yours that go right after it. With parentId it is a lane of that ticket: a parallel piece of it with its own assignee, branch, tasks and updates, which starts without phases unless defaultPhases is true. defaultPhases false stores the tasks exactly as given. complexity sets how much review the ticket gets (low, mid, high or max: the review rounds the project's workflow sets for the level, which the Standard workflow gives as low none, mid one, high three, max up to ten for work built from scratch; mid by default, and a lane without one copies its parent's).",
     {
       projectId: z.number().int(),
       title: z.string(),

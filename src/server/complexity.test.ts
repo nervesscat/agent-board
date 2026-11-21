@@ -280,6 +280,8 @@ describe("a ticket's complexity", () => {
       expect(tool.inputSchema.required ?? [], name).not.toContain('complexity')
       expect(field.description, name).toMatch(/\S/)
       expect(field.description, name).not.toContain('\n')
+      expect(field.description, name).toContain("the review rounds its project's workflow sets")
+      expect(field.description, name).toContain('low none')
       expect(field.description, name).toContain('max up to ten')
       expect(field.description, name).toContain('never max')
       expect(tool.description, name).toContain('complexity')

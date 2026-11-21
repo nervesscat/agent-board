@@ -81,6 +81,7 @@ export function WorkflowPage({
     return next
   }
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
+  const [confirmingReset, setConfirmingReset] = useState(false)
 
   const active = data?.active
   const viewed = pickedPreset ?? active
@@ -151,7 +152,7 @@ export function WorkflowPage({
               <Check data-icon="inline-start" /> Use this workflow
             </Button>
           )}
-          <AlertDialog>
+          <AlertDialog open={confirmingReset} onOpenChange={setConfirmingReset}>
             <AlertDialogTrigger
               render={<Button type="button" variant="outline" size="sm" disabled={!current.tweaked} />}
             >
@@ -167,7 +168,14 @@ export function WorkflowPage({
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={reset}>Reset</AlertDialogAction>
+                <AlertDialogAction
+                  onClick={() => {
+                    setConfirmingReset(false)
+                    reset()
+                  }}
+                >
+                  Reset
+                </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>

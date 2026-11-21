@@ -10,10 +10,10 @@ export const STAGE_KINDS = ['open', 'active', 'blocked', 'review', 'done', 'canc
 export type StageKind = (typeof STAGE_KINDS)[number]
 
 /**
- * How much review a ticket gets: `low` none (the builder verifies itself), `mid` one review round,
- * `high` three, `max` up to ten for work built from scratch (a whole site or app, a new product or
- * service; a feature in an existing codebase is never `max`). Chosen when the ticket is created, and
- * changeable after.
+ * How much review a ticket gets: the review rounds the project's workflow sets for its level (the Standard
+ * workflow: `low` none, the builder verifying itself, `mid` one, `high` three, `max` up to ten for work built
+ * from scratch: a whole site or app, a new product or service; a feature in an existing codebase is never
+ * `max`). Chosen when the ticket is created, and changeable after.
  */
 export const COMPLEXITIES = ['low', 'mid', 'high', 'max'] as const
 export type Complexity = (typeof COMPLEXITIES)[number]
