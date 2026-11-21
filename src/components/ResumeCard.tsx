@@ -3,6 +3,7 @@ import { Play, RotateCw } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '#/components/ui/button'
+import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, post, type TicketFull, type TicketResume, type TicketResumeRow } from '#/lib/api'
 import { ago, stamp } from '#/lib/format'
 
@@ -71,9 +72,9 @@ export function ResumeCard({ t, onChange }: { t: TicketFull; onChange: () => voi
           <div className="flex flex-wrap items-center gap-2">
             <span className={`rounded-full px-2 py-0.5 font-medium ${state.className}`}>{state.label}</span>
             {row.command && <span className="font-mono">{row.command}</span>}
-            <span className="text-muted-foreground" title={stamp(row.startedAt ?? row.createdAt)}>
-              {ago(row.startedAt ?? row.createdAt)}
-            </span>
+            <Tip content={stamp(row.startedAt ?? row.createdAt)}>
+              <span className="text-muted-foreground">{ago(row.startedAt ?? row.createdAt)}</span>
+            </Tip>
           </div>
           {row.state === 'skipped' && (
             <p className="text-muted-foreground [overflow-wrap:anywhere]">
