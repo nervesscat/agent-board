@@ -1,7 +1,8 @@
 /**
- * The work timeline's time warp, pure: time spent in a blocked or review stage is not drawn to scale. Each
- * such period is a fixed-width block on the axis whatever its real length, and a merge sits right after
- * the last recorded work. Real time elsewhere keeps its scale. The chart's layout (timelineRows.ts) maps
+ * The work timeline's time warp, pure: time the ticket waits on the human is not drawn to scale (before
+ * work starts, blocked, a wait or a decision card, a review stage, the wait for the merge). Each such
+ * period is a fixed-width labelled block on the axis whatever its real length, and a merge sits right
+ * after the last recorded work. Real time elsewhere, the agents' work, keeps its scale. The chart's layout (timelineRows.ts) maps
  * every time to its place through `position`, so segments, marks and hand-offs follow the blocks.
  */
 
@@ -12,9 +13,20 @@ export const COLLAPSED_MS = 24 * MIN
 /** The axis the stretch between the last work (or the last collapsed period) and the merge takes. */
 export const GAP_MS = 6 * MIN
 
-/** `tail` is everything after a pinned merge: it takes no axis at all (virtualMs 0). */
-export type PieceKind = 'blocked' | 'review' | 'gap' | 'tail'
+/** What a ticket waited for: to be started, a blocked stage, the human's answer, a review stage, the merge. */
+export type StretchKind = 'start' | 'blocked' | 'human' | 'review' | 'merge'
+/** `gap` is a short unlabelled break; `tail` is everything after a pinned merge: it takes no axis at all (virtualMs 0). */
+export type PieceKind = StretchKind | 'gap' | 'tail'
 type Ms = { start: number; end: number }
+
+/** A block's label when its stretch names none (a review stage names itself). */
+export const STRETCH_LABEL: Record<StretchKind, string> = {
+  start: 'Waiting to start',
+  blocked: 'Blocked',
+  human: 'Waiting on human',
+  review: 'In review',
+  merge: 'Waiting to merge',
+}
 
 /**
  * A stretch of real time drawn as `virtualMs` of axis. `start`/`end` are the real times, clipped to the
@@ -25,18 +37,19 @@ export type Piece = {
   end: number
   kind: PieceKind
   virtualMs: number
-  stretch: Ms | null
+  stretch: (Ms & { label: string }) | null
   /** The kind of period this time was skipped from (a gap between worker steps inside one too), else null. */
-  skips: Stretch['kind'] | null
+  skips: StretchKind | null
 }
 
-export type Stretch = { kind: 'blocked' | 'review'; start: number; end: number }
+/** A period of waiting in real time; `label` is what its block says (the kind's own words when left out). */
+export type Stretch = { kind: StretchKind; start: number; end: number; label?: string }
 
 /** The earliest the last worker step's end can be a gap start: a gap is never empty in real time. */
 const MIN_GAP_REAL = 1
 
 export type PlanInput = {
-  /** Periods in blocked and review stages, in real time (the open one already runs to now). */
+  /** The periods the ticket waited, in real time (the open one already runs to now); none overlap. */
   stretches: Stretch[]
   /** The latest merge, null when there is none. */
   merge: number | null
@@ -81,7 +94,18 @@ export function planPieces(input: PlanInput): { pieces: Piece[]; pinned: number 
     const lastWork = Math.min(lastWorkEnd, merge)
     let from = Math.max(lastWork, ...drawn.filter((d) => d.end > lastWork).map((d) => d.end))
     if (from > merge - MIN_GAP_REAL) from = merge - MIN_GAP_REAL
-    gap = { start: from, end: merge, kind: 'gap', virtualMs: GAP_MS, stretch: null, skips: null }
+    // A real wait before the merge (the ticket was in no waiting stage) is a labelled block; none is a short gap.
+    gap =
+      merge - from >= MIN
+        ? {
+            start: from,
+            end: merge,
+            kind: 'merge',
+            virtualMs: COLLAPSED_MS,
+            stretch: { start: from, end: merge, label: STRETCH_LABEL.merge },
+            skips: 'merge',
+          }
+        : { start: from, end: merge, kind: 'gap', virtualMs: GAP_MS, stretch: null, skips: null }
   }
   // Worker steps keep their real scale, so they are carved out of a period: its first remainder is the
   // labelled block, each later one a short unlabelled gap (a break on the axis).
@@ -97,7 +121,7 @@ export function planPieces(input: PlanInput): { pieces: Piece[]; pinned: number 
         end: part.end,
         kind: labelled ? s.kind : 'gap',
         virtualMs: labelled ? COLLAPSED_MS : GAP_MS,
-        stretch: labelled ? { start: s.start, end: s.end } : null,
+        stretch: labelled ? { start: s.start, end: s.end, label: s.label ?? STRETCH_LABEL[s.kind] } : null,
         skips: s.kind,
       })
       cursor = part.end
@@ -128,8 +152,7 @@ export function fitPieces(
   end: number,
   width: number,
 ): { pieces: Piece[]; slackMs: number } {
-  const px = (p: Piece) =>
-    p.kind === 'blocked' || p.kind === 'review' ? CHIP_PX : p.kind === 'gap' ? GAP_PX : 0
+  const px = (p: Piece) => (p.kind === 'gap' ? GAP_PX : p.kind === 'tail' ? 0 : CHIP_PX)
   const fixed = pieces.reduce((n, p) => n + px(p), 0)
   if (!fixed || width <= 0) return { pieces, slackMs: 0 }
   const shrink = Math.min(1, (FIXED_SHARE * width) / fixed)
@@ -173,4 +196,24 @@ export function position(start: number, pieces: Piece[], at: number): number {
     virtual += p.virtualMs
   }
   return virtual + (at - cursor)
+}
+
+/**
+ * Where a window of `end - start` ms of agent time begins, going back from `end`: the time in the pieces
+ * (the human's waits, the gaps, what follows a merge) takes no part of it, so the window reaches back
+ * past them. Never earlier than `floor` (the ticket's first event), never later than `start`. With no
+ * pieces inside the window it is `start` itself.
+ */
+export function windowStart(pieces: Piece[], start: number, end: number, floor: number | null): number {
+  let cursor = end
+  let left = end - start
+  for (const p of [...pieces].sort((a, b) => b.start - a.start)) {
+    if (p.start >= cursor) continue
+    const free = cursor - Math.min(p.end, cursor)
+    if (free >= left) break
+    left -= free
+    cursor = p.start
+  }
+  const at = cursor - left
+  return Math.min(start, floor === null ? at : Math.max(at, floor))
 }

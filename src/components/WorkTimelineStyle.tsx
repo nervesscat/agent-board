@@ -50,6 +50,18 @@ export const BLOCKED_CHIP =
 export const REVIEW_BAND = 'bg-violet-500/10 dark:bg-violet-400/10'
 export const REVIEW_CHIP =
   'border border-dashed border-violet-700/70 bg-violet-500/30 text-violet-950 dark:border-violet-300/70 dark:bg-violet-400/25 dark:text-violet-50'
+/** Waiting to start and waiting to merge: neutral, the board's own waits. */
+export const NEUTRAL_BAND = 'bg-slate-500/10 dark:bg-slate-400/10'
+export const NEUTRAL_CHIP =
+  'border border-dashed border-slate-600/70 bg-slate-500/25 text-slate-950 dark:border-slate-300/70 dark:bg-slate-400/25 dark:text-slate-50'
+/** The band behind the rows and the chip on the rail for each kind of collapsed wait. */
+export const BAND_STYLE = {
+  blocked: { band: BLOCKED_BAND, chip: BLOCKED_CHIP },
+  human: { band: BLOCKED_BAND, chip: BLOCKED_CHIP },
+  review: { band: REVIEW_BAND, chip: REVIEW_CHIP },
+  start: { band: NEUTRAL_BAND, chip: NEUTRAL_CHIP },
+  merge: { band: NEUTRAL_BAND, chip: NEUTRAL_CHIP },
+} as const
 /** The skip mark on the axis, where time was left out. */
 export const BREAK_MARK = 'text-muted-foreground'
 export const HANDOFF_LINE = 'border-muted-foreground'

@@ -25,8 +25,6 @@ import { onServerClock } from '#/lib/workStatus'
 import {
   ARROW,
   ARROW_ICON,
-  BLOCKED_BAND,
-  BLOCKED_CHIP,
   BREAK_MARK,
   DELEGATION,
   GRID_LINE,
@@ -40,9 +38,8 @@ import {
   OTHER_PHASE,
   PHASE,
   PLAIN_WAIT,
-  REVIEW_BAND,
-  REVIEW_CHIP,
   waitIcon,
+  BAND_STYLE,
   boxStyle,
 } from './WorkTimelineStyle'
 
@@ -83,11 +80,9 @@ export const delegationLabel = (w: ChartWait, live: boolean) =>
 const handoffLabel = (h: { from: string; to: string; at: string; note: string }) =>
   `${h.from} passed the work to ${h.to}, ${clock(h.at)}${h.note ? `: ${h.note}` : ''}`
 
-const BAND_NAME = { blocked: 'Blocked', review: 'In review' } as const
-
 /** A collapsed period's story: its real start, end and length, and that it is not drawn to scale. */
-export const collapsedLabel = (b: Pick<Band, 'kind' | 'start' | 'end' | 'open'>) =>
-  `${BAND_NAME[b.kind]}, ${stamp(new Date(b.start).toISOString())} to ${b.open ? 'now' : stamp(new Date(b.end).toISOString())}, ${longDuration(b.end - b.start)}, not drawn to scale`
+export const collapsedLabel = (b: Pick<Band, 'label' | 'start' | 'end' | 'open'>) =>
+  `${b.label}, ${stamp(new Date(b.start).toISOString())} to ${b.open ? 'now' : stamp(new Date(b.end).toISOString())}, ${longDuration(b.end - b.start)}, not drawn to scale`
 
 const markLabel = (m: TimelineMark) =>
   `${(MARK[m.kind] ?? OTHER_MARK).name}${m.note ? `: ${m.note}` : ''}, ${clock(m.at)}`
@@ -390,7 +385,7 @@ export function WorkTimelineBar({
     return () => watch.disconnect()
   }, [track])
   // The chart follows the time only while its axis runs to now: not when it ends at a pinned merge.
-  const live = timeline.live && (win !== undefined || axisFor(timeline, now).pinned === null)
+  const live = timeline.live && axisFor(timeline, now, win).pinned === null
   if (!timeline.start || !timeline.end || !hasWork(timeline))
     return (
       <p data-testid="work-timeline" className="text-xs text-muted-foreground">
@@ -434,7 +429,7 @@ export function WorkTimelineBar({
         <span
           key={b.key}
           aria-hidden
-          className={`pointer-events-none absolute inset-y-0 ${b.kind === 'review' ? REVIEW_BAND : BLOCKED_BAND}`}
+          className={`pointer-events-none absolute inset-y-0 ${BAND_STYLE[b.kind].band}`}
           style={{ left: `${b.seg.left * 100}%`, width: `${b.seg.width * 100}%` }}
         />
       ))}
@@ -481,7 +476,7 @@ export function WorkTimelineBar({
                 details={
                   <Facts
                     items={[
-                      ['Stage', BAND_NAME[b.kind]],
+                      ['Waiting for', b.label],
                       ['From', stamp(new Date(b.start).toISOString())],
                       ['To', b.open ? 'now' : stamp(new Date(b.end).toISOString())],
                       ['Duration', longDuration(b.end - b.start)],
@@ -499,11 +494,11 @@ export function WorkTimelineBar({
                     ]}
                   />
                 }
-                className={`${SEG_BASE} justify-center ${compact ? 'text-[10px]' : 'text-[11px]'} ${b.kind === 'review' ? REVIEW_CHIP : BLOCKED_CHIP}`}
+                className={`${SEG_BASE} justify-center ${compact ? 'text-[10px]' : 'text-[11px]'} ${BAND_STYLE[b.kind].chip}`}
                 style={boxStyle(b.seg.left, b.seg.width, 2, RAIL_PX - 4)}
                 attrs={{ 'data-kind': b.kind }}
               >
-                <span className="min-w-0 truncate">{BAND_NAME[b.kind]}</span>
+                <span className="min-w-0 truncate">{b.label}</span>
               </Segment>
             ))}
             {marks.map(({ mark: m, left }) => {

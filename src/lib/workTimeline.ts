@@ -148,8 +148,14 @@ export type WorkTimeline = {
   handoffs: TimelineHandoff[]
   marks: TimelineMark[]
   blockedStretches: { start: string; end: string }[]
-  /** Time in a review-kind stage (In review, Approved, Release), joined where one move follows the next. */
-  reviewStretches: { start: string; end: string }[]
+  /** Time in a review-kind stage (In review, Approved, Release), one per stay, with the stage's own name. */
+  reviewStretches: { start: string; end: string; name?: string }[]
+  /**
+   * Time the ticket waited on the human outside a blocked or review stage: an open or closed wait on the
+   * human, and a decision card from its posting to its answer. Overlapping ones are one; `card` says one of
+   * them was a decision card.
+   */
+  humanStretches: { start: string; end: string; card: boolean }[]
   totals: WorkTotals
   lastSignalAt: string
   /** The latest agent event or agent post: when the agent last said something. */
@@ -186,14 +192,16 @@ export type TimelineTicket = {
 
 export type TimelineOptions = {
   now: Date | number
-  /** The project's stages (key and kind): what a status and a stage event's stage mean. */
-  stages: { key: string; kind: StageKind }[]
+  /** The project's stages (key, kind and name): what a status and a stage event's stage mean. */
+  stages: { key: string; kind: StageKind; name?: string }[]
   ticket: TimelineTicket
   stallMinutes: number
   /** Its posts: an agent's refreshes the lease, a human's proves a person spoke, not that the run is alive. */
   posts?: TimelinePost[]
   /** Why it waits on the human outside its events: an undecided decision card, or a blocked next step. */
   waiting?: { decision?: boolean; blockedTask?: boolean }
+  /** Its decision cards: when each was posted and when it was answered (null: still waiting for an answer). */
+  decisions?: { at: string; decidedAt: string | null }[]
   /** The last progress post on the ticket or its lanes, when the caller already read them for the family. */
   progressAt?: string | null
 }
@@ -287,6 +295,7 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
   const now = +o.now
   const sorted = [...events].sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.id - b.id)
   const kindOfKey = (key: string) => o.stages.find((s) => s.key === key)?.kind
+  const nameOfKey = (key: string) => o.stages.find((s) => s.key === key)?.name
   // A status no stage has any more reads as the first stage, as everywhere on the board.
   const ticketKind = kindOfKey(o.ticket.status) ?? o.stages[0]?.kind ?? 'open'
   const live = !o.ticket.archivedAt && LIVE_KINDS.includes(ticketKind)
@@ -345,16 +354,27 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
       if (kindOfKey(e.toStage) !== kind || endMs === null) return []
       const next = stageMoves[i + 1]
       const b = next ? Date.parse(next.at) : endMs
-      return b > Date.parse(e.at) ? [{ start: e.at, end: iso(b) }] : []
+      return b > Date.parse(e.at) ? [{ start: e.at, end: iso(b), name: nameOfKey(e.toStage) }] : []
     })
-  const blockedStretches = stretchesIn('blocked')
-  // One unbroken stay in review (In review, then Approved, then Release) is one stretch.
-  const reviewStretches = stretchesIn('review').reduce<{ start: string; end: string }[]>((out, s) => {
-    const last = out.at(-1)
-    if (last && Date.parse(last.end) >= Date.parse(s.start)) last.end = s.end
-    else out.push({ ...s })
-    return out
-  }, [])
+  const blockedStretches = stretchesIn('blocked').map(({ start, end }) => ({ start, end }))
+  // Each stay in a review-kind stage is its own stretch, named by the stage (In review, Approved, Release).
+  const reviewStretches = stretchesIn('review')
+  // The human's turn outside the stages: waits on the human and decision cards, overlaps made one.
+  const humanStretches = union(
+    [
+      ...waits.filter((w) => w.reason === 'human').map((w) => [Date.parse(w.start), Date.parse(w.end)]),
+      ...(o.decisions ?? []).map((d) => [
+        Date.parse(d.at),
+        d.decidedAt ? Date.parse(d.decidedAt) : (endMs ?? 0),
+      ]),
+    ].map(([a, b]) => clip(a!, b!)),
+  ).map(([a, b]) => ({
+    start: iso(a),
+    end: iso(b),
+    card: (o.decisions ?? []).some(
+      (d) => Date.parse(d.at) < b && (d.decidedAt ? Date.parse(d.decidedAt) : (endMs ?? 0)) > a,
+    ),
+  }))
 
   // The stage the ticket is in now and when it entered it: the latest move into its status (the creation
   // recorded one too), else its creation. A review row counts its wait from this, never from updatedAt.
@@ -474,6 +494,7 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
     marks,
     blockedStretches,
     reviewStretches,
+    humanStretches,
     totals: sums,
     lastSignalAt,
     lastWordAt,

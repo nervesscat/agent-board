@@ -6,8 +6,10 @@ import {
   planPieces,
   position,
   spanOf,
+  windowStart,
   type Piece,
   type Stretch,
+  type StretchKind,
 } from '#/lib/timelineCollapse'
 import {
   type Interval,
@@ -43,7 +45,7 @@ export type Axis = {
   ticks: Tick[]
   span: number
   pieces: Piece[]
-  /** The merge the axis ends at (no window only), null otherwise. */
+  /** The merge the axis ends at , null otherwise. */
   pinned: number | null
 }
 
@@ -88,7 +90,9 @@ export type Mark = { mark: TimelineMark; left: number }
 /** A blocked or review period: its real start and end, whether it is still going, and its fixed block. */
 export type Band = {
   key: string
-  kind: 'blocked' | 'review'
+  kind: StretchKind
+  /** What the block says: the kind's words, or the review stage's own name. */
+  label: string
   start: number
   end: number
   open: boolean
@@ -219,18 +223,57 @@ const agentCarve = (t: WorkTimeline): Ms[] => [
     .map((w) => ({ start: Date.parse(w.start), end: Date.parse(w.end) })),
 ]
 
-/** The blocked and review periods as real times; one still going runs to now on a live ticket. */
+/** An interval minus the ones in `taken`: what is left of it, in order. */
+const without = (from: Ms, taken: Ms[]): Ms[] => {
+  const left: Ms[] = []
+  let cursor = from.start
+  for (const t of [...taken].sort((a, b) => a.start - b.start)) {
+    if (t.end <= cursor) continue
+    if (t.start >= from.end) break
+    if (t.start > cursor) left.push({ start: cursor, end: t.start })
+    cursor = Math.max(cursor, t.end)
+  }
+  if (cursor < from.end) left.push({ start: cursor, end: from.end })
+  return left
+}
+
+/**
+ * The periods the ticket waited on the human, as real times: before work started, in a blocked stage, on
+ * the human or a decision card, in a review stage; one still going runs to now on a live ticket. Where two
+ * overlap the stage wins over the human's wait, and both over the wait to start.
+ */
 function stretchesOf(t: WorkTimeline, now: number): Stretch[] {
   const open = t.end ? Date.parse(t.end) : null
-  const make = (kind: Stretch['kind']) => (b: { start: string; end: string }) => {
-    const end = Date.parse(b.end)
-    return {
-      kind,
-      start: Date.parse(b.start),
-      end: t.live && open !== null && end >= open ? Math.max(end, now) : end,
+  const make =
+    (kind: Stretch['kind'], label?: (s: { card?: boolean; name?: string }) => string | undefined) =>
+    (b: { start: string; end: string; card?: boolean; name?: string }): Stretch => {
+      const end = Date.parse(b.end)
+      return {
+        kind,
+        start: Date.parse(b.start),
+        end: t.live && open !== null && end >= open ? Math.max(end, now) : end,
+        label: label?.(b),
+      }
     }
-  }
-  return [...t.blockedStretches.map(make('blocked')), ...t.reviewStretches.map(make('review'))]
+  const stages = [
+    ...t.blockedStretches.map(make('blocked')),
+    ...t.reviewStretches.map(make('review', (b) => b.name)),
+  ]
+  const taken = (list: Stretch[]) => list.map((s) => ({ start: s.start, end: s.end }))
+  const around = (list: Stretch[], by: Ms[]) =>
+    list.flatMap((s) => without(s, by).map((m) => ({ ...s, start: m.start, end: m.end })))
+  const human = around(
+    (t.humanStretches ?? []).map(make('human', (b) => (b.card ? 'Waiting for a decision' : undefined))),
+    taken(stages),
+  )
+  // From the ticket's creation to its first worker step: it was waiting to be started.
+  const first = agentStarts(t)
+  const begun = first.length ? Math.min(...first) : null
+  const lead =
+    t.start && begun !== null && begun - Date.parse(t.start) >= MIN
+      ? [{ kind: 'start' as const, start: Date.parse(t.start), end: begun }]
+      : []
+  return [...stages, ...human, ...around(lead, taken([...stages, ...human]))]
 }
 
 /**
@@ -243,23 +286,29 @@ export function axisFor(t: WorkTimeline, now: number, win?: Window, width?: numb
   let start: number
   let end: number
   const agentAt = agentStarts(t)
+  const stretches = stretchesOf(t, now)
+  // Waiting to start is part of the axis: it begins at the ticket's creation, not at its first worker step.
+  const lead = stretches.find((s) => s.kind === 'start')
   if (win) {
     start = Date.parse(win.start)
     end = Date.parse(win.end)
   } else {
-    start = agentAt.length ? Math.min(...agentAt) : t.start ? Date.parse(t.start) : now
+    start = lead ? lead.start : agentAt.length ? Math.min(...agentAt) : t.start ? Date.parse(t.start) : now
     end = t.end ? Date.parse(t.end) : now
     if (t.live) end = Math.max(end, now)
   }
   const merges = t.marks.filter((m) => m.kind === 'merge').map((m) => Date.parse(m.at))
   const latest = merges.length ? Math.max(...merges) : null
   const plan = planPieces({
-    stretches: stretchesOf(t, now),
+    stretches,
     merge: latest !== null && latest > start && latest <= end ? latest : null,
     work: agentWork(t, now),
     carve: agentCarve(t),
   })
-  if (plan.pinned !== null && !win) end = plan.pinned
+  // A window is so much agent time: what the ticket waited on the human takes none of it, so it reaches
+  // back past those periods (never before the ticket's first event).
+  if (win) start = windowStart(plan.pieces, start, end, t.start ? Date.parse(t.start) : null)
+  if (plan.pinned !== null) end = plan.pinned
   if (end <= start) end = start + MIN
   const clipped = clipPieces(plan.pieces, start, end)
   // With the track's width known, the blocks are a fixed number of pixels and the real time fills the rest.
@@ -272,7 +321,7 @@ export function axisFor(t: WorkTimeline, now: number, win?: Window, width?: numb
     ticks: ticksFor(start, end, pieces, span, width === undefined ? MAX_TICKS : ticksFit(width)),
     span,
     pieces,
-    pinned: plan.pinned !== null && !win ? plan.pinned : null,
+    pinned: plan.pinned,
   }
 }
 
@@ -360,6 +409,15 @@ export function agentTree(t: WorkTimeline): { agent: string; parent: string | nu
   return out
 }
 
+/** What each kind of skipped time is called in the summary. */
+const SKIPPED: Record<StretchKind, string> = {
+  start: 'waiting to start',
+  blocked: 'blocked',
+  human: 'waiting on the human',
+  review: 'in review',
+  merge: 'waiting to merge',
+}
+
 /** The chart's one-sentence summary for screen readers. */
 export function summarize(t: WorkTimeline, rows: AgentRow[], axis: Axis): string {
   if (!t.start) return 'No work recorded yet.'
@@ -386,16 +444,45 @@ export function summarize(t: WorkTimeline, rows: AgentRow[], axis: Axis): string
   const n = doers || working.length
   const over = spokenDuration(axis.end - axis.start)
   const who = doers ? 'Work by' : 'Activity by'
-  const skipped = (['blocked', 'review'] as const).flatMap((k) => {
+  const skipped = (Object.keys(SKIPPED) as StretchKind[]).flatMap((k) => {
     const ms = axis.pieces.filter((p) => p.skips === k).reduce((n, p) => n + p.end - p.start, 0)
-    return ms > 0 ? [`${k === 'review' ? 'in review' : 'blocked'} ${longDuration(ms)}`] : []
+    return ms > 0 ? [`${SKIPPED[k]} ${longDuration(ms)}`] : []
   })
   const scale = skipped.length ? ` Not to scale: ${skipped.join(', ')}.` : ''
   return `${who} ${n} agent${n === 1 ? '' : 's'} over ${over}: ${clauses.join('; ')}.${t.live ? ' Still going.' : ''}${scale}`
 }
 
+/**
+ * The timeline with one name per agent: an agent recorded under its short name in one event and its full
+ * name (`team/ticket/intent`) in another is one row. A full name is the short one when its last segment is
+ * a name the timeline also uses. Only the grouping changes, never what an event says.
+ */
+export function unifyAgents(t: WorkTimeline): WorkTimeline {
+  const names = new Set<string>()
+  for (const s of t.spans) names.add(s.agent).add(s.by)
+  for (const w of t.waits) {
+    names.add(w.agent)
+    if (w.on) names.add(w.on)
+  }
+  for (const h of t.handoffs) names.add(h.from).add(h.to)
+  const canon = (name: string) => {
+    const leaf = name.split('/').at(-1) ?? name
+    return leaf !== name && names.has(leaf) ? leaf : name
+  }
+  const map = new Map([...names].map((n) => [n, canon(n)] as const))
+  if ([...map].every(([a, b]) => a === b)) return t
+  const of = (n: string) => map.get(n) ?? n
+  return {
+    ...t,
+    spans: t.spans.map((s) => ({ ...s, agent: of(s.agent), by: of(s.by) })),
+    waits: t.waits.map((w) => ({ ...w, agent: of(w.agent), on: w.on ? of(w.on) : w.on })),
+    handoffs: t.handoffs.map((h) => ({ ...h, from: of(h.from), to: of(h.to) })),
+  }
+}
+
 /** The whole chart as the view draws it: rows, marks, blocked bands, the creation mark and the summary. */
-export function buildChart(t: WorkTimeline, now: number, win?: Window, width?: number): Chart {
+export function buildChart(timeline: WorkTimeline, now: number, win?: Window, width?: number): Chart {
+  const t = unifyAgents(timeline)
   const axis = axisFor(t, now, win, width)
   const going = t.live
   // Not live for drawing once the axis ends at a pinned merge: now is days past its right edge.
@@ -480,6 +567,7 @@ export function buildChart(t: WorkTimeline, now: number, win?: Window, width?: n
       bands.push({
         key: `${p.kind}-${i}`,
         kind: p.kind,
+        label: p.stretch.label,
         start: p.stretch.start,
         end: p.stretch.end,
         open: going && openAt !== null && p.stretch.end >= openAt,
@@ -518,7 +606,7 @@ export function buildChart(t: WorkTimeline, now: number, win?: Window, width?: n
     bands,
     breaks,
     created:
-      createdAt !== null && lead >= 1 && createdShare <= 1
+      createdAt !== null && lead >= 1 && createdShare <= 1 && !bands.some((b) => b.kind === 'start')
         ? { minutes: lead, left: Math.max(0, createdShare) }
         : null,
     summary: summarize(t, rows, axis),

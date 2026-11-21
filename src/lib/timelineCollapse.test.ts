@@ -34,6 +34,7 @@ const timeline = (more: Partial<WorkTimeline> = {}): WorkTimeline => ({
   marks: [],
   blockedStretches: [],
   reviewStretches: [],
+  humanStretches: [],
   totals: { workingMs: 0, waitingMs: 0, blockedOnHumanMs: 0 },
   lastSignalAt: iso(m(0)),
   lastWordAt: iso(m(0)),
@@ -101,17 +102,31 @@ describe('collapsed periods', () => {
     expect(chart.axis.end).toBe(m(60) + 5 * DAY)
   })
 
-  it('open the gap after the last work when the merge comes with no review in between', () => {
+  it('labels the wait before a merge that comes with no review in between, and ends the axis at the merge', () => {
     const t = timeline({
       spans: [span(1, m(0), m(60))],
       marks: [merge(2, m(60) + 3 * DAY)],
       end: iso(m(60) + 3 * DAY),
     })
     const chart = buildChart(t, m(0))
-    expect(chart.bands).toHaveLength(0)
-    expect(chart.axis.span).toBe(60 * MIN + GAP_MS)
+    expect(chart.bands.map((b) => [b.kind, b.label, b.start, b.end])).toEqual([
+      ['merge', 'Waiting to merge', m(60), m(60) + 3 * DAY],
+    ])
+    expect(chart.axis.span).toBe(60 * MIN + COLLAPSED_MS)
     expect(chart.marks[0]!.left).toBeCloseTo(1, 6)
     expect(chart.breaks).toHaveLength(1)
+  })
+
+  it('leaves a short unlabelled gap when the merge follows the last work within a minute', () => {
+    const t = timeline({
+      spans: [span(1, m(0), m(60))],
+      marks: [merge(2, m(60) + 20_000)],
+      end: iso(m(60) + 20_000),
+    })
+    const chart = buildChart(t, m(0))
+    expect(chart.bands).toHaveLength(0)
+    expect(chart.axis.pieces.map((p) => p.kind)).toEqual(['gap'])
+    expect(chart.marks[0]!.left).toBeCloseTo(1, 6)
   })
 
   it('cut a review that ends at the merge and ignore one that starts after it', () => {
@@ -255,7 +270,7 @@ describe('a pinned merge in a window and marks inside blocks', () => {
     const chart = buildChart(t, now, win)
     expect(chart.axis.span).toBe(60 * MIN + COLLAPSED_MS + GAP_MS)
     expect(chart.marks[0]!.left).toBeCloseTo(1, 6)
-    expect(position(chart.axis.start, chart.axis.pieces, now) / chart.axis.span).toBeCloseTo(1, 6)
+    expect(chart.axis.end).toBe(m(60) + DAY)
     // The skipped tail has no break mark, and no tick inside it.
     expect(chart.breaks).toHaveLength(2)
     expect(chart.axis.ticks.every((k) => k.at <= m(60) + DAY)).toBe(true)
@@ -413,8 +428,8 @@ describe('a merge inside a block, and a pinned merge on a live ticket', () => {
     expect(chart.live).toBe(false)
     expect(chart.going).toBe(true)
     expect(chart.bands[0]!.open).toBe(true)
-    // In a window now is still the window end, at the merge's place.
-    expect(buildChart(t, now, { start: iso(m(0)), end: iso(now) }).live).toBe(true)
+    // In a window it ends at the merge too: now is not on the axis.
+    expect(buildChart(t, now, { start: iso(m(0)), end: iso(now) }).live).toBe(false)
   })
 })
 
@@ -535,5 +550,109 @@ describe('fitting the chart to its width', () => {
     expect(axisFor(t, m(0), undefined, 220).ticks.length).toBeLessThanOrEqual(ticksFit(220) + 1)
     expect(ticksFit(120)).toBe(2)
     expect(ticksFit(2000)).toBe(5)
+  })
+})
+
+describe('a merged ticket on the Roadmap window', () => {
+  // The shape of a ticket that was worked for a few hours, sat blocked for ten minutes and in review for
+  // two days (In review, then Release), and was merged two days later while the window is the last 24 h.
+  const worked = (id: number, a: number, b: number) => span(id, m(a), m(b))
+  const merged = () => {
+    const reviewAt = m(180)
+    const releaseAt = reviewAt + 2 * DAY
+    const mergedAt = releaseAt + 4 * MIN
+    const now = mergedAt + 3 * HOUR
+    return {
+      now,
+      mergedAt,
+      t: timeline({
+        start: iso(m(-5)),
+        spans: [worked(1, 0, 60), worked(2, 70, 100), worked(3, 110, 180)],
+        blockedStretches: [stretch(m(60), m(70))],
+        reviewStretches: [
+          { ...stretch(reviewAt, releaseAt), name: 'In review' },
+          { ...stretch(releaseAt, now), name: 'Release' },
+        ],
+        marks: [merge(9, mergedAt)],
+        live: true,
+        end: iso(now),
+        now: iso(now),
+      }),
+    }
+  }
+
+  it('draws its work to scale in the 24 h window, which only counts agent time', () => {
+    const { t, now, mergedAt } = merged()
+    const win = { start: iso(now - DAY), end: iso(now) }
+    const chart = buildChart(t, now, win, 700)
+    // The window reaches back past the review stretches to the ticket's first event.
+    expect(chart.axis.start).toBe(m(-5))
+    expect(chart.axis.end).toBe(mergedAt)
+    expect(chart.rows.flatMap((r) => r.items)).toHaveLength(3)
+    expect(chart.bands.map((b) => b.label)).toEqual(['Waiting to start', 'Blocked', 'In review', 'Release'])
+    expect(chart.live).toBe(false)
+    expect(chart.marks[0]!.left).toBeCloseTo(1, 6)
+  })
+
+  it('does not move a window that holds no collapsed time', () => {
+    const t = timeline({ spans: [span(1, m(0), m(600))], end: iso(m(600)), live: true, now: iso(m(600)) })
+    const win = { start: iso(m(300)), end: iso(m(600)) }
+    expect(axisFor(t, m(600), win).start).toBe(m(300))
+  })
+
+  it('keeps the window where the ticket began when it was created inside it', () => {
+    const t = timeline({ spans: [span(1, m(30), m(600))], end: iso(m(600)), live: true, now: iso(m(600)) })
+    expect(axisFor(t, m(600), { start: iso(m(-60)), end: iso(m(600)) }).start).toBe(m(-60))
+  })
+
+  it('draws work done inside a review stretch to scale and splits the block around it', () => {
+    const t = timeline({
+      spans: [span(1, m(0), m(60)), span(2, m(60) + DAY, m(90) + DAY)],
+      reviewStretches: [stretch(m(60), m(120) + DAY)],
+      marks: [merge(9, m(120) + DAY)],
+      end: iso(m(120) + DAY),
+    })
+    const chart = buildChart(t, m(0), undefined, 700)
+    expect(chart.rows[0]!.items).toHaveLength(2)
+    expect(chart.bands.filter((b) => b.kind === 'review')).toHaveLength(1)
+    const second = chart.rows[0]!.items[1]!
+    // The second run of work is a real 30 minutes among the fixed blocks, not squeezed into one.
+    expect(second.seg.width).toBeGreaterThan(0.05)
+  })
+})
+
+describe('waits on the human', () => {
+  it('collapses a wait or a decision card inside the work into a labelled block, and carves work out of it', () => {
+    const t = timeline({
+      spans: [span(1, m(0), m(60)), span(2, m(60 + 600), m(60 + 660))],
+      humanStretches: [{ start: iso(m(60)), end: iso(m(60 + 600)), card: true }],
+      end: iso(m(60 + 660)),
+    })
+    const chart = buildChart(t, m(0))
+    expect(chart.bands.map((b) => [b.kind, b.label])).toEqual([['human', 'Waiting for a decision']])
+    expect(chart.axis.span).toBe(60 * MIN + COLLAPSED_MS + 60 * MIN)
+    const plain = buildChart(
+      timeline({
+        spans: [span(1, m(0), m(60)), span(2, m(60 + 600), m(60 + 660))],
+        humanStretches: [{ start: iso(m(60)), end: iso(m(60 + 600)), card: false }],
+        end: iso(m(60 + 660)),
+      }),
+      m(0),
+    )
+    expect(plain.bands[0]!.label).toBe('Waiting on human')
+  })
+
+  it('leaves out of a human wait what a blocked or review stage already covers', () => {
+    const t = timeline({
+      spans: [span(1, m(0), m(60))],
+      blockedStretches: [stretch(m(60), m(160))],
+      humanStretches: [{ start: iso(m(100)), end: iso(m(200)), card: false }],
+      end: iso(m(200)),
+    })
+    const chart = buildChart(t, m(0))
+    expect(chart.bands.map((b) => [b.kind, b.start, b.end])).toEqual([
+      ['blocked', m(60), m(160)],
+      ['human', m(160), m(200)],
+    ])
   })
 })

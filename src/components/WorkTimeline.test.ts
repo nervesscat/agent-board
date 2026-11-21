@@ -111,7 +111,7 @@ describe('collapsed periods on the chart', () => {
     expect(t.reviewStretches).toHaveLength(1)
     const [r] = t.reviewStretches
     const label = collapsedLabel({
-      kind: 'review',
+      label: 'In review',
       start: Date.parse(r!.start),
       end: Date.parse(r!.end),
       open: false,
@@ -119,7 +119,7 @@ describe('collapsed periods on the chart', () => {
     expect(label).toBe(
       `In review, ${stamp(r!.start)} to ${stamp(r!.end)}, 4 d 23 h 30 min, not drawn to scale`,
     )
-    expect(collapsedLabel({ kind: 'blocked', start: 0, end: 90 * 60_000, open: true })).toMatch(
+    expect(collapsedLabel({ label: 'Blocked', start: 0, end: 90 * 60_000, open: true })).toMatch(
       /^Blocked, .* to now, 1 h 30 min, not drawn to scale$/,
     )
   })

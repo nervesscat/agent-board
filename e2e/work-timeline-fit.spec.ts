@@ -26,9 +26,11 @@ const overflow = (chart: Locator) =>
       scrollers,
       wider: root.scrollWidth > root.clientWidth,
       width: box.width,
-      chips: [...root.querySelectorAll('[data-kind="blocked"], [data-kind="review"]')].map(
-        (el) => el.getBoundingClientRect().width,
-      ),
+      chips: [
+        ...root.querySelectorAll(
+          '[data-kind="blocked"], [data-kind="review"], [data-kind="human"], [data-kind="start"], [data-kind="merge"]',
+        ),
+      ].map((el) => el.getBoundingClientRect().width),
     }
   })
 
