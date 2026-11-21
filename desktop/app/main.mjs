@@ -213,7 +213,7 @@ if (homeError) {
 }
 
 async function start() {
-  await refreshLanguage()
+  await Promise.race([refreshLanguage(), new Promise((r) => setTimeout(r, 500))])
   watchLanguage()
   try {
     settings = resolveSettings({
@@ -618,7 +618,9 @@ async function fatal(message, detail, target, open) {
   console.error(`agent-board desktop: ${translate('en', message)} ${detail()}`)
   try {
     await stopServer()
-    await refreshLanguage()
+    // The language the window's session says now, but never a reason for the dialog not to show: a session that
+    // does not answer in half a second leaves the language as it was.
+    await Promise.race([refreshLanguage(), new Promise((r) => setTimeout(r, 500))])
     const { response } = await dialog.showMessageBox({
       type: 'error',
       title: app.getName(),
