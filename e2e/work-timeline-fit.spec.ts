@@ -1,5 +1,6 @@
 import type { Locator } from '@playwright/test'
 
+import { inDatabase } from './db'
 import { expect, ok, test } from './fixtures'
 import { age, create, errorsOn, record, scrollsSideways } from './workTimeline'
 
@@ -173,5 +174,62 @@ test('a ticket that was only ever blocked shows a small fixed block, not a bar o
       chart.getByText('now', { exact: true }).boundingBox(),
     ])
     expect(Math.abs(block!.x + block!.width - (now!.x + now!.width)), `${width}px`).toBeLessThan(3)
+  }
+})
+
+test('a ticket worked days ago and since in review keeps its work in the Roadmap window, after a Waiting to start block', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const t = await create(human, project, { title: 'Reviewed long ago', status: 'in_progress' })
+  // Created three days before the first worker step.
+  inDatabase((db) =>
+    db
+      .prepare(
+        "update ticket_events set at = strftime('%Y-%m-%dT%H:%M:%fZ', at, '-3 days') where ticket_id = ? and kind = 'stage'",
+      )
+      .run(t.id),
+  )
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'build', agent: 'builder' })
+  age(t.id, 40)
+  await record(agent, project, t.id, { kind: 'span_end', agent: 'builder' })
+  // A decision-free wait on the human in the middle of the work, then the review.
+  await record(agent, project, t.id, { kind: 'wait_start', reason: 'human', agent: 'builder' })
+  age(t.id, 2 * 24 * 60)
+  await record(agent, project, t.id, { kind: 'wait_end', agent: 'builder' })
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'verify', agent: 'builder' })
+  age(t.id, 30)
+  await record(agent, project, t.id, { kind: 'span_end', agent: 'builder' })
+  await ok(human.patch(`/api/tickets/${t.id}`, { data: { status: 'review' } }))
+  age(t.id, 3 * 24 * 60)
+
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto(`/projects/${project.id}/features/${t.id}`)
+    const own = page.getByRole('region', { name: 'Timeline' }).getByTestId('work-timeline')
+    await expect(own.locator('[data-kind="start"]')).toContainText('Waiting to start')
+    await expect(own.locator('[data-kind="human"]')).toContainText('Waiting on human')
+    await expect(own.locator('[data-kind="review"]')).toContainText('In review')
+    await expect(own.locator('[data-kind="span"]')).toHaveCount(2)
+    const o = await overflow(own)
+    expect(o, `ticket page at ${width}px`).toMatchObject({ outside: [], scrollers: 0, wider: false })
+    expect(o.chips).toHaveLength(3)
+    for (const w of o.chips) expect(w).toBeLessThanOrEqual(73)
+
+    // The Roadmap's default window is the last 24 h: all of this was days ago, and its work is still drawn.
+    await page.goto(`/projects/${project.id}/roadmap`)
+    const chart = page
+      .getByRole('region', { name: `#${t.id} Reviewed long ago` })
+      .getByTestId('work-timeline')
+      .first()
+    await expect(chart.locator('[data-kind="span"]')).toHaveCount(2)
+    await expect(chart.locator('[data-kind="review"]')).toBeVisible()
+    expect(await overflow(chart), `Roadmap at ${width}px`).toMatchObject({
+      outside: [],
+      scrollers: 0,
+      wider: false,
+    })
   }
 })
