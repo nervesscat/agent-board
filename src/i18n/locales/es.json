@@ -175,7 +175,7 @@
     "signedIn": "Sesión iniciada",
     "yes": "sí",
     "no": "no ({{state}})",
-    "notRunning": "no está en ejecución",
+    "notRunning": "detenido",
     "thisMachine": "Esta máquina",
     "noName": "sin nombre de tailnet",
     "https": "HTTPS",
@@ -268,7 +268,7 @@
     },
     "fileStatus": {
       "current": "al día",
-      "outdated": "obsoleto",
+      "outdated": "desactualizado",
       "missing": "falta"
     },
     "intro": "<code>/todo-review</code> trabaja los tickets de To do hasta la entrega y <code>/review-queue</code> revisa la cola de PR, ambos delegando en estos agentes. <code>/feature-review</code> es la revisión que ejecutan sobre cada cambio. Una línea instala las tres, con sus agentes, en <code>~/.claude</code> (Claude Code; OpenCode también lee sus skills), reemplazando los archivos del mismo nombre.",
