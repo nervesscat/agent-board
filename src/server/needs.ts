@@ -220,6 +220,7 @@ function context(projectId: number, git: GitCache = gitCache()) {
   return {
     stages,
     all,
+    repos,
     byId: new Map(all.map((t) => [t.id, t])),
     repoOf: (t: Pick<Ticket, 'repoId'>) =>
       (t.repoId ? repos.find((r) => r.id === t.repoId) : repos[0]) ?? null,
@@ -376,6 +377,7 @@ const MEMO_MAX = 20_000
 const includesMemo = new Map<string, Promise<boolean>>()
 const mergedMemo = new Map<string, Promise<Set<string>>>()
 const ownMemo = new Map<string, Promise<boolean>>()
+const includedMemo = new Map<string, Promise<number[]>>()
 
 /**
  * The open tickets this one's branch could hold work of: same repo, not its own parents or lanes, not
@@ -452,22 +454,30 @@ async function certainWork(t: Ticket, ctx: Context): Promise<Map<number, string>
 /**
  * The open tickets whose unmerged work this ticket's branch holds, though the board cannot tell for
  * sure whose it is (so it adds no need): commits of their branch that are in this one but in none of its
- * bases, as two branches that took each other's work in or stacked and then moved apart do. Two
+ * bases, or a copy of them under other shas (`holdsWorkOf`), as two branches do that took each other's
+ * work in (a partial merge-in), stacked and then moved apart, or had commits cherry-picked across. Two
  * branches off the same base are not here. Not those it needs already, nor those it certainly holds
  * (`certainWork`: the board adds those itself, or the human removed the need). Every open ticket of
- * the repo is checked, and each answer is kept for the commits it was worked out for.
+ * the repo is checked. The git answers are kept for the commits they were worked out for, and the whole
+ * answer for the state of the project's branches and tickets and this ticket's needs, so a ticket page
+ * read again (the page asks every minute) costs a fingerprint until something changes.
  */
 async function includedWork(t: Ticket, ctx: Context): Promise<number[]> {
+  // The whole answer is kept for the state of the project's branches and tickets it was worked out for
+  // (and this ticket's needs), so a ticket page opened again, or by someone else, costs a fingerprint.
+  const key = [t.id, needIds(t.id).join(','), await projectState(ctx)].join('\0')
+  return memo(includedMemo, 2_000, key, () => scanIncluded(t, ctx))
+}
+
+async function scanIncluded(t: Ticket, ctx: Context): Promise<number[]> {
   const repo = ctx.repoOf(t)
   if (!t.branch || !repo) return []
   const { refs } = await ctx.git(repo.repoPath)
   const ref = branchRef(t.branch, refs)
   if (!ref) return []
   const chain = baseChain(t, ctx.byId, repo)
-  const settled = new Set([
-    ...needIds(t.id),
-    ...((await certainWork(t, ctx).catch(() => null))?.keys() ?? []),
-  ])
+  // A failure here fails the scan (and is not kept): the ones the board adds are not for the hint.
+  const settled = new Set([...needIds(t.id), ...((await certainWork(t, ctx))?.keys() ?? [])])
   const candidates = candidatesOf(t, ctx, repo).filter((o) => !settled.has(o.id))
   // Every branch of the repo, this one's too: what a branch is built on, a shared integration branch
   // included, is not its own work.
@@ -591,6 +601,25 @@ onRefsListed((repoPath, refs) => {
   for (const id of ids) followBranches(id, { repoPath, refs })
 })
 
+/**
+ * A fingerprint of everything the needs of a project are worked out from: the repos' branches (or that git
+ * cannot read them), the stages' kinds, and each ticket's branch, status, base, parent and repo. The same
+ * fingerprint means the same answers, so a look at it again costs nothing.
+ */
+async function projectState(ctx: Context): Promise<string> {
+  const hash = crypto.createHash('sha1')
+  for (const repo of ctx.repos) {
+    const { refs, error } = await ctx.git(repo.repoPath)
+    hash.update(`${repo.id}\0${error ?? refsKey(refs)}\n`)
+  }
+  for (const s of ctx.stages) hash.update(`${s.key}\0${s.kind}\n`)
+  for (const t of [...ctx.all].sort((a, b) => a.id - b.id))
+    hash.update(
+      [t.id, t.branch, t.status, t.archivedAt, t.baseBranch, t.parentId, t.repoId].join('\0') + '\n',
+    )
+  return hash.digest('hex')
+}
+
 async function sweep(projectId: number, listed?: Listed) {
   // The branches only (no worktrees), as a listing that was just made found them when there is one.
   const kept = new Map<string, Promise<RepoGit>>()
@@ -613,17 +642,7 @@ async function sweep(projectId: number, listed?: Listed) {
     return kept.get(repoPath)!
   }
   const ctx = context(projectId, git)
-  const hash = crypto.createHash('sha1')
-  for (const repo of listRepos(projectId)) {
-    const { refs, error } = await ctx.git(repo.repoPath)
-    hash.update(`${repo.id}\0${error ?? refsKey(refs)}\n`)
-  }
-  for (const s of ctx.stages) hash.update(`${s.key}\0${s.kind}\n`)
-  for (const t of [...ctx.all].sort((a, b) => a.id - b.id))
-    hash.update(
-      [t.id, t.branch, t.status, t.archivedAt, t.baseBranch, t.parentId, t.repoId].join('\0') + '\n',
-    )
-  const state = hash.digest('hex')
+  const state = await projectState(ctx)
   if (sweptState.get(projectId) === state) return
   sweptState.delete(projectId)
   let complete = true

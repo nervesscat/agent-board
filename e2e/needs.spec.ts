@@ -1,7 +1,7 @@
 import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
 import type { TicketFull, TicketGit } from '#/lib/api'
-import { commitFile, git } from './env'
+import { commitFile, commitFiles, git } from './env'
 import { expect, ok, test } from './fixtures'
 
 /**
@@ -170,4 +170,97 @@ test('removing a need the board added sticks, and is not added again for the sam
   expect((await ok<TicketFull>(human.get(`/api/tickets/${t.id}`))).needs).toEqual([])
   await page.reload()
   await expect(details.getByRole('listitem').filter({ hasText: `#${base.id} Foundation` })).toHaveCount(0)
+})
+
+test('a branch that holds work of another the board cannot tell is its own gets a row to add the need, and the ones it adds by itself get none', async ({
+  page,
+  project,
+  human,
+}) => {
+  const name = (what: string) => `e2e-${project.id}-${what}`
+  const ticket = (data: Record<string, unknown>) =>
+    ok<TicketFull>(
+      human.post(`/api/projects/${project.id}/tickets`, { data: { status: 'in_progress', ...data } }),
+    )
+  const root = git('rev-parse', 'main').trim()
+  const base = { 'base.txt': 'base\n' }
+  const at = (branch: string, sha: string) => git('update-ref', `refs/heads/${branch}`, sha)
+
+  // 1. Stacked, and then the lower branch moved on: whose the shared commit is cannot be told.
+  const lo1 = commitFiles([root], { ...base, 'lo.txt': 'lo\n' }, 'lo')
+  at(name('lo'), commitFiles([lo1], { ...base, 'lo.txt': 'lo\n', 'lo2.txt': 'lo2\n' }, 'lo moved on'))
+  at(name('up'), commitFiles([lo1], { ...base, 'lo.txt': 'lo\n', 'up.txt': 'up\n' }, 'up'))
+  // 2. A partial merge-in: the other's first commit only, its tip is not in this branch.
+  const pa1 = commitFiles([root], { ...base, 'pa.txt': 'pa\n' }, 'pa')
+  at(name('pa'), commitFiles([pa1], { ...base, 'pa.txt': 'pa\n', 'pa2.txt': 'pa2\n' }, 'pa more'))
+  const took = commitFiles([root, pa1], { ...base, 'pa.txt': 'pa\n' }, 'merge pa~1')
+  at(name('took'), commitFiles([took], { ...base, 'pa.txt': 'pa\n', 'took.txt': 'took\n' }, 'took'))
+  // 3. A copy of the commits under other shas (cherry-picked onto another parent).
+  at(name('orig'), commitFiles([root], { ...base, 'x.txt': 'x\n' }, 'orig'))
+  const other = commitFiles([root], { ...base, 'y.txt': 'y\n' }, 'other')
+  const cp = commitFiles([other], { ...base, 'y.txt': 'y\n', 'x.txt': 'x\n' }, 'orig')
+  at(name('copy'), commitFiles([cp], { ...base, 'y.txt': 'y\n', 'x.txt': 'x\n', 'z.txt': 'z\n' }, 'copy'))
+  // And a stack the board can prove, beside them: it adds that need itself, so it gets no row.
+  const s1 = commitFiles([root], { ...base, 's1.txt': 's1\n' }, 's1')
+  at(name('s1'), s1)
+  at(name('s2'), commitFiles([s1], { ...base, 's1.txt': 's1\n', 's2.txt': 's2\n' }, 's2'))
+
+  const pairs = {
+    stack: [
+      await ticket({ title: 'Lower branch', branch: name('lo') }),
+      await ticket({ title: 'Upper branch', branch: name('up') }),
+    ],
+    merge: [
+      await ticket({ title: 'Merged from', branch: name('pa') }),
+      await ticket({ title: 'Took part of it', branch: name('took') }),
+    ],
+    copy: [
+      await ticket({ title: 'Original commits', branch: name('orig') }),
+      await ticket({ title: 'Copied commits', branch: name('copy') }),
+    ],
+    proven: [
+      await ticket({ title: 'Proven below', branch: name('s1') }),
+      await ticket({ title: 'Proven above', branch: name('s2') }),
+    ],
+  }
+  const row = (id: number) => `/api/tickets/${id}/git?includes=1`
+  for (const key of ['stack', 'merge', 'copy'] as const) {
+    const [lower, upper] = pairs[key]
+    // The board reads the checkout's refs a few seconds at a time: wait until it has seen these branches.
+    await expect
+      .poll(async () => (await ok<TicketGit>(human.get(row(upper.id)))).includes)
+      .toEqual([lower.id])
+    expect((await ok<TicketFull>(human.get(`/api/tickets/${upper.id}`))).needs).toEqual([])
+  }
+  await expect
+    .poll(async () => (await ok<TicketFull>(human.get(`/api/tickets/${pairs.proven[1].id}`))).needs)
+    .toMatchObject([{ id: pairs.proven[0].id, auto: true }])
+  expect((await ok<TicketGit>(human.get(row(pairs.proven[1].id)))).includes).toEqual([])
+
+  // The proven one: the need with the board's mark, and no row.
+  const details = page.getByRole('region', { name: 'Details' })
+  await page.goto(`/projects/${project.id}/features/${pairs.proven[1].id}`)
+  await expect(details.getByLabel('Added by the board')).toBeVisible()
+  await expect(details.getByTestId('includes-hint')).toHaveCount(0)
+
+  // Each undecidable one: the row, naming the other ticket.
+  for (const key of ['merge', 'copy'] as const) {
+    const [lower, upper] = pairs[key]
+    await page.goto(`/projects/${project.id}/features/${upper.id}`)
+    const hint = details.getByTestId('includes-hint')
+    await expect(hint).toHaveCount(1)
+    await expect(hint.getByRole('link', { name: `#${lower.id} ${lower.title}` })).toBeVisible()
+    await expect(details.getByLabel('Added by the board')).toHaveCount(0)
+  }
+  // Adding it by hand turns it into a need (not the board's), and the row goes.
+  const [lower, upper] = pairs.stack
+  await page.goto(`/projects/${project.id}/features/${upper.id}`)
+  const hint = details.getByTestId('includes-hint')
+  await expect(hint.getByRole('link', { name: `#${lower.id} ${lower.title}` })).toBeVisible()
+  await hint.getByRole('button', { name: 'Add as a need' }).click()
+  await expect(hint).toHaveCount(0)
+  await expect(details.getByRole('listitem').filter({ hasText: `#${lower.id} ${lower.title}` })).toBeVisible()
+  expect((await ok<TicketFull>(human.get(`/api/tickets/${upper.id}`))).needs).toMatchObject([
+    { id: lower.id, auto: false },
+  ])
 })

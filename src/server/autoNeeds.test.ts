@@ -278,6 +278,97 @@ describe('what is not added', () => {
   })
 })
 
+describe('the hint for what the board cannot decide', () => {
+  it('names each undecidable case, and none the board adds or leaves out', async () => {
+    const p = project()
+    // Undecidable: stacked and the lower branch moved on.
+    branch('hint/low', 'main')
+    branch('hint/up', 'hint/low')
+    more('hint/low')
+    const low = p.ticket('low', 'hint/low')
+    const up = p.ticket('up', 'hint/up')
+    // Undecidable: a partial merge-in (the other's first commit only).
+    branch('hint/part', 'main')
+    const first = sha('hint/part')
+    more('hint/part')
+    git('checkout', '-q', '-b', 'hint/took', 'main')
+    git('merge', '-q', '--no-ff', '-m', 'merge one commit', first)
+    commit('own')
+    const part = p.ticket('part', 'hint/part')
+    const took = p.ticket('took', 'hint/took')
+    // Undecidable: a patch-equivalent copy (cherry-picked onto another parent).
+    branch('hint/orig', 'main')
+    branch('hint/copy', 'main')
+    git('cherry-pick', sha('hint/orig'))
+    commit('copy own')
+    const orig = p.ticket('orig', 'hint/orig')
+    const copy = p.ticket('copy', 'hint/copy')
+    // Decidable, so a need and no hint: stacked, and merged in.
+    branch('hint/s1', 'main')
+    branch('hint/s2', 'hint/s1')
+    branch('hint/m1', 'main')
+    git('checkout', '-q', '-b', 'hint/m2', 'main')
+    git('merge', '-q', '--no-ff', '-m', 'merge m1', 'hint/m1')
+    const s1 = p.ticket('s1', 'hint/s1')
+    const s2 = p.ticket('s2', 'hint/s2')
+    const m1 = p.ticket('m1', 'hint/m1')
+    const m2 = p.ticket('m2', 'hint/m2')
+    // Nothing to say: two branches off the same base, and one that took the base in.
+    branch('hint/x1', 'main')
+    branch('hint/x2', 'main')
+    git('checkout', '-q', 'main')
+    commit('main moves')
+    git('checkout', '-q', 'hint/x1')
+    git('merge', '-q', '--no-edit', 'main')
+    const x1 = p.ticket('x1', 'hint/x1')
+    const x2 = p.ticket('x2', 'hint/x2')
+    git('checkout', '-q', 'main')
+    await p.sweep()
+
+    // Each side of a pair holds commits the other has and neither can be told the owner: both name the other.
+    expect(await includes(up.id)).toEqual([low.id])
+    expect(await includes(low.id)).toEqual([up.id])
+    expect(await includes(took.id)).toEqual([part.id])
+    expect(await includes(part.id)).toEqual([took.id])
+    expect(await includes(copy.id)).toEqual([orig.id])
+    expect(await includes(orig.id)).toEqual([copy.id])
+    for (const t of [up, low, took, part, copy, orig]) expect(needIds(t.id)).toEqual([])
+    // The hint is for what the board could not decide: these have their need, and no hint.
+    expect(needIds(s2.id)).toEqual([s1.id])
+    expect(needIds(m2.id)).toEqual([m1.id])
+    for (const t of [s1, s2, m1, m2, x1, x2]) expect(await includes(t.id), t.title).toEqual([])
+    for (const t of [x1, x2]) expect(needIds(t.id)).toEqual([])
+  })
+
+  it('stops naming one once it is declared, and names nothing for an automatic need the human removed', async () => {
+    const p = project()
+    branch('gone/a', 'main')
+    branch('gone/b', 'gone/a')
+    const a = p.ticket('a', 'gone/a')
+    const b = p.ticket('b', 'gone/b')
+    branch('rm/low', 'main')
+    branch('rm/up', 'rm/low')
+    more('rm/low')
+    const low = p.ticket('low', 'rm/low')
+    const up = p.ticket('up', 'rm/up')
+    await p.sweep()
+    expect(needIds(b.id)).toEqual([a.id])
+    expect(await includes(up.id)).toEqual([low.id])
+    needs.setNeeds(up.id, [low.id], 'me')
+    expect(await includes(up.id)).toEqual([])
+    // The human removes the automatic one: it is not added again, and it is not hinted either.
+    needs.setNeeds(b.id, [], 'me')
+    await p.sweep()
+    expect(needIds(b.id)).toEqual([])
+    expect(await includes(b.id)).toEqual([])
+    // Left as it was found: the other tests count the human's removals.
+    dbm.db
+      .delete(dbm.schema.ticketNeedDismissals)
+      .where(eq(dbm.schema.ticketNeedDismissals.ticketId, b.id))
+      .run()
+  })
+})
+
 describe('removing and keeping needs', () => {
   it('does not add again what the human removed, until new work is taken in', async () => {
     const p = project()

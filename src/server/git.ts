@@ -993,7 +993,8 @@ export async function addsNothing(repoPath: string, base: string, ref: string): 
 /**
  * Whether `ref` holds work of `other` that none of `bases` has: a commit of `other`'s own (not in a
  * base, nor in one of `others`, the other branches, those of them `other` itself is built on) that is
- * in `ref`. A branch built on `ref` does not count, and without a base nothing can be told. Each is a
+ * in `ref`, or a copy of one (the same change under another sha: a cherry-pick, or a rebase of `other`'s
+ * commits). A branch built on `ref` does not count, and without a base nothing can be told. Each is a
  * commit's full sha, so the answer is about those commits whatever the branches did since.
  */
 export async function holdsWorkOf(
@@ -1005,6 +1006,18 @@ export async function holdsWorkOf(
 ) {
   if (!bases.length) return false
   if (await isAncestor(repoPath, ref, other)) return false
+  // What `other` stands on is not its own work: the shared commits may be a third branch's. rev-list
+  // prints each of `others` that is not in `other`; one in a base is left out too, which changes
+  // nothing: what a base holds is not counted anyway.
+  const tips = [...new Set(others)]
+  const over = tips.length ? await git(repoPath, ['rev-list', ...tips, '--not', other, ...bases]) : ''
+  const notBelow = new Set(over ? over.split('\n') : [])
+  const stands = tips.filter((x) => !notBelow.has(x))
+  const below = [...bases, ...stands]
+  // A copy: of the commits only one of the two has (outside the bases and what `other` stands on), a
+  // pair with the same change on both sides is marked `=`.
+  const marks = await git(repoPath, ['rev-list', '--cherry-mark', `${ref}...${other}`, '--not', ...below])
+  if (marks.split('\n').some((line) => line.startsWith('='))) return true
   // Quick way out: nothing the two share lies outside the bases.
   const shared = await git(repoPath, ['merge-base', '--all', ref, other]).catch(() => '')
   let outside = false
@@ -1013,14 +1026,7 @@ export async function holdsWorkOf(
     if (!landed.some(Boolean)) outside = true
   }
   if (!outside) return false
-  // What `other` stands on is not its own work: the shared commits may be a third branch's. rev-list
-  // prints each of `others` that is not in `other`; one in a base is left out too, which changes
-  // nothing: what a base holds is not counted anyway.
-  const tips = [...new Set(others)]
-  const over = tips.length ? await git(repoPath, ['rev-list', ...tips, '--not', other, ...bases]) : ''
-  const notBelow = new Set(over ? over.split('\n') : [])
-  const stands = tips.filter((x) => !notBelow.has(x))
-  const own = ['rev-list', '--count', other, ...[...bases, ...stands].map((b) => `^${b}`)]
+  const own = ['rev-list', '--count', other, ...below.map((b) => `^${b}`)]
   const mine = Number(await git(repoPath, own))
   return mine > 0 && Number(await git(repoPath, [...own, `^${ref}`])) < mine
 }

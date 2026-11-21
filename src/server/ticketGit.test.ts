@@ -515,6 +515,43 @@ describe('ticketGitView', () => {
   })
 })
 
+describe('the includes scan', () => {
+  it('is kept: a read again, even past the refs window, runs no git for it until a branch or a ticket changes', async () => {
+    const f = await features()
+    // Stacked, and then the lower branch moved on: only the hint names it.
+    branches('refs/heads/main', 'scan/low')
+    branches('refs/heads/scan/low', 'scan/up')
+    commitOn('scan/low', 'scan low more')
+    const low = f.createTicket(projectId, { title: 'scan low', branch: 'scan/low' }, 't')
+    const up = f.createTicket(projectId, { title: 'scan up', branch: 'scan/up' }, 't')
+    expect((await view(up.id)).includes).toEqual([low.id])
+    // What the read started in the background is done, so the count below is the read's alone.
+    await (await import('./needs')).syncAutoNeeds(projectId)
+
+    quiet()
+    expect((await view(up.id)).includes).toEqual([low.id])
+    expect(spawned).toEqual([])
+
+    // Past the window the repo is listed again (once for the read, and the sweep a read starts may list
+    // it too): nothing else is asked, the scan is not run again.
+    later()
+    quiet()
+    expect((await view(up.id)).includes).toEqual([low.id])
+    expect(ran().other).toEqual([])
+
+    // A branch moved: the scan is worked out again, for the commits it is now about.
+    commitOn('scan/up', 'scan up more')
+    later()
+    quiet()
+    expect((await view(up.id)).includes).toEqual([low.id])
+    expect(ran().other.length).toBeGreaterThan(0)
+
+    // A need declared changes the answer at once.
+    await (await import('./needs')).changeTicket(up.id, { needs: [low.id] }, 't', { agent: true })
+    expect((await view(up.id)).includes).toEqual([])
+  })
+})
+
 describe('memo', () => {
   it('keeps at most its maximum, the oldest answers going first', async () => {
     const { memo } = await import('./cleanup')

@@ -186,4 +186,52 @@ describe('holdsOwnWork', () => {
     expect(await holds('lower/b', 'lower/a')).toBe(false)
     expect(await holdsWorkOf(repo, sha('lower/b'), sha('lower/a'), [sha('main')], [])).toBe(true)
   })
+
+  it('names a partial merge-in for the hint, which the topology cannot decide', async () => {
+    branch('part/a', 'main')
+    git('checkout', '-q', 'part/a')
+    const first = sha('part/a')
+    commit('part-a2.txt', 'a2\n')
+    git('checkout', '-q', '-b', 'part/b', 'main')
+    git('merge', '-q', '--no-ff', '-m', 'merge a~1', first)
+    commit('part-b.txt', 'b\n')
+    // b took in a's first commit only: a's tip is not in b.
+    expect(await holds('part/b', 'part/a')).toBe(false)
+    expect(await holdsWorkOf(repo, sha('part/b'), sha('part/a'), [sha('main')], [])).toBe(true)
+  })
+
+  it('names a copy of the commits (patch-equivalent) for the hint, and nothing for other changes', async () => {
+    branch('twin/a', 'main')
+    branch('twin/b', 'main')
+    git('cherry-pick', sha('twin/a'))
+    commit('twin-b.txt', 'b\n')
+    expect(await holds('twin/b', 'twin/a')).toBe(false)
+    expect(await holdsWorkOf(repo, sha('twin/b'), sha('twin/a'), [sha('main')], [])).toBe(true)
+    // Two branches off the same base with changes of their own: no copy, nothing.
+    branch('twin/c', 'main')
+    expect(await holdsWorkOf(repo, sha('twin/c'), sha('twin/a'), [sha('main')], [])).toBe(false)
+    expect(await holdsWorkOf(repo, sha('twin/a'), sha('twin/c'), [sha('main')], [])).toBe(false)
+  })
+
+  it('names no copy of what a base already holds, nor of what the other branch stands on', async () => {
+    // a's commit went into main as a copy (rebased, landed); b took main in: b holds main's copy, not a's work.
+    branch('landed/a', 'main')
+    const a = sha('landed/a')
+    git('checkout', '-q', 'main')
+    git('cherry-pick', a)
+    const main = sha('main')
+    git('checkout', '-q', '-b', 'landed/b', main)
+    commit('landed-b.txt', 'b\n')
+    expect(await holdsWorkOf(repo, sha('landed/b'), a, [main], [])).toBe(false)
+    // A branch stacked on a third one: the third's commit, copied into b, is the third's work, not a's.
+    git('checkout', '-q', '-b', 'under/x', main)
+    commit('under-x.txt', 'x\n')
+    git('checkout', '-q', '-b', 'under/a')
+    commit('under-a.txt', 'a\n')
+    git('checkout', '-q', '-b', 'under/b', main)
+    git('cherry-pick', sha('under/x'))
+    commit('under-b.txt', 'b\n')
+    expect(await holdsWorkOf(repo, sha('under/b'), sha('under/a'), [main], [])).toBe(true)
+    expect(await holdsWorkOf(repo, sha('under/b'), sha('under/a'), [main], [sha('under/x')])).toBe(false)
+  })
 })

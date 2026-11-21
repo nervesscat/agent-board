@@ -348,7 +348,8 @@ short message shape with the numbered list of what needs the human. Its line is
       which; only the human can mark it done anyway, but in Approved an orchestrator moves it to
       `done` after it merges the PR, below). `get_ticket_git` → `includes` (HTTP: `GET /api/tickets/:id/git?includes=1`) lists only the
       open tickets whose unmerged work your branch holds but git cannot prove is theirs (the
-      board adds no need for those: declare one if it is a real dependency); `get_ticket` →
+      board adds no need for those, and the ticket page shows each as an amber "Includes unmerged
+      work" row with "Add as a need": declare one if it is a real dependency); `get_ticket` →
       `needs` says whether each is `merged`. `needs` is the enforced rule; the review column's order is the
       merge order the agents propose, read top to bottom (top merges first). Moving your ticket to
       review, place it with `update_ticket` → `position` (1 is the top; with `status`, in the new

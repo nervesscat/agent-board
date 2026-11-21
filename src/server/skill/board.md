@@ -450,7 +450,8 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    writing "builds on …" in the PR; the board then confirms it, and a need you declared is yours,
    never touched by the board. Your `needs` list never removes one the board added (only the
    human does). `get_ticket_git` → `includes` (REST: `?includes=1`) lists only the open tickets whose unmerged work your
-   branch holds but git cannot prove is theirs, so the board adds no need for them: each one that
+   branch holds (commits of theirs, or a copy of them) but git cannot prove are theirs, so the board adds no need for
+   them (the human sees each as an amber "Includes unmerged work" row with "Add as a need"): each one that
    is a real dependency belongs in `needs`. The PR queue then marks your PR
    "merge after #<its PR>", and the ticket cannot go to `done` until those branches are merged into
    its base: `update_ticket` to `done` is refused with which one (`get_ticket` → `needs[].merged`).
