@@ -1746,82 +1746,82 @@
       "overview": {
         "title": "Overview",
         "subtitle": "The project's summary",
-        "keywords": ""
+        "keywords": "home, project, summary, needs you"
       },
       "board": {
         "title": "Board",
         "subtitle": "Ongoing features",
-        "keywords": ""
+        "keywords": "tickets, features, kanban, stages, in progress"
       },
       "roadmap": {
         "title": "Roadmap",
         "subtitle": "The work timeline",
-        "keywords": ""
+        "keywords": "timeline, work, schedule"
       },
       "prs": {
         "title": "PR queue",
         "subtitle": "Pull requests to review and waiting on others",
-        "keywords": ""
+        "keywords": "prs, pull requests, reviews, merge"
       },
       "reviews": {
         "title": "Reviews",
         "subtitle": "Review results, in the PR queue",
-        "keywords": ""
+        "keywords": "verdict, findings, review results, prs"
       },
       "previews": {
         "title": "Previews",
         "subtitle": "The previews the board runs",
-        "keywords": ""
+        "keywords": "runs, servers, ports"
       },
       "gallery": {
         "title": "Gallery",
         "subtitle": "Files and screenshots",
-        "keywords": ""
+        "keywords": "files, images, uploads"
       },
       "team": {
         "title": "Team",
         "subtitle": "The agents the project works with",
-        "keywords": ""
+        "keywords": "agents, personas, reservations"
       },
       "daily": {
         "title": "Daily",
         "subtitle": "The project's day",
-        "keywords": ""
+        "keywords": "activity, today, report"
       },
       "cleanup": {
         "title": "Cleanup",
         "subtitle": "Branches and worktrees left behind",
-        "keywords": ""
+        "keywords": "branches, worktrees, delete, leftovers"
       },
       "repositories": {
         "title": "Repositories",
         "subtitle": "Checkouts this project reads",
-        "keywords": ""
+        "keywords": "repos, git, checkouts"
       },
       "instructions": {
         "title": "Instructions",
         "subtitle": "Settings: what every agent reads",
-        "keywords": ""
+        "keywords": "settings, project settings, rules, layout, phases, stages, runs"
       },
       "home": {
         "title": "Home",
         "subtitle": "Every project at a glance",
-        "keywords": ""
+        "keywords": "projects, summary, board"
       },
       "dailyGlobal": {
         "title": "Daily",
         "subtitle": "What every project did",
-        "keywords": ""
+        "keywords": "activity, reports, today"
       },
       "connect": {
         "title": "Connect",
         "subtitle": "Connect an agent and install the skill",
-        "keywords": ""
+        "keywords": "agents, mcp, tokens, setup, install"
       },
       "settingsGlobal": {
         "title": "Settings",
         "subtitle": "Board-wide preferences",
-        "keywords": ""
+        "keywords": "preferences, theme, previews, devices"
       }
     },
     "setting": {

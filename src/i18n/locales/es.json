@@ -1746,82 +1746,82 @@
       "overview": {
         "title": "Resumen",
         "subtitle": "El resumen del proyecto",
-        "keywords": "inicio, proyecto, resumen, te necesita, "
+        "keywords": "inicio, proyecto, resumen, te necesita, home, project, summary, needs you"
       },
       "board": {
         "title": "Features",
         "subtitle": "Features en curso",
-        "keywords": "tickets, features, kanban, etapas, en curso, "
+        "keywords": "tickets, features, kanban, etapas, en curso, stages, in progress"
       },
       "roadmap": {
         "title": "Hoja de ruta",
         "subtitle": "La cronología del trabajo",
-        "keywords": "cronología, trabajo, calendario, plan, "
+        "keywords": "cronología, trabajo, calendario, plan, timeline, work, schedule"
       },
       "prs": {
         "title": "Cola de PR",
         "subtitle": "PR por revisar y a la espera de otros",
-        "keywords": "prs, pull requests, revisiones, merge, "
+        "keywords": "prs, pull requests, revisiones, merge, reviews"
       },
       "reviews": {
         "title": "Revisiones",
         "subtitle": "Resultados de revisión, en la cola de PR",
-        "keywords": "veredicto, hallazgos, resultados de revisión, prs, "
+        "keywords": "veredicto, hallazgos, resultados de revisión, prs, verdict, findings, review results"
       },
       "previews": {
         "title": "Previews",
         "subtitle": "Los previews que ejecuta el tablero",
-        "keywords": "ejecuciones, servidores, puertos, "
+        "keywords": "ejecuciones, servidores, puertos, runs, servers, ports"
       },
       "gallery": {
         "title": "Galería",
         "subtitle": "Archivos y capturas",
-        "keywords": "archivos, imágenes, subidas, "
+        "keywords": "archivos, imágenes, subidas, files, images, uploads"
       },
       "team": {
         "title": "Equipo",
         "subtitle": "Los agentes con los que trabaja el proyecto",
-        "keywords": "agentes, personas, reservas, "
+        "keywords": "agentes, personas, reservas, agents, reservations"
       },
       "daily": {
         "title": "Diario",
         "subtitle": "El día del proyecto",
-        "keywords": "actividad, hoy, informe, "
+        "keywords": "actividad, hoy, informe, activity, today, report"
       },
       "cleanup": {
         "title": "Limpieza",
         "subtitle": "Branches y worktrees que quedaron atrás",
-        "keywords": "branches, worktrees, eliminar, restos, "
+        "keywords": "branches, worktrees, eliminar, restos, delete, leftovers"
       },
       "repositories": {
         "title": "Repositorios",
         "subtitle": "Checkouts que lee este proyecto",
-        "keywords": "repos, git, checkouts, "
+        "keywords": "repos, git, checkouts"
       },
       "instructions": {
         "title": "Instrucciones",
         "subtitle": "Ajustes: lo que lee cada agente",
-        "keywords": "ajustes, ajustes del proyecto, reglas, diseño, fases, etapas, ejecuciones, "
+        "keywords": "ajustes, ajustes del proyecto, reglas, diseño, fases, etapas, ejecuciones, settings, project settings, rules, layout, phases, stages, runs"
       },
       "home": {
         "title": "Inicio",
         "subtitle": "Todos los proyectos de un vistazo",
-        "keywords": "proyectos, resumen, tablero, "
+        "keywords": "proyectos, resumen, tablero, projects, summary, board"
       },
       "dailyGlobal": {
         "title": "Diario",
         "subtitle": "Lo que hizo cada proyecto",
-        "keywords": "actividad, informes, hoy, "
+        "keywords": "actividad, informes, hoy, activity, reports, today"
       },
       "connect": {
         "title": "Conectar",
         "subtitle": "Conecta un agente e instala la skill",
-        "keywords": "agentes, mcp, tokens, configuración, instalar, "
+        "keywords": "agentes, mcp, tokens, configuración, instalar, agents, setup, install"
       },
       "settingsGlobal": {
         "title": "Ajustes",
         "subtitle": "Preferencias de todo el tablero",
-        "keywords": "preferencias, tema, previews, dispositivos, "
+        "keywords": "preferencias, tema, previews, dispositivos, preferences, theme, devices"
       }
     },
     "setting": {
