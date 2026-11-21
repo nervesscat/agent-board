@@ -29,7 +29,6 @@ import {
   RefreshCw,
   Scale,
   ScrollText,
-  TriangleAlert,
   X,
 } from 'lucide-react'
 import {
@@ -358,9 +357,7 @@ function TicketPage() {
       },
     )
   }
-  const openLanes = t.lanes.filter((l) => !isClosed(stageOf(stages, l.status).kind)).length
   const kind = stageOf(stages, t.status).kind
-  const lanesWarning = openLanes > 0 && (kind === 'review' || kind === 'done')
   // null: a section with nothing to show on this ticket. It is left out of its column, so a column
   // with nothing left to show is not drawn and the other one takes the page's width.
   const sections: Record<AreaId<'ticket.main'>, ReactNode> = {
@@ -466,13 +463,6 @@ function TicketPage() {
             >
               <ArchiveRestore /> Restore
             </Button>
-          )}
-          {lanesWarning && (
-            <Tip content="This ticket is marked further along than its lanes">
-              <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
-                <TriangleAlert className="size-3.5" /> {openLanes} lane{openLanes === 1 ? '' : 's'} not done
-              </span>
-            </Tip>
           )}
           <NeedsStatus t={t} />
           {t.updates.some((u) => u.decision && !u.decidedAt) && (
