@@ -2357,9 +2357,11 @@
     "loadError": "No se pudo cargar el resumen: {{error}}",
     "projectOverview": "{{name}}: resumen",
     "headline": {
-      "waiting": "{{count}} te esperan",
+      "waiting_one": "{{count}} te espera",
+      "waiting_other": "{{count}} te esperan",
       "inProgress": "{{count}} en curso",
-      "doneToday": "{{count}} hechos hoy"
+      "doneToday_one": "{{count}} hecho hoy",
+      "doneToday_other": "{{count}} hechos hoy"
     },
     "allHidden": "Todas las tarjetas de este resumen están ocultas. <goto>Muéstralas de nuevo en los ajustes de diseño</goto>.",
     "showFewer": "Mostrar menos",
@@ -2420,7 +2422,8 @@
       "emptyStage": "Nada preparado en {{stage}}.",
       "tasks": "{{done}}/{{total}} tareas",
       "more": "{{count}} más",
-      "blocked": "{{count}} bloqueados",
+      "blocked_one": "{{count}} bloqueado",
+      "blocked_other": "{{count}} bloqueados",
       "backlog": "{{count}} en el backlog",
       "board": "Tablero"
     },
@@ -2445,11 +2448,11 @@
     "finishedWith": "{{title}} terminó · {{summary}}",
     "failedLine": "Falló · {{elapsed}} · {{reason}}",
     "succeededLine": "Correcto · {{elapsed}}",
-    "retryKept": "Reintentar los elementos conservados",
+    "retryKept": "Reintentar los conservados",
     "youAsked": "{{actor}} · Pediste: {{request}}",
     "stale": "Sin novedades desde hace {{since}} · puede que se haya detenido",
     "trackedFailed": "Falló · {{reason}}",
-    "succeeded": "Correcto",
+    "succeeded": "Completado",
     "notice": "Aviso",
     "cannotWait": "No puede esperar: {{reason}}",
     "unit": {

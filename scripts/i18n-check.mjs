@@ -117,7 +117,7 @@ export function compareLocales(en, other, name) {
       problems.push(`${name}: ${k} has no _other form`)
   }
   for (const [key, text] of Object.entries(b)) {
-    const model = a[key] ?? a[`${base(key)}_other`]
+    const model = a[key] ?? a[`${base(key)}_other`] ?? a[base(key)]
     if (model === undefined || typeof text !== 'string' || text.trim() === '') continue
     if (placeholders(model).join() !== placeholders(text).join())
       problems.push(`${name}: ${key} uses other {{placeholders}} than the English text`)
