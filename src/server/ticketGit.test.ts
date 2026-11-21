@@ -120,7 +120,7 @@ const quiet = () => {
 }
 
 let projectId: number
-const view = async (id: number) => (await import('./needs')).ticketGitView(id)
+const view = async (id: number) => (await import('./needs')).ticketGitView(id, { includes: true })
 /** The needs the board added to a ticket, once the sweep a read starts in the background has finished. */
 const autoNeeds = async (id: number) => {
   const needs = await import('./needs')
@@ -184,6 +184,14 @@ const fixture = async (name: string) => {
 }
 
 describe('ticketGitView', () => {
+  it('leaves out includes, and the scan behind it, unless asked for it', async () => {
+    const { ticket } = await fixture('plain')
+    const plain = await (await import('./needs')).ticketGitView(ticket.id)
+    expect(plain.info).toMatchObject({ exists: true })
+    expect('includes' in plain).toBe(false)
+    expect((await view(ticket.id)).includes).toEqual([])
+  })
+
   it('asks git nothing per branch on a second read, and nothing at all within the refs window', async () => {
     const { ticket } = await fixture('again')
     const first = await view(ticket.id)

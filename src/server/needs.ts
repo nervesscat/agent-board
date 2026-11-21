@@ -144,8 +144,8 @@ export function checkNeeds(subject: Pick<Subject, 'id' | 'projectId'>, ids: numb
 /**
  * Replace what a ticket needs (checked as `checkNeeds` does); `[]` clears it. The needs the board added
  * (`auto`) are its own: a list that keeps one leaves its row as it is, an agent's list never removes
- * one, and the human removing one is remembered (`ticket_need_dismissals`), so the board does not add
- * it again for the same commits. Needs not in the list before are the caller's own (not `auto`).
+ * one, and the human removing any need is remembered (`ticket_need_dismissals`), so the board does not
+ * add it again for the same commits. Needs not in the list before are the caller's own (not `auto`).
  */
 export function setNeeds(ticketId: number, ids: number[], actor: string, opts: { agent?: boolean } = {}) {
   const t = features.getTicket(ticketId)
@@ -159,7 +159,8 @@ export function setNeeds(ticketId: number, ids: number[], actor: string, opts: {
       tx.delete(schema.ticketNeeds)
         .where(and(eq(schema.ticketNeeds.ticketId, ticketId), eq(schema.ticketNeeds.needsId, r.needsId)))
         .run()
-      if (r.auto)
+      // The human's removal sticks for any need: a manual row has held '' (no commit seen for it yet).
+      if (r.auto || !opts.agent)
         tx.insert(schema.ticketNeedDismissals)
           .values({ ticketId, needsId: r.needsId, held: r.held })
           .onConflictDoUpdate({
@@ -493,15 +494,19 @@ async function includedWork(t: Ticket, ctx: Context): Promise<number[]> {
 }
 
 /**
- * `get_ticket_git` with `includes`: the open tickets whose unmerged work this ticket's branch holds
+ * `get_ticket_git` with `includes` (the HTTP route only with `?includes=1`, which runs the scan): the open tickets whose unmerged work this ticket's branch holds
  * and the board did not add a need for (`includedWork`). Both read the same ref listing, the one every
  * read shares for a few seconds.
  */
-export async function ticketGitView(id: number) {
+export async function ticketGitView(
+  id: number,
+  opts: { includes?: boolean } = {},
+): Promise<Awaited<ReturnType<typeof features.ticketGit>> & { includes?: number[] }> {
   const repoGit = gitCache({ recent: true })
   const git = await features.ticketGit(id, repoGit)
   const t = features.getTicket(id)
   followBranches(t.projectId)
+  if (!opts.includes) return git
   return { ...git, includes: await includedWork(t, context(t.projectId, repoGit)).catch(() => []) }
 }
 
@@ -642,7 +647,8 @@ async function sweepTicket(t: Ticket, ctx: Context) {
     if (gone)
       removed.set(id, {
         held: gone.held,
-        covers: gone.held === b || (await isAncestor(repo.repoPath, b, gone.held)),
+        // Removed before the board had seen a commit for it (a need declared by hand): this tip is the one.
+        covers: !gone.held || gone.held === b || (await isAncestor(repo.repoPath, b, gone.held)),
       })
   }
   const drops = new Map<number, string>()
@@ -677,7 +683,21 @@ async function sweepTicket(t: Ticket, ctx: Context) {
         }
         const gone = dismissals().find((d) => d.needsId === id)
         // Removed by the human for these commits, or removed or changed since it was looked at: not now.
-        if (gone?.held !== removed.get(id)?.held || removed.get(id)?.covers) continue
+        if (gone?.held !== removed.get(id)?.held) continue
+        if (removed.get(id)?.covers) {
+          // Removed with no commit seen: the tip seen now is the one it was removed with.
+          if (gone && !gone.held)
+            tx.update(schema.ticketNeedDismissals)
+              .set({ held: b })
+              .where(
+                and(
+                  eq(schema.ticketNeedDismissals.ticketId, t.id),
+                  eq(schema.ticketNeedDismissals.needsId, id),
+                ),
+              )
+              .run()
+          continue
+        }
         try {
           checkNeeds(t, [id])
         } catch {

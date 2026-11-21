@@ -336,14 +336,17 @@ short message shape with the numbered list of what needs the human. Its line is
       that need itself once the commits are in the branches it looks at (after a push or a fetch,
       and when a ticket is read; it logs "now needs #N", marks the need `auto` in `get_ticket`,
       and drops it again when the branch no longer holds those commits or the other ticket was
-      cancelled or archived without landing). It cannot see a branch before it is pushed, so when
-      you stack first, declare it yourself with `update_ticket` with `needs: [<its ticket id>]`
+      cancelled or archived without landing). It sees only what git has, at its looks (a fresh
+      listing, a ticket read, a status change), and cannot prove who owns commits two branches
+      share once they moved apart, so when you stack before your ticket's branch exists or the
+      commits are in git, declare it yourself with `update_ticket` with `needs: [<its ticket id>]`
       (or `needs` on `create_ticket`), instead of only writing "builds on …" in the PR: the board
       then confirms it, and a need you declared is yours, never touched by the board. Your `needs`
-      list never removes a need the board added (only the human does, and it then stays removed). The PR queue then marks your PR "merge after #<its PR>", and the
+      list never removes a need the board added (only the human does, and it then stays removed).
+      The PR queue then marks your PR "merge after #<its PR>", and the
       ticket cannot move to `done` until that branch is merged into its base (the refusal says
       which; only the human can mark it done anyway, but in Approved an orchestrator moves it to
-      `done` after it merges the PR, below). `get_ticket_git` → `includes` lists only the
+      `done` after it merges the PR, below). `get_ticket_git` → `includes` (HTTP: `GET /api/tickets/:id/git?includes=1`) lists only the
       open tickets whose unmerged work your branch holds but git cannot prove is theirs (the
       board adds no need for those: declare one if it is a real dependency); `get_ticket` →
       `needs` says whether each is `merged`. `needs` is the enforced rule; the review column's order is the

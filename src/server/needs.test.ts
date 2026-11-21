@@ -281,7 +281,7 @@ describe('includes', () => {
     const c = make('c', 'feat/c')
     const d = make('d', 'feat/d')
     make('landed', 'feat/landed')
-    const includes = async (id: number) => (await needs.ticketGitView(id)).includes
+    const includes = async (id: number) => (await needs.ticketGitView(id, { includes: true })).includes
     const added = async () => {
       await needs.syncAutoNeeds(p)
       return (id: number) => needs.needIds(id)

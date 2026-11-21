@@ -81,7 +81,7 @@ const lines = (ticketId: number) =>
     .where(and(eq(dbm.schema.activity.refId, ticketId), eq(dbm.schema.activity.actor, 'board')))
     .all()
     .map((r) => r.text)
-const includes = async (id: number) => (await needs.ticketGitView(id)).includes
+const includes = async (id: number) => (await needs.ticketGitView(id, { includes: true })).includes
 
 describe('adding needs', () => {
   it('adds the need for a branch stacked on another, once, and logs it', async () => {
@@ -269,6 +269,40 @@ describe('removing and keeping needs', () => {
     expect(rows(b.id)).toMatchObject([{ needsId: a.id, auto: true, held: sha('d7/a') }])
     expect(dismissals()).toEqual([])
     expect(lines(b.id)).toHaveLength(2)
+  })
+
+  it('does not add again a need declared by hand and removed by the human, until new work is taken in', async () => {
+    const p = project()
+    branch('r7/a', 'main')
+    branch('r7/b', 'main')
+    const a = p.ticket('a', 'r7/a')
+    const b = p.ticket('b', 'r7/b')
+    // Declared by hand while b holds nothing of a, then removed by the human.
+    await needs.changeTicket(b.id, { needs: [a.id] }, 'me', human)
+    await needs.changeTicket(b.id, { needs: [] }, 'me', human)
+    const dismissals = () =>
+      dbm.db
+        .select()
+        .from(dbm.schema.ticketNeedDismissals)
+        .where(eq(dbm.schema.ticketNeedDismissals.ticketId, b.id))
+        .all()
+    expect(dismissals()).toMatchObject([{ needsId: a.id, held: '' }])
+    // b then takes a in: the board sees the commits, and the removal still stands.
+    git('checkout', '-q', 'r7/b')
+    git('merge', '-q', '--no-ff', '-m', 'merge a', 'r7/a')
+    await p.sweep()
+    expect(needIds(b.id)).toEqual([])
+    expect(dismissals()).toMatchObject([{ needsId: a.id, held: sha('r7/a') }])
+    p.ticket('other', 'r7/none')
+    await p.sweep()
+    expect(needIds(b.id)).toEqual([])
+    // New work in a, taken in by b: the need comes back.
+    more('r7/a')
+    git('checkout', '-q', 'r7/b')
+    git('merge', '-q', '--no-ff', '-m', 'merge a again', 'r7/a')
+    await p.sweep()
+    expect(rows(b.id)).toMatchObject([{ needsId: a.id, auto: true, held: sha('r7/a') }])
+    expect(dismissals()).toEqual([])
   })
 
   it('leaves a need added by hand alone, held or not, and keeps the board’s own through an agent’s list', async () => {

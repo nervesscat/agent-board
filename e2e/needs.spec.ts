@@ -119,7 +119,7 @@ test('a branch that holds another ticket’s unmerged work gets the need by itse
   await expect
     .poll(async () => (await ok<TicketFull>(human.get(`/api/tickets/${t.id}`))).needs)
     .toMatchObject([{ id: base.id, auto: true, merged: false }])
-  expect((await ok<TicketGit>(human.get(`/api/tickets/${t.id}/git`))).includes).toEqual([])
+  expect((await ok<TicketGit>(human.get(`/api/tickets/${t.id}/git?includes=1`))).includes).toEqual([])
 
   // On its page: the need with the board's mark, and no suggestion to add it.
   await page.goto(`/projects/${project.id}/features/${t.id}`)
