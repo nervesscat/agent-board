@@ -58,8 +58,13 @@ import type { CarryOver, ProjectSummary, Summary } from '#/server/summary'
 import type { ActorRole, ActorRow } from '#/server/actors'
 import type { AgentTokenRow } from '#/server/tokens'
 import type { ProjectWork, TicketEvent } from '#/server/workTimeline'
+import type { effectiveWorkflow, workflowOverview } from '#/server/workflow'
 import type { WorkTimeline } from './workTimeline'
 
+/** `/api/projects/:id/workflow`: the active preset and every preset with its tweaks and steps as a tree. */
+export type WorkflowOverview = ReturnType<typeof workflowOverview>
+/** `/api/projects/:id/workflow/effective`: the workflow a ticket (or a preset and complexity) follows, with its text. */
+export type WorkflowEffective = ReturnType<typeof effectiveWorkflow>
 /** A project as the API returns it: always with its repos. */
 export type Project = ProjectFull
 /**

@@ -11,6 +11,7 @@ const MENU = [
   'Previews',
   'Gallery',
   'Team',
+  'Workflow',
   'Run reports',
   'Daily',
   'Cleanup',
@@ -90,8 +91,9 @@ test('the human hides a page and reorders the menu from the keyboard; both persi
   await expect(up).toBeFocused()
   const order = [
     ...MENU.slice(0, 6),
-    'Daily',
     'Team',
+    'Daily',
+    'Workflow',
     'Run reports',
     'Cleanup',
     'Repositories',
@@ -178,6 +180,7 @@ test('an edit made while a Save or a Reset is on its way stays, unsaved, and a s
   const order = [
     ...MENU.slice(0, 6),
     'Team',
+    'Workflow',
     'Daily',
     'Run reports',
     'Cleanup',
