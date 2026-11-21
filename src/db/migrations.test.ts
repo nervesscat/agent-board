@@ -390,7 +390,11 @@ describe('0029_ticket_pr_link', () => {
 
     const rows = () => ({
       tickets: sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[],
-      tasks: sqlite.prepare('SELECT * FROM tasks ORDER BY id').all(),
+      tasks: sqlite
+        .prepare(
+          'SELECT id, ticket_id, parent_id, text, done, position, blocked, blocked_reason FROM tasks ORDER BY id',
+        )
+        .all(),
       updates: sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
     })
     const before = rows()
@@ -673,7 +677,9 @@ describe('0035_auto_phase_state', () => {
       .run(project)
     const before = {
       tickets: sqlite.prepare('SELECT * FROM tickets').all() as Record<string, unknown>[],
-      tasks: sqlite.prepare('SELECT * FROM tasks').all(),
+      tasks: sqlite
+        .prepare('SELECT id, ticket_id, parent_id, text, done, position, blocked, blocked_reason FROM tasks')
+        .all(),
       prs: sqlite.prepare('SELECT * FROM prs').all() as Record<string, unknown>[],
     }
 
@@ -685,7 +691,11 @@ describe('0035_auto_phase_state', () => {
     expect(prs.map((p) => p.local_ci_sha)).toEqual([null])
     expect(tickets.map(({ merged_phase_checked: _m, ...rest }) => rest)).toEqual(before.tickets)
     expect(prs.map(({ local_ci_sha: _l, ...rest }) => rest)).toEqual(before.prs)
-    expect(sqlite.prepare('SELECT * FROM tasks').all()).toEqual(before.tasks)
+    expect(
+      sqlite
+        .prepare('SELECT id, ticket_id, parent_id, text, done, position, blocked, blocked_reason FROM tasks')
+        .all(),
+    ).toEqual(before.tasks)
     sqlite.close()
   })
 })
@@ -810,7 +820,11 @@ describe('0037_drop_handoff_post_phase', () => {
       task(lane, 'Hand-off post', 1, true)
 
       const rows = (where: string, ...params: unknown[]) =>
-        sqlite.prepare(`SELECT * FROM tasks WHERE ${where} ORDER BY id`).all(...params)
+        sqlite
+          .prepare(
+            `SELECT id, ticket_id, parent_id, text, done, position, blocked, blocked_reason FROM tasks WHERE ${where} ORDER BY id`,
+          )
+          .all(...params)
       const progress = (where: string, ...params: unknown[]) =>
         sqlite
           .prepare(`SELECT coalesce(sum(done), 0) AS done, count(*) AS total FROM tasks WHERE ${where}`)
@@ -1170,7 +1184,12 @@ describe('0042_summary_phase', () => {
     task(lane, 'Write it', 1)
     const plain = ticket('No tasks')
 
-    const tasks = () => sqlite.prepare('SELECT * FROM tasks ORDER BY id').all() as Record<string, unknown>[]
+    const tasks = () =>
+      sqlite
+        .prepare(
+          'SELECT id, ticket_id, parent_id, text, done, position, blocked, blocked_reason FROM tasks ORDER BY id',
+        )
+        .all() as Record<string, unknown>[]
     const before = {
       tasks: tasks(),
       tickets: sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[],
@@ -1489,7 +1508,11 @@ describe('0050_widen_ticket_complexity', () => {
 
     const rows = () => ({
       tickets: sqlite.prepare('SELECT * FROM tickets ORDER BY id').all(),
-      tasks: sqlite.prepare('SELECT * FROM tasks ORDER BY id').all(),
+      tasks: sqlite
+        .prepare(
+          'SELECT id, ticket_id, parent_id, text, done, position, blocked, blocked_reason FROM tasks ORDER BY id',
+        )
+        .all(),
       updates: sqlite.prepare('SELECT * FROM updates ORDER BY id').all(),
       attachments: sqlite.prepare('SELECT * FROM attachments ORDER BY id').all(),
       comments: sqlite.prepare('SELECT * FROM comments ORDER BY id').all(),
@@ -1563,7 +1586,11 @@ describe('0051_agent_cards', () => {
     const before = {
       projects: sqlite.prepare('SELECT * FROM projects ORDER BY id').all(),
       tickets: sqlite.prepare('SELECT * FROM tickets ORDER BY id').all(),
-      tasks: sqlite.prepare('SELECT * FROM tasks ORDER BY id').all(),
+      tasks: sqlite
+        .prepare(
+          'SELECT id, ticket_id, parent_id, text, done, position, blocked, blocked_reason FROM tasks ORDER BY id',
+        )
+        .all(),
       updates: sqlite.prepare('SELECT * FROM updates ORDER BY id').all(),
     }
 
@@ -1585,7 +1612,13 @@ describe('0051_agent_cards', () => {
         sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[],
       ),
     ).toEqual(before.tickets)
-    expect(sqlite.prepare('SELECT * FROM tasks ORDER BY id').all()).toEqual(before.tasks)
+    expect(
+      sqlite
+        .prepare(
+          'SELECT id, ticket_id, parent_id, text, done, position, blocked, blocked_reason FROM tasks ORDER BY id',
+        )
+        .all(),
+    ).toEqual(before.tasks)
     expect(sqlite.prepare('SELECT * FROM updates ORDER BY id').all()).toEqual(before.updates)
 
     expect(columns(sqlite, 'agent_cards')).toEqual([
@@ -1768,5 +1801,34 @@ describe('0057_alerts', () => {
     sqlite.prepare('DELETE FROM projects WHERE id = ?').run(project)
     expect(sqlite.prepare('SELECT count(*) AS n FROM alert_mutes').get()).toEqual({ n: 0 })
     expect(sqlite.prepare('SELECT count(*) AS n FROM alerts').get()).toEqual({ n: 1 })
+  })
+})
+
+describe('0058_task_blocked_at', () => {
+  it('adds the time a task was tagged blocked, backfilled from its ticket for the tasks already blocked', () => {
+    const sqlite = databaseAt('0057_alerts')
+    const project = Number(
+      sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('kept').lastInsertRowid,
+    )
+    const ticket = Number(
+      sqlite
+        .prepare(
+          "INSERT INTO tickets (project_id, title, created_by, updatedAt) VALUES (?, 't', 'a', '2026-01-02T03:04:05.000Z')",
+        )
+        .run(project).lastInsertRowid,
+    )
+    const task = sqlite.prepare(
+      'INSERT INTO tasks (ticket_id, text, blocked, blocked_reason) VALUES (?, ?, ?, ?)',
+    )
+    task.run(ticket, 'waits', 1, 'sign it')
+    task.run(ticket, 'plain', 0, '')
+    expect(columns(sqlite, 'tasks')).not.toContain('blocked_at')
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    expect(sqlite.prepare('SELECT text, blocked_at FROM tasks ORDER BY id').all()).toEqual([
+      { text: 'waits', blocked_at: '2026-01-02T03:04:05.000Z' },
+      { text: 'plain', blocked_at: null },
+    ])
   })
 })
