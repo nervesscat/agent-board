@@ -324,7 +324,7 @@ function PreviewsBar({
               <Button variant="outline" size="sm" className="sm:ml-auto" disabled={stopAll.isPending} />
             }
           >
-            <Square /> {t('runsCard.stopAll')}
+            <Square /> {t('previews.stopAllRuns')}
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -339,7 +339,7 @@ function PreviewsBar({
                   stopAll.mutate()
                 }}
               >
-                {t('runsCard.stopAll')}
+                {t('previews.stopAllRuns')}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

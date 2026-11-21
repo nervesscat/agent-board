@@ -1325,7 +1325,8 @@
     "runBy": "Run by the board on :{{port}}",
     "runBySince": "Run by the board on :{{port}}, since {{time}}",
     "failed": "Failed: {{reason}}",
-    "stoppedReason": "Stopped: {{reason}}"
+    "stoppedReason": "Stopped: {{reason}}",
+    "stopAllRuns": "Stop all"
   },
   "previewWindow": {
     "building": "Building… it shows here once it runs.",

@@ -1265,7 +1265,7 @@
     "cannotStart": "No se puede arrancar: {{reason}}",
     "onPort": "En :{{port}}",
     "runningPlain": "En ejecución",
-    "since": ", desde las {{time}}",
+    "since": ", desde {{time}}",
     "buildLog": "log de build",
     "runLog": "log de ejecución",
     "logAria": "Log de {{name}}"
@@ -1323,9 +1323,10 @@
     "startingOn": "Arrancando en :{{port}}…",
     "startingOnStep": "Arrancando en :{{port}}… {{step}}",
     "runBy": "Ejecutado por el tablero en :{{port}}",
-    "runBySince": "Ejecutado por el tablero en :{{port}}, desde las {{time}}",
+    "runBySince": "Ejecutado por el tablero en :{{port}}, desde {{time}}",
     "failed": "Falló: {{reason}}",
-    "stoppedReason": "Detenido: {{reason}}"
+    "stoppedReason": "Detenido: {{reason}}",
+    "stopAllRuns": "Detener todos"
   },
   "previewWindow": {
     "building": "Compilando… se muestra aquí en cuanto se ejecute.",
@@ -1340,10 +1341,10 @@
     "couldNotCopy": "No se pudo copiar el enlace",
     "window": "Ventana de preview",
     "openPreviews": "Previews abiertos",
-    "reloadTip": "Volver a cargar el preview",
+    "reloadTip": "Recarga el preview",
     "reload": "Recargar el preview",
-    "restoreTip": "Volver a la ventana flotante",
-    "maximizeTip": "Usar toda la pantalla",
+    "restoreTip": "Vuelve a la ventana flotante",
+    "maximizeTip": "Usa toda la pantalla",
     "restore": "Restaurar la ventana de preview",
     "maximize": "Maximizar la ventana de preview",
     "closeTip": "Cierra el preview (la ejecución sigue)",
