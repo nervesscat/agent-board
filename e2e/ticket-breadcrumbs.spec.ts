@@ -3,6 +3,8 @@ import type { APIRequestContext, Page } from '@playwright/test'
 import { expect, test } from './fixtures'
 import { addPosts, box, longTicket, openLong, scrollTo, ticketHeader } from './scrolling'
 
+const title = (page: Page) => page.getByRole('heading', { level: 1 })
+
 /** The breadcrumbs the page draws at its top, and the ones the floating header draws while those are away. */
 const pageCrumbs = (page: Page) =>
   page.getByRole('main').locator('section > div > nav[aria-label="Breadcrumb"]')
@@ -49,8 +51,12 @@ test("the floating header shows the breadcrumbs only while the page's own are sc
   const banner = await box(page.getByRole('banner'))
   expect((await box(barCrumbs(page))).y).toBeGreaterThanOrEqual(banner.y + banner.height)
 
-  // They took the place of the header's meta line: the page and the header are as tall as at rest, so
-  // nothing moves when they come and go.
+  // They are on a line above the title, and the line under it (who opened it, when, its tags) stays. They
+  // take no room of their own: the page and the header are as tall as at rest, so nothing moves.
+  const above = await box(barCrumbs(page))
+  const name = await box(title(page))
+  expect(above.y + above.height).toBeLessThanOrEqual(name.y)
+  await expect(ticketHeader(page).getByText(/^opened by /)).toBeVisible()
   expect(await height()).toBe(rest.page)
   expect((await box(ticketHeader(page))).height).toBe(rest.header)
 

@@ -420,32 +420,26 @@ function TicketPage() {
             Its padding keeps the title off the top bar's edge; the margins take it back at rest. */}
       <header
         ref={measureHeader}
-        className="sticky top-[calc(3rem+1px+env(safe-area-inset-top))] z-10 -my-2 flex flex-wrap items-start gap-3 bg-background py-2"
+        className="sticky top-[calc(3rem+1px+env(safe-area-inset-top))] z-10 -mb-2 -mt-6 flex flex-wrap items-start gap-3 bg-background pb-2 pt-6"
       >
+        {/* The page's breadcrumbs, on a line above the title, while the page's own are scrolled away. The
+              header's top padding is the page's gap above it (the margin takes it back at rest), so this
+              line takes no room of its own: the header's height does not change when it comes and goes. It
+              sticks exactly when the page's own go under the top bar. */}
+        {crumbsAway && (
+          <div className="absolute inset-x-0 top-1 flex min-w-0 items-center">
+            <Breadcrumbs projectId={id} t={t} filter={filter} compact />
+          </div>
+        )}
         {/* At least 12rem wide: a toolbar too wide to sit beside it wraps under it, not squeezes the title. */}
         <div className="min-w-48 flex-1">
           <InlineTitle key={t.id} t={t} onSave={(title) => update.mutate({ title })} />
-          {/* The breadcrumbs take the place of this line while the page's own are away, in the same cell: the
-                header keeps its height, so the page does not move when they come and go. The line stays
-                drawn, hidden, to keep that height when it wraps. */}
-          <div className="mt-1 grid grid-cols-[minmax(0,1fr)] text-xs text-muted-foreground">
-            <div
-              className={cn(
-                'col-start-1 row-start-1 flex flex-wrap items-center gap-x-3 gap-y-1',
-                crumbsAway && 'invisible',
-              )}
-            >
-              <span>
-                opened by <Actor name={t.createdBy} short /> {ago(t.createdAt)}
-              </span>
-              <span>updated {ago(t.updatedAt)}</span>
-              <InlineTags key={t.id} t={t} projectId={id} onSave={(tags) => update.mutate({ tags })} />
-            </div>
-            {crumbsAway && (
-              <div className="col-start-1 row-start-1 flex min-w-0 items-center self-start">
-                <Breadcrumbs projectId={id} t={t} filter={filter} compact />
-              </div>
-            )}
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <span>
+              opened by <Actor name={t.createdBy} short /> {ago(t.createdAt)}
+            </span>
+            <span>updated {ago(t.updatedAt)}</span>
+            <InlineTags key={t.id} t={t} projectId={id} onSave={(tags) => update.mutate({ tags })} />
           </div>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
