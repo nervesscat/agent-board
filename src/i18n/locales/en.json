@@ -2629,5 +2629,20 @@
     "workspacesDesc": "Worktrees, sub-branches and subagent sandboxes the agents opened for this ticket.",
     "workspacesDescLanes": "Worktrees, sub-branches and subagent sandboxes the agents opened for this ticket and its lanes.",
     "noneYet": "None yet."
+  },
+  "complexity": {
+    "label": {
+      "low": "Low",
+      "mid": "Mid",
+      "high": "High",
+      "max": "Max"
+    },
+    "selectHint": "Low: no review. Mid: one review round. High: up to three. Max: up to ten rounds, for work built from scratch; a feature in an existing codebase is never max, however difficult.",
+    "hint": {
+      "low": "Low: no review. The builder verifies it itself.",
+      "mid": "Mid: one review round.",
+      "high": "High: up to three review rounds.",
+      "max": "Max: up to ten review rounds, for a whole site or app built from scratch, a new product or a standalone service, and it stops at the first round that survives. A feature in an existing codebase is at most high, however difficult."
+    }
   }
 }

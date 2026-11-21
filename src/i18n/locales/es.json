@@ -2632,5 +2632,20 @@
     "workspacesDesc": "Worktrees, sub-branches y entornos aislados de subagentes que los agentes abrieron para este ticket.",
     "workspacesDescLanes": "Worktrees, sub-branches y entornos aislados de subagentes que los agentes abrieron para este ticket y sus lanes.",
     "noneYet": "Ninguno aún."
+  },
+  "complexity": {
+    "label": {
+      "low": "Baja",
+      "mid": "Media",
+      "high": "Alta",
+      "max": "Máxima"
+    },
+    "selectHint": "Baja: sin revisión. Media: una ronda de revisión. Alta: hasta tres. Máxima: hasta diez rondas, para trabajo construido desde cero; una funcionalidad en un código ya existente nunca es máxima, por difícil que sea.",
+    "hint": {
+      "low": "Baja: sin revisión. El builder la verifica por sí mismo.",
+      "mid": "Media: una ronda de revisión.",
+      "high": "Alta: hasta tres rondas de revisión.",
+      "max": "Máxima: hasta diez rondas de revisión, para un sitio o una app completos construidos desde cero, un producto nuevo o un servicio independiente; se detiene en la primera ronda que sobrevive. Una funcionalidad en un código ya existente es como mucho alta, por difícil que sea."
+    }
   }
 }

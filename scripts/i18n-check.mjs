@@ -46,10 +46,15 @@ const TEXT_PROPERTIES = new Set([
   'caption',
   'heading',
 ])
+// A constant named like a text table (COMPLEXITY_LABEL, SELECT_HINT, EMPTY_TEXT …) holds interface text.
+const TEXT_CONSTANT = /(LABEL|HINT|TIP|TITLE|TEXT|MESSAGE|DESCRIPTION|COPY|NAME)S?$/i
 const HAS_WORDS = {
   // A key (`shell.connect`) is not a text.
   test: (text) =>
     !/^[a-z]\w*(\.\w+)+$/.test(text) &&
+    !/^\.\w+$/.test(text) &&
+    // a list of CSS classes (text-[10px] font-semibold), not a sentence
+    !(/^[a-z0-9:[\]/.%-]+(\s+[a-z0-9:[\]/.%-]+)*$/.test(text) && /[-:[]/.test(text)) &&
     /\p{L}{2,}/u.test(text.replace(/CrossBoard/g, ' ').replace(/#[0-9a-f]{3,8}\b/gi, ' ')),
 }
 
@@ -194,6 +199,21 @@ export function findHardcoded(source, fileName = 'file.tsx') {
     ) {
       for (const shownText of shown(node.expression))
         if (HAS_WORDS.test(shownText.text)) report(shownText.node, shownText.text)
+    } else if (
+      ts.isVariableDeclaration(node) &&
+      node.initializer &&
+      ts.isIdentifier(node.name) &&
+      TEXT_CONSTANT.test(node.name.text)
+    ) {
+      const walkLiterals = (n) => {
+        for (const shownText of shown(n))
+          if (HAS_WORDS.test(shownText.text)) report(shownText.node, shownText.text)
+        if (ts.isObjectLiteralExpression(n))
+          for (const p of n.properties) if (ts.isPropertyAssignment(p)) walkLiterals(p.initializer)
+        if (ts.isArrayLiteralExpression(n)) n.elements.forEach(walkLiterals)
+        if (ts.isAsExpression(n) || ts.isSatisfiesExpression(n)) walkLiterals(n.expression)
+      }
+      walkLiterals(node.initializer)
     } else if (ts.isPropertyAssignment(node) && TEXT_PROPERTIES.has(node.name.getText(sf))) {
       for (const shownText of shown(node.initializer))
         if (HAS_WORDS.test(shownText.text)) report(shownText.node, shownText.text)

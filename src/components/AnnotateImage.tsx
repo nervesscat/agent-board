@@ -893,7 +893,7 @@ export function AnnotateImage({
           'image/png',
         ),
       )
-      // The attachment is the annotated render, under a name that says it is a PNG.
+      // The attachment is the annotated render, under a name that says it is a PNG. (i18n-ignore: a file extension)
       const name = `${shownFile.name.replace(/\.[^./\\]+$/, '')}.png`
       onAttach(
         {
