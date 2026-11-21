@@ -149,6 +149,12 @@ describe('mergeLayout', () => {
     })
   })
 
+  it('adds Agents at work to an Overview saved before it, right after Needs you', () => {
+    const merged = mergeLayout(without('overview.agents'))
+    expect(merged).toEqual(defaultLayout())
+    expect(shownIn(merged, 'overview').slice(0, 2)).toEqual(['overview.needsYou', 'overview.agents'])
+  })
+
   it('adds Instructions to a menu saved before the split, before Settings', () => {
     // Every layout saved before the Instructions module existed: Settings is there, Instructions is not.
     const merged = mergeLayout(without('nav.instructions'))
@@ -172,6 +178,7 @@ describe('mergeLayout', () => {
       'overview.next',
       'overview.doneToday',
       'overview.inProgress',
+      'overview.agents',
     ])
   })
 
