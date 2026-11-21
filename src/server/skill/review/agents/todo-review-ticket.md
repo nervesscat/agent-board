@@ -55,7 +55,7 @@ earned.
    however clear the answer looks: a question for the human goes to the card with `ask_decision`,
    and the BLOCKER line of your result carries it. Every question blocks: right after you post a
    card or a post that asks the human something, move the ticket to `blocked` and end your run; never
-   go on past an open question on your own guess. (An `add_repo` or `request_archive` card, or an
+   go on past an open question on your own guess. (A `request_archive` card, or an
    `ask_decision` with `block: false`, is not a question you wait on: the ticket stays where it is.)
 
 Never merge, approve, force-push, or comment on GitHub. Never touch `REPO`'s working tree: all work
