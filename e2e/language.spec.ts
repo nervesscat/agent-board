@@ -31,6 +31,8 @@ test('Settings has a Language selector with English and Spanish, and the whole p
   await language.getByRole('tab', { name: 'Español' }).click()
   await expect(html(page)).toHaveAttribute('lang', 'es')
   await expect(page.getByRole('heading', { level: 1, name: 'Ajustes' })).toBeVisible()
+  // The confirmation is in the language just picked, not the one just left.
+  await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Guardado' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Idioma' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Tema' })).toBeVisible()
   await expect(page.getByRole('tablist', { name: 'Tema' }).getByRole('tab')).toHaveText([
@@ -103,6 +105,27 @@ test.describe('before a choice is made, the browser decides between the supporte
       await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
     })
   })
+})
+
+test('the Daily page in Spanish draws without a hydration error, with a calendar in Spanish', async ({
+  page,
+  project,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('/settings')
+  await picker(page, 'Language').getByRole('tab', { name: 'Español' }).click()
+  await expect(html(page)).toHaveAttribute('lang', 'es')
+  // A fresh load: the server draws the page in Spanish, the browser hydrates it.
+  await page.goto(`/projects/${project.id}/daily`)
+  await expect(html(page)).toHaveAttribute('lang', 'es')
+  await expect(page.getByRole('heading', { level: 1, name: 'Diario' })).toBeVisible()
+  // The calendar: the month's name and the weekdays are Spanish, the labels read out too.
+  const month = new Date().toLocaleDateString('es', { month: 'long' })
+  await expect(page.getByRole('region', { name: /calendario|informes/i }).first()).toBeVisible()
+  await expect(page.getByText(new RegExp(month, 'i')).first()).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Ir al mes anterior|mes anterior/i }).first()).toBeVisible()
+  expect(errors.filter((e) => /#418|Hydration/i.test(e))).toEqual([])
 })
 
 test('what people write is not translated: a ticket keeps the title it was given', async ({

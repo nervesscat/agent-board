@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover
 import { Tip } from '#/components/ui/tooltip'
 import { currentLocale } from '#/i18n'
 import { localDate } from '#/lib/format'
+import { useHydrated } from '#/lib/useHydrated'
 
 type Picked = {
   /** The day picked, `YYYY-MM-DD`. */
@@ -41,6 +42,10 @@ export function DatePicker(props: Picked | Optional) {
   const [open, setOpen] = useState(false)
   const optional = 'placeholder' in props
   const selected = props.value ? asDate(props.value) : undefined
+  // The day is written in the browser's language and region: after mount, so the server's page (which cannot
+  // know them for a date) and the first render in the browser say the same.
+  const hydrated = useHydrated()
+  const day = selected && hydrated ? longDay(selected) : ''
   const disabled: Matcher[] = [{ after: new Date() }]
   if (optional && props.min) disabled.push({ before: asDate(props.min) })
   if (optional && props.max) disabled.push({ after: asDate(props.max) })
@@ -48,14 +53,10 @@ export function DatePicker(props: Picked | Optional) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={<Button variant="outline" size="sm" />}
-        aria-label={optional ? `${props.placeholder}${selected ? `: ${longDay(selected)}` : ''}` : undefined}
+        aria-label={optional ? `${props.placeholder}${day ? `: ${day}` : ''}` : undefined}
       >
         <CalendarDays data-icon="inline-start" />
-        {selected ? (
-          longDay(selected)
-        ) : (
-          <span className="text-muted-foreground">{optional ? props.placeholder : ''}</span>
-        )}
+        {selected ? day : <span className="text-muted-foreground">{optional ? props.placeholder : ''}</span>}
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align={optional ? 'start' : 'end'}>
         <Calendar

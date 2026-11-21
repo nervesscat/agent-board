@@ -10,7 +10,7 @@ import { Devices } from '#/components/Devices'
 import { TailnetEntrance } from '#/components/TailnetEntrance'
 import { PreviewLimitEditor } from '#/components/Preview'
 import { Updates } from '#/components/Updates'
-import { LANGUAGES, LANGUAGE_NAME, setLanguage, type Language } from '#/i18n'
+import { LANGUAGES, LANGUAGE_NAME, setLanguage, shared, type Language } from '#/i18n'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { errorMessage, get, type Me, patch } from '#/lib/api'
 import { useAnchor, useReveal } from '#/lib/reveal'
@@ -125,7 +125,8 @@ function LanguagePicker() {
     mutationFn: (language: Language) => patch<{ language: Language }>('/api/me', { language }),
     onSuccess: ({ language }) => {
       qc.setQueryData<Me>(['me'], (me) => (me ? { ...me, language } : me))
-      toast.success(t('common.saved'))
+      // The page was drawn again in the new language: this render's `t` is the old one.
+      toast.success(shared.t('common.saved'))
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
