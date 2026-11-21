@@ -552,17 +552,19 @@ export function WorkTimelineBar({
                   {t.label}
                 </span>
               ))}
-            {chart.breaks.map((k) => (
-              <span
-                key={k.key}
-                aria-hidden
-                data-kind="axis-break"
-                className={`absolute top-0 -translate-x-1/2 text-[10.5px] leading-[14px] font-medium ${BREAK_MARK}`}
-                style={{ left: `${k.left * 100}%` }}
-              >
-                //
-              </span>
-            ))}
+            {chart.breaks
+              .filter((k) => !(live && k.left > 0.92))
+              .map((k) => (
+                <span
+                  key={k.key}
+                  aria-hidden
+                  data-kind="axis-break"
+                  className={`absolute top-0 -translate-x-1/2 text-[10.5px] leading-[14px] font-medium ${BREAK_MARK}`}
+                  style={{ left: `${k.left * 100}%` }}
+                >
+                  //
+                </span>
+              ))}
             {live && (
               <span aria-hidden className="absolute top-0 right-0 text-[10.5px] text-muted-foreground">
                 now

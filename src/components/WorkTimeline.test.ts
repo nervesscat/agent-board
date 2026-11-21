@@ -132,4 +132,27 @@ describe('collapsed periods on the chart', () => {
     expect(html).toContain('data-kind="axis-break"')
     expect(html).toContain('Not to scale: in review 4 d 23 h 30 min.')
   })
+
+  it('leaves a break mark out near the right end of a live axis, where the now label is', () => {
+    // Ten hours of work, then a live review: the block's break mark is at 98% of the axis.
+    const evs = [
+      { ...event('span_start', '09:00', { phase: 'build' }), at: at('09:00', day(0)) },
+      { ...event('span_end', '19:00', { phase: 'build' }), at: at('19:00', day(0)) },
+      moved('19:00', 0, 'in_progress', 'review'),
+    ]
+    const timeline = (live: boolean) =>
+      buildTimeline(live ? evs : [...evs, moved('09:00', 3, 'review', 'done')], {
+        now: Date.parse(at('12:00', day(3))),
+        stages: DEFAULT_STAGES,
+        ticket: ticket({ status: live ? 'review' : 'done', createdAt: at('08:00', day(0)) }),
+        stallMinutes: 30,
+      })
+    const html = renderToStaticMarkup(createElement(WorkTimelineBar, { timeline: timeline(true) }))
+    expect(html).toContain('>now<')
+    expect(html).not.toContain('data-kind="axis-break"')
+    // Not live: the same break is drawn.
+    expect(renderToStaticMarkup(createElement(WorkTimelineBar, { timeline: timeline(false) }))).toContain(
+      'data-kind="axis-break"',
+    )
+  })
 })
