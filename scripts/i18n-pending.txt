@@ -1,14 +1,2 @@
 # Component files that still hold English text, not yet moved into src/i18n/locales (pnpm check:i18n).
 # A file comes off this list when it is extracted; the list never grows.
-src/components/Needs.tsx
-src/components/NotificationCenter.tsx
-src/components/ReviewResult.tsx
-src/components/Summary.tsx
-src/components/Thread.tsx
-src/components/Verdict.tsx
-src/components/WorkStatus.tsx
-src/components/WorkTimeline.tsx
-src/components/WorkTimelineCard.tsx
-src/routes/projects.$id.features.$ticketId.tsx
-src/routes/projects.$id.prs.tsx
-src/routes/projects.$id.roadmap.tsx

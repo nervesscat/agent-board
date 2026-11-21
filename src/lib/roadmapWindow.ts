@@ -58,11 +58,3 @@ export function windowFor(choice: WindowKey, rows: readonly WindowRow[], now: nu
   }
   return { start: Math.min(start, now), end: now }
 }
-
-/** The label of each choice in the control. */
-export const WINDOW_LABELS: Record<WindowChoice, string> = {
-  today: 'Today',
-  '24h': '24 h',
-  '7d': '7 d',
-  fit: 'Fit all rows',
-}

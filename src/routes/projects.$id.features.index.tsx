@@ -39,7 +39,7 @@ import { MAX_TAG_LENGTH, matchTags, tagChoices } from '#/lib/tags'
 import { type TicketsScope, keepSearchRows, ticketsKey, ticketsQuery } from '#/lib/tickets'
 import {
   WORK_LINE_STATES,
-  WORK_STATE_NAME,
+  workStateName,
   type WorkLineState,
   parseWorkStates,
   stateMatches,
@@ -334,12 +334,12 @@ function StateFilter({
                 className="flex min-h-7 cursor-pointer items-center gap-2 rounded-sm px-2 text-sm hover:bg-muted"
               >
                 <Checkbox
-                  aria-label={WORK_STATE_NAME[s]}
+                  aria-label={workStateName(s, t)}
                   checked={value.includes(s)}
                   onCheckedChange={(on) => toggle(s, on)}
                 />
                 <Icon aria-hidden className={`size-4 shrink-0 ${tone}`} />
-                <span className="min-w-0 flex-1">{WORK_STATE_NAME[s]}</span>
+                <span className="min-w-0 flex-1">{workStateName(s, t)}</span>
                 <span className="tabular-nums text-muted-foreground">{counts[s]}</span>
               </label>
             )

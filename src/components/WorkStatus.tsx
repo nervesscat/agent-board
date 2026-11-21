@@ -11,7 +11,9 @@ import {
   Unplug,
   UserRound,
 } from 'lucide-react'
+import type { TFunction } from 'i18next'
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { spokenDuration } from '#/components/WorkTimeline'
 import { Tip } from '#/components/ui/tooltip'
@@ -28,7 +30,7 @@ import {
 import type { WorkTotals as Totals } from '#/lib/workTimeline'
 
 /** A duration in words for the summary: `43 min`, `1 h 5 min`; `0` for none. */
-const dur = (ms: number) => (ms > 0 ? spokenDuration(ms) : '0')
+const dur = (ms: number, t: TFunction) => (ms > 0 ? spokenDuration(ms, t) : '0')
 
 /**
  * Each state's icon and its colour. The shape carries the state; the colour only agrees with it, so no state is told by colour
@@ -76,6 +78,7 @@ export function WorkLine({
   tooltip?: boolean
   className?: string
 }) {
+  const { t } = useTranslation()
   const tick = useNow(60_000)
   const offset = useServerOffset(timeline.now)
   const [open, setOpen] = useState(false)
@@ -112,7 +115,7 @@ export function WorkLine({
     setOpen(next)
   }
   const at = now === undefined ? onServerClock(tick, offset) : +now
-  const line = workLine(timeline, at, stage)
+  const line = workLine(timeline, at, stage, t)
   if (!line) return null
   // The line's why already carries the per-agent detail where it has nothing else to say (a working or
   // a lost run); a state whose why says something else (a stall, a quiet day) keeps the detail beside
@@ -183,17 +186,18 @@ export function WorkLine({
 
 /** The last agent heard from and when, as one line; the time alone when the event named no agent. */
 export function LastHeard({ timeline, className = '' }: { timeline: WorkTimelineLike; className?: string }) {
+  const { t } = useTranslation()
   const h = lastHeard(timeline)
   if (!h)
     return (
       <p data-testid="last-heard" className={`${className} text-xs text-muted-foreground`}>
-        Nobody heard from yet
+        {t('workStatus.nobodyHeard')}
       </p>
     )
   const who = h.agent ? ` · ${h.agent}${h.summary ? `: ${h.summary}` : ''}` : ''
   return (
     <p data-testid="last-heard" className={`${className} text-xs text-muted-foreground tabular-nums`}>
-      Last heard {clock(h.at)}
+      {t('workStatus.lastHeard', { time: clock(h.at) })}
       {who}
     </p>
   )
@@ -201,13 +205,12 @@ export function LastHeard({ timeline, className = '' }: { timeline: WorkTimeline
 
 /** Worked, waited and on-you time as one line, with a proportion bar and a tooltip that defines them. */
 export function WorkSummary({ totals, className = '' }: { totals: Totals; className?: string }) {
+  const { t } = useTranslation()
   const s = workShares(totals)
   const onYou = totals.blockedOnHumanMs > 0
-  const defs = [
-    'Worked: time an agent had work open, not waiting on a person.',
-    'Waited: time nothing moved on the ticket and no person was waited on.',
-    'On you: time waiting on a person (a human wait, or a blocked stage).',
-  ].join('\n')
+  const defs = [t('workStatus.defs.worked'), t('workStatus.defs.waited'), t('workStatus.defs.onYou')].join(
+    '\n',
+  )
   return (
     <div className={`${className} grid gap-1`}>
       <Tip content={defs}>
@@ -218,21 +221,21 @@ export function WorkSummary({ totals, className = '' }: { totals: Totals; classN
         >
           <span className="inline-flex items-center gap-1">
             <Hammer className="size-3" aria-hidden />
-            Worked <b className="font-medium text-foreground">{dur(totals.workingMs)}</b>
+            {t('workStatus.worked')} <b className="font-medium text-foreground">{dur(totals.workingMs, t)}</b>
           </span>
           <span aria-hidden>·</span>
           <span className="inline-flex items-center gap-1">
             <Hourglass className="size-3" aria-hidden />
-            Waited <b className="font-medium text-foreground">{dur(totals.waitingMs)}</b>
+            {t('workStatus.waited')} <b className="font-medium text-foreground">{dur(totals.waitingMs, t)}</b>
           </span>
           <span aria-hidden>·</span>
           <span
             className={`inline-flex items-center gap-1 ${onYou ? 'font-medium text-amber-800 dark:text-amber-300' : ''}`}
           >
             <UserRound className="size-3" aria-hidden />
-            On you{' '}
+            {t('workStatus.onYou')}{' '}
             <b className={`font-medium ${onYou ? '' : 'text-muted-foreground'}`}>
-              {dur(totals.blockedOnHumanMs)}
+              {dur(totals.blockedOnHumanMs, t)}
             </b>
           </span>
         </span>
