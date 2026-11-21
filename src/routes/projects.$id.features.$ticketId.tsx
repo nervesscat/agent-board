@@ -29,7 +29,6 @@ import {
   RefreshCw,
   Scale,
   ScrollText,
-  TriangleAlert,
   X,
 } from 'lucide-react'
 import {
@@ -113,19 +112,16 @@ import {
   laneStageOrder,
   type LaneFilter,
   type LaneSearch,
-  type LaneVerdict,
-  LANE_VERDICTS,
   NO_FILTER,
   effectiveFilter,
   isFiltering,
-  laneVerdict,
+  judgedByStage,
   laneFilter,
   laneNeighbours,
   laneSearch,
   sortLanes,
   stageOk,
   tagOk,
-  verdictOk,
   validateLaneSearch,
 } from '#/lib/lanes'
 import { type AreaId, type Layout, defaultLayout, layoutElement, shownIn } from '#/lib/layout'
@@ -321,46 +317,36 @@ function TicketPage() {
   if (!t) return null
 
   /**
-   * Record a verdict. Disapproving cancels the lane, which can drop it out of the filtered list, so
-   * from inside a lane it moves on to the next one (worked out before the change), and a toast
-   * offers to undo: the lane gets back its stage and earlier call.
+   * Record the human's call on this ticket. Disapproving cancels it, and a toast offers to undo: the
+   * ticket gets back its stage and earlier call.
    */
   const decide = (
-    lane: Pick<TicketFull, 'id' | 'status' | 'approvedAt' | 'approvedBy' | 'disapprovedAt' | 'disapprovedBy'>,
+    ticket: Pick<
+      TicketFull,
+      'id' | 'status' | 'approvedAt' | 'approvedBy' | 'disapprovedAt' | 'disapprovedBy'
+    >,
     verdict: Verdict,
   ) => {
-    if (verdict !== 'disapproved') return judge.mutate({ ticketId: lane.id, verdict })
-    const before = { verdict: verdictOf(lane), status: lane.status }
-    const around = lane.id === t.id && parent ? laneNeighbours(parent.lanes, stages, lane.id, filter) : null
-    const go = around?.next ?? around?.prev ?? null
+    if (verdict !== 'disapproved') return judge.mutate({ ticketId: ticket.id, verdict })
+    const before = { verdict: verdictOf(ticket), status: ticket.status }
     judge.mutate(
-      { ticketId: lane.id, verdict },
+      { ticketId: ticket.id, verdict },
       {
         onSuccess: () => {
-          if (go)
-            navigate({
-              to: '/projects/$id/features/$ticketId',
-              params: { id, ticketId: String(go.id) },
-              search: laneSearch(filter),
-            })
-          toast(`#${lane.id} disapproved and cancelled`, {
-            description: `Undo takes back the disapproval and returns it to ${stageOf(stages, before.status).name}${
-              go ? `. Moved on to #${go.id}.` : '.'
-            }`,
+          toast(`#${ticket.id} disapproved and cancelled`, {
+            description: `Undo takes back the disapproval and returns it to ${stageOf(stages, before.status).name}.`,
             duration: 10_000,
             action: {
               label: 'Undo',
               onClick: () =>
-                judge.mutate({ ticketId: lane.id, verdict: before.verdict, reopenTo: before.status }),
+                judge.mutate({ ticketId: ticket.id, verdict: before.verdict, reopenTo: before.status }),
             },
           })
         },
       },
     )
   }
-  const openLanes = t.lanes.filter((l) => !isClosed(stageOf(stages, l.status).kind)).length
   const kind = stageOf(stages, t.status).kind
-  const lanesWarning = openLanes > 0 && (kind === 'review' || kind === 'done')
   // null: a section with nothing to show on this ticket. It is left out of its column, so a column
   // with nothing left to show is not drawn and the other one takes the page's width.
   const sections: Record<AreaId<'ticket.main'>, ReactNode> = {
@@ -377,7 +363,7 @@ function TicketPage() {
     ),
     'ticket.lanes': (
       <div id="lanes" className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)]">
-        <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
+        <Lanes t={t} filter={filter} onFilter={setFilter} />
       </div>
     ),
     'ticket.activity': (
@@ -467,21 +453,14 @@ function TicketPage() {
               <ArchiveRestore /> Restore
             </Button>
           )}
-          {lanesWarning && (
-            <Tip content="This ticket is marked further along than its lanes">
-              <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
-                <TriangleAlert className="size-3.5" /> {openLanes} lane{openLanes === 1 ? '' : 's'} not done
-              </span>
-            </Tip>
-          )}
           <NeedsStatus t={t} />
           {t.updates.some((u) => u.decision && !u.decidedAt) && (
             <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
               <Scale className="size-3.5" /> decision needed
             </span>
           )}
-          {/* Without a git side the human's approval is the hand-off: shown on every ticket, not only lanes. */}
-          {(t.parentId || verdictOf(t) || (!gitSide && kind === 'review')) && (
+          {/* Without a git side the human's approval is the hand-off. A lane has none: its stage is the call. A PR review (a lane tagged PR) keeps it, with or without a git side. */}
+          {!judgedByStage(t) && (t.parentId || verdictOf(t) || (!gitSide && kind === 'review')) && (
             <VerdictButtons t={t} disabled={judge.isPending} onSet={(verdict) => decide(t, verdict)} />
           )}
           <StatusSelect
@@ -1497,17 +1476,6 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
 const BLOCKED_CHIP =
   'shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] leading-none font-medium text-amber-700 dark:text-amber-400'
 
-const VERDICT_LABEL: Record<LaneVerdict, string> = {
-  approved: 'Approved',
-  disapproved: 'Disapproved',
-  none: 'No call',
-}
-const VERDICT_TAG: Record<LaneVerdict, string> = {
-  approved: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
-  disapproved: 'bg-red-500/15 text-red-700 dark:text-red-400',
-  none: 'bg-muted text-muted-foreground',
-}
-
 /** One row of filter chips: "All" clears it, each chip toggles; a chip with nothing to show dims. */
 function FilterRow<K extends string>({
   label,
@@ -1720,22 +1688,16 @@ function Lanes({
   t,
   filter: wanted,
   onFilter,
-  onVerdict,
-  judging,
 }: {
   t: TicketFull
   filter: LaneFilter
   onFilter: (f: LaneFilter) => void
-  onVerdict: (lane: TicketFull['lanes'][number], verdict: Verdict) => void
-  judging: boolean
 }) {
   const stages = useStages(t.projectId)
   const kindOf = (l: { status: string }) => stageOf(stages, l.status).kind
   const done = t.lanes.filter((l) => kindOf(l) === 'done').length
   const cancelled = t.lanes.filter((l) => kindOf(l) === 'cancelled').length
-  const approved = t.lanes.filter((l) => l.approvedAt).length
-  const disapproved = t.lanes.filter((l) => l.disapprovedAt).length
-  // Filter by stage, tag and verdict: within a row any picked chip matches, across rows all must.
+  // Filter by stage and tag: within a row any picked chip matches, across rows all must.
   // Each row counts the lanes the other rows let through, so a number is what clicking it would show.
   const filter = effectiveFilter(t.lanes, wanted)
   const toggled = <T,>(list: T[], key: T) =>
@@ -1746,7 +1708,7 @@ function Lanes({
     for (const tag of l.tags) {
       const key = tag.toLowerCase()
       const entry = tagCounts.get(key) ?? { tag, count: 0 }
-      if (stageOk(l, filter) && verdictOk(l, filter)) entry.count++
+      if (stageOk(l, filter)) entry.count++
       tagCounts.set(key, entry)
     }
   const tags = [...tagCounts.values()].sort((a, b) => compareTags(a.tag, b.tag))
@@ -1757,20 +1719,11 @@ function Lanes({
       label: (
         <span className={`rounded-full px-1.5 py-px text-[11px] font-medium ${stageBadge(s)}`}>{s.name}</span>
       ),
-      count: t.lanes.filter((l) => l.status === s.key && tagOk(l, filter) && verdictOk(l, filter)).length,
+      count: t.lanes.filter((l) => l.status === s.key && tagOk(l, filter)).length,
     }))
-  const verdictChips = LANE_VERDICTS.filter((v) => t.lanes.some((l) => laneVerdict(l) === v)).map((v) => ({
-    key: v,
-    label: (
-      <span className={`rounded-full px-1.5 py-px text-[11px] font-medium ${VERDICT_TAG[v]}`}>
-        {VERDICT_LABEL[v]}
-      </span>
-    ),
-    count: t.lanes.filter((l) => laneVerdict(l) === v && stageOk(l, filter) && tagOk(l, filter)).length,
-  }))
   const filtering = isFiltering(filter)
   const lanes = sortLanes(
-    t.lanes.filter((l) => stageOk(l, filter) && tagOk(l, filter) && verdictOk(l, filter)),
+    t.lanes.filter((l) => stageOk(l, filter) && tagOk(l, filter)),
     stages,
   )
   return (
@@ -1781,8 +1734,7 @@ function Lanes({
         </h2>
         {t.lanes.length > 0 && (
           <span className="text-xs tabular-nums text-muted-foreground">
-            {done}/{t.lanes.length - cancelled} done · {approved} approved
-            {disapproved > 0 && ` · ${disapproved} disapproved`}
+            {done}/{t.lanes.length - cancelled} done
             {cancelled > 0 && ` · ${cancelled} cancelled`}
             {t.rollup.total > t.progress.total && ` · all tasks ${t.rollup.done}/${t.rollup.total}`}
           </span>
@@ -1806,15 +1758,6 @@ function Lanes({
               onToggle={(s) => onFilter({ ...filter, stages: toggled(filter.stages, s) })}
               onClear={() => onFilter({ ...filter, stages: [] })}
             />
-            {verdictChips.length > 1 && (
-              <FilterRow
-                label="Verdict"
-                chips={verdictChips}
-                active={filter.verdicts}
-                onToggle={(v) => onFilter({ ...filter, verdicts: toggled(filter.verdicts, v) })}
-                onClear={() => onFilter({ ...filter, verdicts: [] })}
-              />
-            )}
             {tags.length > 0 && (
               <FilterRow
                 label="Tags"
@@ -1847,19 +1790,11 @@ function Lanes({
                 key={l.id}
                 className="flex flex-col gap-1 p-3 transition-colors hover:bg-muted/50 sm:flex-row sm:items-start sm:p-0"
               >
-                <span className="order-3 shrink-0 pt-1 sm:order-none sm:py-2 sm:pr-1 sm:pl-3">
-                  <VerdictButtons
-                    t={l}
-                    compact
-                    disabled={judging}
-                    onSet={(verdict) => onVerdict(l, verdict)}
-                  />
-                </span>
                 <Link
                   to="/projects/$id/features/$ticketId"
                   params={{ id: String(t.projectId), ticketId: String(l.id) }}
                   search={laneSearch(filter)}
-                  className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-3 sm:py-2.5 sm:pr-3 sm:pl-2"
+                  className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-3 sm:py-2.5 sm:pr-3 sm:pl-3"
                 >
                   <Tip content={stageOf(stages, l.status).name}>
                     <span

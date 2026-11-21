@@ -355,7 +355,9 @@ describe('needs you', () => {
     post(answered.id, 'Drafts too?', at(7, 8), { progress: false })
     post(answered.id, 'Yes', at(7, 9), { progress: false, author: HUMAN })
     const review = ticket(pid, 'Review me', { status: 'review', prNumber: 7 })
-    ticket(pid, 'Approved lane', { status: 'review', parentId: review.id, approvedAt: iso(at(7, 9)) })
+    // A lane in the Approved stage is judged: it is not waiting on the human's review, one in review is.
+    ticket(pid, 'Approved lane', { status: 'approved', parentId: review.id })
+    const reviewLane = ticket(pid, 'Lane in review', { status: 'review', parentId: review.id })
     const pr = (number: number, values: Partial<typeof schema.prs.$inferInsert>) =>
       db
         .insert(schema.prs)
@@ -389,14 +391,17 @@ describe('needs you', () => {
     ])
     expect(s.needsYou.prs.map((p) => p.number)).toEqual([7])
     expect(s.needsYou.threads).toMatchObject([{ parentType: 'ticket', parentId: asked.id, waiting: 1 }])
-    expect(s.needsYou.reviews).toMatchObject([{ id: review.id, prNumber: 7, parent: null }])
+    expect(s.needsYou.reviews).toMatchObject([
+      { id: review.id, prNumber: 7, parent: null },
+      { id: reviewLane.id, parent: { id: review.id } },
+    ])
     // The tickets in progress have no work-timeline event since long before now: stalled, and counted.
     // None is lost contact: nothing is open on them.
     expect(s.needsYou.stalled.map((x) => x.ticketId).sort()).toEqual(
       [asked.id, reported.id, answered.id].sort(),
     )
     expect(s.lostContact).toEqual([])
-    expect(s.needsYou.total).toBe(4 + 3)
+    expect(s.needsYou.total).toBe(4 + 3 + 1) // plus the lane in review
     // Each stalled row carries its ticket's activity: no open span or wait, and its state.
     for (const x of s.needsYou.stalled) {
       expect(x.activity).toMatchObject({

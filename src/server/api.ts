@@ -766,6 +766,7 @@ api.delete('/api/tickets/:id', ({ params, url, actor }) => {
   return json({ ok: true })
 })
 // Approval is the human's: agents read approvedAt/approvedBy on the ticket but cannot set them.
+// A lane has none (409): its stage is the call.
 api.put('/api/tickets/:id/approval', async ({ request, params, actor }) => {
   if (isAgent(request)) throw new HttpError(403, 'only the human approves')
   // approved, disapproved (which cancels the ticket), or null to take the call back; reopenTo is the
