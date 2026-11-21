@@ -2,7 +2,9 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
 import { GitBranch, Layers, RefreshCw, Square } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import type { TFunction } from 'i18next'
 import { z } from 'zod'
 
 import { Empty } from '#/components/Empty'
@@ -60,17 +62,18 @@ const stageKey = (projectId: string) => `previews.stage.${projectId}`
 const GROUPS = [
   {
     key: 'running',
-    title: 'Running',
-    hint: 'Built and run by the board, or a link on this machine that answers.',
+    title: 'previews.group.running',
+    hint: 'previews.group.runningHint',
   },
   {
     key: 'stopped',
-    title: 'Not running',
-    hint: 'Stopped, failed, a link that does not answer, or one off this machine the board does not check.',
+    title: 'previews.group.stopped',
+    hint: 'previews.group.stoppedHint',
   },
 ] as const
 
 function Previews() {
+  const { t } = useTranslation()
   const { id } = Route.useParams()
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
@@ -126,14 +129,14 @@ function Previews() {
   // None until the previews have loaded, rather than a 0 for every stage.
   const counts = data && countByStage(previews.map((p) => p.ticket.status))
   const shown = previews.filter((p) => inStageFilter(filter, p.ticket.status))
-  const filterName = filter === ALL_STAGES ? 'All stages' : stageOf(stages, filter).name
+  const filterName = filter === ALL_STAGES ? t('previews.allStages') : stageOf(stages, filter).name
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Previews</h1>
-          <p className="text-sm text-muted-foreground">Every preview, running or not.</p>
+          <h1 className="text-xl font-semibold tracking-tight">{t('settings.board.previews.title')}</h1>
+          <p className="text-sm text-muted-foreground">{t('previews.subtitle')}</p>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2 sm:shrink-0">
           {known ? (
@@ -142,7 +145,8 @@ function Previews() {
             <Skeleton className="h-7 w-48" />
           )}
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-            <RefreshCw data-icon="inline-start" className={isFetching ? 'animate-spin' : ''} /> Refresh
+            <RefreshCw data-icon="inline-start" className={isFetching ? 'animate-spin' : ''} />{' '}
+            {t('cleanup.refresh')}
           </Button>
         </div>
       </div>
@@ -159,17 +163,12 @@ function Previews() {
       {isLoading || !known ? (
         <Skeleton className="h-64" />
       ) : !previews.length ? (
-        !error && (
-          <Empty>
-            No previews yet. One shows up here once an agent registers a preview link on a ticket's workspace,
-            or the board runs one from its worktree.
-          </Empty>
-        )
+        !error && <Empty>{t('previews.empty')}</Empty>
       ) : !shown.length ? (
         <Empty>
-          <p>No previews in {filterName}.</p>
+          <p>{t('previews.noneIn', { name: filterName })}</p>
           <Button variant="outline" size="sm" className="mt-3" onClick={() => pickStage(ALL_STAGES)}>
-            Show all stages
+            {t('previews.showAll')}
           </Button>
         </Empty>
       ) : (
@@ -177,11 +176,11 @@ function Previews() {
           const items = shown.filter((p) => p.running === (g.key === 'running'))
           if (!items.length) return null
           return (
-            <section key={g.key} aria-label={g.title} className="space-y-1.5">
+            <section key={g.key} aria-label={t(g.title)} className="space-y-1.5">
               <h2 className="text-sm font-medium">
-                {g.title} <span className="text-muted-foreground">· {items.length}</span>
+                {t(g.title)} <span className="text-muted-foreground">· {items.length}</span>
               </h2>
-              <p className="text-xs text-muted-foreground">{g.hint}</p>
+              <p className="text-xs text-muted-foreground">{t(g.hint)}</p>
               <ul className="space-y-2">
                 {items.map((p) => (
                   <PreviewItem
@@ -216,7 +215,8 @@ function StageFilter({
   counts: Map<string, number> | undefined
   onChange: (key: string) => void
 }) {
-  const options = [{ key: ALL_STAGES, name: 'All stages' }, ...stages]
+  const { t } = useTranslation()
+  const options = [{ key: ALL_STAGES, name: t('previews.allStages') }, ...stages]
   // A list, not an object by key: a key such as `constructor` would be read from its prototype.
   const items = options.map((o) => ({ value: o.key, label: o.name }))
   // After a space, so the option reads "Done 2" to a screen reader; the flex layout drops the space.
@@ -231,9 +231,9 @@ function StageFilter({
     )
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <Label htmlFor="previews-stage">Stage</Label>
+      <Label htmlFor="previews-stage">{t('previews.stage')}</Label>
       <Select value={value} onValueChange={(v) => v && onChange(v)} items={items}>
-        <Tip content="Shows the previews of the tickets in this stage">
+        <Tip content={t('previews.stageTip')}>
           <SelectTrigger id="previews-stage" size="sm" className="max-w-60 min-w-36">
             <SelectValue>
               {(v: string) => (
@@ -261,12 +261,17 @@ function StageFilter({
 }
 
 /** "Stopped 2 · could not stop 1: …", for the toast after Stop all. */
-function stopAllSummary({ stopped, skipped }: StopAll) {
-  if (!stopped.length && !skipped.length) return 'Nothing to stop'
+function stopAllSummary({ stopped, skipped }: StopAll, t: TFunction) {
+  if (!stopped.length && !skipped.length) return t('previews.nothingToStop')
   const could = skipped.length
-    ? `could not stop ${skipped.length}: ${skipped.map((s) => `#${s.ticketId} ${s.reason}`).join('; ')}`
+    ? t('previews.couldNotStop', {
+        count: skipped.length,
+        list: skipped.map((s) => `#${s.ticketId} ${s.reason}`).join('; '),
+      })
     : ''
-  return [stopped.length || !could ? `Stopped ${stopped.length}` : '', could].filter(Boolean).join(' · ')
+  return [stopped.length || !could ? t('previews.stoppedCount', { count: stopped.length }) : '', could]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 /**
@@ -286,25 +291,29 @@ function PreviewsBar({
   anyRunning: boolean
   onChange: () => void
 }) {
+  const { t } = useTranslation()
   const [confirm, setConfirm] = useState(false)
   const stopAll = useMutation({
     mutationFn: () => post<StopAll>(`/api/projects/${projectId}/previews/stop`),
     onSuccess: (r) => {
-      if (r.skipped.length) toast.warning(stopAllSummary(r))
-      else toast.success(stopAllSummary(r))
+      if (r.skipped.length) toast.warning(stopAllSummary(r, t))
+      else toast.success(stopAllSummary(r, t))
       onChange()
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-3 py-2 text-sm">
-      <Tip content="Previews the board builds or runs, in every project, and how many it runs at most at once">
+      <Tip content={t('previews.barTip')}>
         <span>
-          Board-run previews:{' '}
-          <span className="font-medium">
-            {inUse} of {limit} in use
-          </span>{' '}
-          <span className="text-muted-foreground">(board-wide)</span>
+          <Trans
+            i18nKey="previews.bar"
+            values={{ inUse, limit }}
+            components={{
+              strong: <span className="font-medium" />,
+              muted: <span className="text-muted-foreground" />,
+            }}
+          />
         </span>
       </Tip>
       <PreviewLimitEditor key={limit} id="previews-limit" limit={limit} />
@@ -315,26 +324,22 @@ function PreviewsBar({
               <Button variant="outline" size="sm" className="sm:ml-auto" disabled={stopAll.isPending} />
             }
           >
-            <Square /> Stop all
+            <Square /> {t('previews.stopAllRuns')}
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Stop every running preview of this project?</AlertDialogTitle>
-              <AlertDialogDescription>
-                The previews the board runs stop and free their ports. Links stop when the board can tell
-                their server runs from the workspace's worktree; the others keep running, and the toast says
-                why. The links stay on the page.
-              </AlertDialogDescription>
+              <AlertDialogTitle>{t('previews.stopAllTitle')}</AlertDialogTitle>
+              <AlertDialogDescription>{t('previews.stopAllDescription')}</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Keep them</AlertDialogCancel>
+              <AlertDialogCancel>{t('previews.keepThem')}</AlertDialogCancel>
               <AlertDialogAction
                 onClick={() => {
                   setConfirm(false)
                   stopAll.mutate()
                 }}
               >
-                Stop all
+                {t('previews.stopAllRuns')}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -355,6 +360,7 @@ function PreviewItem({
   stage: StageLike | null
   onChange: () => void
 }) {
+  const { t: tr } = useTranslation()
   const { workspace: w, ticket: t } = p
   // A link that answers, not a preview the board runs: whether the board may stop the server behind it.
   const link = !previewActive(p.managed) && !!p.check?.running
@@ -380,7 +386,7 @@ function PreviewItem({
         <PreviewBadge
           url={p.url}
           check={p.check}
-          unchecked="The board checks links on this machine only"
+          unchecked={tr('previews.uncheckedLink')}
           className="ml-auto"
         />
       </div>
@@ -392,7 +398,7 @@ function PreviewItem({
       {p.managed && <ManagedLine m={p.managed} workspaceId={w.id} />}
       {links?.through && (
         <p className="text-xs">
-          Through the board:{' '}
+          {tr('previews.throughBoard')}{' '}
           <a
             href={links.through}
             target="_blank"
@@ -413,12 +419,18 @@ function PreviewItem({
             className="font-mono break-all hover:underline"
             data-testid="preview-through-board"
           >
-            Open through the board
+            {tr('previews.openThrough')}
           </a>
         </p>
       )}
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-        <Tip content={`workspace ${w.name}${w.path ? ` in ${w.path}` : ''}`}>
+        <Tip
+          content={
+            w.path
+              ? tr('runsCard.workspaceTip', { name: w.name, path: w.path })
+              : tr('runsCard.workspaceTipNoPath', { name: w.name })
+          }
+        >
           <span className="inline-flex min-w-0 items-center gap-1 font-mono">
             <GitBranch className="size-3 shrink-0" /> <span className="truncate">{w.branch || w.name}</span>
           </span>
@@ -427,7 +439,7 @@ function PreviewItem({
       </div>
       {link && p.linkStop && (
         <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-          The board will not stop it: {p.linkStop}
+          {tr('previews.linkNotStopped', { reason: p.linkStop })}
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2 empty:hidden">

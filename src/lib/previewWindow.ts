@@ -1,3 +1,7 @@
+import type { TFunction } from 'i18next'
+
+import { shared } from '#/i18n'
+
 /**
  * The embedded preview window: a preview shown inside the board, in a window of its own over the
  * board's pages, so the ticket, its tasks and its conversation stay where they were. A web build shows
@@ -241,15 +245,16 @@ export function previewNotice(
   tab: Pick<PreviewTab, 'through'>,
   reason?: string | null,
   frameBlocked?: string | null,
+  t: TFunction = shared.t,
 ): string | null {
-  if (health === 'building') return 'Building… it shows here once it runs.'
+  if (health === 'building') return t('previewWindow.building')
   if (health === 'failed')
-    return `The preview failed${reason ? `: ${reason}` : ''}. See its log on the ticket.`
+    return reason ? t('previewWindow.failedReason', { reason }) : t('previewWindow.failed')
   if (health === 'blocked')
-    return `This preview will not be shown inside the board: ${frameBlocked ?? 'it refuses to be framed'}.`
+    return frameBlocked
+      ? t('previewWindow.blockedReason', { reason: frameBlocked })
+      : t('previewWindow.blocked')
   if (health === 'stopped')
-    return tab.through
-      ? "This preview is stopped. Start it from the ticket's Runs card or the Previews page."
-      : 'The preview does not answer on this machine. Start its server again where it runs.'
+    return tab.through ? t('previewWindow.stoppedThrough') : t('previewWindow.stoppedDirect')
   return null
 }
