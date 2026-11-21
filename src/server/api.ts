@@ -84,6 +84,7 @@ import * as tokens from './tokens'
 import { changeUpdateSettings, checkForUpdates, installUpdate, updatesState } from './updates'
 import { getSummary } from './summary'
 import { deleteUnattachedUploads } from './unattached'
+import * as unanswered from './unanswered'
 import * as work from './workTimeline'
 import * as uploads from './uploads'
 
@@ -1274,6 +1275,10 @@ api.get('/api/projects/:id/threads', ({ params, url, actor }) =>
 )
 api.get('/api/projects/:id/inbox', ({ params, url, actor }) =>
   json(features.checkInbox(id(params), actor, url.searchParams.get('since'))),
+)
+// The human's comments no agent has addressed yet, oldest first (the MCP's latest_actions).
+api.get('/api/projects/:id/latest-actions', async ({ params, request }) =>
+  json(await forAgent(request, unanswered.unansweredHumanComments(id(params)))),
 )
 api.post('/api/comments', async ({ request, actor }) => {
   const body = await readJson(
