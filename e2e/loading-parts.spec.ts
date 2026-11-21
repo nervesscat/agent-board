@@ -147,15 +147,17 @@ test('the palette recents show a placeholder while the tickets they name are on 
     ([key, value]) => localStorage.setItem(key!, value!),
     ['command-palette.recents', JSON.stringify([`ticket:${project.id}:${t.id}`])],
   )
-  await page.goto(`/projects/${project.id}/features`)
-  await expect(page.getByRole('heading', { name: 'Ongoing features' })).toBeVisible()
+  // The recents' list is the features page's own, so it is held back from the first load on: the palette
+  // opened while the page is still waiting for it is the state under test (a cached list is never pending).
   await page.route(
     (url) => url.pathname === `/api/projects/${project.id}/tickets` && url.search === '?parent=root',
     async (route) => {
-      await new Promise((r) => setTimeout(r, 1500))
+      await new Promise((r) => setTimeout(r, 3000))
       await route.continue().catch(() => {})
     },
   )
+  await page.goto(`/projects/${project.id}/features`)
+  await expect(page.getByRole('heading', { name: 'Ongoing features' })).toBeVisible()
   await page.keyboard.press('Control+f')
   const palette = page.getByRole('dialog', { name: 'Search the board' })
   await expect(status(page, 'Loading recent tickets…')).toBeVisible()

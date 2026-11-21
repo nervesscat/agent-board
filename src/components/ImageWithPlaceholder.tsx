@@ -6,22 +6,19 @@ import { cn } from 'cn'
 
 /**
  * A thumbnail with a skeleton behind it until it has loaded (or failed to: a broken image keeps its
- * alt text, never a skeleton). It sits in its own box: `boxClassName` is the box's, `loadingBoxClassName`
- * gives the box a size while the picture has none yet (a tile whose parent already sets the size needs
- * neither).
+ * alt text, never a skeleton). The skeleton fills the nearest `relative` ancestor; `loadingClassName`
+ * gives the picture a size while it has none yet (a tile whose parent already sets the size needs none).
  */
 export function ImageWithPlaceholder({
   src,
   alt,
   className,
-  boxClassName,
-  loadingBoxClassName,
+  loadingClassName,
 }: {
   src: string
   alt: string
   className?: string
-  boxClassName?: string
-  loadingBoxClassName?: string
+  loadingClassName?: string
 }) {
   const [settled, setSettled] = useState(false)
   const slow = useDelayedFlag(!settled)
@@ -30,17 +27,17 @@ export function ImageWithPlaceholder({
     if (img?.complete) setSettled(true)
   }, [])
   return (
-    <span className={cn('relative block', boxClassName, !settled && loadingBoxClassName)}>
+    <>
       {slow && <Skeleton aria-hidden className="absolute inset-0 rounded-none" />}
       <img
         ref={ref}
         src={src}
         alt={alt}
-        className={className}
+        className={cn(className, !settled && loadingClassName)}
         loading="lazy"
         onLoad={() => setSettled(true)}
         onError={() => setSettled(true)}
       />
-    </span>
+    </>
   )
 }

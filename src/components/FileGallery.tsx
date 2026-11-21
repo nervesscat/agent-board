@@ -106,14 +106,7 @@ function FileTile({ projectId, file: f }: { projectId: string; file: GalleryFile
 
 function Thumb({ file: f }: { file: GalleryFile }) {
   if (f.kind === 'image')
-    return (
-      <ImageWithPlaceholder
-        src={f.url}
-        alt={f.name}
-        className="size-full object-cover"
-        boxClassName="size-full"
-      />
-    )
+    return <ImageWithPlaceholder src={f.url} alt={f.name} className="size-full object-cover" />
   if (f.kind === 'video')
     return (
       <>
