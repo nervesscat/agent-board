@@ -385,6 +385,9 @@ short message shape with the numbered list of what needs the human. Its line is
    and a verdict, `matches` or `does not match`. `matches` hands off; `does not match` goes back to the
    builder with its lines as the brief, then the gate, then one more review round of the project's workflow (the numbering continues), then the intent check again. A `does not match` is outside the workflow's round budget unless the workflow says it counts as a round; after the second one on a ticket the ticket agent stops and asks the human (`ask_decision`: keep going, ship as is, drop) with the intent check's lines and the human's words on the card. It never asks the human earlier: the human is asked (`ask_decision`, both readings on the card) only
    when two readings of their words are both plausible and give visibly different results.
+   **When the workflow lists the intent step as skipped for the ticket** (a low ticket with the check turned off on the
+   Workflow page; above low it is locked and always runs), no intent check is run and none is required before the
+   hand-off or the push, and the summary says it was turned off on the Workflow page.
 
    **The project's workflow sets the cycle.** The order of the work (spec, build, the gate, the review
    rounds and their phases, the intent check, the push, the PR, the hand-off), the review rounds a ticket

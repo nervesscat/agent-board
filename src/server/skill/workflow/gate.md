@@ -15,7 +15,7 @@ From the worktree:
    touches, with `--workers=1` (e.g. `playwright test <spec files> --workers=1`, one test slot), none
    when it touches neither. Use the project's own commands where it has them. Never the full unit or
    end-to-end suite here: GitHub CI runs both on the PR, and CI green on the final head is required
-   before hand-off. A failure goes back to the builder with its output. A gate return uses up no review
+   before hand-off, unless the workflow lists CI as skipped. A failure goes back to the builder with its output. A gate return uses up no review
    round. A run sends the change back at most twice, on every level. After the second return, when the
    checks still fail, or, for a ticket with no review, when a criterion still has no evidence (below),
    post what fails or is unproven, `ask_decision` (keep going or drop) and stop: `BLOCKER: decision`. A

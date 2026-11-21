@@ -104,7 +104,9 @@ Every step in the text has the same parts:
   reading. It returns `done as asked`, `done differently (how)` or `not done` per thing asked, and a
   verdict, `matches` or `does not match`; it never asks the human and never answers a decision
   (`answer_decision`). Any commit after a `matches` changes the head, so the check runs again on the
-  new head before a hand-off stands.
+  new head before a hand-off stands. When the workflow lists the intent step as skipped for the ticket (a low
+  ticket with the check turned off on the Workflow page), you run no intent check and none is required before
+  the push and the hand-off: the summary says it was turned off on the Workflow page.
 
 ## The contract: proof, not claims
 

@@ -3,7 +3,7 @@ Bash tool's 10-minute limit): CI runs the full unit and end-to-end suites, the p
 out, on another platform than yours. CI green on the final head is required before hand-off. A failure
 there goes back to the builder like a gate failure, fixed before you hand off, never waved through as
 flaky without a rerun that passes. A fix commit changes the head, so the intent check runs again on the
-new head before the hand-off stands. The board ticks CI once its checks are green.
+new head before the hand-off stands (a ticket whose workflow lists the intent check as skipped has none). The board ticks CI once its checks are green.
 
 **Where GitHub CI does not run** (no workflow runs on pull requests, or the PR's runs do not start: no
 checks some 10 minutes after the push, or runs that fail in seconds with no step run, such as a billing

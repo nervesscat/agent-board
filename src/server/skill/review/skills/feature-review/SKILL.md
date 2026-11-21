@@ -133,10 +133,21 @@ verify and every hunt at once, then refute, then the merge check), not by the or
 **The single-reviewer plan (`phases=reviewer`).** One reviewer, no spec, env, verify, refute or merge
 phase. Setup and the context bundle are as always (`00-diff.patch`, `00-context.md`,
 `00-focus.md`), and the ticket's instructions and acceptance criteria in `00-context.md` stand in for
-a spec: there is no `01-spec.md`, `00-env.md`, `02-verification.md`, `04-verdicts.md` or `05-merge.md`.
-Spawn one `feature-review-hunt` agent (the project's `hunt` agent when it has one) with prefix `_frh_`,
-the context pack, the focus, the diff and the checklists; it starts no servers and runs only targeted
-tests and probes from the worktree. Its candidates (`03-candidates.md`) are the findings: `confirmed`
+a spec: there is no `01-spec.md`, `02-verification.md`, `04-verdicts.md` or `05-merge.md`, and the only
+environment file is the small `00-env.md` the run writes (below).
+There is no env phase, so **the run itself prepares the worktree** before it spawns the reviewer, as
+Phase 1b does for a hunt: install or reuse the dependencies inside the worktree (a prepared
+`node_modules` copied by hardlink with `cp -al` into a real directory, never a symlink or a junction, or
+the project's own install), and write a small `00-env.md` with the test command that runs from the
+worktree (the project's own, from its runbook or scripts), the repo's `Test slots:` folders when `slots=`
+was given, and `Servers: none started`. Spawn one `feature-review-hunt` agent (the project's `hunt`
+agent when it has one) with prefix `_frh_`, the context pack, the focus, the diff, the checklists and
+`00-env.md`, and tell it the test slots' rule (a heavy run, such as an end-to-end spec, takes the first
+free slot and releases it right after; a targeted unit test or probe takes none). It runs only targeted
+tests and probes from the worktree. Starting a server is the reviewer's own call, only when reproducing
+a finding needs one: it starts it itself on a free port, from the worktree, calls only that port, and
+stops it by the PID it recorded before it returns (this replaces the hunt agent's rule that it never
+starts a server, for this plan only). Its candidates (`03-candidates.md`) are the findings: `confirmed`
 only when it reproduced one by execution, else `plausible`. The report is `review.md` in the same
 shape with these differences: the Freshness block says `Hunts: one`, `Refutation: none (single
 reviewer)` and names the plan; the verdict is `DO NOT SHIP` for a confirmed blocker, `SHIP AFTER
@@ -519,7 +530,8 @@ plan first, then the result with its proofs.
    and the result (the preview, the screenshots or recordings, the diff). It never gets the
    builder's plan, the spec, the review's findings or the options an agent put on a card, so it cannot inherit their reading. It returns
    one line per thing the human asked (`done as asked`, `done differently (how)` or `not done`, with
-   the evidence) and a verdict, `matches` or `does not match`. `matches` hands off. `does not match`
+   the evidence) and a verdict, `matches` or `does not match`. `matches` hands off. When the ticket's workflow lists the intent step as skipped (a low ticket with the check
+   turned off on the Workflow page), no check runs and none is required. `does not match`
    goes back to the builder with the intent check's lines as the brief, then the gate, then ONE more
    review round of the ticket's workflow (numbering continues from the last round; a ticket whose
    workflow lists no review has only the gate), then the intent check again. A `does not match` is

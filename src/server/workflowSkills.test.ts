@@ -558,6 +558,48 @@ describe('review fix pass: one folder per review, the plan of a skipped review, 
     )
   })
 
+  it('has the single-reviewer plan prepare the worktree and the env file, as Phase 1b does for a hunt (C1)', () => {
+    const text = skill()
+    expect(text).toContain(
+      'There is no env phase, so **the run itself prepares the worktree** before it spawns the reviewer, as Phase 1b does for a hunt',
+    )
+    expect(text).toContain(
+      "a prepared `node_modules` copied by hardlink with `cp -al` into a real directory, never a symlink or a junction, or the project's own install",
+    )
+    expect(text).toContain('write a small `00-env.md` with the test command that runs from the worktree')
+    expect(text).toContain('and `Servers: none started`')
+    expect(text).toContain("tell it the test slots' rule")
+    expect(text).toContain(
+      'it starts it itself on a free port, from the worktree, calls only that port, and stops it by the PID it recorded',
+    )
+    // Light's other rules stay: no spec file, no refute or merge, the survival rule of the workflow.
+    expect(text).toContain('there is no `01-spec.md`, `02-verification.md`')
+    expect(text).toContain('`Refutation: none (single reviewer)`')
+  })
+
+  it('has every place that asks for the intent verdict allow for the check turned off for a low ticket (C2)', async () => {
+    const boardTexts = await boardSkills()
+    for (const [name, text] of Object.entries(boardTexts)) {
+      const t = flat(text)
+      expect(t, name).toContain(
+        '**When the workflow lists the intent step as skipped for the ticket** (a low ticket with the check turned off on the Workflow page; above low it is locked and always runs), no intent check is run and none is required before the hand-off or the push, and the summary says it was turned off on the Workflow page.',
+      )
+    }
+    const agentsDoc = flat(read(root, 'AGENTS.md'))
+    expect(agentsDoc).toContain('**When the workflow lists the intent step as skipped for the ticket**')
+    const orchestrator = flat(review('skills/todo-review/SKILL.md'))
+    expect(orchestrator).toContain(
+      'its verdict is `matches`, unless the workflow lists the intent step as skipped for the ticket (a low ticket with the check turned off on the Workflow page): then none ran, none is required',
+    )
+    const ticketAgent = flat(review('agents/todo-review-ticket.md'))
+    expect(ticketAgent).toContain(
+      'When the workflow lists the intent step as skipped for the ticket (a low ticket with the check turned off on the Workflow page), you run no intent check and none is required before the push and the hand-off',
+    )
+    expect(flat(skill())).toContain(
+      "When the ticket's workflow lists the intent step as skipped (a low ticket with the check turned off on the Workflow page), no check runs and none is required.",
+    )
+  })
+
   it('lets a ticket whose workflow lists no review have no depth, and one that lists a review have one (C8)', () => {
     const ticketAgent = flat(review('agents/todo-review-ticket.md'))
     expect(ticketAgent).toContain('When the workflow lists no review for the ticket there is no depth')

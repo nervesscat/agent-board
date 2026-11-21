@@ -3,7 +3,8 @@ of Main, short and to the point: what the change does and its current state, eac
 in one line, the PR link, the preview link and exactly what to try there, how it was tested (the checks
 and the e2e summary; with a review, the review's verdict and counts, with none the builder's evidence per
 criterion), any fake used at an edge and any contract hit you judged legitimate, and the intent check's
-verdict in one line, with the screenshots in `files`.
+verdict in one line (when the workflow lists the intent check as skipped, one line saying it was turned off on
+the Workflow page), with the screenshots in `files`.
 
 "How it was tested" names the level (`low`, `mid`, `high` or `max`) and the workflow's preset. With a
 review it also says which review depth ran and why: the depth, and the measure that put the change there

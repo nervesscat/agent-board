@@ -172,8 +172,10 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    (`get_workflow` with the ticket: the steps it lists, the review's rounds and phases), not from a
    cycle written here: every step the workflow lists for the ticket ran, in its order, and those it
    lists as skipped did not need to. The intent
-   check ran on the head and its verdict is `matches` (it is the workflow's intent step, locked above
-   low: after the last review round and before the hand-off, and again after a human comment that sent
+   check ran on the head and its verdict is `matches`, unless the workflow lists the intent step as
+   skipped for the ticket (a low ticket with the check turned off on the Workflow page): then none ran, none
+   is required and the summary says it was turned off on the Workflow page (when it runs, it is the workflow's
+   intent step, locked above low: after the last review round and before the hand-off, and again after a human comment that sent
    the ticket back;
    at `low` effort, from only the human's words (their answers on decision cards included) and attachments and the result, never the builder's
    plan, the spec, the review's findings or the options an agent put on a card; `does not match` goes back to the builder, then the gate, then one more review round of the

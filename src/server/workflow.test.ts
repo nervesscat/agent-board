@@ -775,4 +775,86 @@ describe('the served step texts of the Thorough and Maximum reviews, and of the 
     }
     await call('DELETE', `/api/projects/${pid}/workflow/standard`)
   })
+
+  it('makes the push, the hand-off and the summary conditional when the intent check is turned off for a low ticket (C2)', async () => {
+    const pid = await newProject()
+    await call('PUT', `/api/projects/${pid}/workflow/standard`, { steps: { intent: { enabled: false } } })
+    const low = flat(await effective(pid, 'preset=standard&complexity=low'))
+    // The step is listed as skipped, and every place that asked for its verdict now says it is not required.
+    expect(low).toContain('- Intent check - skipped: turned off for low tickets on the Workflow page')
+    const unless =
+      'unless this workflow lists the intent check as skipped for the ticket (a low ticket with the check turned off on the Workflow page): then no intent check is run, none is required before the'
+    expect(low.split(unless).length - 1).toBe(2)
+    expect(low).toContain('before the push, and the summary says it was turned off on the Workflow page')
+    expect(low).toContain('before the hand-off, and the summary says it was turned off on the Workflow page')
+    expect(low).toContain(
+      'when the workflow lists the intent check as skipped, one line saying it was turned off on the Workflow page',
+    )
+    // Locked above low: the same tweak does not skip it for a mid ticket.
+    const mid = flat(await effective(pid, 'preset=standard&complexity=mid'))
+    expect(mid).toContain('## 7. Intent check [locked above low] - agent `intent`, effort low')
+    expect(mid).not.toContain('- Intent check - skipped')
+    await call('DELETE', `/api/projects/${pid}/workflow/standard`)
+  })
+
+  it('gives Thorough and Maximum an intent hand-off that matches the rule that replaces the default (C6)', async () => {
+    const pid = await newProject()
+    const outside = 'goes back to the builder, the gate and one more review, outside the round budget'
+    const inBudget =
+      'Hand-off: Brief it with only the human\'s words and the result, never the plan, the spec or the findings. "matches" goes on to the push; "does not match" goes back to the builder, the gate and the next review round, an ordinary round of the budget in this workflow; a second one asks the human.'
+    for (const preset of ['thorough', 'maximum']) {
+      const text = flat(await effective(pid, `preset=${preset}&complexity=mid`))
+      expect(text, preset).toContain(inBudget)
+      expect(text, preset).not.toContain(outside)
+    }
+    // Light and Standard keep the default, outside the budget, and the order and locks are not touched.
+    for (const preset of ['light', 'standard']) {
+      const text = flat(await effective(pid, `preset=${preset}&complexity=mid`))
+      expect(text, preset).toContain(outside)
+      expect(text, preset).not.toContain('an ordinary round of the budget in this workflow')
+    }
+    const maximum = await call('GET', `/api/projects/${pid}/workflow/effective?preset=maximum&complexity=mid`)
+    const steps = maximum.body.steps as { id: string; lock: string }[]
+    const ids = steps.map((x) => x.id)
+    expect(ids.slice(ids.indexOf('review'))).toEqual([
+      'review',
+      'preview',
+      'intent',
+      'push',
+      'pr',
+      'ci',
+      'summary',
+      'handoff',
+    ])
+    expect(steps.find((x) => x.id === 'intent')!.lock).toBe('above-low')
+  })
+
+  it('has the gate and the tests step name what to do with CI turned off and the spec step turned off (C9)', async () => {
+    const pid = await newProject()
+    const text = flat(await effective(pid, 'preset=thorough&complexity=mid'))
+    expect(text).toContain(
+      'and CI green on the final head is required before hand-off, unless the workflow lists CI as skipped.',
+    )
+    await call('PUT', `/api/projects/${pid}/workflow/thorough`, { steps: { spec: { enabled: false } } })
+    const noSpec = flat(await effective(pid, 'preset=thorough&complexity=mid'))
+    expect(noSpec).toContain('- Spec - skipped: turned off on the Workflow page')
+    expect(noSpec).toContain(
+      "When the workflow lists the spec step as skipped for the ticket there is no `WORKDIR/01-spec.md`: the ticket's instructions and the acceptance criteria you wrote from them are the spec, as in the build step.",
+    )
+    await call('DELETE', `/api/projects/${pid}/workflow/thorough`)
+  })
+
+  it('has Light’s reviewer get a prepared worktree and an env file, since it has no env phase (C1)', async () => {
+    const pid = await newProject()
+    const text = flat(await effective(pid, 'preset=light&complexity=mid'))
+    expect(text).toContain('phases=reviewer')
+    expect(text).toContain(
+      "There is no environment phase, so `/feature-review` itself prepares the review worktree before the reviewer starts: it installs or reuses the dependencies there (a hardlink copy of a prepared `node_modules`, never a symlink, or the project's install) and writes a small `00-env.md` with the test command and no servers started, and the reviewer is told the test slots' rule for a heavy run.",
+    )
+    expect(text).toContain('on a free port it picks, and stops it by its PID before it returns')
+    // Light's other rules stay.
+    expect(text).toContain('it is not shown a spec file')
+    expect(text).toContain('never as a defect')
+    expect(text).toContain('This replaces the survival rule above')
+  })
 })

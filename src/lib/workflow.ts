@@ -267,7 +267,7 @@ export const WORKFLOW_STEPS: Readonly<Record<WorkflowStepId, WorkflowStepDef>> =
   push: {
     id: 'push',
     label: 'Push',
-    what: "Pushes the ticket's branch to origin once the intent check matched on this head, and reads the ticket back to see the push registered.",
+    what: "Pushes the ticket's branch to origin once the intent check (when the ticket has one) matched on this head, and reads the ticket back to see the push registered.",
     handoff: 'The pushed head goes to the PR. A git lock is retried, never a failure.',
     agent: 'you',
     lock: 'always',
@@ -518,6 +518,10 @@ const INTENT_EACH_ROUND = sub(
   { phase: null },
 )
 
+/** The intent step's hand-off in the presets whose reviews check intent at the end of every round: there a `does not match` is an ordinary round of the budget. */
+const INTENT_COUNTS_AS_ROUND =
+  'Brief it with only the human\'s words and the result, never the plan, the spec or the findings. "matches" goes on to the push; "does not match" goes back to the builder, the gate and the next review round, an ordinary round of the budget in this workflow; a second one asks the human.'
+
 const STANDARD_SURVIVAL =
   'the verdict is SHIP, the works check is YES, the base check is NO and every acceptance criterion is PASS by execution (UNVERIFIED only for a reason the escalation rules name that could not be got past)'
 
@@ -615,7 +619,7 @@ export const WORKFLOW_PRESET_DEFS: Readonly<Record<WorkflowPresetId, WorkflowPre
       survival: `${STANDARD_SURVIVAL}, and the intent check at the end of the round matches`,
       runs: [{ id: 'review', label: 'Review', phases: thoroughTokens, agentSuffix: null }],
     },
-    text: {},
+    text: { intent: { handoff: INTENT_COUNTS_AS_ROUND } },
   },
   maximum: {
     id: 'maximum',
@@ -679,6 +683,7 @@ export const WORKFLOW_PRESET_DEFS: Readonly<Record<WorkflowPresetId, WorkflowPre
       ],
     },
     text: {
+      intent: { handoff: INTENT_COUNTS_AS_ROUND },
       review: {
         what: "Two full reviews of every round: /feature-review runs twice as separate runners under their own agent names, the second never shown the first one's findings, and the ticket agent reconciles both before deciding the round. A round that does not survive goes back to the builder, then the gate, then the next round, until the change survives or the rounds for the ticket's complexity are used up.",
         handoff:

@@ -3,7 +3,9 @@ author of the code alone.
 
 Start the builder again, briefed as for the build step (the **builder** agent's `instructions`, the
 project's `instructions`, the ticket's context, `WORKDIR/01-spec.md`, the worktree and branch, the scoped
-check commands, the **Local test flags** and the test slots' rule), with this change to the brief:
+check commands, the **Local test flags** and the test slots' rule). When the workflow lists the spec step as skipped for the ticket there is no `WORKDIR/01-spec.md`: the
+ticket's instructions and the acceptance criteria you wrote from them are the spec, as in the build step.
+The change to the brief:
 
 - Its job is tests, not product code: for every acceptance criterion and every edge the spec lists, one
   test that runs the real code (never a mock of the thing under change), added next to the code's existing
