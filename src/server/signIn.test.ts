@@ -226,7 +226,7 @@ describe('the sign-in pages speak the language of the request', () => {
       expect(es).toContain('<html lang="es">')
       expect(es).toContain('<title>Configuración · CrossBoard</title>')
       expect(es).toContain('Crear passkey')
-      expect(es).toMatch(/id="device"[^>]*value="Este ordenador"/)
+      expect(es).toMatch(/id="device"[^>]*value="Esta computadora"/)
       expect(es).toContain('Este navegador no puede usar passkeys aquí.')
       expect(es).not.toContain('Create passkey')
       // The flow's own attributes do not change with the language.
@@ -509,7 +509,7 @@ describe('another device, through the tailnet entrance', () => {
       })
     ).text()
     expect(es).toContain('<html lang="es">')
-    expect(es).toContain('placeholder="Teléfono, portátil…"')
+    expect(es).toContain('placeholder="Teléfono, laptop…"')
     expect(es).toContain('Crea una passkey para Enrique en este dispositivo.')
     expect(es).toContain(`data-code="${code}"`)
     const en = await (await send('GET', `/enroll?code=${code}`, { via: 'tailnet', html: true })).text()
