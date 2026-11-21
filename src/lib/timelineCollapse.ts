@@ -42,6 +42,8 @@ export type PlanInput = {
   merge: number | null
   /** The worker steps (spans and waits; a hand-off is a point) in real time, open ones already run to now. */
   work: Ms[]
+  /** The ones that keep their real scale inside a period: closed spans and closed waits not on the human. */
+  carve: Ms[]
 }
 
 /** Shorter than this, what is left of a period around worker steps is not drawn. */
@@ -88,7 +90,7 @@ export function planPieces(input: PlanInput): { pieces: Piece[]; pinned: number 
   for (const { s, end: cut } of drawn) {
     const stop = gap ? Math.min(cut, gap.start) : cut
     const first = pieces.length
-    for (const part of carve(Math.max(s.start, cursor), stop, input.work)) {
+    for (const part of carve(Math.max(s.start, cursor), stop, input.carve)) {
       const labelled = pieces.length === first
       pieces.push({
         start: part.start,

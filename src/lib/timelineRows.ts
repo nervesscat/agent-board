@@ -189,6 +189,18 @@ const agentWork = (t: WorkTimeline, now: number): Ms[] => {
   ]
 }
 
+/**
+ * The steps that keep their real scale inside a blocked or review period: closed spans and closed waits
+ * that are not on the human. An open one (it runs to the ticket's last event) or a wait on the human (it is
+ * the very time the ticket is blocked) would erase the period, so it is stretched over the block instead.
+ */
+const agentCarve = (t: WorkTimeline): Ms[] => [
+  ...t.spans.filter((s) => !s.open).map((s) => ({ start: Date.parse(s.start), end: Date.parse(s.end) })),
+  ...t.waits
+    .filter((w) => !w.open && w.reason !== 'human')
+    .map((w) => ({ start: Date.parse(w.start), end: Date.parse(w.end) })),
+]
+
 /** The blocked and review periods as real times; one still going runs to now on a live ticket. */
 function stretchesOf(t: WorkTimeline, now: number): Stretch[] {
   const open = t.end ? Date.parse(t.end) : null
@@ -227,6 +239,7 @@ export function axisFor(t: WorkTimeline, now: number, win?: Window): Axis {
     stretches: stretchesOf(t, now),
     merge: latest !== null && latest > start && latest <= end ? latest : null,
     work: agentWork(t, now),
+    carve: agentCarve(t),
   })
   if (plan.pinned !== null && !win) end = plan.pinned
   if (end <= start) end = start + MIN

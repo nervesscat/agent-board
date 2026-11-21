@@ -122,6 +122,7 @@ describe('collapsed periods', () => {
       ],
       merge: m(60) + DAY,
       work: [{ start: m(0), end: m(60) }],
+      carve: [{ start: m(0), end: m(60) }],
     })
     expect(plan.pinned).toBe(m(60) + DAY)
     expect(plan.pieces.map((p) => p.kind)).toEqual(['review', 'gap', 'tail'])
@@ -327,6 +328,58 @@ describe('worker steps inside a collapsed period', () => {
       end: iso(m(120)),
     })
     expect(axisFor(t, m(0)).pieces).toEqual([])
+  })
+})
+
+describe('what does not carve a period', () => {
+  it('leaves the chip when a never-closed span covers the whole review', () => {
+    const t = timeline({
+      spans: [span(1, m(0), m(60)), span(2, m(30), m(60) + 5 * DAY, true)],
+      reviewStretches: [stretch(m(60), m(60) + 5 * DAY)],
+      end: iso(m(60) + 5 * DAY),
+    })
+    const chart = buildChart(t, m(0))
+    expect(chart.bands.map((b) => b.kind)).toEqual(['review'])
+    expect(chart.axis.span).toBe(60 * MIN + COLLAPSED_MS)
+  })
+
+  it('leaves the chip when a wait on the human covers the whole blocked period', () => {
+    const t = timeline({
+      spans: [span(1, m(0), m(60))],
+      waits: [
+        {
+          id: 5,
+          reason: 'human',
+          agent: 'a',
+          on: null,
+          note: '',
+          start: iso(m(60)),
+          end: iso(m(60) + 2 * DAY),
+          open: false,
+        },
+      ],
+      blockedStretches: [stretch(m(60), m(60) + 2 * DAY)],
+      end: iso(m(60) + 2 * DAY),
+    })
+    expect(buildChart(t, m(0)).bands.map((b) => b.kind)).toEqual(['blocked'])
+  })
+
+  it('still carves a closed step, and counts open ones and human waits for the merge pin', () => {
+    const t = timeline({
+      spans: [span(1, m(0), m(60)), span(2, m(60) + DAY, m(60) + DAY + 4 * HOUR)],
+      reviewStretches: [stretch(m(60), m(60) + 3 * DAY)],
+      end: iso(m(60) + 3 * DAY),
+    })
+    const chart = buildChart(t, m(0))
+    expect(chart.rows[0]!.items[1]!.seg.width * chart.axis.span).toBeCloseTo(4 * HOUR, 3)
+    // An open span after the merge still means the merge is not pinned.
+    const later = timeline({
+      spans: [span(1, m(0), m(60)), span(2, m(60) + 2 * DAY, m(60) + 3 * DAY, true)],
+      reviewStretches: [stretch(m(60), m(60) + DAY)],
+      marks: [merge(3, m(60) + DAY)],
+      end: iso(m(60) + 3 * DAY),
+    })
+    expect(axisFor(later, m(0)).pinned).toBeNull()
   })
 })
 
