@@ -315,7 +315,7 @@
   },
   "hostTools": {
     "section": "Herramientas que faltan",
-    "line": "<strong>{{problem}}</strong>: {{breaks}} no funcionará. Solución: {{fix}}.",
+    "line": "<strong>{{problem}}</strong>: afecta a {{breaks}}. Solución: {{fix}}.",
     "dismissTip": "Ocultar esto hasta que la próxima comprobación siga sin encontrar {{name}}",
     "dismissAria": "Descartar el aviso de {{name}}",
     "recheckTip": "Buscar de nuevo git, gh, claude, node y pnpm en el PATH del tablero",

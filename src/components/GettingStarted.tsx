@@ -13,6 +13,7 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
 import { Tip } from '#/components/ui/tooltip'
 import { type AgentTokenRow, errorMessage, get, type HostTools, type Me, post } from '#/lib/api'
+import { hostToolText } from '#/lib/hostToolText'
 import {
   missingTools,
   recallOnboarding,
@@ -285,7 +286,7 @@ function StepBody({ step, o, onGo, onNewProject }: { step: Step; o: Onboarding }
             <Hint key={tool.name}>
               <Trans
                 i18nKey="gettingStarted.tools.missing"
-                values={{ problem: tool.problem, fix: tool.fix }}
+                values={hostToolText(tool, t)}
                 components={{ problem: <span className="font-medium text-foreground" /> }}
               />
             </Hint>

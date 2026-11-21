@@ -7,6 +7,7 @@ import { refreshReports } from '#/components/daily/refresh'
 import { Button } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, post, type HostTools, type ReportList, type ReportView } from '#/lib/api'
+import { hostToolText } from '#/lib/hostToolText'
 
 /**
  * Asks claude for the report of `period` (from the prompt, the template and the period's activity),
@@ -61,8 +62,7 @@ export function GenerateReportButton({
   const failed =
     !busy && list?.generateError && list.generateError.period === period ? list.generateError : null
   const claude = tools?.tools.find((x) => x.name === 'claude')
-  const missing =
-    claude && !claude.ok ? t('generateReport.fix', { problem: claude.problem, fix: claude.fix }) : null
+  const missing = claude && !claude.ok ? t('generateReport.fix', hostToolText(claude, t)) : null
 
   return (
     <div className="flex min-w-0 flex-col items-end gap-1">
