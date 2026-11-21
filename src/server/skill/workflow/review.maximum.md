@@ -1,8 +1,9 @@
 **This workflow reviews every round twice, by different agents.** Each round is two complete reviews and
-a reconciliation. The two additions above hold: the third hunt with the security checklist runs in each
-of the two reviews (it is in the `phases=` of both), and the intent check at the end of the round (with
-the preview of the head started first, as described above) runs once, after the reconciliation, not once
-per review.
+a reconciliation. {{if roundIntent}}The two additions above hold: the third hunt with the security checklist runs in each
+of the two reviews (it is in the `phases=` of both), and the intent check at the end of the round {{if preview}}(with
+the preview of the head started first, as described above) {{end}}runs once, after the reconciliation, not once
+per review.{{else}}The addition above holds: the third hunt with the security checklist runs in each
+of the two reviews (it is in the `phases=` of both).{{end}}
 
 - Run `/feature-review` twice for the round: the first review and the second review, as two separate runs
   with the `phases=` argument this workflow gives, each under its own agent name (the first review as
@@ -22,6 +23,6 @@ per review.
   read against the code and kept when it reproduces. Where the two verdicts differ, the worse one decides
   until the difference is explained: never average them. Write the reconciliation to the round's folder
   (`WORKDIR/round-<n>-reconcile.md`) and post it `progress: true`.
-- **The round survives** only when both reviews survive, the reconciliation leaves no finding open and
+- **The round survives** only when both reviews survive and the reconciliation leaves no finding open{{if roundIntent}}, and
   the intent check at the end of the round matches. A `does not match` is an ordinary round of the
-  budget (the budget rule above: it replaces the intent step's rule that it is outside the budget).
+  budget (the budget rule above: it replaces the intent step's rule that it is outside the budget){{end}}.

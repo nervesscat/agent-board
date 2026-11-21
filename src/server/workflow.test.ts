@@ -724,9 +724,8 @@ describe('the served step texts of the Thorough and Maximum reviews, and of the 
       expect(text, preset).toContain('**The preview comes first:**')
       expect(text, preset).toContain('you start it now, exactly as the preview step says to start it')
       expect(text, preset).toContain('a head is never built twice for the preview')
-      expect(text, preset).toContain(
-        'When the workflow lists the preview step as skipped, there is no preview',
-      )
+      // With the preview step on, nothing says there is none.
+      expect(text, preset).not.toContain('there is no preview')
       // The preview step reuses a preview that already runs for the head.
       expect(text, preset).toContain(
         "When a review round's end-of-round intent check already started it for this head",
@@ -782,18 +781,21 @@ describe('the served step texts of the Thorough and Maximum reviews, and of the 
     const low = flat(await effective(pid, 'preset=standard&complexity=low'))
     // The step is listed as skipped, and every place that asked for its verdict now says it is not required.
     expect(low).toContain('- Intent check - skipped: turned off for low tickets on the Workflow page')
-    const unless =
-      'unless this workflow lists the intent check as skipped for the ticket (a low ticket with the check turned off on the Workflow page): then no intent check is run, none is required before the'
-    expect(low.split(unless).length - 1).toBe(2)
+    const skipped =
+      'This workflow lists the intent check as skipped for the ticket (a low ticket with the check turned off on the Workflow page): no intent check is run, none is required before the'
+    expect(low.split(skipped).length - 1).toBe(2)
     expect(low).toContain('before the push, and the summary says it was turned off on the Workflow page')
     expect(low).toContain('before the hand-off, and the summary says it was turned off on the Workflow page')
-    expect(low).toContain(
-      'when the workflow lists the intent check as skipped, one line saying it was turned off on the Workflow page',
-    )
+    expect(low).toContain('one line saying the intent check was turned off on the Workflow page')
+    // The precondition itself is not served for a ticket that has no check.
+    expect(low).not.toContain('Only after the intent check returned')
     // Locked above low: the same tweak does not skip it for a mid ticket.
     const mid = flat(await effective(pid, 'preset=standard&complexity=mid'))
     expect(mid).toContain('## 7. Intent check [locked above low] - agent `intent`, effort low')
     expect(mid).not.toContain('- Intent check - skipped')
+    expect(
+      mid.split('Only after the intent check returned `matches` on the head being handed off.').length - 1,
+    ).toBe(2)
     await call('DELETE', `/api/projects/${pid}/workflow/standard`)
   })
 

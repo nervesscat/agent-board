@@ -374,8 +374,11 @@ export interface ReviewPlanDef {
   phases: ReviewSubStepDef[]
   /** What happens between two rounds: the fix pass and the gate. */
   between: ReviewSubStepDef[]
-  /** When a round survives, in a sentence. */
-  survival: string
+  /**
+   * When a round survives, in a sentence. `roundIntent` is whether the round-end intent check runs for the
+   * ticket: when it does not (the check is turned off for a low ticket), the rule does not ask for it.
+   */
+  survival: (roundIntent: boolean) => string
   runs: ReviewRunDef[]
 }
 
@@ -510,13 +513,19 @@ function standardPhases(prefix: string, extraHunts: boolean): ReviewSubStepDef[]
   ]
 }
 
+const ROUND_INTENT_ID = 'review.intent'
+
 const INTENT_EACH_ROUND = sub(
-  'review.intent',
+  ROUND_INTENT_ID,
   'Intent check',
   'intent',
   "The intent agent compares the human's own words with the result at the end of every round, so a round that drifts from what was asked is caught while the builder still has rounds left.",
   { phase: null },
 )
+
+/** The intent step's hand-off for a ticket with no review: a `does not match` has only the builder and the gate to go back to. */
+const INTENT_WITHOUT_REVIEW =
+  'Brief it with only the human\'s words and the result, never the plan, the spec or the findings. "matches" goes on to the push; "does not match" goes back to the builder and the gate, then the check again, outside the round budget; a second one asks the human.'
 
 /** The intent step's hand-off in the presets whose reviews check intent at the end of every round: there a `does not match` is an ordinary round of the budget. */
 const INTENT_COUNTS_AS_ROUND =
@@ -563,7 +572,7 @@ export const WORKFLOW_PRESET_DEFS: Readonly<Record<WorkflowPresetId, WorkflowPre
         ),
       ],
       between: [FIX, BETWEEN_GATE],
-      survival:
+      survival: () =>
         "the reviewer reproduced no finding and the builder's evidence covers every acceptance criterion",
       runs: [{ id: 'review', label: 'Review', phases: ['reviewer'], agentSuffix: null }],
     },
@@ -586,7 +595,7 @@ export const WORKFLOW_PRESET_DEFS: Readonly<Record<WorkflowPresetId, WorkflowPre
     review: {
       phases: standardPhases('review', false),
       between: [FIX, BETWEEN_GATE],
-      survival: STANDARD_SURVIVAL,
+      survival: () => STANDARD_SURVIVAL,
       runs: [{ id: 'review', label: 'Review', phases: standardTokens, agentSuffix: null }],
     },
     text: {},
@@ -616,7 +625,10 @@ export const WORKFLOW_PRESET_DEFS: Readonly<Record<WorkflowPresetId, WorkflowPre
     review: {
       phases: [...standardPhases('review', true), INTENT_EACH_ROUND],
       between: [FIX, BETWEEN_GATE],
-      survival: `${STANDARD_SURVIVAL}, and the intent check at the end of the round matches`,
+      survival: (roundIntent) =>
+        roundIntent
+          ? `${STANDARD_SURVIVAL}, and the intent check at the end of the round matches`
+          : STANDARD_SURVIVAL,
       runs: [{ id: 'review', label: 'Review', phases: thoroughTokens, agentSuffix: null }],
     },
     text: { intent: { handoff: INTENT_COUNTS_AS_ROUND } },
@@ -676,7 +688,10 @@ export const WORKFLOW_PRESET_DEFS: Readonly<Record<WorkflowPresetId, WorkflowPre
         INTENT_EACH_ROUND,
       ],
       between: [FIX, BETWEEN_GATE],
-      survival: `both reviews survive (${STANDARD_SURVIVAL}), the reconciliation leaves no finding open and the intent check at the end of the round matches`,
+      survival: (roundIntent) =>
+        roundIntent
+          ? `both reviews survive (${STANDARD_SURVIVAL}), the reconciliation leaves no finding open and the intent check at the end of the round matches`
+          : `both reviews survive (${STANDARD_SURVIVAL}) and the reconciliation leaves no finding open`,
       runs: [
         { id: 'review.first', label: 'First review', phases: thoroughTokens, agentSuffix: 'first' },
         { id: 'review.second', label: 'Second review', phases: thoroughTokens, agentSuffix: 'second' },
@@ -740,6 +755,85 @@ export const defaultHandoff = (preset: WorkflowPresetId, id: WorkflowStepId) =>
 /** The text of what a step does for the preset: its own wording, else the catalogue's. */
 export const stepWhat = (preset: WorkflowPresetId, id: WorkflowStepId) =>
   WORKFLOW_PRESET_DEFS[preset].text[id]?.what ?? WORKFLOW_STEPS[id].what
+
+/**
+ * What runs for a ticket, read from the resolved steps: the served text and the review's phases are built
+ * from it, so nothing asks for a step the same text lists as skipped.
+ */
+export interface FlowState {
+  /** The spec step or the second spec runs, so there is a spec for the builder. */
+  spec: boolean
+  /** The (first) spec step runs: a second spec has one to reconcile with. */
+  firstSpec: boolean
+  tests: boolean
+  /** The review has rounds for this ticket. */
+  review: boolean
+  /** The review ends every round with the intent check (Thorough and Maximum) and that check runs. */
+  roundIntent: boolean
+  preview: boolean
+  intent: boolean
+  ci: boolean
+}
+
+/** The text of a step that depends on what else runs for the ticket, else null (its default stands). */
+function flowText(id: WorkflowStepId, flow: FlowState): { what?: string; handoff?: string } | null {
+  switch (id) {
+    case 'intent':
+      return {
+        ...(flow.preview
+          ? {}
+          : {
+              what: 'The intent agent compares what the human asked, in their own words and attachments, with what was built (the diff and any screenshots the review took), and says for each thing asked whether it was done as asked, done differently or not done.',
+            }),
+        ...(flow.review ? {} : { handoff: INTENT_WITHOUT_REVIEW }),
+      }
+    case 'preview':
+      return flow.intent
+        ? null
+        : {
+            handoff:
+              'The preview link and its screenshots go into the summary. A change with nothing to try has no preview, and the summary says why.',
+          }
+    case 'ci':
+      return flow.intent
+        ? null
+        : {
+            handoff:
+              'Green CI on the final head ends the step. A failure goes back to the builder like a gate failure.',
+          }
+    case 'push':
+      return flow.intent
+        ? null
+        : {
+            what: "Pushes the ticket's branch to origin and reads the ticket back to see the push registered.",
+          }
+    case 'summary':
+      return flow.intent && flow.review && flow.preview
+        ? null
+        : {
+            what: `Writes the ticket's summary, the one post the human reads on top of Main: what the change does and its state, ${flow.review ? "each round's verdict, " : ''}the PR ${flow.preview ? 'and preview links' : 'link'}, what to try, how it was tested${flow.intent ? " and the intent check's verdict" : ''}, with the screenshots. Then answers each of the human's posts it had answered with a plan.`,
+          }
+    case 'pr':
+      return flow.ci ? null : { handoff: 'The PR number goes into the summary.' }
+    case 'gate':
+      return flow.review
+        ? null
+        : {
+            what: "The ticket agent's own check before the change goes on: the project's checks scoped to what changed, the whole diff read, and the added lines searched for what breaks the proof contract (skipped tests, lint or type ignores, branches on the test environment, mocks of the module under change).",
+            handoff:
+              'A pass goes on with the head SHA and a note of what ran. A failure goes back to the builder with its output; the second return asks the human.',
+          }
+    case 'handoff':
+      return flow.review && flow.preview
+        ? null
+        : {
+            what: `Moves the ticket to review and reads the board's answer: the tasks still open${flow.review ? ', the subagent runs recorded without a report and the review phases the last round lacks' : ' and the subagent runs recorded without a report'}. Each is fixed before the hand-off stands.`,
+            handoff: `The ticket stays in review${flow.preview ? ' with its preview running' : ''}; the result goes back to whoever started this run.`,
+          }
+    default:
+      return null
+  }
+}
 
 /** An effort as the agent runs it: `auto` follows the ticket's complexity; with none given, null. */
 export function effortLevel(effort: WorkflowEffort, complexity: Complexity | null): EffortLevel | null {
@@ -1072,6 +1166,8 @@ export interface ResolvedWorkflow {
   /** The review's rounds per complexity, and the preset's own. */
   rounds: Record<Complexity, number>
   defaultRounds: Record<Complexity, number>
+  /** What runs for this ticket: the served text is built from it. */
+  flow: FlowState
 }
 
 function resolveSub(def: ReviewSubStepDef, parent: string | null, at: number): ResolvedSubStep {
@@ -1107,15 +1203,20 @@ function resolveReview(
   number: number | null,
   rounds: Record<Complexity, number>,
   complexity: Complexity | null,
+  intentRuns: boolean,
 ): ResolvedReview {
   const at = number === null ? null : String(number)
-  const counts = phaseCounts(preset.review.phases)
+  // The round-end intent check is a phase of the round only while the intent step runs for the ticket.
+  const defs = preset.review.phases.filter((d) => intentRuns || d.id !== ROUND_INTENT_ID)
+  const counts = phaseCounts(defs)
   return {
     rounds: complexity ? rounds[complexity] : null,
     roundsByComplexity: rounds,
     defaultRounds: { ...preset.rounds },
-    survival: preset.review.survival,
-    phases: preset.review.phases.map((d, i) => resolveSub(d, at, i)),
+    survival: preset.review.survival(
+      intentRuns && preset.review.phases.some((d) => d.id === ROUND_INTENT_ID),
+    ),
+    phases: defs.map((d, i) => resolveSub(d, at, i)),
     between: preset.review.between.map((d) => resolveSub(d, null, 0)),
     runs: preset.review.runs.map((r) => ({ ...r, phasesArg: r.phases.join(',') })),
     perRound: REVIEW_PHASE_KINDS.flatMap((phase) => {
@@ -1145,31 +1246,49 @@ export function resolveWorkflow(
   const saved = readSaved(id, tweak)
   const order = saved?.order ? [...saved.order] : [...preset.steps]
   const rounds = { ...preset.rounds, ...saved?.rounds }
-  let counter = 0
-  const steps: ResolvedStep[] = order.map((stepId, position) => {
+  const skipOf = (stepId: WorkflowStepId): ResolvedStep['skipped'] => {
     const def = WORKFLOW_STEPS[stepId]
     const own = saved?.steps?.[stepId]
     const enabled = def.lock === 'always' ? true : own?.enabled !== false
     const roundsHere = stepId === 'review' && complexity ? rounds[complexity] : null
-    let skipped: ResolvedStep['skipped'] = null
-    if (def.aboveLow && complexity === 'low') skipped = { reason: 'low', note: 'skipped: low ticket' }
-    else if (!enabled && (def.lock !== 'above-low' || complexity === 'low'))
-      skipped = {
+    if (def.aboveLow && complexity === 'low') return { reason: 'low', note: 'skipped: low ticket' }
+    if (!enabled && (def.lock !== 'above-low' || complexity === 'low'))
+      return {
         reason: 'off',
         note:
           def.lock === 'above-low'
             ? 'skipped: turned off for low tickets on the Workflow page'
             : 'skipped: turned off on the Workflow page',
       }
-    else if (roundsHere === 0)
-      skipped =
-        complexity === 'low'
-          ? { reason: 'low', note: 'skipped: low ticket (no review rounds)' }
-          : { reason: 'rounds', note: `skipped: no review rounds for a ${complexity} ticket` }
+    if (roundsHere === 0)
+      return complexity === 'low'
+        ? { reason: 'low', note: 'skipped: low ticket (no review rounds)' }
+        : { reason: 'rounds', note: `skipped: no review rounds for a ${complexity} ticket` }
+    return null
+  }
+  const runs = (stepId: WorkflowStepId) => preset.steps.includes(stepId) && !skipOf(stepId)
+  const flow: FlowState = {
+    spec: runs('spec') || runs('spec2'),
+    firstSpec: runs('spec'),
+    tests: runs('tests'),
+    review: runs('review'),
+    roundIntent:
+      runs('review') && runs('intent') && preset.review.phases.some((d) => d.id === ROUND_INTENT_ID),
+    preview: runs('preview'),
+    intent: runs('intent'),
+    ci: runs('ci'),
+  }
+  let counter = 0
+  const steps: ResolvedStep[] = order.map((stepId, position) => {
+    const def = WORKFLOW_STEPS[stepId]
+    const own = saved?.steps?.[stepId]
+    const enabled = def.lock === 'always' ? true : own?.enabled !== false
+    const skipped = skipOf(stepId)
     const number = skipped ? null : ++counter
     const effortDefaultValue = defaultEffort(id, stepId)
     const effort = effortDefaultValue === null ? null : (own?.effort ?? effortDefaultValue)
-    const handoffDefault = defaultHandoff(id, stepId)
+    const flowOwn = flowText(stepId, flow)
+    const handoffDefault = flowOwn?.handoff ?? defaultHandoff(id, stepId)
     const handoff = own?.instructions ?? handoffDefault
     const moved = order.indexOf(stepId) !== preset.steps.indexOf(stepId)
     const edited = {
@@ -1185,7 +1304,7 @@ export function resolveWorkflow(
     return {
       id: stepId,
       label: def.label,
-      what: stepWhat(id, stepId),
+      what: flowOwn?.what ?? stepWhat(id, stepId),
       agent: def.agent,
       agentLabel: AGENT_LABELS[def.agent],
       handoff,
@@ -1201,7 +1320,7 @@ export function resolveWorkflow(
       effort,
       effortDefault: effortDefaultValue,
       effortLevel: effort === null ? null : effortLevel(effort, complexity),
-      review: stepId === 'review' ? resolveReview(preset, number, rounds, complexity) : null,
+      review: stepId === 'review' ? resolveReview(preset, number, rounds, complexity, flow.intent) : null,
       span: def.span,
       edited,
       moveBlocked: { up: up.ok ? null : up.reason, down: down.ok ? null : down.reason },
@@ -1221,6 +1340,7 @@ export function resolveWorkflow(
     numbered: counter,
     rounds,
     defaultRounds: { ...preset.rounds },
+    flow,
   }
 }
 

@@ -1,10 +1,10 @@
 Start the preview of this head here: it is the one build of this head for the preview, and it keeps
-running. When a review round's end-of-round intent check already started it for this head (the review
+running. {{if roundIntent}}When a review round's end-of-round intent check already started it for this head (the review
 step's text says when it does), it runs: reuse it, take only the screenshots still missing and build
-nothing. The review's `shots/` folder has the verify phase's screenshots. For a UI change you also need
+nothing. {{end}}The review's `shots/` folder has the verify phase's screenshots. For a UI change you also need
 one of the finished thing in that preview at the state the ticket is about. A ticket with no review has no
-review folder, so its screenshots come from the preview. The intent check is given this preview, these
-screenshots and the diff. With `BROWSER=no` and a UI change, do everything else, leave the ticket in
+review folder, so its screenshots come from the preview. {{if intent}}The intent check is given this preview, these
+screenshots and the diff. {{end}}With `BROWSER=no` and a UI change, do everything else, leave the ticket in
 progress with its summary saying where you stopped, and return `STATUS: needs-browser`: the orchestrator
 runs you again with the browser.
 
@@ -47,6 +47,6 @@ A preview build you start is a heavy run, in a test slot like any other (holder
 preview runs or has failed. The board ticks Preview once it runs; when the change cannot be tried, remove
 the Preview phase instead.
 
-Before every re-run of the intent check (after a `does not match` fix round or any new commit) come back
+{{if intent}}Before every re-run of the intent check (after a `does not match` fix round or any new commit) come back
 here at the head being handed off: the preview for that head runs (build it only when none runs for this
-head) and fresh screenshots of the changed state are taken.
+head) and fresh screenshots of the changed state are taken.{{end}}

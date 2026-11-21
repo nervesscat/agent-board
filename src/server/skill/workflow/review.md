@@ -23,7 +23,7 @@ again. It reviews the branch's commits in a worktree of its own, posts its phase
 writes `review.md` and `summary.md`. When it would ask a question, it finishes its read-only phases with
 the spec's assumption marked unconfirmed; once the card is open you block the ticket and end the run,
 never building on that guess. `round=<n>` is the review round this run is (1 for the first, then counting
-on, continuing after an intent return): its phase agents put it on their spans and run reports, and the
+on{{if intent}}, continuing after an intent return{{end}}): its phase agents put it on their spans and run reports, and the
 board counts a phase only when it is there. When it returns, however it ended, release any slot folder
 under `SLOTS` whose `holder.txt` names this ticket. Then stop, by process id, every server, test board,
 dev server or watcher you or your subagents started for the round (the preview is the one that keeps
@@ -41,11 +41,11 @@ for work built from scratch (a whole site or app, a new product or a standalone 
 an existing codebase is never max, however difficult. A surviving round ends the cycle at every level. When a round does not survive and no round is left: post
 what is still open, `ask_decision` (ship as is, keep going, drop) and stop: `BLOCKER: decision`. Never
 start one more round on your own. The complexity sets the budget at every review depth: a `deep` review
-earns no extra round, a `light` one loses none. An intent return (`does not match`, see the intent step)
+earns no extra round, a `light` one loses none. {{if intent}}An intent return (`does not match`, see the intent step)
 is not a gate return and is outside this budget: it gets its own fix pass and one more review, so "never
 start one more round on your own" does not apply to it. Where this workflow's review text below says its
 round-end intent check counts as a round (Thorough and Maximum), that text replaces this sentence: there
-a `does not match` is an ordinary round of the budget.
+a `does not match` is an ordinary round of the budget.{{end}}
 
 **Every phase this workflow lists for a round runs in every round.** None is skipped because the findings
 look obvious, the change looks small or a finding was already reproduced, and each phase posts its
@@ -53,6 +53,6 @@ result, so a skipped phase is visible. The board checks it at the hand-off (`mis
 phases of this workflow's round that the last round lacks).
 
 **The effort** is this step's effort. Pass it as the Agent tool's `effort` on every subagent you start
-for the round, and give it to `/feature-review` as `effort=<level>`, so its phase agents run at it. The
+for the round, and give it to `/feature-review` as `effort=<level>`, so its phase agents run at it.{{if intent}} The
 one exception is the intent agent: it runs at the intent step's effort, `low` unless the human set
-another.
+another.{{end}}

@@ -12,6 +12,7 @@ import {
   readProjectTweaks,
   resolveWorkflow,
   validateTweaks,
+  type FlowState,
   type ProjectTweaks,
   type ResolvedStep,
   type ResolvedSubStep,
@@ -49,15 +50,66 @@ const VARIANT_CHAIN: Record<WorkflowPresetId, readonly WorkflowPresetId[]> = {
   maximum: ['thorough', 'maximum'],
 }
 
-/** A step's procedure: its file, then the preset's variants of it when there are (`review.light.md`). */
-export function stepProcedure(stepId: string, preset: WorkflowPresetId): string {
+const TAG = /\{\{(if !?\w+|else|end)\}\}/g
+
+/**
+ * Reads the conditions of a procedure against what runs for the ticket. A block
+ * `{{if intent}}...{{else}}...{{end}}` (the else part optional, `{{if !intent}}` for the flag not holding,
+ * blocks may nest) keeps its first part when the named flag of the workflow's `flow` holds and its else part when it does not, so a procedure never
+ * asks for a step the same text lists as skipped.
+ */
+export function applyFlow(text: string, flow: FlowState): string {
+  const tags = [...text.matchAll(TAG)]
+  let pos = 0
+  let n = 0
+  // Reads up to the next else or end of the block being read (or the end of the text), and says which.
+  const part = (keep: boolean): { out: string; stop: 'else' | 'end' | null } => {
+    let out = ''
+    for (;;) {
+      const tag = tags[n]
+      if (!tag) {
+        if (keep) out += text.slice(pos)
+        pos = text.length
+        return { out, stop: null }
+      }
+      if (keep) out += text.slice(pos, tag.index)
+      pos = tag.index + tag[0].length
+      // A tag alone at the start of a line takes its line break with it, so a block leaves no blank line.
+      if ((tag.index === 0 || text[tag.index - 1] === '\n') && text[pos] === '\n') pos++
+      n++
+      const word = tag[1]!
+      if (word === 'else' || word === 'end') return { out, stop: word }
+      const negated = word.startsWith('if !')
+      const name = word.slice(negated ? 4 : 3)
+      if (!(name in flow)) throw new Error(`a workflow procedure names the unknown condition "${name}"`)
+      const holds = flow[name as keyof FlowState] !== negated
+      const yes = part(keep && holds)
+      let stop = yes.stop
+      let no = ''
+      if (stop === 'else') {
+        const rest = part(keep && !holds)
+        no = rest.out
+        stop = rest.stop
+      }
+      if (stop !== 'end')
+        throw new Error(`a workflow procedure has a condition on "${name}" that is never closed`)
+      out += yes.out + no
+    }
+  }
+  const top = part(true)
+  if (top.stop) throw new Error(`a workflow procedure has a stray {{${top.stop}}}`)
+  return top.out
+}
+
+/** A step's procedure: its file, then the preset's variants of it when there are (`review.light.md`), read against what runs for the ticket. */
+export function stepProcedure(stepId: string, preset: WorkflowPresetId, flow: FlowState): string {
   const base = procedureFiles[`./skill/workflow/${stepId}.md`]
   if (base === undefined) throw new Error(`the workflow has no procedure file for ${stepId}`)
   const variants = VARIANT_CHAIN[preset].flatMap((id) => {
     const variant = procedureFiles[`./skill/workflow/${stepId}.${id}.md`]
     return variant === undefined ? [] : [clean(variant)]
   })
-  return [clean(base), ...variants].join('\n\n')
+  return [clean(base), ...variants].map((part) => applyFlow(part, flow).trim()).join('\n\n')
 }
 
 export const WORKFLOW_SOFTWARE_ONLY =
@@ -356,7 +408,7 @@ export function renderWorkflowText(
     out.push(`Does: ${step.what}`)
     out.push(`Hand-off: ${step.handoff}${step.edited.instructions ? ' (set by the human)' : ''}`)
     if (step.review) out.push(...reviewLines(step))
-    out.push('How it runs:', '', stepProcedure(step.id, workflow.preset), '')
+    out.push('How it runs:', '', stepProcedure(step.id, workflow.preset, workflow.flow), '')
   }
   return `${out.join('\n').trim()}\n`
 }

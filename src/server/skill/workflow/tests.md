@@ -2,9 +2,9 @@ A pass that only writes tests, after the build and before the gate, so the proof
 author of the code alone.
 
 Start the builder again, briefed as for the build step (the **builder** agent's `instructions`, the
-project's `instructions`, the ticket's context, `WORKDIR/01-spec.md`, the worktree and branch, the scoped
-check commands, the **Local test flags** and the test slots' rule). When the workflow lists the spec step as skipped for the ticket there is no `WORKDIR/01-spec.md`: the
-ticket's instructions and the acceptance criteria you wrote from them are the spec, as in the build step.
+project's `instructions`, the ticket's context, {{if spec}}`WORKDIR/01-spec.md`, {{end}}the worktree and branch, the scoped
+check commands, the **Local test flags** and the test slots' rule). {{if !spec}}When the workflow lists the spec step as skipped for the ticket there is no `WORKDIR/01-spec.md`: the
+ticket's instructions and the acceptance criteria you wrote from them are the spec, as in the build step.{{end}}
 The change to the brief:
 
 - Its job is tests, not product code: for every acceptance criterion and every edge the spec lists, one

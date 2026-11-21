@@ -1,7 +1,6 @@
-Only after the intent check returned `matches` on the head being handed off, unless this workflow lists the
-intent check as skipped for the ticket (a low ticket with the check turned off on the Workflow page): then
-no intent check is run, none is required before the hand-off, and the summary says it was turned off on the
-Workflow page. Every item, in order, as the board skill's hand-off checklist says. The board ticks the phases Pushed, PR, CI, Preview, Summary and
+{{if intent}}Only after the intent check returned `matches` on the head being handed off.{{else}}This workflow lists the intent check as skipped for the ticket (a low ticket with the check turned off on the
+Workflow page): no intent check is run, none is required before the hand-off, and the summary says it was
+turned off on the Workflow page.{{end}} Every item, in order, as the board skill's hand-off checklist says. The board ticks the phases Pushed, PR, CI, Preview, Summary and
 Merged itself as their facts hold (a tick by hand is refused); you tick Implementation and its steps
 (`set_task_done`).
 
