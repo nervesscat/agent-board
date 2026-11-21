@@ -81,11 +81,11 @@ short message shape with the numbered list of what needs the human. Its line is
    `branch`, `baseBranch`, `prNumber`). `repos` on `create_ticket` and `update_ticket` sets the list,
    `claim_ticket`'s `branch` is the primary's and its `repos` sets each one's branch, `add_workspace`
    takes the `repoId` its worktree is of, and `get_ticket_git` reports every repo.
-   Repos are the human's to add, change and remove, on each project's Repositories page (`POST`/`PATCH`/`DELETE /api/repos` answer 403
-   to an agent; an orchestrator only moves one to another project, a `PATCH` of `projectId` alone,
-   see "Who is who"). When the work needs one the project lacks (a new repository you are building), ask
-   with `add_repo` (step 7); once it is added, `set_ticket_repo` moves your ticket onto it
-   (makes it the primary).
+   Repos of a project are managed by its agents too, with no card: `add_repo`, `update_repo` and
+   `delete_repo` (below); `POST`/`PATCH`/`DELETE /api/repos` stay the human's (403 to an
+   agent; an orchestrator only moves one to another project, a `PATCH` of `projectId` alone, see "Who is
+   who"). When the work needs a repo the project lacks (a new repository you are building), add it with
+   `add_repo`; once it is added, `set_ticket_repo` moves your ticket onto it (makes it the primary).
    Its `stages[]` are the board's columns in order, each with a `key`, a `name` and a `kind`
    (`open`, `active`, `blocked`, `review`, `done`, `cancelled`). A ticket's `status` is a stage key;
    wherever a status is asked for you can also give a stage's name or a kind (`todo` and
@@ -390,7 +390,7 @@ short message shape with the numbered list of what needs the human. Its line is
 
    `update_ticket` to `review` answers with `open`: every task and subtask still open, the
    ticket's and its lanes' that are not cancelled, in tree order, each `{taskId, ticketId, text,
-   auto}`. Merged is left out: merging is the human's, except on a ticket in Approved (below).
+auto}`. Merged is left out: merging is the human's, except on a ticket in Approved (below).
    `auto: true` marks a phase the board ticks from its fact (Pushed, PR, CI, Preview, Summary):
    settle it by making the fact hold (push, open the PR, get CI green, start the preview, rewrite the
    summary after your last commit), never by a tick. The move goes through anyway: fix each one;
@@ -416,21 +416,26 @@ short message shape with the numbered list of what needs the human. Its line is
    says which agent asked. Keep changes nothing. The card's body is never edited (409): ask again
    instead.
 
-   Adding a repo is the human's in the same way. `add_repo` (MCP `{ticketId, name, repoPath,
-githubRepo, baseBranch?, as?}`; REST `POST /api/tickets/:id/repo-request` `{name, repoPath,
-githubRepo, baseBranch?, as?}`, agents only) posts one decision card, "Add repo shop?" with Add
-   and Don't add, on the ticket you name (it does not block), naming the repo's name, GitHub repo,
-   path and base branch (`main` when left out). The repo goes to that ticket's project, never
-   another. It is checked first, and nothing is posted when a check fails (400 or 409, saying
-   which): `repoPath` is an absolute path to an existing git checkout (a worktree too); its `origin`
-   remote is `githubRepo` on github.com (`owner/name` in any casing; https, `git@github.com:` and
-   `ssh://` URLs; only the URL is read); the project has no repo of that name (any casing); and no
-   repo of the board is registered at that path (either slash, a trailing one, and on Windows any
-   casing). Nothing is added until the human answers Add on the board (or the orchestrator relays
-   their chat answer with `answer_decision`): Add checks it all again, then adds the repo as asked,
-   in the human's name, and the activity says which agent asked; a check that fails by then adds
-   nothing and the reply under the card says why. Answering Add again reports it as already added.
-   Don't add changes nothing. The card's body is never edited (409). Once the repo is there,
+   Repos: an agent adds, changes and removes the repos of its own project, at once, with no card, and
+   every change is in the project's activity under its name. `add_repo` (MCP `{ticketId, name, repoPath,
+githubRepo, baseBranch?, as?}`; REST `POST /api/tickets/:id/repos`, the older `/repo-request` path
+   answering the same) adds a repo to the ticket's project, never another, and returns it
+   (`baseBranch` is `main` when left out). It is checked first, and nothing is added when a check fails
+   (400 or 409, saying which): `repoPath` is an absolute path to an existing git checkout (a worktree
+   too); its `origin` remote is `githubRepo` on github.com (`owner/name` in any casing; https,
+   `git@github.com:` and `ssh://` URLs; only the URL is read); the project has no repo of that name
+   (any casing); and no repo of the board is registered at that path (either slash, a trailing one,
+   and on Windows any casing). `update_repo` (MCP `{projectId, repoId, name?, repoPath?, githubRepo?,
+baseBranch?}`; REST `PATCH /api/projects/:id/repos/:repoId`) changes the fields given, checking what
+   changes: a new name is unique in the project, a new path or GitHub repo is the whole checkout check
+   above (the repo itself not counting as another at its path), a new path makes the next look at
+   origin's branches a first one. `delete_repo` (MCP `{projectId, repoId}`; REST `DELETE
+/api/projects/:id/repos/:repoId`) is the Repositories page's Remove: its run configs go, its PR rows
+   and their PR tickets go, tickets stay and take their next repo as the primary, the checkout on disk is
+   untouched. A repo of another project is refused (403) and nothing changes; an unknown one is 404.
+   A repo never moves to another project through these. A decision card an older `add_repo` posted
+   ("Add repo shop?") still adds the repo when answered Add (on the board, or relayed with
+   `answer_decision`), checking again; its body is never edited (409). Once the repo is there,
    `set_ticket_repo` (MCP `{ticketId, repoId, baseBranch?}`; REST `PUT /api/tickets/:id/repo`
    `{repoId, baseBranch?}`) moves a ticket onto any repo of its own project at once, with no card,
    as its primary: its base branch becomes that repo's unless you give one (a repo it already spans
