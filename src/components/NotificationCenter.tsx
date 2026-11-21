@@ -566,7 +566,6 @@ function AlertCardView({
           <span
             data-testid="new-dot"
             className="mt-1.5 size-2 shrink-0 rounded-full bg-sky-600 dark:bg-sky-400"
-            title="New"
           >
             <span className="sr-only">New</span>
           </span>
