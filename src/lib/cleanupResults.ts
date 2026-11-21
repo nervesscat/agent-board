@@ -1,3 +1,4 @@
+import { shared } from '#/i18n'
 import type { DeleteItem, DeleteResult } from '#/lib/api'
 
 /**
@@ -46,9 +47,9 @@ export function countsOf(results: DeleteResult[]): DeleteCounts {
   const deleted = results.filter((r) => r.outcome === 'deleted').length
   const kept = results.filter((r) => !r.ok).length
   const gone = results.filter((r) => r.outcome === 'gone').length
-  const parts = [`${deleted} deleted`]
-  if (kept) parts.push(`${kept} kept`)
-  if (gone) parts.push(`${gone} already gone`)
+  const parts = [shared.t('cleanup.counts.deleted', { count: deleted })]
+  if (kept) parts.push(shared.t('cleanup.counts.kept', { count: kept }))
+  if (gone) parts.push(shared.t('cleanup.counts.gone', { count: gone }))
   return { deleted, kept, gone, text: parts.join(', ') }
 }
 

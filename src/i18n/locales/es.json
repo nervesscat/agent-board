@@ -747,8 +747,8 @@
       "pr_other": "{{count}} PRs",
       "review_one": "{{count}} revisión",
       "review_other": "{{count}} revisiones",
-      "workspace_one": "{{count}} espacio de trabajo",
-      "workspace_other": "{{count}} espacios de trabajo",
+      "workspace_one": "{{count}} workspace",
+      "workspace_other": "{{count}} workspaces",
       "agent_one": "{{count}} agente",
       "agent_other": "{{count}} agentes",
       "project_one": "{{count}} proyecto",
@@ -898,5 +898,327 @@
     "save": "Guardar",
     "saving": "Guardando…",
     "weekdayLabel": "El"
+  },
+  "cleanup": {
+    "counts": {
+      "deleted_one": "{{count}} eliminado",
+      "deleted_other": "{{count}} eliminados",
+      "kept_one": "{{count}} conservado",
+      "kept_other": "{{count}} conservados",
+      "gone_one": "{{count}} ya no existía",
+      "gone_other": "{{count}} ya no existían"
+    },
+    "actions": {
+      "local": {
+        "row": "Eliminar branch",
+        "all": "Eliminar todos los branches locales elegibles",
+        "title_one": "¿Eliminar {{count}} branch local?",
+        "title_other": "¿Eliminar {{count}} branches locales?",
+        "confirm_one": "Eliminar {{count}} branch local",
+        "confirm_other": "Eliminar {{count}} branches locales",
+        "what": "Cada branch se quita del checkout. Origin conserva su copia."
+      },
+      "remote": {
+        "row": "Eliminar en origin",
+        "all": "Eliminar todos los branches elegibles en origin",
+        "title_one": "¿Eliminar {{count}} branch en origin?",
+        "title_other": "¿Eliminar {{count}} branches en origin?",
+        "confirm_one": "Eliminar {{count}} branch en origin",
+        "confirm_other": "Eliminar {{count}} branches en origin",
+        "what": "Cada branch se quita de origin, para todos los que trabajan con él. Los branches locales se quedan."
+      },
+      "worktrees": {
+        "row": "Quitar worktree + branch",
+        "all": "Quitar todos los worktrees elegibles con su branch",
+        "title_one": "¿Quitar los worktrees de {{count}} branch, y el branch?",
+        "title_other": "¿Quitar los worktrees de {{count}} branches, y los branches?",
+        "confirm_one": "Quitar worktrees y eliminar {{count}} branch",
+        "confirm_other": "Quitar worktrees y eliminar {{count}} branches",
+        "what": "Se elimina la carpeta de cada worktree (con los archivos ignorados, como node_modules) y después el branch local. Un enlace dentro se elimina como enlace: la carpeta a la que apunta fuera del worktree se queda. Origin conserva su copia."
+      }
+    },
+    "previewState": {
+      "running": "en ejecución en :{{port}}",
+      "building": "compilando",
+      "starting": "iniciando"
+    },
+    "copied": "Copiado",
+    "sweep": {
+      "partial_one": "Se eliminó {{count}} archivo; {{failed}} no se pudieron eliminar y quedan para la próxima ejecución",
+      "partial_other": "Se eliminaron {{count}} archivos; {{failed}} no se pudieron eliminar y quedan para la próxima ejecución",
+      "done_one": "Se eliminó {{count}} archivo ({{size}})",
+      "done_other": "Se eliminaron {{count}} archivos ({{size}})"
+    },
+    "toast": {
+      "keptSee": "{{counts}}: mira abajo el motivo",
+      "jobFailed": "{{title}} falló: {{reason}}"
+    },
+    "noReasonGiven": "sin motivo",
+    "title": "Limpieza",
+    "intro": "Trabajo terminado que limpiar, comprobado contra su base.",
+    "refresh": "Actualizar",
+    "agentsNote": "Los agentes pueden eliminar los branches locales que ya se integraron (<tool>cleanup_delete</tool>); quitar worktrees y eliminar branches en origin sigue siendo cosa tuya, desde esta página.",
+    "deleteOff": "Eliminar está desactivado: {{reason}}.",
+    "repoError": "{{name}}: {{error}}. No se conocen sus branches ni worktrees, así que no se puede eliminar nada de él.",
+    "progress": {
+      "label": "Progreso de la eliminación",
+      "of": "{{done}} de {{total}}",
+      "starting": "Iniciando…",
+      "failed": "Falló · {{reason}}",
+      "succeeded": "Completado · {{counts}}"
+    },
+    "empty": "No queda nada. Todos los tickets cerrados están limpios.",
+    "group": {
+      "safe": {
+        "title": "Se puede eliminar",
+        "hint": "Todos los commits, o los mismos parches, están en la base."
+      },
+      "edited": {
+        "title": "Editado pero presente",
+        "hint": "Los commits cambiaron al integrarse, pero fusionar el branch no añadiría nada."
+      },
+      "unique": {
+        "title": "Aún tiene trabajo propio",
+        "hint": "El branch tiene cambios que sus bases no tienen. Consérvalo, o comprueba adónde fue el trabajo."
+      },
+      "kept": {
+        "title": "Conservados",
+        "hint": "En uso por un ticket en curso o un PR abierto, una base, el branch base del repositorio, el branch del checkout principal o el branch por defecto de origin: nunca se eliminan desde aquí."
+      },
+      "other": {
+        "title": "Nada que comparar",
+        "hint": "Workspaces aún registrados sin branch, o un branch sin base contra la que comprobarlo."
+      }
+    },
+    "workspacesRegistered_one": "{{count}} workspace registrado",
+    "workspacesRegistered_other": "{{count}} workspaces registrados",
+    "previewStop": "preview {{state}}: páralo en el ticket",
+    "notLocal": "no local",
+    "worktreeKept": "{{path}}: conservado, {{reason}}",
+    "mainCheckout": "checkout principal",
+    "originSha": "origin {{sha}}",
+    "copyRestore": "Copiar el comando de restauración: {{command}}",
+    "col": {
+      "ticket": "Ticket",
+      "branch": "Branch",
+      "reach": "Alcance",
+      "worktree": "Worktree",
+      "origin": "Origin",
+      "branchOnOrigin": "Branch en origin"
+    },
+    "remote": {
+      "title": "Branches que quedan en origin",
+      "intro": "Según el último fetch; el tablero vuelve a hacer fetch de origin antes de eliminar uno. Cada uno se juzga por sus propios commits frente a las copias de las bases en origin, o por un PR fusionado cuyo head es ese mismo commit."
+    },
+    "prMerged": "PR #{{number}} fusionado en este commit",
+    "prWasMerged": "El PR #{{number}} se fusionó en este commit",
+    "untracked": {
+      "title": "Worktrees sin seguimiento",
+      "intro": "Worktrees que ningún ticket ni workspace explica. Regístralos en su ticket, o quítalos."
+    },
+    "detached": "detached {{sha}}",
+    "uploads": {
+      "title": "Subidas sin adjuntar",
+      "intro": "Archivos subidos hace más de un día que nada en el tablero usa: una ventana de nuevo ticket cerrada sin crear, un archivo quitado de una publicación antes de enviarla. El tablero los elimina cada hora; los archivos de menos de un día no se tocan.",
+      "introRecent": "Archivos subidos hace más de un día que nada en el tablero usa: una ventana de nuevo ticket cerrada sin crear, un archivo quitado de una publicación antes de enviarla. El tablero los elimina cada hora; los archivos de menos de un día no se tocan ({{recent}} ahora).",
+      "summary_one": "{{count}} archivo, {{size}}",
+      "summary_other": "{{count}} archivos, {{size}}",
+      "deleteNow": "Eliminar ahora",
+      "confirmTitle": "¿Eliminar las subidas sin adjuntar?",
+      "confirmText_one": "{{count}} archivo ({{size}}) que ninguna publicación, respuesta, ticket o imagen de agente usa, subido hace más de un día. No se puede deshacer.",
+      "confirmText_other": "{{count}} archivos ({{size}}) que ninguna publicación, respuesta, ticket o imagen de agente usa, subidos hace más de un día. No se puede deshacer."
+    },
+    "keep": "Conservar",
+    "delete": "Eliminar",
+    "keptReason": "Conservado: {{reason}}",
+    "noLocalBranch": "sin branch local",
+    "kind": {
+      "remote": "en origin",
+      "local": "local",
+      "worktrees": "con sus worktrees"
+    },
+    "worktreePath": "worktree {{path}}",
+    "stopsPreview": "detiene su preview ({{state}})",
+    "stopsServer": "detiene el servidor en :{{port}} si se ejecuta desde este worktree",
+    "confirmChecked": "Cada uno se comprueba de nuevo justo antes de eliminarse, y se conserva si algo cambió; nada se fuerza. Los comandos de restauración se muestran después.",
+    "toDelete": "Para eliminar",
+    "toDeleteEdited": "Para eliminar, editados",
+    "editedOnTheWay": "Editados al integrarse: estos commits difieren de la base, pero fusionar no añadiría nada",
+    "outcome": {
+      "deleted": "Eliminados",
+      "refused": "Conservados",
+      "failed": "Fallidos",
+      "gone": "Ya no existían"
+    },
+    "advice": {
+      "changes": "Haz commit o stash de ellos en el worktree y luego actualiza.",
+      "prune": "Ejecuta git worktree prune y luego actualiza.",
+      "moved": "Actualiza y luego confirma de nuevo sobre el commit nuevo.",
+      "checkedOut": "Primero haz checkout de otro branch allí."
+    },
+    "removed": "eliminado {{path}}",
+    "removedLink": "eliminado el enlace {{path}} a {{target}}, que se queda",
+    "copyCommand": "Copiar: {{command}}",
+    "results": {
+      "label": "Resultados de la eliminación",
+      "title": "Última eliminación",
+      "retry": "Reintentar los conservados",
+      "dismiss": "Descartar"
+    }
+  },
+  "gallery": {
+    "kind": {
+      "image": "Imágenes",
+      "video": "Videos",
+      "pdf": "PDFs",
+      "docs": "Documentos y texto",
+      "other": "Otros"
+    },
+    "sort": {
+      "newest": "Más recientes primero",
+      "oldest": "Más antiguos primero",
+      "name": "Nombre de A a Z",
+      "name-desc": "Nombre de Z a A",
+      "largest": "Más grandes primero",
+      "smallest": "Más pequeños primero",
+      "type": "Por tipo"
+    },
+    "page": {
+      "title": "Galería",
+      "intro": "Todos los archivos de los tickets del proyecto.",
+      "filters": "Filtros",
+      "fileType": "Tipo de archivo",
+      "from": "Desde",
+      "to": "Hasta",
+      "sortTip": "Orden: {{sort}}",
+      "sort": "Orden",
+      "archivedTip": "También los archivos de los tickets archivados",
+      "includeArchived": "Incluir archivados",
+      "clearFilters": "Quitar filtros",
+      "loadError": "No se pudieron cargar los archivos: {{error}}",
+      "noMatch": "Ningún archivo coincide con estos filtros.",
+      "none": "Este proyecto aún no tiene archivos.",
+      "loadingMore": "Cargando más archivos…"
+    }
+  },
+  "files": {
+    "copyImage": {
+      "unsupported": "Este navegador no puede copiar imágenes al portapapeles",
+      "failedNamed": "No se pudo copiar {{name}}",
+      "copied": "Copiado",
+      "failed": "No se pudo copiar",
+      "copy": "Copiar imagen"
+    },
+    "attachments": {
+      "notesOn": "Notas sobre {{name}}",
+      "sizeKb": "{{kb}} KB"
+    },
+    "grid": {
+      "open": "Abrir {{name}}",
+      "inLaneTip": "En el lane {{lane}}",
+      "inLane": "en el lane {{lane}}",
+      "openTicket": "Abrir ticket",
+      "replyTip": "La respuesta con la que llegó",
+      "postTip": "La publicación con la que llegó",
+      "openThread": "Abrir hilo"
+    },
+    "pending": {
+      "preview": "Vista previa de {{name}}",
+      "uploading": "subiendo",
+      "remove": "Quitar",
+      "removeNamed": "Quitar {{name}}"
+    },
+    "viewer": {
+      "openInNewTab": "Abrir en una pestaña nueva",
+      "download": "Descargar",
+      "close": "Cerrar (Esc)",
+      "notes": "Notas sobre la imagen",
+      "previous": "Anterior",
+      "next": "Siguiente",
+      "noPreview": "No hay vista previa para este tipo de archivo.",
+      "zoomOut": "Alejar (-)",
+      "fit": "Ajustar (0)",
+      "zoomIn": "Acercar (+)",
+      "loadFailed": "No se pudo cargar este archivo.",
+      "loading": "Cargando…",
+      "empty": "(archivo vacío)",
+      "cut": "Se muestran los primeros {{limit}} caracteres. Descarga el archivo para ver el resto."
+    }
+  },
+  "annotate": {
+    "cannotDraw": "este navegador no puede dibujar la imagen",
+    "couldNotSave": "no se pudo guardar la imagen",
+    "title": "Anotar imagen",
+    "description": "{{name}}: dibuja sobre ella y escribe qué significa cada marca. La imagen se adjunta tal como se ve aquí, y las notas van con ella.",
+    "toolbar": "Herramientas de dibujo",
+    "tool": {
+      "select": {
+        "label": "Seleccionar",
+        "hint": "Elige marcas para moverlas, girarlas o eliminarlas"
+      },
+      "pen": {
+        "label": "Lápiz",
+        "hint": "Dibuja a mano alzada"
+      },
+      "rect": {
+        "label": "Cuadro",
+        "hint": "Dibuja un cuadro alrededor de algo"
+      },
+      "arrow": {
+        "label": "Flecha",
+        "hint": "Señala algo"
+      },
+      "ellipse": {
+        "label": "Elipse",
+        "hint": "Rodea algo con un círculo"
+      },
+      "text": {
+        "label": "Texto",
+        "hint": "Escribe sobre la imagen"
+      },
+      "note": {
+        "label": "Nota",
+        "hint": "Haz clic en una marca para escribir su nota"
+      },
+      "line": {
+        "label": "Línea",
+        "hint": "Dibuja una línea recta"
+      }
+    },
+    "colour": "Color",
+    "strokeWidth": "Grosor del trazo",
+    "fill": "Relleno",
+    "textToPlace": "Texto a colocar",
+    "undo": "Deshacer",
+    "redo": "Rehacer",
+    "clear": "Borrar todo",
+    "notePlaceholder": "¿Qué significa esta marca?",
+    "notePlaceholderEmpty": "Dibuja una marca, o elige Nota y haz clic en una",
+    "canvas": "Imagen a anotar",
+    "cannotOpen": "Esta imagen no se puede abrir en el lienzo.",
+    "opening": "Abriendo la imagen…",
+    "notes": "Notas",
+    "locked": "Las marcas quedan bloqueadas hasta que se adjunte la imagen.",
+    "attachOriginal": "Adjuntar original",
+    "attaching": "Adjuntando…",
+    "attach": "Adjuntar"
+  },
+  "reach": {
+    "merged": {
+      "label": "fusionada",
+      "title": "Todos los commits están en la base tal cual. Se puede eliminar sin riesgo."
+    },
+    "rebased": {
+      "label": "rebaseada",
+      "title": "Los commits se rebasearon o se aplicaron con cherry-pick; los mismos parches están en la base. Se puede eliminar sin riesgo."
+    },
+    "edited": {
+      "label": "integrada con cambios",
+      "title": "Los parches difieren, pero fusionar la rama no cambiaría nada en la base. Se puede eliminar sin riesgo."
+    },
+    "unique": {
+      "label": "trabajo propio",
+      "title": "La rama aún tiene cambios que la base no tiene. Consérvala."
+    }
   }
 }

@@ -31,8 +31,26 @@ const TEXT_ATTRIBUTES = new Set([
   'emptyText',
 ])
 // Words, not a brand name (CrossBoard) or a colour (#0a0a0a).
+// Properties of an object literal that hold text shown to the human (a label table, a tooltip map).
+const TEXT_PROPERTIES = new Set([
+  'label',
+  'title',
+  'tip',
+  'hint',
+  'description',
+  'text',
+  'message',
+  'placeholder',
+  'empty',
+  'tooltip',
+  'caption',
+  'heading',
+])
 const HAS_WORDS = {
-  test: (text) => /\p{L}{2,}/u.test(text.replace(/CrossBoard/g, ' ').replace(/#[0-9a-f]{3,8}\b/gi, ' ')),
+  // A key (`shell.connect`) is not a text.
+  test: (text) =>
+    !/^[a-z]\w*(\.\w+)+$/.test(text) &&
+    /\p{L}{2,}/u.test(text.replace(/CrossBoard/g, ' ').replace(/#[0-9a-f]{3,8}\b/gi, ' ')),
 }
 
 /** The leaves of a nested translation file: `{ a: { b: 'x' } }` is `{ 'a.b': 'x' }`. */
@@ -138,25 +156,38 @@ export function findHardcoded(source, fileName = 'file.tsx') {
       : ts.isTemplateExpression(node)
         ? [node.head.text, ...node.templateSpans.map((s) => s.literal.text)].join(' ')
         : undefined
+  // The texts a JSX expression can show: a literal, either branch of a ternary, the right of && / ||.
+  const shown = (node) => {
+    if (ts.isParenthesizedExpression(node)) return shown(node.expression)
+    if (ts.isConditionalExpression(node)) return [...shown(node.whenTrue), ...shown(node.whenFalse)]
+    if (ts.isBinaryExpression(node) && ['&&', '||', '??'].includes(node.operatorToken.getText(sf)))
+      return [...(node.operatorToken.getText(sf) === '&&' ? [] : shown(node.left)), ...shown(node.right)]
+    const text = literal(node)
+    return text === undefined ? [] : [{ node, text }]
+  }
   const visit = (node) => {
     if (ts.isJsxText(node)) {
       const text = node.text.replace(/&\w+;|&#\d+;/g, ' ')
       if (HAS_WORDS.test(text)) report(node, node.text)
     } else if (ts.isJsxAttribute(node) && TEXT_ATTRIBUTES.has(node.name.getText(sf)) && node.initializer) {
       const init = node.initializer
-      const text = ts.isStringLiteral(init)
-        ? init.text
+      const texts = ts.isStringLiteral(init)
+        ? [{ node, text: init.text }]
         : ts.isJsxExpression(init) && init.expression
-          ? literal(init.expression)
-          : undefined
-      if (text !== undefined && HAS_WORDS.test(text)) report(node, text)
+          ? shown(init.expression)
+          : []
+      for (const shownText of texts)
+        if (HAS_WORDS.test(shownText.text)) report(shownText.node, shownText.text)
     } else if (
       ts.isJsxExpression(node) &&
       node.expression &&
       (ts.isJsxElement(node.parent) || ts.isJsxFragment(node.parent))
     ) {
-      const text = literal(node.expression)
-      if (text !== undefined && HAS_WORDS.test(text)) report(node, text)
+      for (const shownText of shown(node.expression))
+        if (HAS_WORDS.test(shownText.text)) report(shownText.node, shownText.text)
+    } else if (ts.isPropertyAssignment(node) && TEXT_PROPERTIES.has(node.name.getText(sf))) {
+      for (const shownText of shown(node.initializer))
+        if (HAS_WORDS.test(shownText.text)) report(shownText.node, shownText.text)
     } else if (ts.isCallExpression(node)) {
       const callee = node.expression.getText(sf)
       if (/^toast(\.(success|error|info|warning|message|loading))?$/.test(callee) && node.arguments[0]) {

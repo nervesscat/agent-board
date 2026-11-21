@@ -898,5 +898,327 @@
     "save": "Save",
     "saving": "Saving…",
     "weekdayLabel": "On"
+  },
+  "cleanup": {
+    "counts": {
+      "deleted_one": "{{count}} deleted",
+      "deleted_other": "{{count}} deleted",
+      "kept_one": "{{count}} kept",
+      "kept_other": "{{count}} kept",
+      "gone_one": "{{count}} already gone",
+      "gone_other": "{{count}} already gone"
+    },
+    "actions": {
+      "local": {
+        "row": "Delete branch",
+        "all": "Delete every eligible local branch",
+        "title_one": "Delete {{count}} local branch?",
+        "title_other": "Delete {{count}} local branches?",
+        "confirm_one": "Delete {{count}} local branch",
+        "confirm_other": "Delete {{count}} local branches",
+        "what": "Each branch goes from the checkout. Origin keeps its copy."
+      },
+      "remote": {
+        "row": "Delete on origin",
+        "all": "Delete every eligible branch on origin",
+        "title_one": "Delete {{count}} branch on origin?",
+        "title_other": "Delete {{count}} branches on origin?",
+        "confirm_one": "Delete {{count}} branch on origin",
+        "confirm_other": "Delete {{count}} branches on origin",
+        "what": "Each branch goes from origin, for everyone who works with it. Local branches stay."
+      },
+      "worktrees": {
+        "row": "Remove worktree + branch",
+        "all": "Remove every eligible worktree with its branch",
+        "title_one": "Remove the worktrees of {{count}} branch, and the branch?",
+        "title_other": "Remove the worktrees of {{count}} branches, and the branches?",
+        "confirm_one": "Remove worktrees and delete {{count}} branch",
+        "confirm_other": "Remove worktrees and delete {{count}} branches",
+        "what": "Each worktree folder goes (ignored files such as node_modules with it), then the local branch. A link in it goes as a link: a folder it leads to out of the worktree stays. Origin keeps its copy."
+      }
+    },
+    "previewState": {
+      "running": "running on :{{port}}",
+      "building": "building",
+      "starting": "starting"
+    },
+    "copied": "Copied",
+    "sweep": {
+      "partial_one": "Deleted {{count}} file; {{failed}} could not be deleted and stay for the next run",
+      "partial_other": "Deleted {{count}} files; {{failed}} could not be deleted and stay for the next run",
+      "done_one": "Deleted {{count}} file ({{size}})",
+      "done_other": "Deleted {{count}} files ({{size}})"
+    },
+    "toast": {
+      "keptSee": "{{counts}}: see why below",
+      "jobFailed": "{{title}} failed: {{reason}}"
+    },
+    "noReasonGiven": "no reason given",
+    "title": "Cleanup",
+    "intro": "Finished work to clean up, checked against its base.",
+    "refresh": "Refresh",
+    "agentsNote": "Agents may delete local branches that landed (<tool>cleanup_delete</tool>); removing worktrees and deleting branches on origin stay yours, from this page.",
+    "deleteOff": "Deleting is off: {{reason}}.",
+    "repoError": "{{name}}: {{error}}. Its branches and worktrees are unknown, so nothing in it can be deleted.",
+    "progress": {
+      "label": "Delete progress",
+      "of": "{{done}} of {{total}}",
+      "starting": "Starting…",
+      "failed": "Failed · {{reason}}",
+      "succeeded": "Succeeded · {{counts}}"
+    },
+    "empty": "Nothing left behind. Every closed ticket is cleaned up.",
+    "group": {
+      "safe": {
+        "title": "Safe to delete",
+        "hint": "Every commit, or the same patches, are in the base."
+      },
+      "edited": {
+        "title": "Edited but present",
+        "hint": "The commits changed on the way in, but merging the branch would add nothing."
+      },
+      "unique": {
+        "title": "Still has unique work",
+        "hint": "The branch has changes its bases lack. Keep it, or check where the work went."
+      },
+      "kept": {
+        "title": "Kept",
+        "hint": "In use by a ticket in work or an open PR, a base, the repo's base branch, the main checkout's branch or origin's default branch: never deleted from here."
+      },
+      "other": {
+        "title": "Nothing to compare",
+        "hint": "Workspaces still registered without a branch, or a branch with no base to check against."
+      }
+    },
+    "workspacesRegistered_one": "{{count}} workspace registered",
+    "workspacesRegistered_other": "{{count}} workspaces registered",
+    "previewStop": "preview {{state}}: stop it on the ticket",
+    "notLocal": "not local",
+    "worktreeKept": "{{path}}: kept, {{reason}}",
+    "mainCheckout": "main checkout",
+    "originSha": "origin {{sha}}",
+    "copyRestore": "Copy the restore command: {{command}}",
+    "col": {
+      "ticket": "Ticket",
+      "branch": "Branch",
+      "reach": "Reach",
+      "worktree": "Worktree",
+      "origin": "Origin",
+      "branchOnOrigin": "Branch on origin"
+    },
+    "remote": {
+      "title": "Branches left on origin",
+      "intro": "As of the last fetch; the board fetches origin again before it deletes one. Each is judged by its own commits against origin's copies of the bases, or by a merged PR whose head is that very commit."
+    },
+    "prMerged": "PR #{{number}} merged at this commit",
+    "prWasMerged": "PR #{{number}} was merged at this commit",
+    "untracked": {
+      "title": "Untracked worktrees",
+      "intro": "Worktrees no ticket or workspace accounts for. Register them on their ticket, or remove them."
+    },
+    "detached": "detached {{sha}}",
+    "uploads": {
+      "title": "Unattached uploads",
+      "intro": "Files uploaded more than a day ago that nothing on the board uses: a New ticket window closed without creating, a file removed from a post before sending. The board deletes them every hour; files younger than a day are left alone.",
+      "introRecent": "Files uploaded more than a day ago that nothing on the board uses: a New ticket window closed without creating, a file removed from a post before sending. The board deletes them every hour; files younger than a day are left alone ({{recent}} now).",
+      "summary_one": "{{count}} file, {{size}}",
+      "summary_other": "{{count}} files, {{size}}",
+      "deleteNow": "Delete now",
+      "confirmTitle": "Delete the unattached uploads?",
+      "confirmText_one": "{{count}} file ({{size}}) that no post, reply, ticket or agent picture uses, uploaded more than a day ago. This cannot be undone.",
+      "confirmText_other": "{{count}} files ({{size}}) that no post, reply, ticket or agent picture uses, uploaded more than a day ago. This cannot be undone."
+    },
+    "keep": "Keep",
+    "delete": "Delete",
+    "keptReason": "Kept: {{reason}}",
+    "noLocalBranch": "no local branch",
+    "kind": {
+      "remote": "on origin",
+      "local": "local",
+      "worktrees": "with its worktrees"
+    },
+    "worktreePath": "worktree {{path}}",
+    "stopsPreview": "stops its preview ({{state}})",
+    "stopsServer": "stops the server on :{{port}} if it runs from this worktree",
+    "confirmChecked": "Each is checked again just before it goes, and kept if anything changed; nothing is forced. The restore commands are shown afterwards.",
+    "toDelete": "To delete",
+    "toDeleteEdited": "To delete, edited",
+    "editedOnTheWay": "Edited on the way in: these commits differ from the base, but merging would add nothing",
+    "outcome": {
+      "deleted": "Deleted",
+      "refused": "Kept",
+      "failed": "Failed",
+      "gone": "Already gone"
+    },
+    "advice": {
+      "changes": "Commit or stash them in the worktree, then refresh.",
+      "prune": "Run git worktree prune, then refresh.",
+      "moved": "Refresh, then confirm again on the new commit.",
+      "checkedOut": "Check out another branch there first."
+    },
+    "removed": "removed {{path}}",
+    "removedLink": "removed the link {{path}} to {{target}}, which stays",
+    "copyCommand": "Copy: {{command}}",
+    "results": {
+      "label": "Deletion results",
+      "title": "Last deletion",
+      "retry": "Retry kept items",
+      "dismiss": "Dismiss"
+    }
+  },
+  "gallery": {
+    "kind": {
+      "image": "Images",
+      "video": "Videos",
+      "pdf": "PDFs",
+      "docs": "Documents and text",
+      "other": "Other"
+    },
+    "sort": {
+      "newest": "Newest first",
+      "oldest": "Oldest first",
+      "name": "Name A to Z",
+      "name-desc": "Name Z to A",
+      "largest": "Largest first",
+      "smallest": "Smallest first",
+      "type": "By type"
+    },
+    "page": {
+      "title": "Gallery",
+      "intro": "Every file on the project's tickets.",
+      "filters": "Filters",
+      "fileType": "File type",
+      "from": "From",
+      "to": "To",
+      "sortTip": "Sort: {{sort}}",
+      "sort": "Sort",
+      "archivedTip": "Also the files of archived tickets",
+      "includeArchived": "Include archived",
+      "clearFilters": "Clear filters",
+      "loadError": "Could not load the files: {{error}}",
+      "noMatch": "No files match these filters.",
+      "none": "No files on this project yet.",
+      "loadingMore": "Loading more files…"
+    }
+  },
+  "files": {
+    "copyImage": {
+      "unsupported": "This browser cannot copy images to the clipboard",
+      "failedNamed": "Could not copy {{name}}",
+      "copied": "Copied",
+      "failed": "Could not copy",
+      "copy": "Copy image"
+    },
+    "attachments": {
+      "notesOn": "Notes on {{name}}",
+      "sizeKb": "{{kb}} KB"
+    },
+    "grid": {
+      "open": "Open {{name}}",
+      "inLaneTip": "In lane {{lane}}",
+      "inLane": "in lane {{lane}}",
+      "openTicket": "Open ticket",
+      "replyTip": "The reply it came with",
+      "postTip": "The post it came with",
+      "openThread": "Open thread"
+    },
+    "pending": {
+      "preview": "Preview {{name}}",
+      "uploading": "uploading",
+      "remove": "Remove",
+      "removeNamed": "Remove {{name}}"
+    },
+    "viewer": {
+      "openInNewTab": "Open in new tab",
+      "download": "Download",
+      "close": "Close (Esc)",
+      "notes": "Notes on the picture",
+      "previous": "Previous",
+      "next": "Next",
+      "noPreview": "No preview for this file type.",
+      "zoomOut": "Zoom out (-)",
+      "fit": "Fit (0)",
+      "zoomIn": "Zoom in (+)",
+      "loadFailed": "Could not load this file.",
+      "loading": "Loading…",
+      "empty": "(empty file)",
+      "cut": "Showing the first {{limit}} characters. Download the file for the rest."
+    }
+  },
+  "annotate": {
+    "cannotDraw": "this browser cannot draw the picture",
+    "couldNotSave": "the picture could not be saved",
+    "title": "Annotate image",
+    "description": "{{name}}: draw on it and write what each mark means. The picture is attached as it looks here, and the notes go with it.",
+    "toolbar": "Drawing tools",
+    "tool": {
+      "select": {
+        "label": "Select",
+        "hint": "Pick marks to move, turn or delete them"
+      },
+      "pen": {
+        "label": "Pencil",
+        "hint": "Draw freehand"
+      },
+      "rect": {
+        "label": "Box",
+        "hint": "Draw a box around something"
+      },
+      "arrow": {
+        "label": "Arrow",
+        "hint": "Point at something"
+      },
+      "ellipse": {
+        "label": "Ellipse",
+        "hint": "Circle something"
+      },
+      "text": {
+        "label": "Text",
+        "hint": "Write on the picture"
+      },
+      "note": {
+        "label": "Note",
+        "hint": "Click a mark to write its note"
+      },
+      "line": {
+        "label": "Line",
+        "hint": "Draw a straight line"
+      }
+    },
+    "colour": "Colour",
+    "strokeWidth": "Stroke width",
+    "fill": "Fill",
+    "textToPlace": "Text to place",
+    "undo": "Undo",
+    "redo": "Redo",
+    "clear": "Clear",
+    "notePlaceholder": "What does this mark mean?",
+    "notePlaceholderEmpty": "Draw a mark, or pick Note and click one",
+    "canvas": "Picture to annotate",
+    "cannotOpen": "This picture cannot be opened in the canvas.",
+    "opening": "Opening the picture…",
+    "notes": "Notes",
+    "locked": "The marks are locked until the picture is attached.",
+    "attachOriginal": "Attach original",
+    "attaching": "Attaching…",
+    "attach": "Attach"
+  },
+  "reach": {
+    "merged": {
+      "label": "merged",
+      "title": "Every commit is in the base as is. Safe to delete."
+    },
+    "rebased": {
+      "label": "rebased",
+      "title": "The commits were rebased or cherry-picked; the same patches are in the base. Safe to delete."
+    },
+    "edited": {
+      "label": "edited in",
+      "title": "The patches differ, but merging the branch would change nothing in the base. Safe to delete."
+    },
+    "unique": {
+      "label": "unique work",
+      "title": "The branch still has changes the base does not. Keep it."
+    }
   }
 }

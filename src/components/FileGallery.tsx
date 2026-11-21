@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { FileIcon, FileText, PlayIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import { COPY_IMAGE_OVERLAY, CopyImageButton } from '#/components/CopyImage'
 import { galleryItem } from '#/components/Gallery'
@@ -27,6 +28,7 @@ export function FileGrid({ projectId, files }: { projectId: string; files: Galle
 }
 
 function FileTile({ projectId, file: f }: { projectId: string; file: GalleryFile }) {
+  const { t } = useTranslation()
   const ticket = { id: projectId, ticketId: String(f.ticket.id) }
   // A lane's file is under its top-level ticket, whose page also shows the lane's posts and replies.
   const name = `#${f.ticket.id} ${f.ticket.title}`
@@ -41,7 +43,7 @@ function FileTile({ projectId, file: f }: { projectId: string; file: GalleryFile
           href={f.url}
           target="_blank"
           rel="noreferrer"
-          aria-label={`Open ${f.name}`}
+          aria-label={t('files.grid.open', { name: f.name })}
           className="relative block aspect-[4/3] overflow-hidden bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring"
           {...galleryItem(
             { src: f.url, name: f.name, mime: f.mime, notes: annotationNotes(f.annotations) },
@@ -73,8 +75,8 @@ function FileTile({ projectId, file: f }: { projectId: string; file: GalleryFile
           <div className="truncate">{name}</div>
         </Tip>
         {lane && (
-          <Tip content={`In lane ${lane}`}>
-            <div className="truncate text-muted-foreground">in lane {lane}</div>
+          <Tip content={t('files.grid.inLaneTip', { lane })}>
+            <div className="truncate text-muted-foreground">{t('files.grid.inLane', { lane })}</div>
           </Tip>
         )}
         <div className="mt-auto flex flex-wrap gap-x-3 pt-1">
@@ -83,17 +85,17 @@ function FileTile({ projectId, file: f }: { projectId: string; file: GalleryFile
             params={ticket}
             className="text-primary underline-offset-4 hover:underline"
           >
-            Open ticket
+            {t('files.grid.openTicket')}
           </Link>
           {f.anchor && (
-            <Tip content={f.source.kind === 'reply' ? 'The reply it came with' : 'The post it came with'}>
+            <Tip content={f.source.kind === 'reply' ? t('files.grid.replyTip') : t('files.grid.postTip')}>
               <Link
                 to="/projects/$id/features/$ticketId"
                 params={ticket}
                 hash={f.anchor}
                 className="text-primary underline-offset-4 hover:underline"
               >
-                Open thread
+                {t('files.grid.openThread')}
               </Link>
             </Tip>
           )}
