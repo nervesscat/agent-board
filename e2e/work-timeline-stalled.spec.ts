@@ -248,14 +248,15 @@ test('a run whose lease expired mid-span reads Lost contact, never Stalled and n
   await expect(timeline.getByTestId('work-line')).toHaveAccessibleName(/Lost contact/)
   await expect(timeline.getByText(/^claude · build · \d+ min · last word \d+ min ago$/)).toBeVisible()
 
-  // Needs you is the human's turn: the ticket is in the Overview's own Lost contact block instead.
+  // Needs you is the human's turn: the ticket is in the Overview's Lost contact card instead.
   await page.goto(`/projects/${project.id}`)
   const needsYou = section(page, 'Needs you')
   await expect(needsYou.getByRole('link', { name: /Lost contact: .*Ship the importer/ })).toHaveCount(0)
   await expect(needsYou.getByRole('link', { name: /No word \d+m: .*Ship the importer/ })).toHaveCount(0)
   const lost = section(page, 'Lost contact')
   const row = lost.getByRole('listitem').filter({ hasText: `#${t.id} Ship the importer` })
-  await expect(row).toContainText(/claude · build · since .* · last word \d+ min ago/)
+  await expect(row).toContainText(/claude · build · since .*/)
+  await expect(row).toContainText(/last heard \d+[mhd] ago/)
 })
 
 test('a long span kept alive by the agent’s posts reads Working, and stays out of Needs you', async ({

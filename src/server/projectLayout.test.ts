@@ -117,7 +117,7 @@ describe("a project's layout", () => {
     expect(summary.body.projects[0].project.overview).toEqual([
       'overview.needsYou',
       'overview.inProgress',
-      'overview.next',
+      'overview.lostContact',
       'overview.carryingOver',
       'overview.notes',
     ])
