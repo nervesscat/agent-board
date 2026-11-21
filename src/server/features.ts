@@ -60,6 +60,7 @@ import {
   stageOf,
 } from './stages'
 import { assertUnattached, attachTo, attachmentView } from './uploads'
+import { resumeAfterAnswer, resumeAfterMove } from './resume'
 import { noteBoardEvent, noteStageMove } from './workTimeline'
 
 // --- tickets ---
@@ -894,6 +895,8 @@ export function updateTicket(
   })
   if (!row.prId && (patch.prNumber !== undefined || patch.branch !== undefined || patch.repoId !== undefined))
     takeOverPrTickets(row, actor)
+  // The human sends a blocked or review ticket back to work: the board continues it (resume.ts).
+  if (!opts.agent && row.status !== before.status) resumeAfterMove(id, before.status, row.status)
   return row
 }
 
@@ -2631,6 +2634,8 @@ export function decide(
   const repo = row.repoRequest && option === 0 ? repoRequested(row, actor, opts.origin) : null
   const words = `${changed ? 'Changed the decision to' : 'Decided'}: **${picked.label}**${note.trim() ? `\n\n${note.trim()}` : ''}${archiveWords(archive)}${repoWords(repo)}`
   settleDecision(row, actor, words, `decided "${picked.label}"`)
+  // The agent that asked has ended its turn: the board continues the work (resume.ts).
+  resumeAfterAnswer(row, words, changed)
   return { ...row, archive, repo }
 }
 

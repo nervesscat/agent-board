@@ -1,0 +1,559 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { spawn } from 'node:child_process'
+
+import { and, eq } from 'drizzle-orm'
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+
+// The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
+const tmp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-resume-')))
+process.env.DATA_DIR = path.join(tmp, 'data')
+
+const HUMAN = 'enrique'
+const AGENT = 'claude'
+
+let dbm: typeof import('#/db')
+let features: typeof import('./features')
+let resume: typeof import('./resume')
+let cards: typeof import('./agentCards')
+let handle: (request: Request) => Promise<Response>
+let projectId: number
+
+/** A command's tiny stand-in: records what it was given into the file named by its first argument. */
+const script = path.join(tmp, 'agent.mjs')
+fs.writeFileSync(
+  script,
+  `import fs from 'node:fs'
+const [out, mode = '0'] = process.argv.slice(2)
+let stdin = ''
+process.stdin.setEncoding('utf8')
+for await (const chunk of process.stdin) stdin += chunk
+const file = process.env.BOARD_RESUME_PROMPT_FILE
+fs.writeFileSync(out, JSON.stringify({
+  stdin,
+  promptFile: file ? fs.readFileSync(file, 'utf8') : null,
+  cwd: process.cwd(),
+  env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k.startsWith('BOARD_'))),
+  pid: process.pid,
+}))
+console.log('recorded for the test')
+if (mode === 'hang') setInterval(() => {}, 1000)
+else process.exit(Number(mode))
+`,
+)
+
+const node = `"${process.execPath}"`
+/** The command of a test: runs the script, which writes to `out`. */
+const commandFor = (out: string, mode = '0') => `${node} "${script}" "${out}" ${mode}`
+
+let n = 0
+const outFile = () => path.join(tmp, `out-${++n}.json`)
+const read = (out: string) => JSON.parse(fs.readFileSync(out, 'utf8')) as Record<string, any>
+
+async function until<T>(what: () => T | undefined | false | null, ms = 15_000): Promise<T> {
+  const end = Date.now() + ms
+  for (;;) {
+    const got = what()
+    if (got) return got
+    if (Date.now() > end) throw new Error('timed out waiting')
+    await new Promise((r) => setTimeout(r, 20))
+  }
+}
+
+const rowsOf = (ticketId: number) =>
+  dbm.db.select().from(dbm.schema.ticketResumes).where(eq(dbm.schema.ticketResumes.ticketId, ticketId)).all()
+const rowState = (id: number) =>
+  dbm.db.select().from(dbm.schema.ticketResumes).where(eq(dbm.schema.ticketResumes.id, id)).get()!
+const repliesOf = (postId: number) =>
+  dbm.db
+    .select()
+    .from(dbm.schema.comments)
+    .where(and(eq(dbm.schema.comments.parentType, 'update'), eq(dbm.schema.comments.parentId, postId)))
+    .all()
+const statusOf = (ticketId: number) =>
+  dbm.db.select().from(dbm.schema.tickets).where(eq(dbm.schema.tickets.id, ticketId)).get()!.status
+
+function setCommand(command: string, minutes = 240) {
+  dbm.db
+    .update(dbm.schema.projects)
+    .set({ resumeCommand: command, resumeTimeoutMinutes: minutes })
+    .where(eq(dbm.schema.projects.id, projectId))
+    .run()
+}
+
+let folderCount = 0
+/** A ticket an agent works from a registered worktree, which asked a question: blocked, with its card. */
+function asked(question = 'Which database?', opts: { assignee?: string; workspace?: boolean } = {}) {
+  const ticket = features.createTicket(
+    projectId,
+    { title: 'Pick a database', status: 'in_progress', assignee: opts.assignee ?? AGENT },
+    AGENT,
+  )
+  let folder: string | null = null
+  if (opts.workspace !== false) {
+    folder = path.join(tmp, `wt-${++folderCount}`)
+    fs.mkdirSync(folder)
+    features.addWorkspace(ticket.id, { name: 'wt', path: folder, agent: AGENT }, AGENT)
+  }
+  const post = ask(ticket.id, question)
+  return { ticket, post, folder }
+}
+function ask(ticketId: number, question: string) {
+  return features.askDecision(
+    ticketId,
+    { body: question, options: [{ label: 'SQLite' }, { label: 'Postgres' }] },
+    AGENT,
+  )
+}
+/** The card was asked a while ago: an agent's signals right after it are not a live agent. */
+function askedLongAgo(postId: number) {
+  dbm.db
+    .update(dbm.schema.updates)
+    .set({ createdAt: new Date(Date.now() - 5 * 60_000).toISOString() })
+    .where(eq(dbm.schema.updates.id, postId))
+    .run()
+}
+
+beforeAll(async () => {
+  dbm = await import('#/db')
+  features = await import('./features')
+  resume = await import('./resume')
+  cards = await import('./agentCards')
+  ;(await import('./actors')).noteActor(HUMAN, 'human')
+  const repoDir = path.join(tmp, 'repo')
+  fs.mkdirSync(repoDir)
+  projectId = dbm.db.insert(dbm.schema.projects).values({ name: 'shop' }).returning().get().id
+  dbm.db.insert(dbm.schema.repos).values({ projectId, name: 'shop', repoPath: repoDir }).run()
+  const { api } = await import('./api')
+  const { api: guard } = await import('./http')
+  const guarded = guard(({ request }: { request: Request }) =>
+    api.handle(request, request.headers.has('authorization') ? AGENT : HUMAN),
+  )
+  handle = (request) => guarded({ request })
+})
+
+afterEach(() => {
+  resume.stopWatching()
+  resume.setResumeRunner(null)
+  setCommand('')
+})
+
+async function call(method: string, pathname: string, body?: unknown, as: 'human' | 'agent' = 'human') {
+  const res = await handle(
+    new Request(`http://localhost${pathname}`, {
+      method,
+      headers: {
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        ...(as === 'agent' ? { authorization: 'Bearer gate_test' } : {}),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
+  )
+  return { status: res.status, body: (await res.json()) as any }
+}
+
+describe('resume: an answer on the board', () => {
+  it('with no command, answering changes nothing new and the ticket says resuming is off', () => {
+    const { ticket, post } = asked()
+    expect(statusOf(ticket.id)).toBe('blocked')
+    features.decide(post.id, 0, '', HUMAN)
+    expect(statusOf(ticket.id)).toBe('in_progress')
+    expect(repliesOf(post.id).map((c) => c.author)).toEqual([HUMAN])
+    const [row] = rowsOf(ticket.id)
+    expect(row).toMatchObject({ state: 'skipped', trigger: 'answer', postId: post.id, pid: null })
+    expect(row!.reason).toContain('resuming is off')
+    expect(resume.ticketResume(ticket.id)).toMatchObject({ enabled: false, current: { state: 'skipped' } })
+  })
+
+  it('with a command, starts exactly one process in the worktree with the prompt, the file and the env', async () => {
+    const out = outFile()
+    setCommand(commandFor(out))
+    const { ticket, post, folder } = asked('Which database?')
+    features.decide(post.id, 1, 'Please use the managed one.', HUMAN)
+    const rows = rowsOf(ticket.id)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      state: 'running',
+      trigger: 'answer',
+      command: expect.stringContaining('node'),
+    })
+    expect(rows[0]!.pid).toBeGreaterThan(0)
+    await until(() => fs.existsSync(out) && fs.readFileSync(out, 'utf8').endsWith('}'))
+    const got = read(out)
+    expect(got.cwd).toBe(folder)
+    expect(got.stdin).toContain(`ticket #${ticket.id}`)
+    expect(got.stdin).toContain('Which database?')
+    expect(got.stdin).toContain('Postgres')
+    expect(got.stdin).toContain('Please use the managed one.')
+    expect(got.promptFile).toBe(got.stdin)
+    expect(got.env).toMatchObject({
+      BOARD_PROJECT_ID: String(projectId),
+      BOARD_TICKET_ID: String(ticket.id),
+      BOARD_AGENT_NAME: AGENT,
+      BOARD_URL: expect.stringMatching(/^http/),
+    })
+    expect(repliesOf(post.id).some((c) => c.author === 'board' && c.body.startsWith('Continuing:'))).toBe(
+      true,
+    )
+    expect(statusOf(ticket.id)).toBe('in_progress')
+    await until(() => rowState(rows[0]!.id).state === 'succeeded')
+    expect(rowState(rows[0]!.id)).toMatchObject({ exitCode: 0, reason: '' })
+    expect(resume.ticketResume(ticket.id).current!.tail).toContain('recorded for the test')
+  })
+
+  it('runs in the repo when the ticket has no worktree', async () => {
+    const out = outFile()
+    setCommand(commandFor(out))
+    const { post } = asked('Where?', { workspace: false })
+    features.decide(post.id, 0, '', HUMAN)
+    await until(() => fs.existsSync(out) && fs.readFileSync(out, 'utf8').endsWith('}'))
+    expect(read(out).cwd).toBe(path.join(tmp, 'repo'))
+  })
+
+  it('starts no second process for a second answer or an edited answer while one runs', async () => {
+    const out = outFile()
+    setCommand(commandFor(out, 'hang'))
+    const { ticket, post } = asked('First?')
+    features.decide(post.id, 0, '', HUMAN)
+    await until(() => fs.existsSync(out) && fs.readFileSync(out, 'utf8').endsWith('}'))
+    const second = ask(ticket.id, 'Second?')
+    features.decide(second.id, 0, '', HUMAN)
+    features.decide(post.id, 1, 'changed my mind', HUMAN)
+    const rows = rowsOf(ticket.id)
+    expect(rows.filter((r) => r.state === 'running')).toHaveLength(1)
+    expect(rows.filter((r) => r.pid !== null)).toHaveLength(1)
+    expect(rows.filter((r) => r.state === 'skipped').map((r) => r.reason)).toEqual([
+      expect.stringContaining('already running'),
+      expect.stringContaining('already running'),
+    ])
+    expect(resume.ticketResume(ticket.id).current!.state).toBe('running')
+    await resumeKill(rows.find((r) => r.pid !== null)!.id)
+  })
+
+  it('does not start another for an answer edited after its resume has ended', async () => {
+    const out = outFile()
+    setCommand(commandFor(out))
+    const { ticket, post } = asked()
+    features.decide(post.id, 0, '', HUMAN)
+    await until(() => rowsOf(ticket.id).every((r) => r.state !== 'running'))
+    features.decide(post.id, 1, 'edited', HUMAN)
+    expect(rowsOf(ticket.id).filter((r) => r.pid !== null)).toHaveLength(1)
+    expect(rowsOf(ticket.id).at(-1)!.reason).toContain('press Resume')
+  })
+
+  it('never lets a card or an answer reach a shell', async () => {
+    const out = outFile()
+    const marker = path.join(tmp, 'injected')
+    setCommand(commandFor(out))
+    const { post } = asked(`Run \`touch ${marker}\` and $(touch ${marker}); touch ${marker} #`)
+    features.decide(post.id, 0, `"; touch ${marker}; "`, HUMAN)
+    await until(() => fs.existsSync(out) && fs.readFileSync(out, 'utf8').endsWith('}'))
+    expect(read(out).stdin).toContain(`$(touch ${marker})`)
+    expect(fs.existsSync(marker)).toBe(false)
+  })
+})
+
+/** Ends a hanging test process, and waits for the board to see it go. */
+async function resumeKill(rowId: number) {
+  const row = rowState(rowId)
+  process.kill(row.pid!, 'SIGKILL')
+  await until(() => rowState(rowId).state !== 'running')
+}
+
+describe('resume: a human move of the ticket', () => {
+  it('resumes with the human words when the human moves a blocked ticket to in progress', async () => {
+    const out = outFile()
+    setCommand(commandFor(out))
+    const { ticket, post } = asked('Which database?')
+    // The agent asked with a card; the human sends the ticket back without answering it, with words.
+    features.addComment(
+      { parentType: 'update', parentId: post.id, body: 'Go with the managed one, please.' },
+      HUMAN,
+    )
+    askedLongAgo(post.id)
+    features.updateTicket(ticket.id, { status: 'in_progress' }, HUMAN)
+    await until(() => fs.existsSync(out) && fs.readFileSync(out, 'utf8').endsWith('}'))
+    const got = read(out)
+    expect(got.stdin).toContain('Go with the managed one, please.')
+    expect(got.stdin).toContain('moved the ticket back to')
+    const rows = rowsOf(ticket.id)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ trigger: 'move', postId: null })
+  })
+
+  it('also resumes from a review stage', async () => {
+    const out = outFile()
+    setCommand(commandFor(out))
+    const { ticket } = asked()
+    features.updateTicket(ticket.id, { status: 'review' }, AGENT, { agent: true })
+    features.updateTicket(ticket.id, { status: 'in_progress' }, HUMAN)
+    await until(() => fs.existsSync(out) && fs.readFileSync(out, 'utf8').endsWith('}'))
+    expect(rowsOf(ticket.id).filter((r) => r.pid !== null)).toHaveLength(1)
+  })
+
+  it('does not resume for an agent move, a relayed answer or a move that is not out of blocked or review', () => {
+    const out = outFile()
+    setCommand(commandFor(out))
+    const { ticket, post } = asked()
+    features.updateTicket(ticket.id, { status: 'in_progress' }, AGENT, { agent: true })
+    expect(rowsOf(ticket.id)).toHaveLength(0)
+    const t2 = asked()
+    features.relayDecision(t2.post.id, { option: 0, words: 'yes' }, AGENT, { agent: true })
+    expect(statusOf(t2.ticket.id)).toBe('in_progress')
+    expect(rowsOf(t2.ticket.id)).toHaveLength(0)
+    const t3 = features.createTicket(projectId, { title: 'todo one', assignee: AGENT }, AGENT)
+    features.updateTicket(t3.id, { status: 'in_progress' }, HUMAN)
+    expect(rowsOf(t3.id)).toHaveLength(0)
+    expect(post.id).toBeGreaterThan(0)
+    expect(fs.existsSync(out)).toBe(false)
+  })
+})
+
+describe('resume: a ticket with a live agent', () => {
+  it('starts no process and says why when an agent kept working after the question', () => {
+    setCommand(commandFor(outFile()))
+    const { ticket, post } = asked()
+    askedLongAgo(post.id)
+    // The agent is still heartbeating: its lease is open.
+    dbm.db
+      .insert(dbm.schema.ticketEvents)
+      .values({ ticketId: ticket.id, projectId, kind: 'heartbeat', agent: AGENT, by: 'gate_test' })
+      .run()
+    features.decide(post.id, 0, '', HUMAN)
+    const [row] = rowsOf(ticket.id)
+    expect(row).toMatchObject({ state: 'skipped', pid: null })
+    expect(row!.reason).toContain(`${AGENT} is working the ticket`)
+    expect(repliesOf(post.id).at(-1)!.body).toContain('live agent')
+  })
+
+  it('treats an agent that only finished its turn after asking as gone', async () => {
+    const out = outFile()
+    setCommand(commandFor(out))
+    const { ticket, post } = asked()
+    dbm.db
+      .insert(dbm.schema.ticketEvents)
+      .values({ ticketId: ticket.id, projectId, kind: 'span_end', agent: AGENT, by: 'gate_test' })
+      .run()
+    features.decide(post.id, 0, '', HUMAN)
+    await until(() => fs.existsSync(out))
+    expect(rowsOf(ticket.id)[0]!.state).not.toBe('skipped')
+  })
+})
+
+describe('resume: skipped without an agent to continue', () => {
+  it('skips an unassigned ticket', () => {
+    setCommand(commandFor(outFile()))
+    const { ticket, post } = asked('Who?', { assignee: '' })
+    features.decide(post.id, 0, '', HUMAN)
+    expect(rowsOf(ticket.id)[0]).toMatchObject({ state: 'skipped' })
+    expect(rowsOf(ticket.id)[0]!.reason).toContain('no agent holds the ticket')
+  })
+})
+
+describe('resume: failure', () => {
+  const notices = () => cards.listCards(projectId).filter((c) => c.kind === 'notice')
+
+  async function failed(command: string, minutes = 240) {
+    setCommand(command, minutes)
+    const { ticket, post } = asked('Which database?')
+    const before = notices().length
+    features.decide(post.id, 0, '', HUMAN)
+    const row = rowsOf(ticket.id)[0]!
+    await until(() => rowState(row.id).state === 'failed')
+    return { ticket, post, row: rowState(row.id), before }
+  }
+
+  it('a non-zero exit shows on the ticket and in the notification center, and blocks the ticket again', async () => {
+    const { ticket, post, row, before } = await failed(commandFor(outFile(), '3'))
+    expect(row).toMatchObject({ state: 'failed', exitCode: 3 })
+    expect(row.reason).toContain('code 3')
+    expect(statusOf(ticket.id)).toBe('blocked')
+    expect(repliesOf(post.id).at(-1)!.body).toContain('could not resume')
+    expect(notices()).toHaveLength(before + 1)
+    expect(notices()[0]).toMatchObject({
+      actor: 'board',
+      href: `/projects/${projectId}/features/${ticket.id}`,
+    })
+    expect(resume.ticketResume(ticket.id).current).toMatchObject({ state: 'failed' })
+  })
+
+  it('a command the shell cannot find fails the same way', async () => {
+    const { ticket, row } = await failed('definitely-not-an-installed-command-xyz')
+    expect(row.state).toBe('failed')
+    expect(row.exitCode).not.toBe(0)
+    expect(statusOf(ticket.id)).toBe('blocked')
+  })
+
+  it('a command that cannot be started at all fails', async () => {
+    resume.setResumeRunner({
+      spawn: () => ({ pid: undefined, exited: Promise.resolve(null) }),
+      killTree: async () => {},
+      alive: () => false,
+    })
+    setCommand('anything')
+    const { ticket, post } = asked()
+    features.decide(post.id, 0, '', HUMAN)
+    expect(rowsOf(ticket.id)[0]).toMatchObject({
+      state: 'failed',
+      reason: 'the command could not be started',
+    })
+    expect(statusOf(ticket.id)).toBe('blocked')
+  })
+
+  it('a process that does not exit by the timeout is stopped and fails', async () => {
+    const out = outFile()
+    setCommand(commandFor(out, 'hang'), 0.002)
+    const { ticket, post } = asked()
+    features.decide(post.id, 0, '', HUMAN)
+    const row = rowsOf(ticket.id)[0]!
+    await until(() => rowState(row.id).state === 'failed')
+    expect(rowState(row.id).reason).toContain('did not finish within')
+    await until(() => {
+      try {
+        process.kill(read(out).pid, 0)
+        return false
+      } catch {
+        return true
+      }
+    })
+    expect(statusOf(ticket.id)).toBe('blocked')
+  })
+
+  it('Retry starts one new run and puts the ticket back in progress', async () => {
+    const { ticket, post, row } = await failed(commandFor(outFile(), '3'))
+    const out = outFile()
+    setCommand(commandFor(out))
+    const res = await call('POST', `/api/tickets/${ticket.id}/resume`)
+    expect(res.status).toBe(202)
+    expect(res.body).toMatchObject({ state: 'running', trigger: 'retry', postId: post.id })
+    await until(() => fs.existsSync(out) && fs.readFileSync(out, 'utf8').endsWith('}'))
+    expect(read(out).stdin).toContain('Which database?')
+    expect(rowsOf(ticket.id).filter((r) => r.pid !== null)).toHaveLength(2)
+    expect(rowsOf(ticket.id).find((r) => r.id === row.id)!.state).toBe('failed')
+    expect(statusOf(ticket.id)).toBe('in_progress')
+    await until(() => rowsOf(ticket.id).every((r) => r.state !== 'running'))
+  })
+
+  it('Retry while one runs is refused', async () => {
+    const out = outFile()
+    setCommand(commandFor(out, 'hang'))
+    const { ticket, post } = asked()
+    features.decide(post.id, 0, '', HUMAN)
+    await until(() => fs.existsSync(out) && fs.readFileSync(out, 'utf8').endsWith('}'))
+    const res = await call('POST', `/api/tickets/${ticket.id}/resume`)
+    expect(res.status).toBe(409)
+    expect(rowsOf(ticket.id).filter((r) => r.pid !== null)).toHaveLength(1)
+    await resumeKill(rowsOf(ticket.id).find((r) => r.pid !== null)!.id)
+  })
+})
+
+describe('resume: a board restart', () => {
+  /** A real process that is already gone, and its pid. */
+  async function deadPid() {
+    const child = spawn(process.execPath, ['-e', ''])
+    await new Promise((r) => child.once('exit', r))
+    return child.pid!
+  }
+
+  function openRow(ticketId: number, pid: number | null, state: 'running' | 'queued' = 'running') {
+    return dbm.db
+      .insert(dbm.schema.ticketResumes)
+      .values({ ticketId, trigger: 'answer', state, pid, startedAt: new Date().toISOString() })
+      .returning()
+      .get()
+  }
+
+  it('closes a row whose process is gone, keeps one whose process lives, and still watches it', async () => {
+    setCommand('x')
+    const { ticket } = asked()
+    const gone = openRow(ticket.id, await deadPid())
+    const queued = openRow(asked().ticket.id, null, 'queued')
+    const child = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], {
+      detached: true,
+      stdio: 'ignore',
+    })
+    child.unref()
+    const t2 = asked().ticket
+    const alive = openRow(t2.id, child.pid!)
+    resume.sweepResumes()
+    expect(rowState(gone.id)).toMatchObject({ state: 'succeeded', exitCode: null })
+    expect(rowState(gone.id).reason).toContain('not known')
+    expect(rowState(queued.id).state).toBe('failed')
+    expect(rowState(alive.id).state).toBe('running')
+    // Beyond its timeout the board stops it, though it did not start it this time.
+    dbm.db
+      .update(dbm.schema.ticketResumes)
+      .set({ startedAt: new Date(Date.now() - 10 * 3_600_000).toISOString() })
+      .where(eq(dbm.schema.ticketResumes.id, alive.id))
+      .run()
+    resume.stopWatching()
+    resume.sweepResumes()
+    await until(() => rowState(alive.id).state === 'failed')
+    expect(rowState(alive.id).reason).toContain('did not finish within')
+    await until(() => {
+      try {
+        process.kill(child.pid!, 0)
+        return false
+      } catch {
+        return true
+      }
+    })
+  })
+
+  it('a process started by the board is detached: its own process group', async () => {
+    const out = outFile()
+    setCommand(commandFor(out, 'hang'))
+    const { ticket, post } = asked()
+    features.decide(post.id, 0, '', HUMAN)
+    await until(() => fs.existsSync(out) && fs.readFileSync(out, 'utf8').endsWith('}'))
+    const pid = rowsOf(ticket.id)[0]!.pid!
+    // A group leader: it was started on its own, so the board's stop does not take it down.
+    const ps = await new Promise<string>((resolve) => {
+      const p = spawn('ps', ['-o', 'pgid=', '-p', String(pid)])
+      let text = ''
+      p.stdout.on('data', (d) => (text += d))
+      p.once('close', () => resolve(text.trim()))
+    })
+    if (process.platform !== 'win32') expect(Number(ps)).toBe(pid)
+    await resumeKill(rowsOf(ticket.id)[0]!.id)
+  })
+})
+
+describe('resume: who may set it', () => {
+  it('the human sets the command and the timeout; an agent token is refused', async () => {
+    const mine = await call('PATCH', `/api/projects/${projectId}`, {
+      resumeCommand: 'claude -p',
+      resumeTimeoutMinutes: 60,
+    })
+    expect(mine.status).toBe(200)
+    expect(mine.body).toMatchObject({ resumeCommand: 'claude -p', resumeTimeoutMinutes: 60 })
+    const theirs = await call('PATCH', `/api/projects/${projectId}`, { resumeCommand: 'rm -rf /' }, 'agent')
+    expect(theirs.status).toBe(403)
+    expect(
+      (await call('PATCH', `/api/projects/${projectId}`, { resumeTimeoutMinutes: 5 }, 'agent')).status,
+    ).toBe(403)
+    expect(
+      dbm.db.select().from(dbm.schema.projects).where(eq(dbm.schema.projects.id, projectId)).get()!
+        .resumeCommand,
+    ).toBe('claude -p')
+    expect((await call('PATCH', `/api/projects/${projectId}`, { resumeCommand: 'a\nb' })).status).toBe(400)
+    expect((await call('PATCH', `/api/projects/${projectId}`, { resumeTimeoutMinutes: 0 })).status).toBe(400)
+  })
+
+  it('an agent token cannot press Resume, and no MCP tool names the setting', async () => {
+    const { ticket } = asked()
+    expect((await call('POST', `/api/tickets/${ticket.id}/resume`, undefined, 'agent')).status).toBe(403)
+    const mcp = fs.readFileSync(path.join(__dirname, 'mcp.ts'), 'utf8')
+    expect(mcp).not.toMatch(/resumeCommand|resumeTimeout/)
+  })
+
+  it('shows the state on the ticket and which preset tools are on the machine', async () => {
+    const { ticket } = asked()
+    const res = await call('GET', `/api/tickets/${ticket.id}/resume`)
+    expect(res.body).toMatchObject({ enabled: false, current: null, recent: [] })
+    const tools = await call('GET', '/api/resume/tools')
+    expect(tools.body.map((t: { id: string }) => t.id)).toEqual(['claude', 'codex', 'opencode'])
+    expect(tools.body.every((t: { found: boolean }) => typeof t.found === 'boolean')).toBe(true)
+  })
+})

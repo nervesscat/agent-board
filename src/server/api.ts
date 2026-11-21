@@ -14,6 +14,7 @@ import {
 } from '#/lib/constants'
 import { AGENT_TOKEN_NAME } from '#/lib/agents'
 import { KINDS } from '#/lib/kinds'
+import { RESUME_COMMAND_MAX, RESUME_TIMEOUT, resumeCommandProblem } from '#/lib/resume'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import * as agentCards from './agentCards'
 import * as agents from './agents'
@@ -43,6 +44,7 @@ import { GalleryQuery, listGallery } from './gallery'
 import { listDirs } from './fs'
 import { assertRepo, listBranches } from './git'
 import { checkHostTools, readyHostTools } from './hostTools'
+import { presetTools, retryResume, ticketResume } from './resume'
 import { HttpError, intParam, notFound, readJson } from './http'
 import * as jobs from './jobs'
 import * as instructions from './instructionsHistory'
@@ -402,8 +404,18 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
       layout: projects.LayoutBody.optional(),
       workStage: z.string().min(1).max(100).nullable().optional(),
       kinds: ProjectKinds.optional(),
+      resumeCommand: z
+        .string()
+        .max(RESUME_COMMAND_MAX)
+        .refine((c) => resumeCommandProblem(c) === null, { message: 'the command is one line' })
+        .optional(),
+      resumeTimeoutMinutes: z.number().int().min(RESUME_TIMEOUT.min).max(RESUME_TIMEOUT.max).optional(),
     }),
   )
+  // The command runs on this machine with the board user's rights: only the signed-in human writes it,
+  // never an agent token, and no MCP tool sets it.
+  if ((body.resumeCommand !== undefined || body.resumeTimeoutMinutes !== undefined) && isAgent(request))
+    throw new HttpError(403, "only the human sets the project's resume command")
   // What the project is for decides which of the board is in use: the human's to choose.
   if (body.kinds !== undefined && isAgent(request))
     throw new HttpError(403, 'only the human sets what the project is for')
@@ -1086,6 +1098,15 @@ api.get('/api/workspaces/:id/preview/log', ({ params, url }) => {
     headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
   })
 })
+// The board continues a ticket's work by running the project's resume command (resume.ts): what happened
+// the last times, and the Resume / Retry button, which is the human's alone.
+api.get('/api/tickets/:id/resume', ({ params }) => json(ticketResume(id(params))))
+api.post('/api/tickets/:id/resume', ({ request, params }) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human resumes a ticket')
+  return json(retryResume(id(params)), 202)
+})
+// Which agent CLIs the resume presets name are on this machine's PATH.
+api.get('/api/resume/tools', () => json(presetTools()))
 // Every run of every repo of the ticket, each with the workspace it runs from, its state and why it
 // would not start; Start all and Stop all (repoId: one repo's only) answer each run's outcome.
 api.get('/api/tickets/:id/runs', ({ params }) => json(ticketRuns.ticketRuns(id(params))))
