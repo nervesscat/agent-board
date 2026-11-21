@@ -39,30 +39,43 @@ Kept in English, as Spanish-speaking developers say them: **ticket**, **lane**, 
 
 Translated, always the same word:
 
-| English            | Spanish                 |
-| ------------------ | ----------------------- |
-| board              | tablero                 |
-| project            | proyecto                |
-| agent              | agente                  |
-| orchestrator       | orquestador             |
-| worker             | trabajador              |
-| stage              | etapa                   |
-| task, subtask      | tarea, subtarea         |
-| post, update       | publicación, novedad    |
-| comment, reply     | comentario, respuesta   |
-| summary            | resumen                 |
-| review (noun)      | revisión                |
-| report             | informe                 |
-| settings           | ajustes                 |
-| sign in / sign out | iniciar / cerrar sesión |
-| device             | dispositivo             |
-| repository         | repositorio             |
-| attachment         | adjunto                 |
-| notification       | notificación            |
-| search             | buscar, búsqueda        |
-| save, cancel       | guardar, cancelar       |
-| delete, remove     | eliminar, quitar        |
-| needs you          | te necesita             |
-| in progress        | en curso                |
-| blocked            | bloqueado               |
-| done               | hecho                   |
+| English                 | Spanish                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| board                   | tablero                                                                       |
+| project                 | proyecto                                                                      |
+| agent                   | agente                                                                        |
+| orchestrator            | orquestador                                                                   |
+| worker                  | trabajador                                                                    |
+| stage                   | etapa                                                                         |
+| task, subtask           | tarea, subtarea                                                               |
+| post, update            | publicación, novedad                                                          |
+| comment, reply          | comentario, respuesta                                                         |
+| summary                 | resumen                                                                       |
+| review (noun)           | revisión                                                                      |
+| report                  | informe                                                                       |
+| settings                | ajustes                                                                       |
+| sign in / sign out      | iniciar / cerrar sesión                                                       |
+| device                  | dispositivo                                                                   |
+| repository              | repositorio                                                                   |
+| attachment              | adjunto                                                                       |
+| notification            | notificación                                                                  |
+| search                  | buscar, búsqueda                                                              |
+| save, cancel            | guardar, cancelar                                                             |
+| delete, remove          | eliminar, quitar                                                              |
+| needs you               | te necesita                                                                   |
+| in progress             | en curso                                                                      |
+| blocked                 | bloqueado                                                                     |
+| done                    | hecho                                                                         |
+| run (a started process) | ejecución; "en ejecución" for running, "arrancar" to start, "detener" to stop |
+| keep (do not delete)    | conservar                                                                     |
+| clear (a filter)        | quitar                                                                        |
+| push (verb), unpushed   | subir, sin subir                                                              |
+| build (a preview)       | compilar                                                                      |
+| needs (a ticket)        | necesita; dependencia (noun)                                                  |
+| on hold                 | en pausa, pausar                                                              |
+| assigned to             | asignado a                                                                    |
+| this computer           | este equipo                                                                   |
+| runs, previews          | "el preview", "los previews" (masculine); PR is invariable ("los PR")         |
+
+Times are written without "a las" (`vence: {{time}}`, `desde {{time}}`), so any hour reads right. Tooltips are
+imperative like the English ("Detén el preview"); buttons are infinitive ("Guardar").

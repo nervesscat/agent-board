@@ -43,7 +43,7 @@
       },
       "previews": {
         "title": "Previews",
-        "text": "Cuántas previews construye y ejecuta el tablero a la vez, en todos los proyectos (de 1 a 32). Cada una es un tablero completo con su propia copia de los datos; un inicio por encima del límite se rechaza. La página Previews de un proyecto muestra cuántas están en uso."
+        "text": "Cuántos previews compila y ejecuta el tablero a la vez, en todos los proyectos (de 1 a 32). Cada uno es un tablero completo con su propia copia de los datos; un inicio por encima del límite se rechaza. La página Previews de un proyecto muestra cuántos están en uso."
       },
       "theme": {
         "title": "Tema",
@@ -65,7 +65,7 @@
     "copy": "Copiar",
     "save": "Guardar",
     "revoke": "Revocar",
-    "keep": "Mantener",
+    "keep": "Conservar",
     "turnOff": "Desactivar",
     "checkAgain": "Comprobar de nuevo",
     "title": "Conectar un agente",
@@ -133,7 +133,7 @@
       "revokeAria": "Revocar {{name}}",
       "revokeText": "Al agente que lo usa, y a todo subagente que trabaje bajo él, se le rechaza desde su siguiente petición. Genera comandos de nuevo en Conectar un agente para conectarlo con uno nuevo.",
       "hide": "Ocultar los agentes",
-      "show_one": "Mostrar los {{count}} agentes",
+      "show_one": "Mostrar {{count}} agente",
       "show_other": "Mostrar los {{count}} agentes",
       "workingUnder": "Trabajando bajo {{token}}",
       "seen": "visto {{when}}"
@@ -556,7 +556,7 @@
         "inProgress": "En curso",
         "doneToday": "Hecho hoy",
         "next": "Siguiente",
-        "carryingOver": "Arrastrado",
+        "carryingOver": "Pendiente de antes",
         "notes": "Notas"
       },
       "ticket": {
@@ -609,7 +609,7 @@
   },
   "folderPicker": {
     "title": "Elige el checkout",
-    "description": "Carpetas de la máquina donde corre el tablero. <repo/> marca un checkout de git.",
+    "description": "Carpetas de la máquina donde se ejecuta el tablero. <repo/> marca un checkout de git.",
     "up": "Subir una carpeta",
     "home": "Inicio",
     "path": "Ruta de la carpeta",
@@ -694,8 +694,8 @@
     },
     "weekOf": "semana del {{date}}",
     "scheduleOff": "desactivado",
-    "scheduleDaily": "diario antes de las {{end}}, {{format}}",
-    "scheduleWeekly": "semanal, cada {{day}} antes de las {{end}}, {{format}}",
+    "scheduleDaily": "diario, hasta {{end}}, {{format}}",
+    "scheduleWeekly": "semanal, cada {{day}}, hasta {{end}}, {{format}}",
     "formatFile": "un archivo",
     "formatText": "texto"
   },
@@ -710,10 +710,10 @@
     "region": "Informes pendientes",
     "notifyTitleDue": "{{project}}: informe por entregar",
     "notifyTitleMissing": "{{project}}: informe atrasado",
-    "notifyBodyDaily": "El informe diario de {{label}} vence a las {{time}}.",
-    "notifyBodyWeekly": "El informe semanal de {{label}} vence a las {{time}}.",
-    "missing": ": informe atrasado, el turno terminó a las {{time}}",
-    "due": ": el informe vence en {{left}}, a las {{time}}",
+    "notifyBodyDaily": "El informe diario de {{label}} vence: {{time}}.",
+    "notifyBodyWeekly": "El informe semanal de {{label}} vence: {{time}}.",
+    "missing": ": informe atrasado, el turno terminó ({{time}})",
+    "due": ": el informe vence en {{left}} ({{time}})",
     "leftMinutes": "{{count}} min",
     "leftHours": "{{hours}} h",
     "leftHoursMinutes": "{{hours}} h {{minutes}} min",
@@ -744,7 +744,7 @@
       "comment_one": "{{count}} comentario",
       "comment_other": "{{count}} comentarios",
       "pr_one": "{{count}} PR",
-      "pr_other": "{{count}} PRs",
+      "pr_other": "{{count}} PR",
       "review_one": "{{count}} revisión",
       "review_other": "{{count}} revisiones",
       "workspace_one": "{{count}} workspace",
@@ -776,15 +776,15 @@
   "pushedToday": {
     "commits_one": "{{count}} commit",
     "commits_other": "{{count}} commits",
-    "label": "Enviado hoy: {{commits}}, {{added}} líneas añadidas, {{removed}} eliminadas",
-    "labelNone": "Enviado hoy: nada",
-    "nothing": "Nada enviado hoy",
-    "title": "Enviado hoy",
+    "label": "Subido hoy: {{commits}}, {{added}} líneas añadidas, {{removed}} eliminadas",
+    "labelNone": "Subido hoy: nada",
+    "nothing": "Nada subido hoy",
+    "title": "Subido hoy",
     "checked": "origin comprobado {{ago}}",
     "notFetched": "origin aún sin consultar",
-    "byRepo": "Enviado hoy por repositorio",
+    "byRepo": "Subido hoy por repositorio",
     "emptyRepos": "Hoy no llegó nada a origin en los repositorios de este proyecto.",
-    "hint": "Commits que llegaron hoy a una rama de origin, cada uno una vez, sin contar los merges."
+    "hint": "Commits que llegaron hoy a un branch de origin, cada uno una vez, sin contar los merges."
   },
   "reportCalendar": {
     "region": "Calendario de informes",
@@ -849,7 +849,7 @@
     "bothEmpty": "Ambos están vacíos.",
     "state": {
       "pending": "te necesita",
-      "accepted": "mantenido",
+      "accepted": "conservado",
       "reverted": "revertido"
     },
     "dialogTitle": "Cambio en {{field}} del informe",
@@ -857,11 +857,11 @@
     "loading": "Cargando…",
     "byAgent": "por <who>{{name}}</who> (un agente)",
     "by": "por <who>{{name}}</who>",
-    "keptBy": "mantenido por {{name}}",
+    "keptBy": "conservado por {{name}}",
     "revertedBy": "revertido por {{name}}",
     "showChange": "Mostrar qué cambió",
     "noticesRegion": "Cambios de agentes por revisar",
-    "keptToast": "Cambio mantenido: {{field}} del informe",
+    "keptToast": "Cambio conservado: {{field}} del informe",
     "revertedToast": "Cambio revertido: {{field}} del informe",
     "noticeLabel": "Cambio en {{field}} del informe, hecho por {{name}}",
     "noticeText": "Cambio en {{field}} del informe, hecho por <who>{{name}}</who>. ¿Revertir?",
@@ -916,7 +916,7 @@
         "title_other": "¿Eliminar {{count}} branches locales?",
         "confirm_one": "Eliminar {{count}} branch local",
         "confirm_other": "Eliminar {{count}} branches locales",
-        "what": "Cada branch se quita del checkout. Origin conserva su copia."
+        "what": "Cada branch se elimina del checkout. Origin conserva su copia."
       },
       "remote": {
         "row": "Eliminar en origin",
@@ -925,7 +925,7 @@
         "title_other": "¿Eliminar {{count}} branches en origin?",
         "confirm_one": "Eliminar {{count}} branch en origin",
         "confirm_other": "Eliminar {{count}} branches en origin",
-        "what": "Cada branch se quita de origin, para todos los que trabajan con él. Los branches locales se quedan."
+        "what": "Cada branch se elimina de origin, para todos los que trabajan con él. Los branches locales se quedan."
       },
       "worktrees": {
         "row": "Quitar worktree + branch",
@@ -940,7 +940,7 @@
     "previewState": {
       "running": "en ejecución en :{{port}}",
       "building": "compilando",
-      "starting": "iniciando"
+      "starting": "arrancando"
     },
     "copied": "Copiado",
     "sweep": {
@@ -992,7 +992,7 @@
     },
     "workspacesRegistered_one": "{{count}} workspace registrado",
     "workspacesRegistered_other": "{{count}} workspaces registrados",
-    "previewStop": "preview {{state}}: páralo en el ticket",
+    "previewStop": "preview {{state}}: detenlo en el ticket",
     "notLocal": "no local",
     "worktreeKept": "{{path}}: conservado, {{reason}}",
     "mainCheckout": "checkout principal",
@@ -1191,7 +1191,7 @@
     "textToPlace": "Texto a colocar",
     "undo": "Deshacer",
     "redo": "Rehacer",
-    "clear": "Borrar todo",
+    "clear": "Quitar todo",
     "notePlaceholder": "¿Qué significa esta marca?",
     "notePlaceholderEmpty": "Dibuja una marca, o elige Nota y haz clic en una",
     "canvas": "Imagen a anotar",
@@ -1213,12 +1213,12 @@
       "title": "Los commits se rebasearon o se aplicaron con cherry-pick; los mismos parches están en la base. Se puede eliminar sin riesgo."
     },
     "edited": {
-      "label": "integrada con cambios",
-      "title": "Los parches difieren, pero fusionar la rama no cambiaría nada en la base. Se puede eliminar sin riesgo."
+      "label": "editada",
+      "title": "Los parches difieren, pero fusionar el branch no cambiaría nada en la base. Se puede eliminar sin riesgo."
     },
     "unique": {
       "label": "trabajo propio",
-      "title": "La rama aún tiene cambios que la base no tiene. Consérvala."
+      "title": "El branch aún tiene cambios que la base no tiene. Consérvalo."
     }
   },
   "runsCard": {
@@ -1238,18 +1238,18 @@
     "notStarted_one": "{{count}} no se arrancó: {{list}}",
     "notStarted_other": "{{count}} no se arrancaron: {{list}}",
     "nothingRunning": "No había nada en ejecución",
-    "startAllTip": "Arranca todas las ejecuciones de los repositorios del ticket que aún no están en marcha",
+    "startAllTip": "Arranca todas las ejecuciones de los repositorios del ticket que aún no están en ejecución",
     "startAll": "Arrancar todas",
-    "stopAllTip": "Detiene todas las ejecuciones del ticket que se están compilando o en marcha",
+    "stopAllTip": "Detén todas las ejecuciones del ticket que se están compilando o en ejecución",
     "stopAll": "Detener todas",
-    "inUse": "{{inUse}} de {{limit}} ejecuciones en marcha en el tablero",
+    "inUse": "{{inUse}} de {{limit}} ejecuciones en ejecución en el tablero",
     "primary": "principal",
     "workspaceTip": "workspace {{name}} en {{path}}",
     "workspaceTipNoPath": "workspace {{name}}",
     "noRuns": "Sin ejecuciones: las añade la persona en los ajustes del proyecto.",
     "orphaned": "Ya no están en este ticket",
     "orphanedHint": "se puede detener, pero no volver a arrancar desde aquí",
-    "alsoRunning": "También en marcha",
+    "alsoRunning": "También en ejecución",
     "alsoRunningHint": "se puede detener aquí; su fila arranca la que muestra",
     "links": "Enlaces",
     "openTip": "Muestra el preview dentro de CrossBoard, sobre la página: el tablero se queda como estaba",
@@ -1260,7 +1260,7 @@
     "startTipJob": "Compílalo y arráncalo en segundo plano, desde el worktree del ticket",
     "start": "Arrancar",
     "stop": "Detener",
-    "restartTip": "Lo detiene, lo compila otra vez y lo arranca",
+    "restartTip": "Deténlo, compílalo otra vez y arráncalo",
     "restart": "Reiniciar",
     "cannotStart": "No se puede arrancar: {{reason}}",
     "onPort": "En :{{port}}",
@@ -1279,7 +1279,7 @@
     },
     "group": {
       "running": "En ejecución",
-      "runningHint": "Construidos y ejecutados por el tablero, o un enlace en esta máquina que responde.",
+      "runningHint": "Compilados y ejecutados por el tablero, o un enlace en esta máquina que responde.",
       "stopped": "Sin ejecutar",
       "stoppedHint": "Detenidos, fallidos, un enlace que no responde o uno fuera de esta máquina que el tablero no comprueba."
     },
@@ -1295,23 +1295,23 @@
     "couldNotStop_other": "no se pudieron detener {{count}}: {{list}}",
     "stoppedCount_one": "Se detuvo {{count}}",
     "stoppedCount_other": "Se detuvieron {{count}}",
-    "barTip": "Previews que el tablero construye o ejecuta, en todos los proyectos, y cuántos ejecuta como máximo a la vez",
+    "barTip": "Previews que el tablero compila o ejecuta, en todos los proyectos, y cuántos ejecuta como máximo a la vez",
     "bar": "Previews del tablero: <strong>{{inUse}} de {{limit}} en uso</strong> <muted>(en todo el tablero)</muted>",
     "stopAllTitle": "¿Detener todos los previews en ejecución de este proyecto?",
-    "stopAllDescription": "Los previews que ejecuta el tablero se detienen y liberan sus puertos. Los enlaces se detienen cuando el tablero puede saber que su servidor se ejecuta desde el worktree del workspace; los demás siguen en marcha, y el aviso dice por qué. Los enlaces se quedan en la página.",
+    "stopAllDescription": "Los previews que ejecuta el tablero se detienen y liberan sus puertos. Los enlaces se detienen cuando el tablero puede saber que su servidor se ejecuta desde el worktree del workspace; los demás siguen en ejecución, y el aviso dice por qué. Los enlaces se quedan en la página.",
     "keepThem": "Conservarlos",
     "uncheckedLink": "El tablero solo comprueba los enlaces de esta máquina",
     "throughBoard": "A través del tablero:",
     "openThrough": "Abrir a través del tablero",
     "linkNotStopped": "El tablero no lo detendrá: {{reason}}",
     "stoppedStillListening": "Detenido, pero algo sigue escuchando en :{{port}}",
-    "stopLinkTip": "Detiene el servidor de este enlace (se ejecuta desde el worktree del workspace) y libera su puerto",
+    "stopLinkTip": "Detén el servidor de este enlace (se ejecuta desde el worktree del workspace) y libera su puerto",
     "startTip": "Compila este worktree y lo ejecuta en un puerto libre, con una copia nueva de los datos en vivo",
-    "stopTip": "Detiene el preview y libera su puerto",
-    "restartTip": "Lo detiene, compila de nuevo y lo arranca con una copia nueva de los datos",
-    "answered": "Respondió con HTTP {{status}} a las {{time}}",
+    "stopTip": "Detén el preview y libera su puerto",
+    "restartTip": "Deténlo, compílalo de nuevo y arráncalo con una copia nueva de los datos",
+    "answered": "Respondió con HTTP {{status}} ({{time}})",
     "notRunning": "Sin ejecutar",
-    "noAnswer": "Sin respuesta a las {{time}}",
+    "noAnswer": "Sin respuesta ({{time}})",
     "notChecked": "Sin comprobar",
     "checking": "Comprobando…",
     "checkingTitle": "Comprobando si responde",
@@ -1350,7 +1350,7 @@
     "closeTip": "Cierra el preview (la ejecución sigue)",
     "close": "Cerrar la ventana de preview",
     "url": "URL del preview",
-    "copyTip": "Copiar el enlace del preview",
+    "copyTip": "Copia el enlace del preview",
     "copy": "Copiar el enlace del preview"
   },
   "roleLabels": {
@@ -1552,7 +1552,7 @@
     "newTicket": "Nuevo ticket",
     "newLane": "Nuevo lane",
     "description": "Escríbelo como se lo explicarías a un colega: los agentes lo leen antes de empezar.",
-    "laneDescription": "Una parte en paralelo de <parent>{{title}}</parent>, con su propio branch, responsable, tareas y novedades.",
+    "laneDescription": "Una parte en paralelo de <parent>{{title}}</parent>, con su propio branch, asignado, tareas y novedades.",
     "title": "Título",
     "instructions": "Instrucciones",
     "instructionsPlaceholder": "Qué hacer, cómo saber que está hecho y qué no hacer nunca. Pega o suelta archivos para adjuntarlos.",
@@ -1561,7 +1561,7 @@
     "stage": "Etapa",
     "complexity": "Complejidad",
     "repository": "Repositorio",
-    "assignee": "Responsable (opcional)",
+    "assignee": "Asignado a (opcional)",
     "tags": "Etiquetas (opcional)",
     "tagsPlaceholder": "Alta, Formularios",
     "branchesOff": "Sale de <branch>{{branch}}</branch> cuando está en el mismo repositorio.",
@@ -1641,7 +1641,7 @@
         "title": "Tiene conflictos con el branch base: necesita un rebase o un merge antes de poder entrar."
       },
       "behind": {
-        "label": "por detrás de la base",
+        "label": "detrás de la base",
         "title": "La base avanzó y la protección del branch pide tenerlo al día primero."
       },
       "blocked": {
@@ -1820,7 +1820,7 @@
       },
       "settingsGlobal": {
         "title": "Ajustes",
-        "subtitle": "Preferencias de todo el tablero",
+        "subtitle": "Ajustes de todo el tablero",
         "keywords": "preferencias, tema, previews, dispositivos, preferences, theme, devices"
       }
     },
@@ -1837,7 +1837,7 @@
       },
       "previewsLimit": {
         "title": "Límite de previews",
-        "subtitle": "Cuántos previews corren a la vez",
+        "subtitle": "Cuántos previews se ejecutan a la vez",
         "keywords": "previews, ejecuciones, límite, puertos, previews, runs, limit, ports"
       },
       "updates": {
@@ -1920,13 +1920,13 @@
     "keywords": {
       "newTicket": "crear, añadir, ticket, lane, nuevo, create, add, new",
       "copyLink": "url, compartir, portapapeles, enlace, share, clipboard",
-      "startPreview": "ejecutar, preview, iniciar, servidor, run, start, server",
+      "startPreview": "ejecutar, preview, arrancar, iniciar, servidor, run, start, server",
       "stopPreview": "ejecutar, preview, detener, servidor, run, stop, server",
       "switchProject": "proyecto, cambiar, abrir, project, switch, open"
     },
     "recent": "Recientes",
-    "notStarted_one": "{{count}} sin iniciar: {{details}}",
-    "notStarted_other": "{{count}} sin iniciar: {{details}}",
+    "notStarted_one": "{{count}} sin arrancar: {{details}}",
+    "notStarted_other": "{{count}} sin arrancar: {{details}}",
     "notStopped_one": "{{count}} sin detener: {{details}}",
     "notStopped_other": "{{count}} sin detener: {{details}}",
     "nothingRunning": "No había nada en ejecución",
@@ -1935,10 +1935,10 @@
     "copyLink": "Copiar enlace del ticket",
     "copyLinkText": "Copia la dirección de este ticket al portapapeles",
     "linkCopied": "Enlace del ticket copiado",
-    "startPreview": "Iniciar preview",
-    "startPreviewText": "Inicia los previews y trabajos del ticket",
+    "startPreview": "Arrancar preview",
+    "startPreviewText": "Arranca los previews y trabajos del ticket",
     "stopPreview": "Detener preview",
-    "stopPreviewText": "Detiene los previews y trabajos del ticket",
+    "stopPreviewText": "Detén los previews y trabajos del ticket",
     "switchTo": "Cambiar a {{name}}",
     "currentProject": "Proyecto actual",
     "openOverview": "Abre su Resumen",
@@ -1964,8 +1964,8 @@
     "setupIntro": "Crea la cuenta del tablero y su primera passkey, en esta máquina. Los demás dispositivos se añaden después desde Ajustes, con un enlace de un solo uso.",
     "nameLabel": "Tu nombre en el tablero",
     "deviceLabel": "Este dispositivo",
-    "deviceDefault": "Esta computadora",
-    "devicePlaceholder": "Teléfono, laptop…",
+    "deviceDefault": "Este equipo",
+    "devicePlaceholder": "Teléfono, tablet…",
     "createPasskey": "Crear passkey",
     "loginTitle": "Iniciar sesión",
     "loginHeading": "Iniciar sesión",
@@ -2020,9 +2020,9 @@
     "list": "Lista",
     "archived": "Archivados",
     "noMatch": "Ningún ticket coincide con “{{query}}”.",
-    "clearSearch": "Borrar la búsqueda",
+    "clearSearch": "Quitar la búsqueda",
     "state": "Estado",
-    "clearState": "Borrar el filtro de estado",
+    "clearState": "Quitar el filtro de estado",
     "allTags": "Todas las etiquetas",
     "filterByTag": "Filtrar por etiqueta",
     "tags": "Etiquetas",
@@ -2031,13 +2031,13 @@
     "tickets_one": "{{count}} ticket",
     "tickets_other": "{{count}} tickets",
     "showEveryTag": "Mostrar todas las etiquetas",
-    "clearTag": "Borrar el filtro de etiqueta",
+    "clearTag": "Quitar el filtro de etiqueta",
     "loadingTags": "Cargando etiquetas…",
     "couldNotLoadTags": "No se pudieron cargar las etiquetas.",
     "retry": "Reintentar",
     "searchTickets": "Buscar tickets",
     "searchPlaceholder": "Buscar por nombre o hilo",
-    "clearSearchAria": "Borrar la búsqueda"
+    "clearSearchAria": "Quitar la búsqueda"
   },
   "needs": {
     "titleIn": "#{{id}} {{title}}: {{branch}} está en {{into}}",
@@ -2084,20 +2084,20 @@
     "sending": "Enviando…"
   },
   "prQueue": {
-    "title": "Cola de PRs",
-    "subtitle": "PRs por revisar y los tuyos, por estado de revisión.",
+    "title": "Cola de PR",
+    "subtitle": "PR por revisar y los tuyos, por estado de revisión.",
     "filters": {
       "me": {
         "label": "Por revisar",
-        "title": "PRs de otros que revisas: pendientes de tu aprobación, aprobados por ti o en pausa por tus comentarios"
+        "title": "PR de otros que revisas: pendientes de tu aprobación, aprobados por ti o en pausa por tus comentarios"
       },
       "others": {
         "label": "Esperando a otros",
-        "title": "Tus PRs (los de los agentes también): aprobaciones pendientes, aprobados por todos los revisores o en pausa por sus comentarios"
+        "title": "Tus PR (los de los agentes también): aprobaciones pendientes, aprobados por todos los revisores o en pausa por sus comentarios"
       }
     },
     "reviewers": {
-      "all": "Todos los PRs",
+      "all": "Todos los PR",
       "mine": "Solo yo como revisor"
     },
     "tabs": {
@@ -2107,8 +2107,8 @@
       "done": "Hecho"
     },
     "empty": {
-      "me": "Nada {{stage}} por revisar.",
-      "others": "Nada {{stage}} esperando a otros."
+      "me": "Ningún PR {{stage}} de los que revisas.",
+      "others": "Ningún PR {{stage}} de los que esperan a otros."
     },
     "refresh": "Actualizar",
     "mergeAfterTip": "Su ticket necesita que estos se fusionen antes:\n{{list}}",
@@ -2159,18 +2159,18 @@
       "h": "{{count}}h",
       "d": "{{count}}d"
     },
-    "since": "desde las {{time}}",
+    "since": "desde {{time}}",
     "minutes": "{{count}} min",
     "lastWord": "última noticia hace {{count}} min",
     "noWordYet": "aún sin noticias",
     "why": {
-      "inStage": "en {{stage}}, sin noticias de ningún agente desde las {{time}}",
-      "waitingOn": "esperando a {{on}}, sin noticias de nadie desde las {{time}}",
-      "nothingOpen": "nada abierto desde las {{time}}",
+      "inStage": "en {{stage}}, sin noticias de ningún agente desde {{time}}",
+      "waitingOn": "esperando a {{on}}, sin noticias de nadie desde {{time}}",
+      "nothingOpen": "nada abierto desde {{time}}",
       "work": "trabajo",
-      "ended": "nada abierto desde que terminó {{phase}} a las {{time}}",
-      "endedQuote": "nada abierto desde que terminó {{phase}} a las {{time}} ('{{quote}}')",
-      "noProgress": "ninguna publicación de progreso desde las {{time}}"
+      "ended": "nada abierto desde que terminó {{phase}} ({{time}})",
+      "endedQuote": "nada abierto desde que terminó {{phase}} ({{time}}, '{{quote}}')",
+      "noProgress": "ninguna publicación de progreso desde {{time}}"
     },
     "verb": {
       "spec": "Especificando",
@@ -2178,12 +2178,12 @@
       "review": "Revisando",
       "verify": "Verificando",
       "pr": "Abriendo PR",
-      "preview": "Previsualizando",
+      "preview": "Preparando preview",
       "merge": "Fusionando",
       "work": "Trabajando"
     },
     "nobodyHeard": "Aún sin noticias de nadie",
-    "lastHeard": "Última noticia a las {{time}}",
+    "lastHeard": "Última noticia: {{time}}",
     "worked": "Trabajo",
     "waited": "Espera",
     "onYou": "Contigo",
@@ -2273,8 +2273,8 @@
       "showLess": "Mostrar menos",
       "showHeartbeats": "Mostrar latidos",
       "hideHeartbeats": "Ocultar latidos",
-      "heartbeats_one": "{{count}} latido, el último a las {{time}}",
-      "heartbeats_other": "{{count}} latidos, el último a las {{time}}",
+      "heartbeats_one": "{{count}} latido, el último: {{time}}",
+      "heartbeats_other": "{{count}} latidos, el último: {{time}}",
       "story": "Historia de la cronología"
     },
     "story": {
@@ -2290,7 +2290,7 @@
       "heartbeat": "latido{{note}}",
       "movedTo": "pasó a {{stage}}",
       "createdIn": "creado en {{stage}}",
-      "pushed": "hizo push",
+      "pushed": "subió commits",
       "openedPr": "abrió el PR{{note}}",
       "merged": "fusionó",
       "preview": "preview {{note}}",
@@ -2308,11 +2308,11 @@
   },
   "roadmap": {
     "title": "Hoja de ruta",
-    "subtitle": "Cada ticket en marcha: hecho, ahora, después.",
+    "subtitle": "Cada ticket en curso: hecho, ahora, después.",
     "filter": {
       "all": "Todos",
       "blocked": "Bloqueados",
-      "review": "Necesitan revisión"
+      "review": "Por revisar"
     },
     "timeAxis": "Eje de tiempo, todas las filas:",
     "window": {
@@ -2365,7 +2365,7 @@
     },
     "allHidden": "Todas las tarjetas de este resumen están ocultas. <goto>Muéstralas de nuevo en los ajustes de diseño</goto>.",
     "showFewer": "Mostrar menos",
-    "viewAll": "Ver las {{count}}",
+    "viewAll": "Ver todo ({{count}})",
     "unassigned": "sin asignar",
     "projectAgent": "{{name}} (uno de los agentes del proyecto)",
     "sinceDate": "desde el {{date}}",
@@ -2393,7 +2393,7 @@
       "instructionsChanged": "Instrucciones del proyecto cambiadas",
       "changedBy": "por <actor/>",
       "reviewed": "Revisadas",
-      "revertTip": "Dejar las instrucciones como estaban antes de este cambio",
+      "revertTip": "Deja las instrucciones como estaban antes de este cambio",
       "revertBlockedTip": "Las instrucciones cambiaron de nuevo desde entonces: revierte primero el cambio posterior",
       "revert": "Revertir",
       "last": "último:"
@@ -2438,10 +2438,10 @@
   "notifications": {
     "title": "Notificaciones",
     "clearFinished": "Quitar terminadas",
-    "empty": "Nada en marcha",
+    "empty": "Nada en ejecución",
     "dismiss": "Descartar {{label}}",
     "of": "{{done}} de {{total}}",
-    "starting": "Empezando…",
+    "starting": "Iniciando…",
     "noReason": "sin motivo",
     "failed": "{{title}} falló",
     "finished": "{{title}} terminó",
@@ -2480,7 +2480,7 @@
     "lanesNotDone_one": "{{count}} lane sin terminar",
     "lanesNotDone_other": "{{count}} lanes sin terminar",
     "decisionNeeded": "decisión pendiente",
-    "archiveTip": "Lo saca del tablero, con sus lanes; Archivados, en la página de features, lo devuelve",
+    "archiveTip": "Sácalo del tablero, con sus lanes; Archivados, en la página de features, lo devuelve",
     "deleteTitle": "¿Eliminar este ticket?",
     "deleteBody": "Las tareas, las novedades, los adjuntos y el hilo se van con él.",
     "deleteLanes_one": "Tiene {{count}} lane: elimínalo también, o consérvalo y súbelo un nivel.",
@@ -2501,10 +2501,10 @@
     "showLess": "Mostrar menos",
     "showFull": "Mostrar las instrucciones completas",
     "removeNamed": "Quitar {{name}}",
-    "otherReposTip": "El trabajo del ticket en otros repositorios del proyecto, cada uno en su propio branch: aparecen en Branch y Runs",
+    "otherReposTip": "El trabajo del ticket en otros repositorios del proyecto, cada uno en su propio branch: aparecen en Branch y Ejecuciones",
     "otherRepos": "Otros repositorios",
     "repositoryNamed": "Repositorio {{name}}",
-    "takeOffTip": "Quita {{name}} del ticket (sus runs para el ticket se detienen)",
+    "takeOffTip": "Quita {{name}} del ticket (sus ejecuciones para el ticket se detienen)",
     "addRepo": "Añadir un repositorio",
     "addRepoPlaceholder": "Añadir un repositorio…",
     "details": "Detalles",
@@ -2520,7 +2520,7 @@
     "autoTip": {
       "Pushed": "Marcado por el tablero desde git (el branch está en origin con todos los commits locales)",
       "PR": "Marcado por el tablero desde GitHub (un PR abierto o fusionado del ticket)",
-      "CI": "Marcado por el tablero desde GitHub (los checks del PR en verde, o un comentario \"CI run locally: green\" sobre el SHA de la cabeza)",
+      "CI": "Marcado por el tablero desde GitHub (las comprobaciones del PR en verde, o un comentario \"CI run locally: green\" sobre el SHA de la cabeza)",
       "Preview": "Marcado por el tablero desde los previews (un workspace del ticket ejecuta un preview, o su enlace de preview responde)",
       "Summary": "Marcado por el tablero desde las publicaciones del ticket (un agente escribió o actualizó su resumen después del último commit del branch)",
       "Merged": "Marcado por el tablero desde GitHub y git (el PR fusionado, o el branch fusionado en su base)"
@@ -2568,7 +2568,7 @@
     "feed": "Actividad del ticket",
     "mainTip": "Para ti: tus publicaciones con sus respuestas, decisiones y preguntas",
     "main": "Principal",
-    "agentsTip": "El registro de trabajo de los agentes: avances, fases de revisión, notas del constructor",
+    "agentsTip": "El registro de trabajo de los agentes: avances, fases de revisión, notas del builder",
     "agents": "Agentes",
     "includeLanePosts": "incluir publicaciones de lanes",
     "newCount_one": "{{count}} nueva",
@@ -2604,8 +2604,8 @@
     "postActions": "Acciones de la publicación",
     "notProgressLabel": "no es avance",
     "markProgressLabel": "marcar como avance",
-    "notProgressTip": "No es avance: la convierte en una publicación normal",
-    "markProgressTip": "Marcar como avance",
+    "notProgressTip": "No es avance: conviértela en una publicación normal",
+    "markProgressTip": "Marca como avance",
     "decisionArchived": "Archivado {{ids}}: fuera del tablero, en Archivados",
     "notArchived": "No archivado: {{why}}",
     "decision": "Decisión",
@@ -2629,8 +2629,8 @@
     "base": "base {{name}}",
     "noBranch": "Aún no hay branch: elige uno arriba, o lo fija el agente.",
     "workspaces": "Workspaces",
-    "workspacesDesc": "Worktrees, sub-branches y sandboxes de subagentes que los agentes abrieron para este ticket.",
-    "workspacesDescLanes": "Worktrees, sub-branches y sandboxes de subagentes que los agentes abrieron para este ticket y sus lanes.",
+    "workspacesDesc": "Worktrees, sub-branches y entornos aislados de subagentes que los agentes abrieron para este ticket.",
+    "workspacesDescLanes": "Worktrees, sub-branches y entornos aislados de subagentes que los agentes abrieron para este ticket y sus lanes.",
     "noneYet": "Ninguno aún."
   }
 }
