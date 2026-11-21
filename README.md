@@ -993,6 +993,7 @@ menu, the cards of its Overview (and of its block on Home) and the sections of a
 its main or its side column. Each is a tile on a small picture of those pages: its switch hides it,
 dragging it or its arrows move it, and Save applies it to everyone; Reset to default goes back to the
 defaults. A hidden page leaves the menu but still opens by its link. The Overview's cards are Needs you,
+Agents at work (one tiny pixel-art pet per agent on a ticket right now, read from the live work, each linking to its ticket),
 In progress, Done today, Next, Carrying over and Notes: the project's short shared facts (a command, a
 path, a rule, a reminder), pinned first, edited in place or in its manage dialog. The landing page, the board and
 the Settings page, and the ticket sections that links lead to (instructions, tasks, activity)
