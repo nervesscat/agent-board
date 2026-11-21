@@ -35,6 +35,8 @@ import {
 import {
   Fragment,
   type ReactNode,
+  type Ref,
+  type RefObject,
   createContext,
   useCallback,
   useContext,
@@ -133,6 +135,7 @@ import { useProject, useStages } from '#/lib/project'
 import { type Anchor, anchorId, cameBack, useAnchor, useReveal } from '#/lib/reveal'
 import { addTags, overTagLimits } from '#/lib/tags'
 import { type StepList, columnNeighbours, isClosed, stageBadge, stageOf } from '#/lib/stages'
+import { scrolledAway } from '#/lib/scrolledAway'
 import { ticketsKey, ticketsQuery } from '#/lib/tickets'
 
 export const Route = createFileRoute('/projects/$id/features/$ticketId')({
@@ -303,6 +306,9 @@ function TicketPage() {
   // once per anchor, so turning it off again stays off.
   const anchoredPost = anchorId(anchor?.holder ?? anchor?.target, 'post')
   const foldedFor = useRef<string | null>(null)
+  // The page's own breadcrumbs: the floating header shows them while these are scrolled out of view.
+  const crumbs = useRef<HTMLElement>(null)
+  const crumbsAway = useCrumbsAway(crumbs, t !== undefined)
   useEffect(() => {
     if (!drawn || !anchor || anchoredPost === null || laneFeed || foldedFor.current === anchor.hash) return
     if (t.lanes.length && !t.updates.some((u) => u.id === anchoredPost)) {
@@ -407,27 +413,7 @@ function TicketPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-        <Link to="/projects/$id/features" params={{ id }} className="hover:text-foreground">
-          Ongoing features
-        </Link>
-        {t.ancestors.map((a) => (
-          <span key={a.id} className="inline-flex min-w-0 items-center gap-1">
-            <ChevronRight className="size-3.5 shrink-0" />
-            <Link
-              to="/projects/$id/features/$ticketId"
-              params={{ id, ticketId: String(a.id) }}
-              // Back to the parent's list with the filter it had.
-              search={a.id === t.parentId ? laneSearch(filter) : {}}
-              className="max-w-64 truncate hover:text-foreground"
-            >
-              #{a.id} {a.title}
-            </Link>
-          </span>
-        ))}
-        <ChevronRight className="size-3.5" />
-        <span className="text-foreground">#{t.id}</span>
-      </nav>
+      <Breadcrumbs ref={crumbs} projectId={id} t={t} filter={filter} />
 
       {/* The header stays in view once scrolled up to the top bar (h-12 and its border), with the
             page scrolling under it: opaque, above the feed's positioned bits, below the top bar.
@@ -439,12 +425,27 @@ function TicketPage() {
         {/* At least 12rem wide: a toolbar too wide to sit beside it wraps under it, not squeezes the title. */}
         <div className="min-w-48 flex-1">
           <InlineTitle key={t.id} t={t} onSave={(title) => update.mutate({ title })} />
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <span>
-              opened by <Actor name={t.createdBy} short /> {ago(t.createdAt)}
-            </span>
-            <span>updated {ago(t.updatedAt)}</span>
-            <InlineTags key={t.id} t={t} projectId={id} onSave={(tags) => update.mutate({ tags })} />
+          {/* The breadcrumbs take the place of this line while the page's own are away, in the same cell: the
+                header keeps its height, so the page does not move when they come and go. The line stays
+                drawn, hidden, to keep that height when it wraps. */}
+          <div className="mt-1 grid grid-cols-[minmax(0,1fr)] text-xs text-muted-foreground">
+            <div
+              className={cn(
+                'col-start-1 row-start-1 flex flex-wrap items-center gap-x-3 gap-y-1',
+                crumbsAway && 'invisible',
+              )}
+            >
+              <span>
+                opened by <Actor name={t.createdBy} short /> {ago(t.createdAt)}
+              </span>
+              <span>updated {ago(t.updatedAt)}</span>
+              <InlineTags key={t.id} t={t} projectId={id} onSave={(tags) => update.mutate({ tags })} />
+            </div>
+            {crumbsAway && (
+              <div className="col-start-1 row-start-1 flex min-w-0 items-center self-start">
+                <Breadcrumbs projectId={id} t={t} filter={filter} compact />
+              </div>
+            )}
           </div>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -611,6 +612,88 @@ function TicketPage() {
       </div>
     </div>
   )
+}
+
+type CrumbsProps = { projectId: string; t: TicketFull; filter: LaneFilter }
+
+/**
+ * The path to the ticket: Ongoing features, the tickets it is a lane of, the ticket. At the top of the page,
+ * and again in the floating header (`compact`) while the page's own is scrolled away.
+ */
+function Breadcrumbs({
+  projectId,
+  t,
+  filter,
+  compact = false,
+  ref,
+}: CrumbsProps & { compact?: boolean; ref?: Ref<HTMLElement> }) {
+  return (
+    <nav
+      ref={ref}
+      aria-label="Breadcrumb"
+      className={cn(
+        'flex items-center gap-1 text-muted-foreground',
+        // The bar is one line: the path shortens (each ticket's title cut off) instead of wrapping.
+        compact ? 'min-w-0 flex-nowrap overflow-hidden text-xs' : 'flex-wrap text-sm',
+      )}
+    >
+      <Link
+        to="/projects/$id/features"
+        params={{ id: projectId }}
+        className={cn('hover:text-foreground', compact && 'shrink-0')}
+      >
+        Ongoing features
+      </Link>
+      {t.ancestors.map((a) => (
+        <span key={a.id} className="inline-flex min-w-0 items-center gap-1">
+          <ChevronRight className="size-3.5 shrink-0" />
+          <Link
+            to="/projects/$id/features/$ticketId"
+            params={{ id: projectId, ticketId: String(a.id) }}
+            // Back to the parent's list with the filter it had.
+            search={a.id === t.parentId ? laneSearch(filter) : {}}
+            className={cn('truncate hover:text-foreground', compact ? 'max-w-32 sm:max-w-48' : 'max-w-64')}
+          >
+            #{a.id} {a.title}
+          </Link>
+        </span>
+      ))}
+      <ChevronRight className="size-3.5 shrink-0" />
+      <span className={cn('shrink-0', !compact && 'text-foreground')}>#{t.id}</span>
+    </nav>
+  )
+}
+
+/**
+ * Whether the page's own breadcrumbs (`page`) are scrolled out of view, up under the top bar: the floating
+ * header then shows them, and only then, so they are never on screen twice. The header's stuck offset is the
+ * top bar's height, which is where the page's breadcrumbs go out of sight. `drawn`: the page has its
+ * breadcrumbs and header.
+ */
+function useCrumbsAway(page: RefObject<HTMLElement | null>, drawn: boolean) {
+  const [away, setAway] = useState(false)
+  useEffect(() => {
+    const crumbs = page.current
+    const header = crumbs?.parentElement?.querySelector('header')
+    if (!drawn || !crumbs || !header) return
+    let seen: IntersectionObserver | undefined
+    const watch = () => {
+      seen?.disconnect()
+      const bar = parseFloat(getComputedStyle(header).top)
+      seen = new IntersectionObserver(([entry]) => setAway(scrolledAway(entry!, bar)), {
+        rootMargin: `-${bar}px 0px 0px 0px`,
+      })
+      seen.observe(crumbs)
+    }
+    watch()
+    // The top bar's height follows the device's safe area, which turns with the screen.
+    window.addEventListener('resize', watch)
+    return () => {
+      window.removeEventListener('resize', watch)
+      seen?.disconnect()
+    }
+  }, [page, drawn])
+  return away
 }
 
 /** The anchor of the URL to the feed's posts, once the ticket it is on is the one shown. */
