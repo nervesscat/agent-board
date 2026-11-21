@@ -42,7 +42,7 @@ export function BoardSettings() {
         <p className="text-sm text-muted-foreground">
           <Trans
             i18nKey="settings.board.defaultAgent.text"
-            components={{ link: <Link to="/agents" className="underline hover:text-foreground" /> }}
+            components={{ goto: <Link to="/agents" className="underline hover:text-foreground" /> }}
           />
         </p>
         <AgentPicker value={data.defaultAgent} onChange={(defaultAgent) => save.mutate({ defaultAgent })} />

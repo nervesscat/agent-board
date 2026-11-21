@@ -72,7 +72,7 @@ function ConnectAgents() {
             i18nKey="connect.intro"
             components={{
               strong: <strong />,
-              link: <Link to="/settings" className="underline hover:text-foreground" />,
+              goto: <Link to="/settings" className="underline hover:text-foreground" />,
             }}
           />
         </p>

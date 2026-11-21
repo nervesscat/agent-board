@@ -46,6 +46,25 @@ export function flatten(tree, prefix = '') {
   return out
 }
 
+// An HTML void element (<link>, <br>, <input> …) cannot hold text: the parser drops what is between its tags,
+// so a sentence's tag is never one of these (use <goto>, <strong>, <code> …).
+const VOID_TAGS = new Set([
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'param',
+  'source',
+  'track',
+  'wbr',
+])
+
 const base = (key) => key.replace(PLURAL, '')
 const placeholders = (text) =>
   [...String(text).matchAll(/\{\{\s*([\w.]+)\s*(?:,[^}]*)?\}\}/g)].map((m) => m[1]).sort()
@@ -64,6 +83,16 @@ export function compareLocales(en, other, name) {
   for (const [key, text] of Object.entries(b)) {
     if (typeof text !== 'string' || text.trim() === '') problems.push(`${name}: ${key} is empty`)
   }
+  for (const [lang, flat] of [
+    ['en', a],
+    [name, b],
+  ])
+    for (const [key, text] of Object.entries(flat))
+      for (const tag of new Set(tags(text)))
+        if (VOID_TAGS.has(tag))
+          problems.push(
+            `${lang}: ${key} uses <${tag}>, an HTML void element that loses its text: pick another tag name`,
+          )
   for (const k of aBases) {
     const pluralOf = (flat) => Object.keys(flat).filter((x) => base(x) === k && PLURAL.test(x))
     if (pluralOf(a).length && !pluralOf(b).some((x) => x.endsWith('_other')))

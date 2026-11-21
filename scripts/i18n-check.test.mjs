@@ -39,6 +39,17 @@ describe('every language has every text', () => {
     ])
   })
 
+  it('refuses a tag that is an HTML void element, whose text the parser would drop', () => {
+    const model = { a: 'Open <link>Connect</link>.' }
+    expect(compareLocales(model, { a: 'Abre <link>Conectar</link>.' }, 'es')).toEqual([
+      'en: a uses <link>, an HTML void element that loses its text: pick another tag name',
+      'es: a uses <link>, an HTML void element that loses its text: pick another tag name',
+    ])
+    expect(
+      compareLocales({ a: 'Open <goto>Connect</goto>.' }, { a: 'Abre <goto>Conectar</goto>.' }, 'es'),
+    ).toEqual([])
+  })
+
   it("passes on the app's own translation files", () => {
     expect(Object.keys(readLocales()).sort()).toEqual(['en', 'es'])
     expect(checkLocales()).toEqual([])
