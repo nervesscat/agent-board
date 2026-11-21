@@ -4,6 +4,7 @@ import { useId, useState } from 'react'
 import { EditedChip } from '#/components/WorkflowChips'
 import { Button } from '#/components/ui/button'
 import { Textarea } from '#/components/ui/textarea'
+import type { Complexity } from '#/lib/constants'
 import { INSTRUCTIONS_MAX, type ResolvedStep } from '#/lib/workflow'
 import { instructionsProblem } from '#/lib/workflowEdit'
 import { cn } from '#/lib/utils'
@@ -11,33 +12,51 @@ import { cn } from '#/lib/utils'
 /**
  * The hand-off after a step, drawn as the connector to the next one: what the step passes on and what the ticket
  * agent checks when it returns. The default text is the preset's; the human edits it in place (Save, or Cancel to
- * leave it) and Reset to default puts the preset's back. A blank text is the default too. The last step has no
- * next one: its connector ends the flow.
+ * leave it) and Reset to default puts the preset's back. A blank text is the default too. The editor closes once
+ * the text is saved; a refused save keeps it open with the draft and the reason. A saved text belongs to the
+ * preset's step, not to the complexity on view, and the editor says so. The last step has no next one: its
+ * connector ends the flow.
  */
 export function WorkflowHandoff({
   step,
   next,
   last,
+  complexity,
+  defaultVaries,
   onSave,
 }: {
   step: ResolvedStep
   /** The label of the step that follows, for the connector's heading. */
   next: string | null
   last: boolean
-  /** The instruction to keep, or null to go back to the default. */
-  onSave: (instructions: string | null) => void
+  /** The complexity on view: the hand-off shown is the one a ticket of it reads. */
+  complexity: Complexity
+  /** Whether this step's default hand-off reads differently at another complexity. */
+  defaultVaries: boolean
+  /** The instruction to keep, or null to go back to the default; answers with why it was not saved, else null. */
+  onSave: (instructions: string | null) => Promise<string | null>
 }) {
   const [draft, setDraft] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
   const field = useId()
   const editing = draft !== null
   const problem = draft === null ? null : instructionsProblem(draft)
   const count = draft?.trim().length ?? 0
-  const save = () => {
-    if (draft === null || problem) return
-    const text = draft.trim()
-    // A blank text, or the default as it stands, is the default.
-    onSave(text === '' || text === step.handoffDefault ? null : text)
+  const close = () => {
     setDraft(null)
+    setFailure(null)
+  }
+  const save = async () => {
+    if (draft === null || problem || saving) return
+    const text = draft.trim()
+    setSaving(true)
+    setFailure(null)
+    // A blank text, or the default as it stands, is the default. The editor closes once it is kept.
+    const error = await onSave(text === '' || text === step.handoffDefault ? null : text)
+    setSaving(false)
+    if (error === null) setDraft(null)
+    else setFailure(error)
   }
   return (
     <div
@@ -86,7 +105,7 @@ export function WorkflowHandoff({
               id={field}
               aria-label={`${step.label} hand-off instruction`}
               aria-invalid={problem ? true : undefined}
-              aria-describedby={`${field}-count`}
+              aria-describedby={`${field}-count ${field}-scope${failure ? ` ${field}-failure` : ''}`}
               value={draft}
               autoFocus
               rows={4}
@@ -94,7 +113,7 @@ export function WorkflowHandoff({
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
                   e.stopPropagation()
-                  setDraft(null)
+                  if (!saving) close()
                 } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                   e.preventDefault()
                   save()
@@ -111,14 +130,26 @@ export function WorkflowHandoff({
                 {problem ? `: ${problem}` : ''}
               </span>
               <span className="ml-auto flex gap-1.5">
-                <Button type="button" variant="outline" size="sm" onClick={() => setDraft(null)}>
+                <Button type="button" variant="outline" size="sm" disabled={saving} onClick={close}>
                   Cancel
                 </Button>
-                <Button type="button" size="sm" disabled={Boolean(problem)} onClick={save}>
+                <Button type="button" size="sm" disabled={Boolean(problem) || saving} onClick={save}>
                   Save
                 </Button>
               </span>
             </div>
+            {failure && (
+              <p id={`${field}-failure`} role="alert" className="text-xs text-destructive">
+                Not saved: {failure}
+              </p>
+            )}
+            <p id={`${field}-scope`} data-handoff-scope className="text-xs text-muted-foreground">
+              A saved instruction replaces this step&apos;s hand-off for every ticket on this preset, whatever
+              its complexity.
+              {defaultVaries && !step.edited.instructions
+                ? ` The text shown is the default for ${complexity} tickets.`
+                : ''}
+            </p>
             <p className="text-xs text-muted-foreground">
               What the {step.label} step passes on and what the ticket agent checks when it returns. Leave it
               blank for the default. Ctrl+Enter saves, Escape cancels.

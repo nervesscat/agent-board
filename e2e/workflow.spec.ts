@@ -452,6 +452,14 @@ test('a hand-off instruction is edited in place with a limit, reset to the defau
   const field = connector.getByRole('textbox', { name: 'Build hand-off instruction' })
   await expect(field).toHaveValue(def)
   await expect(connector).toContainText(`${def.length}/4000`)
+  // The editor says what a saved text covers, and the field is described by it.
+  const scope = connector.locator('[data-handoff-scope]')
+  await expect(scope).toBeVisible()
+  await expect(scope).toContainText(
+    "A saved instruction replaces this step's hand-off for every ticket on this preset, whatever its complexity.",
+  )
+  await expect(scope).not.toContainText('The text shown is the default for')
+  expect(await field.getAttribute('aria-describedby')).toContain((await scope.getAttribute('id'))!)
 
   // Past the limit: an error, and Save waits.
   await field.fill('x'.repeat(4003))
@@ -484,6 +492,71 @@ test('a hand-off instruction is edited in place with a limit, reset to the defau
   await expect(page.locator('[data-handoff="build"] [data-handoff-text]')).toHaveText(def)
   await expect(page.locator('[data-handoff="build"]').getByText('edited', { exact: true })).toHaveCount(0)
   expect((await presetOf(human, project.id, 'standard')).tweaked).toBe(false)
+})
+
+test('the hand-off editor says a saved text is for every complexity, and which complexity the default shown is for (F10)', async ({
+  page,
+  project,
+}) => {
+  await open(page, project.id, '?complexity=low')
+  // The Intent check reads differently by complexity: the note names the one shown.
+  const intent = page.locator('[data-handoff="intent"]')
+  await intent.getByRole('button', { name: 'Edit the Intent check hand-off' }).click()
+  const scope = intent.locator('[data-handoff-scope]')
+  await expect(scope).toBeVisible()
+  await expect(scope).toHaveText(
+    "A saved instruction replaces this step's hand-off for every ticket on this preset, whatever its complexity. The text shown is the default for low tickets.",
+  )
+  await expect(intent.getByRole('textbox', { name: 'Intent check hand-off instruction' })).toHaveAttribute(
+    'aria-describedby',
+    new RegExp(`${(await scope.getAttribute('id'))!}`),
+  )
+  // The Build hand-off reads the same at every complexity: only the first sentence.
+  const build = page.locator('[data-handoff="build"]')
+  await build.getByRole('button', { name: 'Edit the Build hand-off' }).click()
+  await expect(build.locator('[data-handoff-scope]')).toHaveText(
+    "A saved instruction replaces this step's hand-off for every ticket on this preset, whatever its complexity.",
+  )
+})
+
+test('a hand-off save that is refused keeps the editor open with the draft and the reason, and a retry saves (F10)', async ({
+  page,
+  project,
+  human,
+}) => {
+  await open(page, project.id)
+  const connector = page.locator('[data-handoff="build"]')
+  await connector.getByRole('button', { name: 'Edit the Build hand-off' }).click()
+  const field = connector.getByRole('textbox', { name: 'Build hand-off instruction' })
+  const draft = 'A draft that has to survive a refused save.'
+  await field.fill(draft)
+
+  const refuse = (route: import('@playwright/test').Route) =>
+    route.request().method() === 'PUT'
+      ? route.fulfill({
+          status: 400,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'steps.build.instructions: refused' }),
+        })
+      : route.fallback()
+  const putUrl = /\/api\/projects\/\d+\/workflow\/standard$/
+  await page.route(putUrl, refuse)
+  await connector.getByRole('button', { name: 'Save' }).click()
+  await expect(connector.getByRole('alert')).toContainText('steps.build.instructions: refused')
+  // Still open, with what was typed, and nothing stored.
+  await expect(field).toBeVisible()
+  await expect(field).toHaveValue(draft)
+  await expect(connector.getByRole('button', { name: 'Save' })).toBeEnabled()
+  expect((await presetOf(human, project.id, 'standard')).tweaked).toBe(false)
+
+  await page.unroute(putUrl, refuse)
+  await connector.getByRole('button', { name: 'Save' }).click()
+  await saved(page)
+  await expect(connector.getByRole('textbox')).toHaveCount(0)
+  await expect(connector.locator('[data-handoff-text]')).toHaveText(draft)
+  expect((await presetOf(human, project.id, 'standard')).tweaks).toEqual({
+    steps: { build: { instructions: draft } },
+  })
 })
 
 test('an open hand-off editor does not survive a switch to another preset, and nothing is stored for it (F10)', async ({

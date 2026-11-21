@@ -64,17 +64,20 @@ export function WorkflowPage({
   })
   // Saves wait for each other: the next is built from what the one before it saved, never from older data.
   const queue = useRef<Promise<unknown>>(Promise.resolve())
+  // The answer is the reason a save failed, or null once it was kept: an editor stays open on a refusal.
   const run = (job: () => Promise<WorkflowOverview>, message = 'Saved') => {
     const next = queue.current.then(job).then(
-      (overview) => {
+      (overview): string | null => {
         qc.setQueryData(key, overview)
         qc.invalidateQueries({ queryKey: readsKey(projectId) })
         qc.invalidateQueries({ queryKey: ['project', projectId] })
         toast.success(message)
+        return null
       },
-      (err) => {
+      (err): string | null => {
         toast.error(errorMessage(err))
         qc.invalidateQueries({ queryKey: key })
+        return errorMessage(err)
       },
     )
     queue.current = next

@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from 'lucide-react'
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 
 import { AgentChip, Chip, EditedChip, LockChip } from '#/components/WorkflowChips'
 import { WorkflowHandoff } from '#/components/WorkflowHandoff'
@@ -8,9 +8,10 @@ import { Button } from '#/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Switch } from '#/components/ui/switch'
 import { Tip } from '#/components/ui/tooltip'
-import type { Complexity } from '#/lib/constants'
+import { COMPLEXITIES, type Complexity } from '#/lib/constants'
 import {
   WORKFLOW_EFFORTS,
+  resolveWorkflow,
   type ResolvedStep,
   type ResolvedWorkflow,
   type WorkflowEffort,
@@ -32,8 +33,11 @@ import { cn } from '#/lib/utils'
 export interface WorkflowEdits {
   setEnabled: (id: WorkflowStepId, enabled: boolean) => void
   setEffort: (id: WorkflowStepId, effort: WorkflowEffort) => void
-  /** The instruction to keep, or null for the preset's. */
-  setInstructions: (id: WorkflowStepId, instructions: string | null) => void
+  /**
+   * The instruction to keep, or null for the preset's. Answers with the reason it was not saved, or null once
+   * it was, so the editor stays open on a refusal.
+   */
+  setInstructions: (id: WorkflowStepId, instructions: string | null) => Promise<string | null>
   setRounds: (level: Complexity, rounds: number) => void
   move: (id: WorkflowStepId, direction: 'up' | 'down') => void
 }
@@ -74,6 +78,14 @@ export function WorkflowTree({
   const moved = useRef<string | null>(null)
   const list = useRef<HTMLOListElement>(null)
   const order = workflow.order.join()
+  // The same preset and tweaks at the other complexities: a hand-off whose default reads differently there.
+  const others = useMemo(
+    () =>
+      COMPLEXITIES.filter((level) => level !== complexity).map((level) =>
+        resolveWorkflow(workflow.preset, workflow.tweak, level),
+      ),
+    [workflow.preset, workflow.tweak, complexity],
+  )
   useLayoutEffect(() => {
     const target = moved.current
     if (!target) return
@@ -100,6 +112,9 @@ export function WorkflowTree({
           last={i === workflow.steps.length - 1}
           preset={workflow.preset}
           complexity={complexity}
+          handoffVaries={others.some(
+            (w) => w.steps.find((o) => o.id === step.id)?.handoffDefault !== step.handoffDefault,
+          )}
           edits={edits}
           open={!collapsed.has(step.id)}
           collapsed={collapsed}
@@ -120,6 +135,7 @@ function StepNode({
   last,
   preset,
   complexity,
+  handoffVaries,
   edits,
   open,
   collapsed,
@@ -131,6 +147,8 @@ function StepNode({
   last: boolean
   preset: WorkflowPresetId
   complexity: Complexity
+  /** Whether this step's default hand-off reads differently at another complexity. */
+  handoffVaries: boolean
   edits: WorkflowEdits
   open: boolean
   collapsed: ReadonlySet<string>
@@ -247,6 +265,8 @@ function StepNode({
         step={step}
         next={next}
         last={last}
+        complexity={complexity}
+        defaultVaries={handoffVaries}
         onSave={(instructions) => edits.setInstructions(step.id, instructions)}
       />
     </li>

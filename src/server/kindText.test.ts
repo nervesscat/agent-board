@@ -115,6 +115,31 @@ describe('the text a project with no software kind is offered', () => {
     expect(Object.fromEntries(Object.entries(found).filter(([, v]) => v.length))).toEqual({})
   })
 
+  it('never points at the workflow or its tool: a project with no software kind has no review rounds', async () => {
+    const result = await rpc(`/api/mcp?project=${music}`, 'tools/list')
+    const tools = result.tools as { name: string; description?: string; inputSchema?: unknown }[]
+    expect(tools.map((t) => t.name)).not.toContain('get_workflow')
+    const found = tools
+      .filter((t) =>
+        /get_workflow|workflow/i.test(`${t.description ?? ''} ${JSON.stringify(t.inputSchema ?? {})}`),
+      )
+      .map((t) => t.name)
+    expect(found).toEqual([])
+    // The software text still points at the tool, as it must.
+    const soft = (await rpc(`/api/mcp?project=${software}`, 'tools/list')).tools as {
+      name: string
+      inputSchema: any
+    }[]
+    expect(
+      soft.find((t) => t.name === 'create_ticket')!.inputSchema.properties.complexity.description,
+    ).toContain('get_workflow')
+    // The complexity parameter is still described, for create_ticket and update_ticket.
+    for (const name of ['create_ticket', 'update_ticket']) {
+      const field = tools.find((t) => t.name === name)!.inputSchema as any
+      expect(field.properties.complexity.description, name).toContain('low unless you say otherwise')
+    }
+  })
+
   it('tells the agent where its files are', async () => {
     const init = await rpc(`/api/mcp?project=${music}`, 'initialize', {
       protocolVersion: '2025-03-26',
