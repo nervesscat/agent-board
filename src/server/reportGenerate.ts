@@ -1,3 +1,6 @@
+import { and, eq } from 'drizzle-orm'
+
+import { db, schema } from '#/db'
 import { localDate, shiftDate } from '#/lib/format'
 import { isDay, periodLabel, periodOf, type TrackedCadence } from '#/lib/reports'
 import { checkTemplate, effectiveTemplate, unwrapReport } from '#/lib/reportTemplate'
@@ -109,6 +112,30 @@ export async function generateReport(
   } finally {
     running.delete(projectId)
   }
+}
+
+/**
+ * The failure of the project's last run that still stands: nothing is left to retry once reports are off
+ * or the report of the failed period was written since (by hand, or by a later run). Null then. The alerts
+ * about a failed generation share it, so they agree on when it is over.
+ */
+export function standingFailure(projectId: number): NonNullable<GenerationState['error']> | null {
+  const error = failed.get(projectId)
+  if (!error) return null
+  const { cadence } = readReportSettings(projectId)
+  if (cadence === 'off') return null
+  const written = db
+    .select({ id: schema.reports.id })
+    .from(schema.reports)
+    .where(
+      and(
+        eq(schema.reports.projectId, projectId),
+        eq(schema.reports.cadence, cadence),
+        eq(schema.reports.period, error.period),
+      ),
+    )
+    .get()
+  return written ? null : error
 }
 
 export function generationState(projectId: number): GenerationState {

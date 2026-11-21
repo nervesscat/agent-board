@@ -12,7 +12,7 @@ import { checkHostTools, hostTools, type HostTool } from '../hostTools'
 import { HttpError } from '../http'
 import { listPasskeys, revokeSession } from '../passkeys'
 import { prRefreshFailures, refreshPrs } from '../prs'
-import { generationState, needsLogin } from '../reportGenerate'
+import { needsLogin, standingFailure } from '../reportGenerate'
 import {
   activeRuns,
   cannotStartRun,
@@ -290,7 +290,7 @@ function agentLoginAlerts(ctx: AlertContext): AlertCandidate[] {
       buttons: [checkAgain],
     })
   const failed = ctx.projects.list().flatMap((p) => {
-    const error = generationState(p.id).error
+    const error = standingFailure(p.id)
     return error && needsLogin(error.message) ? [{ project: p, error }] : []
   })
   if (failed.length) {
@@ -303,7 +303,10 @@ function agentLoginAlerts(ctx: AlertContext): AlertCandidate[] {
         'A report could not be written because claude refused to sign in. Run claude on this machine and ' +
         'sign in again; reports and any agent started from here fail until then.',
       details: failed.map((f) => `${f.project.name}: ${f.error.message}`),
-      buttons: [{ id: 'reports', label: 'Open Reports', kind: 'link', href: `/projects/${first.id}/daily` }],
+      buttons: [
+        checkAgain,
+        { id: 'reports', label: 'Open Reports', kind: 'link', href: `/projects/${first.id}/daily` },
+      ],
     })
   }
   return out
@@ -318,12 +321,21 @@ const agentLogin: AlertType = {
   scope: 'board',
   check: agentLoginAlerts,
   actions: {
-    check: recheck(
-      () => agentLogin,
-      () => edges.recheckTools(),
-      'claude is fine now.',
-      'claude still has a problem.',
-    ),
+    // No cheap sign-in probe exists (claude would have to call out), so this re-runs the tools check and
+    // asks the check again: the login alert ends only when a report was written or reports went off.
+    check: async (ctx) => {
+      await edges.recheckTools()
+      const raised = await agentLogin.check(ctx)
+      const gone = !raised.some((c) => (c.subject ?? '') === ctx.alert.subject)
+      if (gone) return { ok: true, message: 'claude is fine now.', resolve: true }
+      return {
+        ok: false,
+        message:
+          ctx.alert.subject === 'login'
+            ? 'Still failing: the last report was refused for want of a sign-in. Sign in with claude on this machine, then generate the report again.'
+            : 'Still failing: claude has a problem on this machine.',
+      }
+    },
   },
 }
 

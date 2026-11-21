@@ -393,10 +393,67 @@ describe('4 agent login or CLI problem', () => {
       hostTools.setHostTools(hostTools.hostToolsWith({ claude: { path: null } }))
     expect(await press(row!.id, 'check')).toMatchObject({
       resolved: false,
-      message: expect.stringMatching(/still/),
+      message: expect.stringMatching(/^Still failing/),
     })
     machine.edges.recheckTools = async () => hostTools.setHostTools(hostTools.hostToolsWith({}))
     expect(await press(row!.id, 'check')).toMatchObject({ resolved: true })
+  })
+  /** A project whose last report was refused for want of a sign-in. */
+  async function refusedLogin() {
+    const script = path.join(tmp, `claude-refused-${++count}.mjs`)
+    fs.writeFileSync(
+      script,
+      "process.stdin.resume(); process.stderr.write('Invalid API key. Please run /login'); process.exit(1)\n",
+    )
+    const p = reportingProject('good')
+    const fakeArgs = config.claudeArgs
+    config.claudeArgs = [script]
+    try {
+      await expect(gen.generateReport(p)).rejects.toThrow(/Please run \/login/)
+    } finally {
+      config.claudeArgs = fakeArgs
+    }
+    expect(await check('agent-login')).toMatchObject([{ subject: 'login' }])
+    return p
+  }
+
+  it('ends when the report of the failed period is written by hand', async () => {
+    const p = await refusedLogin()
+    const { period } = gen.generationState(p).error!
+    await reports.postReport(p, { period, body: 'Written by hand' }, 'enrique')
+    expect(await check('agent-login')).toEqual([])
+  })
+
+  it('ends when reports are switched off for the project', async () => {
+    const p = await refusedLogin()
+    reports.setReportSettings(p, { cadence: 'off' }, 'enrique')
+    expect(await check('agent-login')).toEqual([])
+  })
+
+  it('has a Check again that stays honest: it fails while the login failure stands and resolves when it ends', async () => {
+    machine.edges.recheckTools = async () => hostTools.setHostTools(hostTools.hostToolsWith({}))
+    const p = await refusedLogin()
+    const [row] = await raise('agent-login')
+    expect(row!.subject).toBe('login')
+    expect(JSON.parse(row!.buttons).map((b: { id: string }) => b.id)).toEqual(['check', 'reports'])
+    // The tools are fine and the check ran again, but nothing says claude signed in.
+    expect(await press(row!.id, 'check')).toMatchObject({
+      ok: false,
+      resolved: false,
+      message: expect.stringMatching(/^Still failing: .*sign-in/),
+    })
+    const { period } = gen.generationState(p).error!
+    await reports.postReport(p, { period, body: 'Written by hand' }, 'enrique')
+    expect(await press(row!.id, 'check')).toMatchObject({ ok: true, resolved: true })
+  })
+
+  it('leaves a report that failed for another reason to the report alert, whose description says so', async () => {
+    const housekeeping = await import('./housekeeping')
+    const type = housekeeping.alertTypes.find((t) => t.type === 'report-generation-failed')!
+    expect(type.description).toBe(
+      'claude could not write the report: it timed out, did not fill the template or failed otherwise',
+    )
+    expect(type.description).not.toMatch(/signed in|installed/)
   })
 })
 

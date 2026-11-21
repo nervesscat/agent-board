@@ -1,12 +1,9 @@
-import { and, eq } from 'drizzle-orm'
-
-import { db, schema } from '#/db'
 import { periodLabel } from '#/lib/reports'
 import { cleanupReport } from '../cleanup'
 import { toolProblem } from '../hostTools'
 import { HttpError } from '../http'
 import { reportDueFor } from '../reportDue'
-import { generateReport, generationState, needsLogin } from '../reportGenerate'
+import { generateReport, needsLogin, standingFailure } from '../reportGenerate'
 import { readReportSettings } from '../reports'
 import type { AlertActionContext, AlertCandidate, AlertContext, AlertType } from './registry'
 
@@ -112,25 +109,13 @@ const clock = (iso: string) => {
 
 export function checkReportFailed(ctx: AlertContext): AlertCandidate[] {
   const projectId = projectOf(ctx)
-  const { error } = generationState(projectId)
+  const error = standingFailure(projectId)
   if (!error) return []
   // A refused login, or a claude the board cannot find, is the machine's fact: the agent-login alert says it.
   if (needsLogin(error.message) || toolProblem('claude') !== null) return []
   const { cadence } = readReportSettings(projectId)
+  // standingFailure said so already: this only narrows the type.
   if (cadence === 'off') return []
-  // Written by hand since, or by a later run: nothing is left to retry.
-  const written = db
-    .select({ id: schema.reports.id })
-    .from(schema.reports)
-    .where(
-      and(
-        eq(schema.reports.projectId, projectId),
-        eq(schema.reports.cadence, cadence),
-        eq(schema.reports.period, error.period),
-      ),
-    )
-    .get()
-  if (written) return []
   const daily = `/projects/${projectId}/daily`
   return [
     {
@@ -185,7 +170,8 @@ export const alertTypes: AlertType[] = [
     idea: 35,
     group: 'housekeeping',
     label: 'Report generation failed',
-    description: 'claude could not write the report (not installed, not signed in, timed out)',
+    description:
+      'claude could not write the report: it timed out, did not fill the template or failed otherwise',
     scope: 'project',
     check: checkReportFailed,
     actions: { retry: retryGeneration },
