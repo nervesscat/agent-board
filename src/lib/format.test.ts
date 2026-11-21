@@ -85,6 +85,10 @@ describe('times, dates and numbers follow the language', () => {
     await at('en', ['de-DE', 'fr'])
     expect(clock(iso)).toMatch(/15:30/)
     expect(formatNumber(1234.5)).toBe('1.234,5')
+    // The Spanish interface keeps Spanish formats whatever the browser speaks.
+    await at('es', ['de-DE'])
+    expect(formatNumber(1234.5)).toBe('1234,5')
+    expect(stamp(iso)).toMatch(/5 mar 2026/)
     // A Spanish browser picks Spanish; a pick of English over it keeps English formats.
     await at('en', ['es-MX'])
     expect(formatNumber(1234.5)).toBe('1,234.5')

@@ -287,7 +287,7 @@ function ColorPick({ value, onChange }: { value: StageColor; onChange: (c: Stage
   const colorItems = Object.fromEntries(STAGE_COLORS.map((c) => [c, t(`stagesEditor.color.${c}`)]))
   return (
     <Select value={value} onValueChange={(c) => c && onChange(c as StageColor)} items={colorItems}>
-      <SelectTrigger size="sm" className="w-28" aria-label={t('stagesEditor.colour')}>
+      <SelectTrigger size="sm" className="w-36" aria-label={t('stagesEditor.colour')}>
         <SelectValue>
           {(c: StageColor) => (
             <span className="inline-flex items-center gap-1.5">

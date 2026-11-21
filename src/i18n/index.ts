@@ -63,7 +63,8 @@ export const currentLocale = (): string => {
   const tags = navigator.languages ?? []
   const own = tags.find((tag) => languageOfTag(tag) === language)
   if (own) return own
-  return matchLanguage(tags) === undefined && tags[0] ? tags[0] : language
+  // Only on the default (English) interface: a Spanish interface a German browser picked keeps Spanish formats.
+  return language === DEFAULT_LANGUAGE && matchLanguage(tags) === undefined && tags[0] ? tags[0] : language
 }
 
 /**
