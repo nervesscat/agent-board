@@ -208,7 +208,7 @@ complexity: a ticket the workflow gives no spec step and no review (a low ticket
 leaves no review record; the rounds a ticket gets are the workflow's for its level (max is for work
 built from scratch, a whole site or app or a new product; a feature in an existing codebase is at most
 high). Every agent it starts for a ticket runs at the effort its workflow step names (the Agent tool's
-`effort`), except the intent agent, which runs at `low` effort whatever the complexity. Do not
+`effort`), except the intent agent, which runs at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity. Do not
 work tickets yourself.
 
 ## Notes

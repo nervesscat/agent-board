@@ -92,8 +92,7 @@ Every step in the text has the same parts:
   ticket's complexity, at every review depth: a `deep` review earns no extra round and a `light` one
   loses none.
 - **The intent check's brief is blind.** The intent agent (the project's `intent` agent; else
-  `feature-review-intent`) is started at the intent step's effort: it runs at `low` effort whatever the
-  complexity, unless the human set another on that step. It runs on every ticket where the workflow
+  `feature-review-intent`) is started at the intent step's effort: it runs at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity. It runs on every ticket where the workflow
   lists the check (a low ticket skips the review, never the intent check, unless the human turned
   the step off for low tickets), and it is briefed with only two things: the
   human's own words and attachments (the ticket's instructions, every post and reply by the human,
@@ -129,7 +128,13 @@ earned.
 4. **A subagent saying "done" or "tests pass" is a claim.** You re-run the checks yourself and read
    the diff yourself before every review and before hand-off.
 5. **Screenshots show the running app** (the review's server or the preview), never code or test
-   output. For an API change, the request and the response instead.
+   output. For an API change, the request and the response instead. The screenshots of a UI change
+   come from the preview where the workflow lists the preview step, and from the review's own run
+   (`shots/`, the verify phase) where the preview is turned off, the summary then saying the preview
+   was turned off on the Workflow page. **A UI change needs a browser:** with `BROWSER=no` and a UI
+   change, do everything else, leave the ticket in progress with its summary saying where you stopped,
+   and return `STATUS: needs-browser`: the orchestrator runs you again with the browser. This holds
+   with or without a preview step in the workflow.
 6. **Push as far as you can before you stop.** The human is the last resort, not the first
    (Escalation, below).
 7. **The human answers a decision, not you.** This agent runs unattended and never answers a decision (`answer_decision`),

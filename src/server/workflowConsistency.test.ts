@@ -9,6 +9,7 @@ import {
   WORKFLOW_PRESETS,
   WORKFLOW_PRESET_DEFS,
   WORKFLOW_STEPS,
+  orderProblem,
   resolveWorkflow,
   type PresetTweak,
   type ResolvedWorkflow,
@@ -59,7 +60,38 @@ function combos(preset: WorkflowPresetId): Combo[] {
   list.push({ name: 'rounds.mid 0, intent off', tweak: { rounds: { mid: 0 }, steps: off('intent') } })
   list.push({ name: 'rounds.mid 0, preview off', tweak: { rounds: { mid: 0 }, steps: off('preview') } })
   list.push({ name: 'rounds all 0', tweak: { rounds: { low: 0, mid: 0, high: 0, max: 0 } } })
+  // The Preview step moved before the Review, which the order rules allow: the text must follow the order.
+  const previewFirst = previewBeforeReview(preset)
+  list.push({ name: 'preview before review', tweak: { order: previewFirst } })
+  list.push({
+    name: 'preview before review, intent off',
+    tweak: { order: previewFirst, steps: off('intent') },
+  })
+  list.push({
+    name: 'preview before review, preview off',
+    tweak: { order: previewFirst, steps: off('preview') },
+  })
+  list.push({
+    name: 'preview before review, intent and CI off',
+    tweak: { order: previewFirst, steps: off('intent', 'ci') },
+  })
+  list.push({
+    name: 'preview before review, rounds.low 1, intent off',
+    tweak: { order: previewFirst, rounds: { low: 1 }, steps: off('intent') },
+  })
+  list.push({
+    name: 'preview before review, rounds.mid 0',
+    tweak: { order: previewFirst, rounds: { mid: 0 } },
+  })
   return list
+}
+
+/** The preset's order with the Preview step moved to just before the Review (an order the rules allow). */
+function previewBeforeReview(preset: WorkflowPresetId): WorkflowStepId[] {
+  const order: WorkflowStepId[] = WORKFLOW_PRESET_DEFS[preset].steps.filter((id) => id !== 'preview')
+  order.splice(order.indexOf('review'), 0, 'preview')
+  expect(orderProblem(preset, order), `${preset} with the preview before the review`).toBeNull()
+  return order
 }
 
 const flat = (text: string) => text.replace(/\s+/g, ' ')
@@ -70,6 +102,9 @@ const NAMES: Partial<Record<WorkflowStepId, RegExp>> = {
   preview: /preview/i,
   ci: /\bCI\b/,
   review: /review round|one more review|review phases|every review|each round|the next round/i,
+  spec: /first spec|reconcile the two|merge the two|the two specs/i,
+  spec2: /second spec|01-spec-2/i,
+  tests: /test-writing/i,
 }
 
 /** A sentence that asks for something the workflow lists as skipped is a contradiction; one that says it is not asked for is not. */
@@ -177,6 +212,22 @@ function inconsistencies(w: ResolvedWorkflow, text: string): string[] {
       }
     }
   }
+
+  // (e) A step that is said to come "later" or "earlier" in the order does, in this order, relative to the
+  // step whose section says it.
+  const stepOfLabel = (label: string) =>
+    w.steps.find((st) => label === st.label || label.startsWith(`${st.label} `))
+  for (const sec of secs) {
+    const here = stepOfLabel(sec.label)
+    if (!here) continue
+    for (const m of flat(sec.body).matchAll(/the (\w+) step[^.]{0,40}?\b(later|earlier)\b/gi)) {
+      const named = w.steps.find((st) => st.id === m[1]!.toLowerCase())
+      if (!named || named.skipped) continue
+      const later = named.position > here.position
+      if ((m[2]!.toLowerCase() === 'later') !== later)
+        found.push(`(e) ${here.id} says the ${named.id} step is ${m[2]} in the order, but it is not: ${m[0]}`)
+    }
+  }
   return found
 }
 
@@ -196,7 +247,7 @@ describe('the served workflow text for every preset, complexity and tweak', () =
       }
     }
     // Four presets by four complexities by the tweak sets above.
-    expect(rendered).toBeGreaterThan(400)
+    expect(rendered).toBeGreaterThan(500)
     const unique = [...new Set(problems.map((p) => p.replace(/^[^:]*: /, '')))]
     expect(unique).toEqual([])
   })
@@ -267,8 +318,84 @@ describe('the served workflow text for every preset, complexity and tweak', () =
     expect(text).toContain('- Spec - skipped: turned off on the Workflow page')
     expect(text).toContain('this is the only spec: there is no first spec to reconcile with')
     expect(text).not.toContain('Reconcile them yourself')
+    // Its own Does and Hand-off lines follow the flow state too: it is the only spec, nothing is reconciled.
+    const second = resolveWorkflow('maximum', { steps: off('spec') }, 'mid').steps.find(
+      (st) => st.id === 'spec2',
+    )!
+    expect(second.what).toContain("writes the ticket's only spec from the ticket alone, to `01-spec.md`")
+    expect(second.what).toContain('with nothing to merge')
+    expect(second.handoff).toContain('Its spec is the one the builder gets')
+    for (const line of [second.what, second.handoff])
+      expect(line).not.toMatch(/reconcile|merge the two|first/i)
+    expect(second.handoffDefault).toBe(second.handoff)
+    // With the Spec step on, the catalogue's own lines (two specs, reconciled) stand.
+    const both = resolveWorkflow('maximum', undefined, 'mid').steps.find((st) => st.id === 'spec2')!
+    expect(both.what).toBe(WORKFLOW_STEPS.spec2.what)
+    expect(both.handoff).toBe(WORKFLOW_STEPS.spec2.handoff)
     // Both on: the two are reconciled.
     expect(flat(render(resolveWorkflow('maximum', undefined, 'mid')))).toContain('Reconcile them yourself')
+  })
+
+  it('says nothing of the preview step being later in the order when it comes first, and has the intent check see a preview of its own head (C2)', () => {
+    const intentOf = (text: string) => flat(text.slice(text.indexOf('Intent check')))
+    for (const preset of WORKFLOW_PRESETS) {
+      for (const [name, order] of [
+        ['preview after review', undefined],
+        ['preview before review', previewBeforeReview(preset)],
+      ] as const) {
+        const w = resolveWorkflow(preset, order ? { order } : undefined, 'mid')
+        const heads = w.steps.map((st) => st.id)
+        expect(heads.indexOf('preview') < heads.indexOf('review'), `${preset}/${name}`).toBe(
+          order !== undefined,
+        )
+        const text = flat(render(w))
+        expect(text, `${preset}/${name}`).not.toMatch(/preview step[^.]{0,30}\b(later|earlier)\b/i)
+        // The first intent run and every re-run find a preview that runs for the head they check.
+        expect(intentOf(render(w)), `${preset}/${name}`).toContain(
+          'The intent check always runs against a preview of the head it checks. Before the first intent run and before every re-run',
+        )
+        expect(intentOf(render(w)), `${preset}/${name}`).toContain(
+          "whatever the preview step's place in the order",
+        )
+        if (preset === 'thorough' || preset === 'maximum') {
+          expect(text, `${preset}/${name}`).toContain(
+            '**The preview comes first:** in a round where no preview',
+          )
+          expect(text, `${preset}/${name}`).toContain(
+            "whatever the preview step's place in the order, a fix commit changes the head",
+          )
+        }
+      }
+      // With the preview off, nothing asks for one.
+      const none = flat(render(resolveWorkflow(preset, { steps: off('preview') }, 'mid')))
+      expect(none, preset).not.toContain('The intent check always runs against a preview')
+    }
+  })
+
+  it('has a turned-off preview leave the screenshots to the review, in the summary, the hand-off and the intent brief (C3)', () => {
+    for (const preset of WORKFLOW_PRESETS)
+      for (const complexity of ['low', 'mid'] as const) {
+        const on = flat(render(resolveWorkflow(preset, undefined, complexity)))
+        const text = flat(render(resolveWorkflow(preset, { steps: off('preview') }, complexity)))
+        const at = `${preset}/${complexity}`
+        // The summary: the screenshots are the review's own and it says the preview was turned off.
+        expect(text, at).toContain(
+          "the screenshots of a UI change in `files`, which come from the review's own run (its `shots/` folder, the verify phase)",
+        )
+        expect(text, at).toContain('the summary says the preview was turned off on the Workflow page')
+        // The hand-off checklist.
+        expect(text, at).toContain(
+          "With the preview turned off, the screenshots of a UI change are the review's own (`shots/`, the verify phase)",
+        )
+        // The intent brief.
+        expect(text, at).toContain("the screenshots of a UI change come from the review's own run")
+        // With the preview on, none of it is said.
+        expect(on, at).not.toContain("which come from the review's own run")
+        expect(on, at).not.toContain('With the preview turned off')
+      }
+    // A ticket with no review has none of the review's screenshots to name as a source.
+    const low = flat(render(resolveWorkflow('standard', { steps: off('preview') }, 'low')))
+    expect(low).toContain('if it took any (this ticket has no review)')
   })
 
   it('reads the conditions of a procedure: if, else, not, nested, and refuses a broken one', () => {

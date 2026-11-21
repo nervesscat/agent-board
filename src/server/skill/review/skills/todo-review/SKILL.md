@@ -128,8 +128,7 @@ Loop until nothing is pending or running:
   `QUEUE`. Pass `model` on the Agent call when `model=` was given. Pass `effort` on the Agent call
   as the ticket's complexity sets it: `low` for low, `medium` for mid and high, `high` for max; the ticket agent passes
   each step's own effort, as the ticket's workflow names it, to every agent it starts (spec, builder,
-  the review's phase agents), except the intent agent, which runs at `low` effort whatever the
-  complexity (its workflow step sets that, and only the human changes it). The ticket agent reads
+  the review's phase agents), except the intent agent, which runs at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity (only the human changes it). The ticket agent reads
   the project's workflow itself (`get_workflow` with its ticket) and follows it: you pass it none.
   Tell it to
   `get_ticket` the ticket before anything else and to carry its context — the instructions, the
@@ -177,7 +176,7 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    is required and the summary says it was turned off on the Workflow page (when it runs, it is the workflow's
    intent step, locked above low: after the last review round and before the hand-off, and again after a human comment that sent
    the ticket back;
-   at `low` effort, from only the human's words (their answers on decision cards included) and attachments and the result, never the builder's
+   at its step's effort (`low` by default), from only the human's words (their answers on decision cards included) and attachments and the result, never the builder's
    plan, the spec, the review's findings or the options an agent put on a card; `does not match` goes back to the builder, then the gate, then one more review round of the
    workflow's phases (outside the round budget; after the second one the ticket agent asks the human), then the intent check
    again; it runs on the preview started before it, and again on any new head), the preview was started
@@ -187,7 +186,7 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    Preview phase with a summary saying why the change cannot be previewed (no preview setup, or
    nothing to try, or the step turned off), or the CI phase when the workflow turned CI off. The ticket's summary
    (`summary` on `get_ticket`, `fallback: false`: the hand-off is the summary the agent wrote, not a
-   separate post) has screenshots in its attachments when the change has a UI, and a "Tested" part
+   separate post) has screenshots in its attachments when the change has a UI and the workflow lists the preview step or the review produced screenshots (with the preview turned off, the screenshots are the review's own, `shots/`, and the summary says the preview was turned off on the Workflow page; none are required when the review took none), and a "Tested" part
    that names the level and what checked it (the workflow's preset and, with a review, the review depth and why). Unless `depth=` was given
    (other than `auto`), measure the branch
    yourself the way the ticket agent's "Review depth" says

@@ -415,7 +415,7 @@ describe('the review texts the board ships', () => {
       ] as const) {
         const t = flat(text)
         expect(t, name).toContain('intent')
-        expect(t, name).toContain('`low` effort')
+        expect(t, name).toContain('the effort its workflow step gives (`low` by default in every preset)')
         expect(t, name).toMatch(
           /builder's plan, the spec, the review's findings or the options an agent put on a card/i,
         )
@@ -427,7 +427,9 @@ describe('the review texts the board ships', () => {
       expect(rules).toContain(
         'a low ticket skips the review, never the intent check, unless the human turned the step off for low tickets',
       )
-      expect(rules).toContain('it runs at `low` effort whatever the complexity')
+      expect(rules).toContain(
+        "it runs at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity",
+      )
       expect(rules).toContain('`done as asked`, `done differently (how)` or `not done`')
       expect(rules).toContain(
         "and the human's own answer on each decision card (the option they picked and their words, as the human's own reply)",
@@ -438,7 +440,9 @@ describe('the review texts the board ships', () => {
       expect(rules).toContain(
         'Any commit after a `matches` changes the head, so the check runs again on the new head before a hand-off stands',
       )
-      expect(flat(ticketAgent)).toContain('it runs at `low` effort whatever the complexity')
+      expect(flat(ticketAgent)).toContain(
+        "it runs at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity",
+      )
       // The intent step's procedure now lives in the workflow the board serves (`get_workflow`): read there.
       const wf = await workflowText('standard', 'mid')
       const intent = wf.slice(wf.indexOf('Intent check'))
@@ -472,7 +476,7 @@ describe('the review texts the board ships', () => {
         "the spec, the review's findings or the options an agent put on a card: it must not inherit their reading",
       )
       expect(intent).toContain(
-        "Before every re-run of the intent check (after a `does not match` fix round or any new commit) go through the preview step again at the head being handed off: the preview for that head runs and fresh screenshots of the changed state are taken; brief the check with those, never the old head's",
+        "The intent check always runs against a preview of the head it checks. Before the first intent run and before every re-run (after a `does not match` fix round or any new commit), see whether a preview runs for the head being handed off, whatever the preview step's place in the order: when none does (a commit since the preview was started changed the head), go through the preview step again at that head, so the preview for that head runs and fresh screenshots of the changed state are taken; brief the check with those, never an older head's",
       )
       expect(wf).toContain('reused wherever it is needed and not built again')
       expect(wf).toContain(
@@ -485,7 +489,7 @@ describe('the review texts the board ships', () => {
       expect(wf).toContain('Only after the intent check returned `matches`')
       expect(flat(featureReview)).toContain('again after any human comment that sent the ticket back')
       expect(flat(todoReview)).toContain(
-        'the intent agent, which runs at `low` effort whatever the complexity',
+        "the intent agent, which runs at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity",
       )
     })
 
@@ -498,7 +502,9 @@ describe('the review texts the board ships', () => {
         expect(t, name).toContain(
           'The intent check comes first, on every ticket of any complexity (low included)',
         )
-        expect(t, name).toContain('at `low` effort whatever the complexity')
+        expect(t, name).toContain(
+          "at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity",
+        )
         expect(t, name).toContain(
           "never the builder's plan, the spec, the review's findings or the options an agent put on a card",
         )
@@ -514,7 +520,10 @@ describe('the review texts the board ships', () => {
           "the project's workflow** (`get_workflow` with the ticket's id: its steps in order",
         )
         expect(t.replaceAll('**intent**', 'intent'), name).toContain(
-          'the **intent** agent runs at `low` effort before the hand-off'.replaceAll('**intent**', 'intent'),
+          "the **intent** agent runs at its workflow step's effort (`low` by default in every preset) before the hand-off".replaceAll(
+            '**intent**',
+            'intent',
+          ),
         )
       }
       expect(flat(readme)).toContain('hunt, refute, merge, intent)')
@@ -539,7 +548,7 @@ describe('the review texts the board ships', () => {
       const { DEFAULT_AGENTS } = await import('./defaultAgents')
       const builder = DEFAULT_AGENTS.find((a) => a.name === 'builder')!
       expect(flat(builder.delegation)).toContain(
-        "(the Agent tool's `effort`); the intent agent always runs at `low`.",
+        "(the Agent tool's `effort`); the intent agent too, at the effort its own step gives, `low` by default in every preset.",
       )
       const runner = flat(read(path.join(skills, 'agents', 'feature-review-runner.md')))
       expect(runner).toContain('`round` (optional): the review round this run is')
@@ -551,13 +560,21 @@ describe('the review texts the board ships', () => {
       const i = flat(instructions)
       expect(i).toContain('refute, merge, and the intent check)')
       expect(i).toContain("the project's workflow: get_workflow with the ticket's id serves it")
-      expect(i).toContain('the intent check runs at low effort before the hand-off')
-      expect(i).toContain("the builder and the review's phase agents; the intent agent always runs at low)")
+      expect(i).toContain(
+        "the intent check runs at its workflow step's effort (low by default in every preset) before the hand-off",
+      )
+      expect(i).toContain(
+        "the builder and the review's phase agents; the intent agent too, at the effort its own step gives, low by default in every preset)",
+      )
       const queue = flat(between(reviewQueue, '**Building**', '## Notes'))
       expect(queue).toContain("the build cycle of the project's workflow (`get_workflow`")
-      expect(queue).toContain('except the intent agent, which runs at `low` effort whatever the complexity')
+      expect(queue).toContain(
+        "except the intent agent, which runs at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity",
+      )
       const todo = flat(todoReview)
-      expect(todo).toContain('except the intent agent, which runs at `low` effort whatever the complexity')
+      expect(todo).toContain(
+        "except the intent agent, which runs at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity",
+      )
       expect(todo).toContain(
         "except the intent agent: it gets only the human's own words and attachments (the instructions, every post and reply by the human, and the human's own answer on a decision card) and the result, never the spec, the plan, the review's findings or the options an agent put on a card, and it may not read the rest of the ticket's posts itself",
       )

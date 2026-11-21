@@ -316,7 +316,7 @@ describe('the board skill, AGENTS.md, the session skill and review-queue point a
       "then one more review round of the project's workflow (the numbering continues), then the intent check again.",
       "a review that does not survive after the workflow's last round goes to a human decision",
       'the build goes to hand-off only with evidence for every criterion',
-      'the **intent** agent runs at `low` effort before the hand-off',
+      "the **intent** agent runs at its workflow step's effort (`low` by default in every preset) before the hand-off",
       'Max is for work built from scratch (a whole site or app, a new product or standalone service); a feature in an existing codebase is at most high, however difficult.',
     ]) {
       expect(agentsDoc, `AGENTS.md: ${sentence}`).toContain(sentence)
@@ -336,7 +336,9 @@ describe('the board skill, AGENTS.md, the session skill and review-queue point a
     const queue = flat(review('skills/review-queue/SKILL.md'))
     expect(queue).toContain("the build cycle of the project's workflow (`get_workflow`")
     expect(queue).toContain("the rounds a ticket gets are the workflow's for its level")
-    expect(queue).toContain('except the intent agent, which runs at `low` effort whatever the complexity')
+    expect(queue).toContain(
+      "except the intent agent, which runs at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity",
+    )
   })
 })
 
@@ -614,5 +616,79 @@ describe('review fix pass: one folder per review, the plan of a skipped review, 
     )
     expect(orchestrator).toContain('a low ticket included, a review ran and is required')
     expect(orchestrator).not.toContain('A low ticket skips this measure')
+  })
+})
+
+describe('review fix pass: the intent effort, the browser rule and the screenshot source', () => {
+  it('says the intent agent runs at the effort its workflow step gives, in every text that names its effort (C4)', async () => {
+    const stale = [/always runs at/i, /runs at `?low`? effort,? whatever/i, /at `low` effort,? whatever/i]
+    const texts: Record<string, string> = {
+      ...(await servedTexts()),
+      'feature-review-intent.md': review('agents/feature-review-intent.md'),
+      'mcp.ts': read(skillDir, '..', 'mcp.ts'),
+      'defaultAgents.ts': read(skillDir, '..', 'defaultAgents.ts'),
+    }
+    for (const [name, text] of Object.entries(texts))
+      for (const re of stale) expect(flat(text), `${name}: ${re}`).not.toMatch(re)
+    const step =
+      "the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity"
+    for (const [name, text] of [
+      ['board skill', (await boardSkills())['board skill (mcp)']!],
+      ['AGENTS.md', read(root, 'AGENTS.md')],
+      ['feature-review', review('skills/feature-review/SKILL.md')],
+      ['review-queue', review('skills/review-queue/SKILL.md')],
+      ['todo-review', review('skills/todo-review/SKILL.md')],
+      ['ticket agent', review('agents/todo-review-ticket.md')],
+    ] as const)
+      expect(flat(text), name).toContain(step)
+    // The sentence that says each step's effort rules no longer carves out the intent agent as fixed.
+    for (const [name, text] of [
+      ['board skill', read(skillDir, 'board.md')],
+      ['AGENTS.md', read(root, 'AGENTS.md')],
+    ] as const)
+      expect(flat(text), name).toContain(
+        'the intent agent too, at the effort its own step gives, `low` by default in every preset)',
+      )
+  })
+
+  it('keeps the needs-browser rule in the ticket agent for every workflow, and out of the preview step (C3)', async () => {
+    const agent = flat(review('agents/todo-review-ticket.md'))
+    const rule =
+      'with `BROWSER=no` and a UI change, do everything else, leave the ticket in progress with its summary saying where you stopped, and return `STATUS: needs-browser`'
+    expect(agent).toContain(rule)
+    expect(agent).toContain('with or without a preview step in the workflow')
+    // The rule sits in the always-on contract, not in a step procedure.
+    const contract = flat(agent.slice(agent.indexOf('## The contract: proof, not claims')))
+    expect(contract).toContain(rule)
+    // The preview step only points at it, so a workflow with the step off still has the rule.
+    const on = flat(await workflowText('standard', 'mid'))
+    const { renderWorkflowText } = await import('./workflow')
+    const offText = flat(
+      renderWorkflowText(resolveWorkflow('standard', { steps: { preview: { enabled: false } } }, 'mid'), {
+        source: 'project',
+        projectPreset: 'standard',
+        ticketId: null,
+      }),
+    )
+    expect(on).toContain('your always-on `needs-browser` rule applies')
+    expect(on).not.toContain('return `STATUS: needs-browser`')
+    expect(offText).not.toContain('needs-browser')
+  })
+
+  it('has the orchestrator and the hand-off require screenshots of a UI change only where there is a preview step or the review took some (C3)', async () => {
+    const orchestrator = flat(review('skills/todo-review/SKILL.md'))
+    expect(orchestrator).toContain(
+      'has screenshots in its attachments when the change has a UI and the workflow lists the preview step or the review produced screenshots',
+    )
+    expect(orchestrator).toContain(
+      "with the preview turned off, the screenshots are the review's own, `shots/`, and the summary says the preview was turned off on the Workflow page; none are required when the review took none",
+    )
+    const rule =
+      "With the preview turned off, the screenshots of a UI change are the review's own (`shots/`, the verify phase), required only where the review took them, and the summary says the preview was turned off on the Workflow page."
+    for (const [name, text] of Object.entries(await boardSkills())) expect(flat(text), name).toContain(rule)
+    expect(flat(read(root, 'AGENTS.md'))).toContain(rule)
+    expect(flat(review('agents/todo-review-ticket.md'))).toContain(
+      "the review's own run (`shots/`, the verify phase) where the preview is turned off",
+    )
   })
 })

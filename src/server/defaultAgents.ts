@@ -134,7 +134,7 @@ codebase, however difficult: that is at most high. With no review, its checks re
 most twice, and after the second return, when the checks still fail or a criterion still has no
 evidence, the human decides (keep going or drop). Every agent the cycle starts for the ticket runs at
 the effort its workflow step names, \`auto\` being low for low, medium for mid and high, high for max
-(the Agent tool's \`effort\`); the intent agent always runs at \`low\`.`,
+(the Agent tool's \`effort\`); the intent agent too, at the effort its own step gives, \`low\` by default in every preset.`,
   },
   {
     name: 'runner',

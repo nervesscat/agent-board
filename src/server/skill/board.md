@@ -471,8 +471,7 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    setup, or the change has nothing to try: docs only, a script), say why in the summary instead.
 7. The summary, up to date (`set_ticket_summary`, never a new hand-off post): the PR link, **the
    preview link and what to try there**, how it was tested, the e2e result (its summary, or its
-   report when something failed), each review round's verdict and, for a UI change, the latest
-   screenshots of what changed, in `files`. A new version replaces the previous one in wording,
+   report when something failed), each review round's verdict and, for a UI change, the latest screenshots of what changed (the preview's where the workflow lists the preview step, else the review's own), in `files`. A new version replaces the previous one in wording,
    never in facts: carry forward every section and fact that still holds (what the change does,
    where it stands, each review round's verdict, the PR, the preview and what to try there, how it
    was tested); keep the latest screenshots and recordings in `files`, and older proofs while they
@@ -484,15 +483,13 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
 **The project's workflow decides which of these run.** When its workflow (`get_workflow`) lists a step as
 skipped because the human turned it off on the Workflow page (CI, or the preview), its items are not run
 and not required: no CI wait (the CI checks green on the head that item 2 still asks for, and item 5's CI comment; the local checks stay), no preview (item
-6), and the summary says that step was turned off on the Workflow page. The push, the pull request and
-the summary are locked: they are always done.
+6), and the summary says that step was turned off on the Workflow page. With the preview turned off, the screenshots of a UI change are the review's own (`shots/`, the verify phase), required only where the review took them, and the summary says the preview was turned off on the Workflow page. The push, the pull request and the summary are locked: they are always done.
 
 **The intent check comes first, on every ticket of any complexity (low included).** When you
 orchestrate the cycle, the last review round (none for low) passes and then the project's **intent**
 agent compares what the human asked with what was built, before any item above stands (the preview
 is started first, with its screenshots, and the check reads it at the current head; a commit after a
-`matches`, such as a CI fix, changes the head, so the check runs again on it): at `low`
-effort whatever the complexity, again after any human comment that sent the ticket back. It gets only
+`matches`, such as a CI fix, changes the head, so the check runs again on it): at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity, again after any human comment that sent the ticket back. It gets only
 the human's own words and attachments (the instructions, every post and reply by the human and the human's own answer on a decision card, newest
 last, the latest comment that sent the ticket back weighing most) and the result (the preview link,
 its screenshots or recordings, the diff at the current head), never the builder's plan, the spec, the review's findings or the options an agent put on a card. It
@@ -681,11 +678,10 @@ hold in every workflow: a fix pass by the **builder** takes the review's confirm
 the project's checks and a new review; a review that does not survive after the workflow's last round
 goes to a human decision; the checks return the build at most twice, and after the second return,
 when the checks still fail or a criterion still has no evidence, the human decides (keep going or
-drop); the build goes to hand-off only with evidence for every criterion; the **intent** agent runs at
-`low` effort before the hand-off. Max is for work built from scratch (a whole site or app, a new product or standalone service); a feature in an existing codebase is at most high, however difficult. The agents' thinking effort is each workflow
+drop); the build goes to hand-off only with evidence for every criterion; the **intent** agent runs at its workflow step's effort (`low` by default in every preset) before the hand-off. Max is for work built from scratch (a whole site or app, a new product or standalone service); a feature in an existing codebase is at most high, however difficult. The agents' thinking effort is each workflow
 step's effort, `auto` unless the human set one: `low` for a low ticket, `medium` for mid and high,
 `high` for max; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket (the ticket agent, the
-spec agent, the builder and the review's phase agents; the intent agent always runs at `low`). `/todo-review` is that
+spec agent, the builder and the review's phase agents; the intent agent too, at the effort its own step gives, `low` by default in every preset). `/todo-review` is that
 orchestrator for
 the To do tickets: one agent per ticket runs the cycle, checks the proof itself (criteria seen
 working, no weakened tests, screenshots) and blocks only for what only the human can give.

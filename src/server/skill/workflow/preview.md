@@ -4,9 +4,8 @@ step's text says when it does), it runs: reuse it, take only the screenshots sti
 nothing. {{end}}The review's `shots/` folder has the verify phase's screenshots. For a UI change you also need
 one of the finished thing in that preview at the state the ticket is about. A ticket with no review has no
 review folder, so its screenshots come from the preview. {{if intent}}The intent check is given this preview, these
-screenshots and the diff. {{end}}With `BROWSER=no` and a UI change, do everything else, leave the ticket in
-progress with its summary saying where you stopped, and return `STATUS: needs-browser`: the orchestrator
-runs you again with the browser.
+screenshots and the diff. {{end}}With `BROWSER=no` and a UI change, your always-on `needs-browser` rule applies: you cannot take
+these screenshots, so stop as it says.
 
 The preview comes before the move to review, never after it: start it first whenever the project has a
 preview setup and the change can be previewed; when it cannot (no preview setup, or nothing to try), the
@@ -47,6 +46,6 @@ A preview build you start is a heavy run, in a test slot like any other (holder
 preview runs or has failed. The board ticks Preview once it runs; when the change cannot be tried, remove
 the Preview phase instead.
 
-{{if intent}}Before every re-run of the intent check (after a `does not match` fix round or any new commit) come back
-here at the head being handed off: the preview for that head runs (build it only when none runs for this
-head) and fresh screenshots of the changed state are taken.{{end}}
+{{if intent}}Before the first intent check and before every re-run (after a `does not match` fix round or any new commit) come
+back here when no preview runs for the head being handed off: the preview for that head runs (build it only
+when none runs for this head) and fresh screenshots of the changed state are taken.{{end}}

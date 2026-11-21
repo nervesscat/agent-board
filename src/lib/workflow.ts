@@ -787,6 +787,14 @@ function flowText(id: WorkflowStepId, flow: FlowState): { what?: string; handoff
             }),
         ...(flow.review ? {} : { handoff: INTENT_WITHOUT_REVIEW }),
       }
+    case 'spec2':
+      return flow.firstSpec
+        ? null
+        : {
+            what: "A spec agent writes the ticket's only spec from the ticket alone, to `01-spec.md`: the Spec step is turned off, so the builder gets this spec as it is, with nothing to merge.",
+            handoff:
+              "Brief it with the ticket's context. Its spec is the one the builder gets; where the readings lead to different products, put both on a decision card.",
+          }
     case 'preview':
       return flow.intent
         ? null

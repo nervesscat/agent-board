@@ -524,7 +524,7 @@ plan first, then the result with its proofs.
    off; the review itself never runs it, the orchestrator that hands the ticket off does (the
    todo-review skill's ticket agent). It runs on every ticket, of any complexity (low included, which
    has no review rounds), and again after any human comment that sent the ticket back. It runs the
-   project's `intent` agent (or `feature-review-intent`) at `low` effort, whatever the complexity,
+   project's `intent` agent (or `feature-review-intent`) at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity,
    and gives it only the human's own words and attachments (the ticket's instructions, every post
    and reply by the human, newest last, and the human's own answer on a decision card, the latest comment that sent the ticket back weighing most)
    and the result (the preview, the screenshots or recordings, the diff). It never gets the

@@ -22,5 +22,7 @@ Merged itself as their facts hold (a tick by hand is refused); you tick Implemen
    commit). An open Preview may stay only when the summary says why (no preview setup, nothing to try, or
    the preview step turned off on the Workflow page). A step this workflow lists as skipped because it was
    turned off (CI, the preview) is not run and not required: its phase may stay open, and the summary says
-   that step was turned off on the Workflow page. The push, the pull request and the summary are never
+   that step was turned off on the Workflow page. {{if !preview}}With the preview turned off, the screenshots of a UI
+   change are the review's own (`shots/`, the verify phase), and the summary says the preview was turned off on the Workflow page; none are
+   required when the review took none. {{end}}The push, the pull request and the summary are never
    skipped.
