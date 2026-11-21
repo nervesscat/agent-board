@@ -146,7 +146,9 @@ Loop until nothing is pending or running:
   `tests-<repo id>-full`), and nothing else. The agent releases its own right after each heavy
   run; this covers a run that ended any other way, and clears a slot a dead run left behind. You
   are the only one besides the holder who clears a dead run's slot, and only when its
-  `holder.txt` names that ticket. Then check the result (Step 4) and fill the slot again.
+  `holder.txt` names that ticket. Then check that nothing the agent started is still running (servers, test boards,
+  dev servers, watchers, by process id), stop what is (except the ticket's preview, which stays up while it is in review and is stopped once it is merged or dropped), check the result (Step 4) and fill the slot
+  again.
 
 ## Step 4: Check each result
 
@@ -166,8 +168,10 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    at `low` effort, from only the human's words (their answers on decision cards included) and attachments and the result, never the builder's
    plan, the spec, the review's findings or the options an agent put on a card; `does not match` goes back to the builder, then the gate, then one more full review round
    (outside the round budget; after the second one the ticket agent asks the human), then the intent check
-   again; it runs on the preview started before it, and again on any new head), and `open` is empty, or
-   holds only the Preview phase with a summary saying why the change cannot be tried. The ticket's summary
+   again; it runs on the preview started before it, and again on any new head), the preview was started
+   before the move to review whenever the project has a preview setup and the change can be previewed,
+   and `open` is empty, or holds only the Preview phase with a summary saying why the change cannot be
+   previewed (no preview setup, or nothing to try). The ticket's summary
    (`summary` on `get_ticket`, `fallback: false`: the hand-off is the summary the agent wrote, not a
    separate post) has screenshots in its attachments when the change has a UI, and a "Tested" part
    that names the level and what checked it (for mid, high and max, the review depth and why). Unless `depth=` was given
@@ -207,7 +211,8 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
 check found>` added. It resumes from the ticket's summary and posts, not from scratch. It goes
 back in the queue and starts like any other ticket, only after the previous run of that ticket has
 returned (`ticket:<id>`). Each ticket is sent back or re-queued at most once; after that its result
-is recorded as it is.
+is recorded as it is. A relaunch after the human's answer, or after a comment that moved the ticket back
+to In progress, is not a send-back and does not count toward that limit.
 
 Record the row: ticket, title, repo, status, verdict, rounds, depth, PR, preview, blocker, notes.
 
@@ -223,7 +228,8 @@ returns `error`, or you stop it at the human's word or your own), record on ever
 that it was stopped and why: a `comment`, and a `set_ticket_summary` whose state says stopped and the
 reason. The next reader must be able to tell a deliberate stop from a failure.
 
-**Clean up what you started when the work ends.** Stop what you or your agents started (the review's
+**Clean up what you started, per ticket.** After each ticket agent ends, check that nothing it started
+is still running and stop what is, by process id, except the ticket's preview, which stays up while it is in review and is stopped once it is merged or dropped. Stop what you or your agents started (the review's
 servers, test boards, watchers), remove this run's temporary files and folders, and release the test
 lock when its `holder.txt` names a ticket whose run returned. The review's own scratch worktree may
 go; the tickets' worktrees and their branches on origin are the human's: list them, never delete
@@ -246,7 +252,10 @@ them.
   runs `/feature-review`, whose phase agents (env, verify, hunt, refute, merge) are its own. Do not
   add a level, and never do a ticket agent's work yourself.
 - Never two ticket agents on one ticket or one branch. Never move a ticket yourself except to leave
-  a comment on an error; the ticket agents own their tickets' stages.
+  a comment on an error; the ticket agents own their tickets' stages. Before you call a ticket blocked
+  or send one back, check for answered cards and new human comments, and never move a ticket the human
+  just moved: an answer, or a comment that moved it back to In progress, relaunches its agent
+  (`RETRY`), briefed with it.
 - The orchestrator never changes a ticket's complexity: it passes the level on, and the ticket agent
   never changes its own.
 - Where posts go on a ticket: progress posts and anything posted `as` one of the project's agents

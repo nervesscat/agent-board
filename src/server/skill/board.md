@@ -176,8 +176,11 @@ Lanes of a ticket you are working are yours to create (next section).
   close your spans and waits, and rewrite the summary when you stop or hand off. You are not
   finished while the board is behind what you did. If you stop a ticket before the end, at the
   human's word or your own, record on the ticket that it was stopped and why (a `comment` and a line
-  in the summary), so the next reader can tell a stop from a failure. When the work ends, clean up
-  what you started: processes, temporary files, locks, and any scratch worktree of your own. A
+  in the summary), so the next reader can tell a stop from a failure. Clean up
+  what you started per ticket, not only at the close: every server, test board, dev server, watcher
+  or lock you or your subagents start is stopped by you, by its process id, after each review round
+  and at the hand-off (except the ticket's preview, which stays up while it is in review and is
+  stopped once it is merged or dropped), together with temporary files and any scratch worktree of your own. A
   ticket's worktrees and origin branches are the human's: list them and never delete them.
 - A step that needs the human (a credential, a manual action, a call only they can make): tag
   that task or subtask blocked, `update_task` with `blocked: true` and `blockedReason` saying what
@@ -191,8 +194,10 @@ Lanes of a ticket you are working are yours to create (next section).
   lined-up, done or cancelled ticket, nor one under such a ticket, asks nothing. It still counts as open and does not move the
   ticket. A blocked step further
   down the order surfaces once the steps before it are done.
-  Ticking the task done clears the tag; `blocked: false` clears it once resolved. Move the whole
-  ticket to `blocked` (or `ask_decision`) only when nothing else can go on.
+  Ticking the task done clears the tag; `blocked: false` clears it once resolved. A question
+  to the human always moves the whole ticket to `blocked` right after it is posted (an `ask_decision`
+  card or an asking post), and you end your work; "only when nothing else can go on" is for a step
+  that needs a human action that is not a question, which is tagged blocked on the task while work goes on.
 - Parallel work goes in lanes. When parts of the ticket run at once (subagents, worktrees, another
   agent), `create_ticket` for each part with `parentId` = the ticket, a short title, the part's
   brief as `body` ([Delegating](#delegating)), its own `branch`, `assignee` and `tasks`. Its repo
@@ -274,8 +279,8 @@ Lanes of a ticket you are working are yours to create (next section).
   new top-level post: first a reply with your plan, then, once done, a reply with the result and
   its proofs. A reply brings their post back to the top of Main.
 - **Previews:** when the change can be tried (a page, an API), give the human a preview and put
-  its link with what to try in the summary; say that what they post there stays in the copy. Keep
-  it running while the ticket is in `review`.
+  its link with what to try in the summary; say that what they post there stays in the copy. Start
+  it before you move the ticket to `review`, and keep it running while the ticket is there.
   - A repo with runs (configured per repo, by the human in the project's settings or by you with
     `add_run` / `update_run` / `delete_run`: previews with a link, jobs without; a checkout of the
     board has its `Preview`): the board runs them. `add_workspace` with your worktree's `path` and
@@ -320,9 +325,14 @@ Lanes of a ticket you are working are yours to create (next section).
   `answer_decision` records their answer on the card: the option's index and their words as they
   gave them. Only that session does it, never a subagent, never with `as`, never unattended. A
   relay is refused on a card already decided, by the human or an earlier relay: the human changes
-  it on the card. If you cannot go on
-  without the answer, also `update_ticket` → `status: blocked`, and back to `in_progress` once it
-  is answered. When only one step waits on the human, tag that task blocked instead and go on. On resuming, and between steps, `list_my_threads` shows what is waiting on you.
+  it on the card. **Every question blocks:** right after you post one, a card or a post that asks
+  the human something, move the ticket with `update_ticket` → `status: blocked` and end your work;
+  never keep working past an open question on your own guess. An `ask_decision` card moves the ticket
+  to blocked by default, but a plain asking post does not: move it yourself. The requests that say they do not block (an `add_repo` or `request_archive` card, or an `ask_decision` posted with `block: false`) are not questions you wait on: they keep the ticket where it is and work goes on, because nothing in the ticket's own work depends on the answer. Back to `in_progress`
+  once it is answered; when an answer or a comment moves it back, you are relaunched briefed with it
+  and reply under that post (plan first, then the result). A step that needs a human action which is
+  not a question (a credential, a manual step) is the other case: tag that task blocked and go on.
+  On resuming, and between steps, `list_my_threads` shows what is waiting on you.
 - Files the human attaches (screenshots on a post or reply) come with `path` (and
   `windowsPath` when the board runs in WSL): open that file directly. `get_attachment` looks one
   up by id. To find a file again, `list_gallery` lists the project's files (posts, replies under
@@ -446,11 +456,12 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    While GitHub's checks do not run, comment on the PR `CI run locally: green on <sha>` with the
    head commit the checks of item 2 passed on (`gh pr comment`): that ticks CI. Comment again after
    each push.
-6. **Preview running**: `start_run` (or `start_preview`), then `list_runs` until it is `running`
-   (`failed`: read the log lines and fix). For a repo with no runs configured, start one the
-   project's way and `set_preview` (see Previews in
-   [While working](#3-while-working)). Required whenever the change can be tried; when it cannot
-   (docs only, a script), say why in the summary.
+6. **Preview running, started before the move to review.** Whenever the project has a preview
+   setup and the change can be previewed, start the preview first: `start_run` (or
+   `start_preview`), then `list_runs` until it is `running` (`failed`: read the log lines and fix).
+   For a repo with no runs configured, start one the project's way and `set_preview` (see Previews
+   in [While working](#3-while-working)). When it cannot be previewed (the project has no preview
+   setup, or the change has nothing to try: docs only, a script), say why in the summary instead.
 7. The summary, up to date (`set_ticket_summary`, never a new hand-off post): the PR link, **the
    preview link and what to try there**, how it was tested, the e2e result (its summary, or its
    report when something failed), each review round's verdict and, for a UI change, the latest
@@ -554,8 +565,10 @@ for `post_report` on the current period: use `post_report`.
 Finished work leaves worktrees and branches behind. The rule, for every ticket and lane you
 worked:
 
-- What you started goes too: stop the processes you or your agents started (previews, dev servers,
-  test boards, watchers), remove your temporary files and folders, and release any test lock you
+- What you started goes too, per ticket and not only at the close: stop the processes you or your
+  agents started (previews, dev servers, test boards, watchers) by their process id after each review
+  round and at the hand-off (except the ticket's preview, which stays up while it is in review and
+  is stopped once it is merged or dropped), remove your temporary files and folders, and release any test lock you
   hold. The review's own scratch worktree under `~/.claude/feature-review/` may go; the ticket's
   worktrees and origin branches stay the human's, listed below.
 

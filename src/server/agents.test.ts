@@ -310,6 +310,223 @@ describe('the default agents', () => {
   })
 })
 
+describe('the general rules in the served skill texts', () => {
+  const review = (p: string) =>
+    fs.readFileSync(path.join(import.meta.dirname, 'skill', 'review', p), 'utf8').replace(/\r\n/g, '\n')
+  const flat = (t: string) => t.replace(/\s+/g, ' ')
+  const session = () => flat(agents.sessionSkill())
+  const board = () => flat(agents.renderSkill('claude'))
+  const ticketAgent = () => flat(review('agents/todo-review-ticket.md'))
+  const todoReview = () => flat(review('skills/todo-review/SKILL.md'))
+
+  it('has the session skill restart the work on an answer or a comment that moved the ticket', () => {
+    for (const text of [
+      "relaunch that ticket's agent at once, briefed with the answer or the comment",
+      'replies under the post: its plan first, then the result',
+      'check for answered cards and new human comments',
+      'never move a ticket the human just moved',
+      "is already the human's yes",
+    ])
+      expect(session()).toContain(text)
+    expect(todoReview()).toContain('check for answered cards and new human comments')
+    expect(todoReview()).toContain('never move a ticket the human just moved')
+  })
+
+  it('keeps the non-blocking requests out of every question blocks, and ends the run last', () => {
+    expect(board()).toContain(
+      "are not questions you wait on: they keep the ticket where it is and work goes on, because nothing in the ticket's own work depends on the answer",
+    )
+    expect(ticketAgent()).toContain('is not a question you wait on: the ticket stays where it is')
+    const para = ticketAgent().slice(ticketAgent().indexOf('When you do block, and whenever'))
+    const order = [
+      'post the ask',
+      'move the ticket to `blocked` right after posting',
+      '`set_ticket_summary`',
+      'then end your run',
+    ]
+    const at = order.map((s) => para.indexOf(s))
+    expect(at.every((i) => i >= 0)).toBe(true)
+    expect(at).toEqual([...at].sort((x, y) => x - y))
+    expect(para.indexOf('then end your run')).toBeLessThan(para.indexOf('you are relaunched briefed'))
+  })
+
+  it('makes every question block the ticket, in the session, board and ticket agent texts', () => {
+    expect(session()).toContain('moves its ticket to blocked and ends its work')
+    expect(board()).toContain('**Every question blocks:**')
+    expect(board()).toContain('never keep working past an open question on your own guess')
+    expect(board()).toContain('a plain asking post does not: move it yourself')
+    expect(board()).not.toContain('If you cannot go on without the answer, also')
+    expect(board()).toContain('tag that task blocked and go on')
+    expect(ticketAgent()).toContain('Every question blocks:')
+    expect(ticketAgent()).toContain('a plain asking post needs `update_ticket` with `status: blocked`')
+    expect(ticketAgent()).toContain('never go on past an open question on your own guess')
+  })
+
+  it('has the session skill confirm a short UI comment before delegating', () => {
+    const skill = session()
+    for (const text of [
+      'look at what the branch does now',
+      'write the concrete reading in two or three bullets',
+      'ask the human ONE question to confirm it',
+      "the confirmed reading and the human's own words both go into the agent's brief",
+    ])
+      expect(skill).toContain(text)
+    const confirm = skill.indexOf('Short UI comments: confirm first')
+    const quiet = skill.indexOf('Quiet about delegated work')
+    expect(confirm).toBeGreaterThanOrEqual(0)
+    expect(quiet).toBeGreaterThanOrEqual(0)
+    expect(confirm).toBeLessThan(quiet)
+  })
+
+  it('has the confirmation of a short UI comment come before a relaunch', () => {
+    const skill = session()
+    expect(skill).toContain(
+      'a short UI comment that also moved the ticket back to In progress does not relaunch the agent until the human has confirmed the reading',
+    )
+    expect(skill).toContain('A short UI comment is the exception: the human confirms the reading first')
+    expect(skill).toContain('relaunch at once, briefed with the confirmed reading and their own words')
+    expect(skill).toContain('except that a short UI comment still needs its reading confirmed first')
+  })
+
+  it('keeps the update_task description from limiting a question to "nothing else can go on"', () => {
+    const mcp = flat(fs.readFileSync(path.join(import.meta.dirname, 'mcp.ts'), 'utf8'))
+    const at = mcp.indexOf('Reword a task or a subtask, tick / untick it')
+    expect(at).toBeGreaterThanOrEqual(0)
+    const tool = mcp.slice(at, mcp.indexOf('${BLOCKED}', at))
+    expect(tool.length).toBeGreaterThan(0)
+    expect(tool).toContain('or tag it blocked on the human and clear that')
+    expect(tool).toContain(
+      'The tag is for one step that needs a human action that is not a question; a question to the human blocks the whole ticket right after it is posted (update_ticket to blocked, or an ask_decision card), and the work ends.',
+    )
+    expect(mcp).not.toContain('or ask_decision only when nothing else can go on')
+    const kind = flat(fs.readFileSync(path.join(import.meta.dirname, 'kindText.ts'), 'utf8'))
+    const kindAt = kind.indexOf('Reword a task or a subtask, tick / untick it')
+    expect(kindAt).toBeGreaterThanOrEqual(0)
+    const kindTool = kind.slice(kindAt, kind.indexOf("',", kindAt))
+    expect(kindTool.length).toBeGreaterThan(0)
+    expect(kindTool).toContain('or tag it blocked on the human and clear that')
+    expect(kindTool).toContain(
+      'The tag is for one step that needs a human action that is not a question; a question to the human blocks the whole ticket right after it is posted (update_ticket to blocked, or an ask_decision card), and the work ends.',
+    )
+    expect(kind).not.toContain('or ask_decision only when nothing else can go on')
+  })
+
+  it('does not count a relaunch after the human answers as a send-back', () => {
+    expect(todoReview()).toContain(
+      "A relaunch after the human's answer, or after a comment that moved the ticket back to In progress, is not a send-back and does not count toward that limit.",
+    )
+  })
+
+  it('cleans up per ticket and per review round, by process id, in every text', () => {
+    expect(board()).toContain('Clean up what you started per ticket, not only at the close')
+    expect(board().split('after each review round and at the hand-off').length - 1).toBeGreaterThanOrEqual(2)
+    expect(board()).toContain('by its process id, after each review round and at the hand-off (except')
+    expect(board()).toContain('by their process id after each review round and at the hand-off (except')
+    expect(ticketAgent()).toContain('Clean up what you started, per round and at the hand-off.')
+    expect(ticketAgent()).toContain('clean up after each round, not only at the hand-off')
+    expect(todoReview()).toContain('Clean up what you started, per ticket.')
+    expect(todoReview()).toContain('check that nothing the agent started is still running')
+    expect(session()).toContain('After each agent ends, check that nothing it started is still running')
+    expect(session()).toContain('not only here')
+    for (const text of [board(), ticketAgent(), todoReview(), session()]) expect(text).toContain('process id')
+  })
+
+  it('starts the preview before a ticket moves to review, or says why it cannot', () => {
+    const rule = 'the project has a preview setup and the change can be previewed'
+    for (const text of [board(), ticketAgent(), todoReview(), session()]) expect(text).toContain(rule)
+    expect(board()).toContain('Preview running, started before the move to review.')
+    expect(board()).toContain('Start it before you move the ticket to `review`')
+    expect(board()).toContain('say why in the summary instead')
+    expect(ticketAgent()).toContain('The preview comes before the move to review, never after it')
+    expect(ticketAgent()).toContain('is started before the ticket moves to review')
+    expect(ticketAgent()).toContain('say why in the summary instead')
+    expect(todoReview()).toContain('the preview was started before the move to review')
+    expect(session()).toContain('Whoever moves a ticket to review starts its preview first')
+    expect(session()).toContain('the hand-off says why')
+    const mcp = flat(fs.readFileSync(path.join(import.meta.dirname, 'mcp.ts'), 'utf8'))
+    expect(mcp).toContain('started before the move to review whenever the project has a preview setup')
+  })
+
+  it('keeps the ticket preview up through the per-ticket cleanup', () => {
+    const keep =
+      "except the ticket's preview, which stays up while it is in review and is stopped once it is merged or dropped"
+    expect(board().split(keep).length - 1).toBeGreaterThanOrEqual(2)
+    expect(session()).toContain(keep)
+    expect(session()).toContain("(the ticket's preview stays up while it is in review)")
+    expect(todoReview().split(keep).length - 1).toBeGreaterThanOrEqual(2)
+    expect(ticketAgent()).toContain(keep)
+  })
+
+  it('never builds on an open question, and limits "nothing else can go on" to a human action', () => {
+    expect(ticketAgent()).not.toContain('keep going on it')
+    expect(ticketAgent()).toContain('never building on the assumption past the open card')
+    expect(ticketAgent()).toContain('A question that is not decisive takes the spec')
+    expect(ticketAgent()).toContain(
+      "it finishes its read-only phases with the spec's assumption marked unconfirmed",
+    )
+    expect(flat(review('skills/feature-review/SKILL.md'))).not.toContain(
+      'Continue with the assumption until the human',
+    )
+    expect(flat(review('skills/feature-review/SKILL.md'))).toContain(
+      'the caller (a ticket agent) blocks its ticket and ends its work on it rather than building on that guess',
+    )
+    expect(board()).toContain(
+      'A question to the human always moves the whole ticket to `blocked` right after it is posted',
+    )
+    expect(board()).not.toContain('only when nothing else can go on.')
+    expect(ticketAgent()).toContain(
+      'A question to the human is not that: it blocks the ticket right after it is posted',
+    )
+    expect(ticketAgent()).not.toContain('the ticket only when nothing else can go on.')
+    const mcp = fs.readFileSync(path.join(import.meta.dirname, 'mcp.ts'), 'utf8')
+    const instructions = flat(mcp.slice(mcp.indexOf('const INSTRUCTIONS'), mcp.indexOf('const STATUS')))
+    expect(instructions).toContain(
+      'A question always blocks the ticket right after you post it, and you end your work',
+    )
+    expect(instructions).toContain('a step that needs a human action that is not a question')
+    expect(instructions).not.toContain('That is for when nothing else can go on')
+  })
+
+  it('has the session skill notice each agent ending, from the project or the client', () => {
+    const skill = session()
+    expect(skill).toContain('You notice every delegated agent ending without the human asking')
+    expect(skill).toContain('one line to the human if it changes something for them')
+    expect(skill).toContain('a relaunch if it failed')
+    expect(skill).toContain("the client's own agent-finished notification")
+    expect(skill).toContain("comes from the project's instructions when they give one")
+    expect(skill).toContain('## One message shape')
+  })
+
+  it('keeps project-specific words out of the served texts', () => {
+    const denied = [
+      /VPS/i,
+      /opencode run/i,
+      /haiku/i,
+      /systemd/i,
+      /\bssh\b/i,
+      /tunnel/i,
+      /\/home\//,
+      /ticket 9\d\d/i,
+      /ticket-9\d\d/i,
+    ]
+    const texts = {
+      session: agents.sessionSkill(),
+      board: agents.renderSkill('claude'),
+      ticketAgent: review('agents/todo-review-ticket.md'),
+      todoReview: review('skills/todo-review/SKILL.md'),
+      featureReview: review('skills/feature-review/SKILL.md'),
+      mcpInstructions: (() => {
+        const mcp = fs.readFileSync(path.join(import.meta.dirname, 'mcp.ts'), 'utf8')
+        const slice = mcp.slice(mcp.indexOf('const INSTRUCTIONS'), mcp.indexOf('const STATUS'))
+        expect(slice).toContain('The rhythm:')
+        return slice
+      })(),
+    }
+    for (const [name, text] of Object.entries(texts))
+      for (const word of denied) expect(text, `${name}: ${word}`).not.toMatch(word)
+  })
+})
+
 describe('the review skills bundle', () => {
   it('is a tar that extracts to both skills and their agents, byte for byte', async () => {
     const { execFileSync } = await import('node:child_process')

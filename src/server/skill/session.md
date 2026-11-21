@@ -95,7 +95,21 @@ When the human names a ticket to start ("start with 859", "work on the notificat
 You never run `todo-review` in your own context and wait for it, and you work in no worktree. The
 agent you start runs the project's protocol: its ticket agent writes the spec, starts the builder,
 and runs `/feature-review` for the rounds the ticket's complexity allows, with `/feature-review`'s
-phases trying to break the change before the hand-off.
+phases trying to break the change before the hand-off. Whoever moves a ticket to review starts its
+preview first, whenever the project has a preview setup and the change can be previewed; when it
+cannot, the hand-off says why. A ticket that reached review without its preview and
+without that reason is not handed off: send its agent back to start it.
+
+## Short UI comments: confirm first
+
+A short human comment about the UI ("make it bigger", "this looks off") is easy to misread. Before
+you start an agent on it: look at what the branch does now, write the concrete reading in two or
+three bullets, and ask the human ONE question to confirm it. Only then delegate: the confirmed
+reading and the human's own words both go into the agent's brief.
+
+This comes before a relaunch: a short UI comment that also moved the ticket back to In progress
+does not relaunch the agent until the human has confirmed the reading ([Answers restart the
+work](#answers-restart-the-work)).
 
 ## Quiet about delegated work
 
@@ -113,6 +127,31 @@ each one.
   and in plain terms, not technical.
 
 A failure the human's next step depends on is news; a finding a round already fixed is not.
+
+**Know when each agent ends.** You notice every delegated agent ending without the human asking, and
+you act on it: one line to the human if it changes something for them, a relaunch if it failed. The
+mechanism comes from the project's instructions when they give one; otherwise it is the client's own
+agent-finished notification. After each agent ends, check that nothing it started is still running
+(servers, test boards, dev servers, watchers, locks, by process id) and stop what is, except the
+ticket's preview, which stays up while it is in review and is stopped once it is merged or dropped:
+the close below keeps its own cleanup.
+
+## Answers restart the work
+
+When the human answers a decision card, or comments on a ticket and moves it back to In progress,
+relaunch that ticket's agent at once, briefed with the answer or the comment. The agent replies under
+the post: its plan first, then the result. A comment with no stage move does not relaunch by itself.
+
+A short UI comment is the exception: the human confirms the reading first ([Short UI comments:
+confirm first](#short-ui-comments-confirm-first)); once they have, relaunch at once, briefed with the
+confirmed reading and their own words.
+
+Before you call anything blocked or move a ticket, check for answered cards and new human comments,
+and never move a ticket the human just moved.
+
+A question to the human means the ticket is blocked until it is answered: an agent that asks (a card
+or a post that asks something) moves its ticket to blocked and ends its work, and it goes back to in
+progress once the human answers.
 
 ## How you write
 
@@ -188,7 +227,10 @@ the ticket's summary and its last posts first.
   elsewhere or not worth continuing): do not recommend continuing. At most list it as paused.
 
 In both cases the human agrees first: propose, and never restart without the human's yes. A ticket is
-sometimes left to stall because the human no longer wants it finished.
+sometimes left to stall because the human no longer wants it finished. An answer or a comment that
+moved the ticket back to In progress is already the human's yes ([Answers restart the
+work](#answers-restart-the-work)), except that a short UI comment still needs its reading confirmed
+first.
 
 ## Closing the session
 
@@ -201,6 +243,8 @@ On the human's word (or offered when the session winds down), a short close in t
 For every finished ticket (its PR merged, or cancelled), nothing may be left behind. Check with
 `cleanup_report`, then:
 
+- the same check runs after each agent ends, not only here: what it started is stopped by process id
+  as soon as it is done (the ticket's preview stays up while it is in review);
 - stop what you may: `stop_run` and `stop_preview` for the board's runs, and any process, watcher,
   test board or test lock that you or your agents started;
 - delete the landed local branches of closed tickets with `cleanup_delete`, as the report gives them;

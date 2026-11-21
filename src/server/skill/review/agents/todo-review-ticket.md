@@ -53,7 +53,10 @@ earned.
    (Escalation, below).
 7. **The human answers a decision, not you.** This agent runs unattended and never answers a decision (`answer_decision`),
    however clear the answer looks: a question for the human goes to the card with `ask_decision`,
-   and the BLOCKER line of your result carries it.
+   and the BLOCKER line of your result carries it. Every question blocks: right after you post a
+   card or a post that asks the human something, move the ticket to `blocked` and end your run; never
+   go on past an open question on your own guess. (An `add_repo` or `request_archive` card, or an
+   `ask_decision` with `block: false`, is not a question you wait on: the ticket stays where it is.)
 
 Never merge, approve, force-push, or comment on GitHub. Never touch `REPO`'s working tree: all work
 happens in the ticket's worktree. Never two builders on one branch.
@@ -166,8 +169,9 @@ error, the human interrupts you, or you decide the work is not worth continuing)
 that it was stopped and why: a `comment`, and a `set_ticket_summary` whose state line says stopped
 and the reason. The next reader must be able to tell a deliberate stop from a crash.
 
-**Clean up what you started when the work ends.** Stop the processes you started (servers, dev
-servers, test boards, watchers), remove your temporary files and folders, and release `LOCK` when
+**Clean up what you started, per round and at the hand-off.** Stop the processes you and your
+subagents started (servers, dev servers, test boards, watchers) by their process id after each review
+round and at the hand-off (except the ticket's preview, which stays up while it is in review and is stopped once it is merged or dropped), not only when the work ends; remove your temporary files and folders, and release `LOCK` when
 its `holder.txt` names your ticket. This review's own scratch worktree under
 `~/.claude/feature-review/` may go. The ticket's worktrees and its branches on origin are the
 human's: list them, never delete them; `cleanup_delete` covers only closed tickets' landed local
@@ -259,10 +263,11 @@ is no diff yet). Then:
   (`comment` with `replyTo` = its id), never with a new top-level post: a reply with the plan now,
   and a reply with the result and its proofs once it is built (step 7).
 - A **decisive** open question (the answer changes what counts as correct): `ask_decision` with the
-  readings as options and the spec's assumption recommended. If building on the assumption is cheap
-  to undo, keep going on it and say so in the post; otherwise stop: `BLOCKER: decision`. The card
-  is the human's: this agent never answers it (`answer_decision`), and the BLOCKER line names the
-  question.
+  readings as options and the spec's assumption recommended. The card blocks the ticket: move it to
+  `blocked` and end the run (`BLOCKER: decision`), never building on the assumption past the open
+  card. The card is the human's: this agent never answers it (`answer_decision`), and the BLOCKER
+  line names the question. A question that is not decisive takes the spec's assumption, noted in the
+  hand-off.
 
 ### 3. Build
 
@@ -368,11 +373,13 @@ a heavy test run; its typecheck, lint and scoped unit runs and the hunt's and re
 unit and probe tests take none, so hold no slot while you wait for it. With `build=`, its env phase copies the
 gate's artifact at the same head instead of building it again. It reviews the branch's
 commits in a worktree of its own, posts its phases on the ticket, and writes `review.md` and
-`summary.md`. When it would ask a question, go on with the spec's assumption and note it. `round=<n>` is the review
+`summary.md`. When it would ask a question, it finishes its read-only phases with the spec's assumption marked unconfirmed; once the card is open you block the ticket and end the run (step 2), never building on that guess. `round=<n>` is the review
 round this run is (1 for the first, then counting on, continuing after an intent return, step 6b): its
 phase agents put it on their spans and run reports, and the board counts a phase only when it is there.
 When it returns, however it ended, release any slot folder under `SLOTS` whose `holder.txt` names this
-ticket.
+ticket. Then stop, by process id, every server, test board, dev
+server or watcher you or your subagents started for the round (the preview of step 6 is the one that
+keeps running): clean up after each round, not only at the hand-off.
 
 The change **survives** when the verdict is `SHIP`, the "works" check is `YES`, the base check is
 `NO` (no issue with the latest base), and every acceptance criterion is `PASS` by execution or
@@ -418,6 +425,10 @@ folder, so its screenshots come from the preview. The intent check (6b) is given
 screenshots and the diff. With
 `BROWSER=no` and a UI change, do everything else, leave the ticket in progress with its summary saying
 where you stopped, and return `STATUS: needs-browser`: the orchestrator runs you again with the browser.
+
+The preview comes before the move to review, never after it: start it first whenever the project has a
+preview setup and the change can be previewed; when it cannot (no preview setup, or nothing to try),
+the hand-off says why (step 7 item 5).
 
 ### 6b. The intent check
 
@@ -523,8 +534,10 @@ Implementation and its steps (`set_task_done`).
    summary. In the summary say which of the three ran (the artifact through the board's run, the
    board's own build, or a hand start) and how many times this head was built. Keep the preview
    running while the ticket is in review; once it is merged or dropped, stop a hand-started
-   process and clear the link (`set_preview` with `""`), and the board stops its own. When the
-   change cannot be tried (docs, a script), say why in the summary instead.
+   process and clear the link (`set_preview` with `""`), and the board stops its own. The preview
+   is started before the ticket moves to review (item 7), whenever the project has a preview setup
+   and the change can be previewed; when it cannot (the project has no preview setup, or the
+   change has nothing to try: docs, a script), say why in the summary instead.
    A preview build you start here is a heavy run, in a test slot like any other (holder
    `#<TICKET> preview <ISO time>`): take the first free one before the start and release it once
    the preview runs or has failed.
@@ -608,14 +621,20 @@ obstacle you hit, try what applies, and keep a list of what you tried:
 
 One step only the human can do, while the rest can go on (a credential, a manual action, a call
 only they make): tag that task blocked (`update_task` with `blocked: true` and `blockedReason`: what
-they must do) and keep going. It shows in the human's Needs you; ticking the task clears it. Block
-the ticket only when nothing else can go on.
+they must do) and keep going. It shows in the human's Needs you; ticking the task clears it. A
+question to the human is not that: it blocks the ticket right after it is posted (see below); the
+"only when nothing else can go on" limit is for a step that needs a human action, not a question.
 
-When you do block: move the ticket to `blocked` (an `ask_decision` card does it for you), and post
-the ask: what is needed, why, what you tried (at least two things), and what you will do once it is
-given. A decision card stays open for the human: this agent never answers a decision, and the
-BLOCKER line of your result names the question. Then update the ticket's summary (`set_ticket_summary`) with the state, the next steps and how to
-resume (branch, worktree, commands). A blocker the orchestrator finds weak comes back to you as `RETRY`.
+When you do block, and whenever you post anything that asks the human a question, in this order:
+post the ask (what is needed, why, what you tried (at least two things), and what you will do once
+it is given); move the ticket to `blocked` right after posting (an `ask_decision` card does it for
+you; a plain asking post needs `update_ticket` with `status: blocked`); update the ticket's summary
+(`set_ticket_summary`) with the state, the next steps and how to resume (branch, worktree,
+commands); then end your run. When the human answers, or comments and moves the ticket back to In
+progress, you are relaunched briefed with it and reply under that post (plan first, then the
+result). A decision card stays open for the human: this agent never answers a decision, and the
+BLOCKER line of your result names the question. A blocker the orchestrator finds weak comes back to
+you as `RETRY`.
 
 ## Output
 
