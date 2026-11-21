@@ -15,7 +15,7 @@ test('a lane is judged by its stage: no approve or disapprove on it or on its pa
   )
 
   await page.goto(`/projects/${project.id}/features/${parent.id}?verdict=approved`)
-  await expect(page.getByRole('heading', { name: 'Lanes' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Lanes', exact: true })).toBeVisible()
   await expect(page.getByText('Judged lane')).toBeVisible()
   await expect(page.getByRole('button', { name: /^(Approve|Disapprove)/ })).toHaveCount(0)
   await expect(page.getByText(/\d+ approved|disapproved|No call/)).toHaveCount(0)
