@@ -11,7 +11,7 @@
 // above, with the reason.
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import ts from 'typescript'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -134,6 +134,15 @@ export function readLocales() {
   return out
 }
 
+/** The desktop app's own table (desktop/app/strings.mjs, plain ESM that cannot read the JSON files). */
+export const DESKTOP_STRINGS = path.join(root, 'desktop/app/strings.mjs')
+
+export async function checkDesktopStrings(file = DESKTOP_STRINGS) {
+  const { STRINGS } = await import(pathToFileURL(file).href)
+  const { en, ...rest } = STRINGS
+  return Object.entries(rest).flatMap(([name, table]) => compareLocales(en, table, `desktop ${name}`))
+}
+
 export function checkLocales(locales = readLocales()) {
   const { en, ...rest } = locales
   if (!en) return ['the English file (en.json) is missing']
@@ -246,7 +255,7 @@ export function allHardcoded() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const problems = [...checkLocales(), ...checkComponents()]
+  const problems = [...checkLocales(), ...(await checkDesktopStrings()), ...checkComponents()]
   if (problems.length) {
     console.error(problems.join('\n'))
     console.error(`\n${problems.length} translation problem(s).`)

@@ -24,7 +24,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { app, BrowserWindow, dialog, Menu, nativeImage, Notification, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, Menu, nativeImage, Notification, session, shell, Tray } from 'electron'
 import electronUpdater from 'electron-updater'
 
 import {
@@ -50,7 +50,8 @@ import {
   withLoginPath,
 } from './settings.mjs'
 import { watchLiveness } from './liveness.mjs'
-import { exitLine, exitSentence, logServer, spawnFailedLine, startLine } from './serverLog.mjs'
+import { exitLine, logServer, spawnFailedLine, startLine } from './serverLog.mjs'
+import { resolveLanguage, t as translate } from './strings.mjs'
 import {
   BRIDGE,
   createUpdates,
@@ -74,9 +75,42 @@ const READY_MS = 60_000
 /** Remote mode: how long a health check may take, and the waits between them (the last one repeated). */
 const HEALTH_TIMEOUT_MS = 4000
 const RETRY_WAITS_MS = [2000, 5000, 10_000]
-const OPEN_SETTINGS = 'Open the settings file'
-const OPEN_LOGS = 'Open the logs folder'
-const OPEN_HOME = 'Open the app folder'
+const OPEN_SETTINGS = 'openSettings'
+const OPEN_LOGS = 'openLogs'
+const OPEN_HOME = 'openHome'
+
+// The language of the app's own texts (strings.mjs): the board's, from its `lang` cookie in the window's
+// session, and the system's until there is one. Kept here so the menus, built synchronously, read it.
+let language = 'en'
+/**
+ * @param {string} key
+ * @param {Record<string, string | number>} [params]
+ */
+const t = (key, params) => translate(language, key, params)
+
+/** Reads the board's language from the window's session; true when it changed. */
+async function refreshLanguage() {
+  let cookie
+  try {
+    cookie = (await session.defaultSession.cookies.get({ name: 'lang' }))[0]?.value
+  } catch {
+    // no session yet: the system's language
+  }
+  const next = resolveLanguage(cookie, app.getLocale())
+  const changed = next !== language
+  language = next
+  return changed
+}
+
+/** The tray's and the window's menus follow the board's language: rebuilt when the cookie changes. */
+function watchLanguage() {
+  session.defaultSession.cookies.on('changed', (_event, cookie) => {
+    if (cookie.name !== 'lang') return
+    void refreshLanguage().then((changed) => {
+      if (changed && !quitting) refreshMenus()
+    })
+  })
+}
 
 /** @param {unknown} err */
 function errorText(err) {
@@ -138,9 +172,8 @@ if (homeError) {
     .whenReady()
     .then(() =>
       fatal(
-        'The board cannot start.',
-        `The app's folder ${home} cannot be used: ${errorText(homeError)}\n\n` +
-          'Set AGENT_BOARD_HOME to a folder that can be written, or remove it to use the default.',
+        'cannotStart',
+        () => t('homeUnusable', { home, error: errorText(homeError) }),
         nearestFolder(home),
         OPEN_HOME,
       ),
@@ -169,11 +202,13 @@ if (homeError) {
     .whenReady()
     .then(start)
     .catch((/** @type {unknown} */ err) =>
-      fatal('The board cannot start.', errorText(err), nearestFolder(home), OPEN_HOME),
+      fatal('cannotStart', () => errorText(err), nearestFolder(home), OPEN_HOME),
     )
 }
 
 async function start() {
+  await refreshLanguage()
+  watchLanguage()
   try {
     settings = resolveSettings({
       env: process.env,
@@ -183,11 +218,11 @@ async function start() {
     })
   } catch (err) {
     if (err instanceof SettingsError)
-      return fatal('The board’s settings are not valid.', err.message, configFile, OPEN_SETTINGS)
+      return fatal('settingsInvalid', () => err.message, configFile, OPEN_SETTINGS)
     // The app's folder, or its config.env, cannot be read or written.
     return fatal(
-      'The board cannot start.',
-      `${errorText(err)}\n\nThe app's folder: ${home}`,
+      'cannotStart',
+      () => t('homeLine', { error: errorText(err), home }),
       nearestFolder(home),
       OPEN_HOME,
     )
@@ -200,19 +235,13 @@ async function start() {
   ])
   settings.serverEnv = serverEnv
   if (!free)
-    return fatal(
-      'The board cannot start.',
-      portBusyMessage(settings.port, configFile),
-      configFile,
-      OPEN_SETTINGS,
-    )
+    return fatal('cannotStart', () => portBusyMessage(settings.port, configFile), configFile, OPEN_SETTINGS)
   try {
     fs.mkdirSync(path.join(settings.dataDir, 'logs'), { recursive: true })
   } catch (err) {
     return fatal(
-      'The board cannot start.',
-      `Its data folder ${settings.dataDir} cannot be used: ${errorText(err)}\n\n` +
-        `Set another DATA_DIR in ${configFile}, or in the environment, and start the app again.`,
+      'cannotStart',
+      () => t('dataFolderUnusable', { dir: settings.dataDir, error: errorText(err), file: configFile }),
       configFile,
       OPEN_SETTINGS,
     )
@@ -394,7 +423,8 @@ function startServer() {
   proc.on('error', (e) => {
     if (server === proc) server = null
     if (!proc.pid) logServer(logs, spawnFailedLine({ error: errorText(e) }))
-    if (!quitting) void fatal('The board cannot start.', `${errorText(e)}\n\nLogs: ${logs}`, logs, OPEN_LOGS)
+    if (!quitting)
+      void fatal('cannotStart', () => t('logsLine', { detail: errorText(e), logs }), logs, OPEN_LOGS)
   })
   proc.on('exit', (code, signal) => {
     if (server === proc) server = null
@@ -418,24 +448,40 @@ function startServer() {
 function onServerExit(code, signal) {
   const logs = path.join(settings.dataDir, 'logs')
   const reason = exitReason(code, signal)
+  const shownReason = () =>
+    code !== null ? t('reasonCode', { code }) : signal ? t('reasonSignal', { signal }) : t('reasonNone')
   const plan = ready ? restartPlan(restarts, Date.now()) : { exits: 0, delay: null }
   restarts = { exits: plan.exits, healthySince: null }
   if (plan.delay === null) {
-    const tried = plan.exits > 1 ? ` It was started again ${plan.exits - 1} times.` : ''
-    const detail = `${exitSentence(code, signal)}${tried}\n\n${tail(serverErr) || '(no output)'}`
-    void fatal('The board stopped.', `${detail}\n\nLogs: ${logs}`, logs, OPEN_LOGS)
+    const at = new Date()
+    void fatal(
+      'stopped',
+      () => {
+        const time = at.toLocaleTimeString(language)
+        const sentence = signal
+          ? t('exitedSignal', { signal, time })
+          : code !== null
+            ? t('exitedCode', { code, time })
+            : t('exited', { time })
+        const tried = plan.exits > 1 ? t('restartedTimes', { count: plan.exits - 1 }) : ''
+        const detail = `${sentence}${tried}\n\n${tail(serverErr) || t('noOutput')}`
+        return t('logsLine', { detail, logs })
+      },
+      logs,
+      OPEN_LOGS,
+    )
     return
   }
   const note = `the board's server exited (${reason}); starting it again in ${plan.delay / 1000} s`
   console.error(`agent-board desktop: ${note}`)
   appendLog(logs, note)
-  tray?.setToolTip(`${app.getName()}: restarting the board (${reason})`)
+  tray?.setToolTip(t('tipRestarting', { name: app.getName(), reason: shownReason() }))
   restartTimer = runLater(
     plan.delay,
-    () => restartServer(reason),
+    () => restartServer(reason, shownReason()),
     (err) => {
       if (!quitting)
-        void fatal('The board cannot start.', `${errorText(err)}\n\nLogs: ${logs}`, logs, OPEN_LOGS)
+        void fatal('cannotStart', () => t('logsLine', { detail: errorText(err), logs }), logs, OPEN_LOGS)
     },
   )
 }
@@ -445,23 +491,25 @@ function onServerExit(code, signal) {
  * blocking anyone (the tray's tooltip, a notification) and loads the window again if its page failed
  * while the board was down; an open page catches up by itself. Its exit, if it dies again, is
  * onServerExit's.
- * @param {string} reason
+ * @param {string} reason The log's wording.
+ * @param {string} restartedReason The same, in the person's language.
  */
-async function restartServer(reason) {
+async function restartServer(reason, restartedReason) {
   restartTimer = null
   if (quitting) return
   startServer()
   if (!(await waitUntilUp(server))) return
   restarts.healthySince = Date.now()
   greetServer()
-  const at = new Date().toLocaleTimeString()
+  const at = new Date().toLocaleTimeString(language)
   console.log(`agent-board desktop: the board answers again on ${settings.url} (it had exited: ${reason})`)
   appendLog(path.join(settings.dataDir, 'logs'), `the board answers again on ${settings.url}`)
-  tray?.setToolTip(`${app.getName()}: ${settings.url} (restarted at ${at} after ${reason})`)
+  const shown = restartedReason
+  tray?.setToolTip(t('tipRestarted', { name: app.getName(), url: settings.url, time: at, reason: shown }))
   if (Notification.isSupported())
     new Notification({
       title: app.getName(),
-      body: `The board restarted (${reason}).`,
+      body: t('notifyRestarted', { reason: shown }),
       icon: icon(),
       silent: true,
     }).show()
@@ -507,8 +555,8 @@ async function waitUntilUp(proc) {
   }
   const logs = path.join(settings.dataDir, 'logs')
   await fatal(
-    'The board did not start.',
-    `It did not answer on ${health} within a minute.\n\nLogs: ${logs}`,
+    'didNotStart',
+    () => t('logsLine', { detail: t('didNotAnswer', { url: health }), logs }),
     logs,
     OPEN_LOGS,
   )
@@ -552,24 +600,25 @@ function signalGroup(proc, signal) {
 /**
  * Says what went wrong in a dialog (and on stderr), offers to open the file or folder to fix it, and
  * ends the app, stopping the board first if it runs. Only the first failure is shown.
- * @param {string} message
- * @param {string} detail
+ * @param {string} message The key of the headline (strings.mjs).
+ * @param {() => string} detail The text under it, made once the language is known.
  * @param {string | null} target Null when there is nothing to open: the dialog offers Quit alone.
- * @param {string} open The button that opens `target`.
+ * @param {string} open The key of the button that opens `target`.
  */
 async function fatal(message, detail, target, open) {
   if (failed) return
   failed = true
   quitting = true
-  console.error(`agent-board desktop: ${message} ${detail}`)
+  console.error(`agent-board desktop: ${translate('en', message)} ${detail()}`)
   try {
     await stopServer()
+    await refreshLanguage()
     const { response } = await dialog.showMessageBox({
       type: 'error',
       title: app.getName(),
-      message,
-      detail,
-      buttons: target ? [open, 'Quit'] : ['Quit'],
+      message: t(message),
+      detail: detail(),
+      buttons: target ? [t(open), t('quit')] : [t('quit')],
       defaultId: target ? 1 : 0,
       cancelId: target ? 1 : 0,
       noLink: true,
@@ -794,7 +843,7 @@ function refreshMenus() {
 function unreachablePage(address) {
   const where = address.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`)
   const html = `<!doctype html>
-<html lang="en">
+<html lang="${language}">
 <head>
 <meta charset="utf-8">
 <title>${app.getName()}</title>
@@ -812,9 +861,8 @@ function unreachablePage(address) {
 </head>
 <body>
 <main>
-<h1>The board at <code>${where}</code> cannot be reached.</h1>
-<p>The board runs on another machine: check that this one is online and that the board is running there.
-The app tries again by itself, and <a href="${where}/">Retry now</a> tries at once.</p>
+<h1>${t('unreachableHeading', { address: where })}</h1>
+<p>${t('unreachableBody', { retry: `<a href="${where}/">${t('retryNow')}</a>` })}</p>
 </main>
 </body>
 </html>`
@@ -855,16 +903,16 @@ function createTray() {
  * retries (the window's page has the same link).
  * @returns {Electron.MenuItemConstructorOptions}
  */
-const retryItem = () => ({ label: 'Retry now', click: retryNow })
+const retryItem = () => ({ label: t('retryNow'), click: retryNow })
 
 function trayMenu() {
   return Menu.buildFromTemplate([
-    { label: 'Open', click: showWindow },
-    { label: 'Open in browser', click: openInBrowser },
+    { label: t('open'), click: showWindow },
+    { label: t('openInBrowser'), click: openInBrowser },
     ...(settings.mode === 'remote' && boardUnreachable ? [retryItem()] : []),
     ...(LINUX ? [startAtLoginItem()] : []),
     { type: 'separator' },
-    { label: 'Quit', click: () => app.quit() },
+    { label: t('quit'), click: () => app.quit() },
   ])
 }
 
@@ -877,11 +925,11 @@ function linuxMenu() {
     {
       label: app.getName(),
       submenu: [
-        { label: 'Open in browser', click: openInBrowser },
+        { label: t('openInBrowser'), click: openInBrowser },
         ...(settings.mode === 'remote' && boardUnreachable ? [retryItem()] : []),
         startAtLoginItem(),
         { type: 'separator' },
-        { label: 'Quit', accelerator: 'CmdOrCtrl+Q', click: () => app.quit() },
+        { label: t('quit'), accelerator: 'CmdOrCtrl+Q', click: () => app.quit() },
       ],
     },
     { role: 'editMenu' },
@@ -904,7 +952,7 @@ const autostart = () => ({
 function startAtLoginItem() {
   return {
     id: 'start-at-login',
-    label: 'Start at login',
+    label: t('startAtLogin'),
     type: 'checkbox',
     checked: fs.existsSync(autostart().file),
     click: () => {
@@ -915,7 +963,7 @@ function startAtLoginItem() {
         void dialog.showMessageBox({
           type: 'error',
           title: app.getName(),
-          message: 'Start at login could not be changed.',
+          message: t('startAtLoginFailed'),
           detail: `${errorText(err)}\n\n${entry.file}`,
         })
       }

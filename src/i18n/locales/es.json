@@ -1955,5 +1955,29 @@
     "toOpen": "para abrir",
     "toClose": "para cerrar",
     "anywhere": "en cualquier página"
+  },
+  "signIn": {
+    "finishTitle": "Termina la configuración en el host",
+    "finishBody": "Este tablero aún no tiene cuenta. Se crea en la máquina donde se ejecuta el tablero: abre {{url}} allí. Después vuelve aquí para añadir este dispositivo con un enlace del tablero.",
+    "setupTitle": "Configuración",
+    "setupHeading": "Configura CrossBoard",
+    "setupIntro": "Crea la cuenta del tablero y su primera passkey, en esta máquina. Los demás dispositivos se añaden después desde Ajustes, con un enlace de un solo uso.",
+    "nameLabel": "Tu nombre en el tablero",
+    "deviceLabel": "Este dispositivo",
+    "deviceDefault": "Este ordenador",
+    "devicePlaceholder": "Teléfono, portátil…",
+    "createPasskey": "Crear passkey",
+    "loginTitle": "Iniciar sesión",
+    "loginHeading": "Iniciar sesión",
+    "loginWelcomeMachine": "Te damos la bienvenida de nuevo, {{name}}. Inicia sesión con una passkey de esta máquina.",
+    "loginWelcomeDevice": "Te damos la bienvenida de nuevo, {{name}}. Inicia sesión con una passkey de este dispositivo.",
+    "loginButton": "Iniciar sesión con una passkey",
+    "enrollTitle": "Añadir un dispositivo",
+    "enrollNeedsLinkHeading": "Añadir un dispositivo",
+    "enrollNeedsLink": "Esta página necesita un enlace del tablero: en un dispositivo con la sesión iniciada, abre Ajustes, Dispositivos y pulsa Añadir un dispositivo.",
+    "enrollHeading": "Añadir este dispositivo",
+    "enrollIntro": "Crea una passkey para {{name}} en este dispositivo. El enlace funciona una vez, durante 15 minutos.",
+    "noPasskeys": "Este navegador no puede usar passkeys aquí.",
+    "promptClosed": "Se cerró el aviso de la passkey o caducó. Inténtalo de nuevo."
   }
 }
