@@ -270,7 +270,8 @@ describe('4 agent login or CLI problem', () => {
     const [found] = await check('agent-login')
     expect(found).toMatchObject({
       subject: 'cli',
-      severity: 'warning',
+      // The board can do without claude: info, as the host-tools check says.
+      severity: 'info',
       title: expect.stringMatching(/not found/),
     })
     expect(found!.buttons).toEqual([{ id: 'check', label: 'Check again', kind: 'action', primary: true }])
@@ -347,6 +348,35 @@ describe('4 agent login or CLI problem', () => {
     ['connection reset', false],
   ])('reads %j as a sign-in problem: %s', (text, expected) => {
     expect(machine.needsLogin(text)).toBe(expected)
+  })
+
+  it('is the only alert for a refused login or a missing claude: the report-failed alert leaves them to it', async () => {
+    const housekeeping = await import('./housekeeping')
+    const script = path.join(tmp, 'claude-logged-out-2.mjs')
+    fs.writeFileSync(
+      script,
+      "process.stdin.resume(); process.stderr.write('Invalid API key. Please run /login'); process.exit(1)\n",
+    )
+    const refused = reportingProject('good')
+    const other = reportingProject('fail')
+    const fakeArgs = config.claudeArgs
+    config.claudeArgs = [script]
+    try {
+      await expect(gen.generateReport(refused)).rejects.toThrow()
+    } finally {
+      config.claudeArgs = fakeArgs
+    }
+    await expect(gen.generateReport(other)).rejects.toThrow()
+    expect(housekeeping.checkReportFailed(ctxOf(refused))).toEqual([])
+    expect(subjects(await check('agent-login'))).toEqual(['login'])
+    // Any other failure is the report's own, and the report alert says it.
+    expect(housekeeping.checkReportFailed(ctxOf(other))).toHaveLength(1)
+    // With the last tools check finding claude missing, the machine alert says that too.
+    tools({ claude: { path: null } })
+    expect(housekeeping.checkReportFailed(ctxOf(other))).toEqual([])
+    expect(subjects(await check('agent-login'))).toEqual(['cli', 'login'])
+    // Signed in again: what the generation state kept is gone, for the tests after this one.
+    await gen.generateReport(refused)
   })
 
   it('is not raised for a report that failed for another reason', async () => {
@@ -538,10 +568,19 @@ describe('11 resources', () => {
     const disk = (free: number, total: number) => (machine.edges.disk = () => ({ free, total }))
     disk(500 * GB, 1000 * GB)
     expect(await check('machine-resources')).toEqual([])
+    // Plenty of space in all, but a tenth: running low, not almost full.
     disk(80 * GB, 1000 * GB)
-    expect(await check('machine-resources')).toMatchObject([{ subject: 'disk', severity: 'warning' }])
+    expect(await check('machine-resources')).toMatchObject([
+      { subject: 'disk', severity: 'warning', title: 'The disk is running low: 80.0 GB free' },
+    ])
     disk(1.5 * GB, 10 * GB)
-    expect(await check('machine-resources')).toMatchObject([{ subject: 'disk', severity: 'warning' }])
+    expect(await check('machine-resources')).toMatchObject([
+      { subject: 'disk', severity: 'warning', title: 'The disk is almost full: 1.5 GB free' },
+    ])
+    disk(40 * GB, 1000 * GB)
+    expect(await check('machine-resources')).toMatchObject([
+      { title: 'The disk is almost full: 40.0 GB free' },
+    ])
     disk(20 * GB, 1000 * GB)
     expect(await check('machine-resources')).toMatchObject([{ subject: 'disk', severity: 'problem' }])
     machine.edges.disk = () => null

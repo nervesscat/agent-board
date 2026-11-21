@@ -20,6 +20,16 @@ export interface GenerationState {
   error: { period: string; message: string; at: string } | null
 }
 
+/**
+ * What claude (the agent CLI) printed when it was refused for want of a sign-in: only errors that signing
+ * in again fixes. A credit balance, an expired token the CLI refreshes itself or any other failure is no
+ * login problem.
+ */
+const LOGIN_FAILURE =
+  /invalid (api )?key|please run \/login|not logged in|not authenticated|authentication (failed|required)|\b401 unauthori[sz]ed|login required/i
+
+export const needsLogin = (message: string) => LOGIN_FAILURE.test(message)
+
 /** The author of every generated report. */
 export const GENERATED_BY = 'claude'
 

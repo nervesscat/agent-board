@@ -12,7 +12,7 @@ import { checkHostTools, hostTools, type HostTool } from '../hostTools'
 import { HttpError } from '../http'
 import { listPasskeys, revokeSession } from '../passkeys'
 import { prRefreshFailures, refreshPrs } from '../prs'
-import { generationState } from '../reportGenerate'
+import { generationState, needsLogin } from '../reportGenerate'
 import {
   activeRuns,
   cannotStartRun,
@@ -57,6 +57,8 @@ export const CLAUDE_MIN_VERSION = '1.0.0'
 /** The disk is raised below this share of the data folder's volume free, or below this much (idea 11). */
 export const DISK_FREE_FRACTION = 0.1
 export const DISK_FREE_BYTES = 2 * GB
+/** ... and "almost full", not just "running low", below this share or this much free. */
+export const DISK_FULL_FRACTION = 0.05
 /** ... and is a problem, not a warning, below these. */
 export const DISK_CRITICAL_FRACTION = 0.03
 export const DISK_CRITICAL_BYTES = 500 * 1024 ** 2
@@ -263,15 +265,7 @@ const projectOf = (ctx: AlertContext) => {
 
 // --- 4: agent login / CLI problem ---
 
-/**
- * What claude (the agent CLI) printed when it was refused for want of a sign-in: only errors that signing
- * in again fixes. A credit balance, an expired token the CLI refreshes itself or any other failure is no
- * login problem.
- */
-const LOGIN_FAILURE =
-  /invalid (api )?key|please run \/login|not logged in|not authenticated|authentication (failed|required)|\b401 unauthori[sz]ed|login required/i
-
-export const needsLogin = (message: string) => LOGIN_FAILURE.test(message)
+export { needsLogin }
 
 function agentLoginAlerts(ctx: AlertContext): AlertCandidate[] {
   const out: AlertCandidate[] = []
@@ -279,7 +273,8 @@ function agentLoginAlerts(ctx: AlertContext): AlertCandidate[] {
   if (claude && !claude.found)
     out.push({
       subject: 'cli',
-      severity: 'warning',
+      // The board can do without claude (it only writes the board's own reports): info, as the tools check says.
+      severity: claude.optional ? 'info' : 'warning',
       title: 'The claude CLI was not found on this machine',
       body: `${claude.problem ?? 'claude was not found'}. Without it ${claude.breaks} does not work.`,
       details: claude.fix ? [`To fix: ${claude.fix}`] : undefined,
@@ -288,7 +283,8 @@ function agentLoginAlerts(ctx: AlertContext): AlertCandidate[] {
   else if (claude?.found && claude.version && versionBelow(claude.version, CLAUDE_MIN_VERSION))
     out.push({
       subject: 'cli',
-      severity: 'warning',
+      // The board can do without claude (it only writes the board's own reports): info, as the tools check says.
+      severity: claude.optional ? 'info' : 'warning',
       title: `The claude CLI is too old (${claude.version})`,
       body: `The board needs claude ${CLAUDE_MIN_VERSION} or newer for ${claude.breaks}. Update Claude Code on this machine.`,
       buttons: [checkAgain],
@@ -474,7 +470,7 @@ function resourceAlerts(ctx: AlertContext): AlertCandidate[] {
         subject: 'disk',
         severity:
           fraction < DISK_CRITICAL_FRACTION || disk.free < DISK_CRITICAL_BYTES ? 'problem' : 'warning',
-        title: `The disk is almost full: ${gigabytes(disk.free)} free`,
+        title: `The disk is ${fraction < DISK_FULL_FRACTION || disk.free < DISK_FREE_BYTES ? 'almost full' : 'running low'}: ${gigabytes(disk.free)} free`,
         body:
           `The volume of the board's data folder has ${gigabytes(disk.free)} free of ${gigabytes(disk.total)} ` +
           `(${percent(fraction)}). Attachments, previews and the database stop working when it is full. ` +

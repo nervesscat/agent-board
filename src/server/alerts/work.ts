@@ -22,8 +22,9 @@ import {
 /**
  * The alerts about work that waits on the human or is going wrong (ideas 6 to 9, 24 to 29 and 33). Each
  * reads what the board already keeps (the project's summary and work timeline, the PR rows of the last
- * refresh, the archive requests, the actors' last calls, the push states): a check never calls GitHub
- * and never waits on the network.
+ * refresh, the archive requests, the actors' last calls, the push states): no check waits on the network.
+ * The unpushed check reads the push state the board keeps; that read may start the board's own throttled
+ * background fetch of origin, which is never awaited.
  */
 
 // Not imported from the registry: it imports this file, so its constants are not set yet when this one loads.

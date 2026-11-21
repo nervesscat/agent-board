@@ -3,9 +3,10 @@ import { and, eq } from 'drizzle-orm'
 import { db, schema } from '#/db'
 import { periodLabel } from '#/lib/reports'
 import { cleanupReport } from '../cleanup'
+import { toolProblem } from '../hostTools'
 import { HttpError } from '../http'
 import { reportDueFor } from '../reportDue'
-import { generateReport, generationState } from '../reportGenerate'
+import { generateReport, generationState, needsLogin } from '../reportGenerate'
 import { readReportSettings } from '../reports'
 import type { AlertActionContext, AlertCandidate, AlertContext, AlertType } from './registry'
 
@@ -113,6 +114,8 @@ export function checkReportFailed(ctx: AlertContext): AlertCandidate[] {
   const projectId = projectOf(ctx)
   const { error } = generationState(projectId)
   if (!error) return []
+  // A refused login, or a claude the board cannot find, is the machine's fact: the agent-login alert says it.
+  if (needsLogin(error.message) || toolProblem('claude') !== null) return []
   const { cadence } = readReportSettings(projectId)
   if (cadence === 'off') return []
   // Written by hand since, or by a later run: nothing is left to retry.
