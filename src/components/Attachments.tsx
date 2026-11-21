@@ -7,7 +7,6 @@ import { PdfThumb } from '#/components/PdfThumb'
 import { Tip } from '#/components/ui/tooltip'
 import { annotationNotes } from '#/lib/annotations'
 import type { Attachment } from '#/lib/api'
-import { fileSize } from '#/lib/format'
 
 /**
  * Image, video and PDF thumbnails, everything else a link; a click opens the gallery. A picture that
@@ -77,7 +76,10 @@ export function Attachments({ items }: { items: (Attachment & { url: string })[]
             className="text-sm underline underline-offset-4"
             {...gallery}
           >
-            {a.name} <span className="text-muted-foreground">({fileSize(a.size)})</span>
+            {a.name}{' '}
+            <span className="text-muted-foreground">
+              ({t('files.attachments.sizeKb', { kb: Math.round(a.size / 1024) })})
+            </span>
           </a>
         )
       })}

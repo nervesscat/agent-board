@@ -12,6 +12,7 @@ src/components/Needs.tsx
 src/components/NewTicket.tsx
 src/components/Notes.tsx
 src/components/NotificationCenter.tsx
+src/components/PdfThumb.tsx
 src/components/PostTools.tsx
 src/components/PrState.tsx
 src/components/Preview.tsx
@@ -25,6 +26,7 @@ src/components/RunsCard.tsx
 src/components/Summary.tsx
 src/components/Thread.tsx
 src/components/TicketBoard.tsx
+src/components/Verdict.tsx
 src/components/WorkStatus.tsx
 src/components/WorkTimeline.tsx
 src/components/WorkTimelineCard.tsx

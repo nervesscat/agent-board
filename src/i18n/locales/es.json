@@ -747,8 +747,8 @@
       "pr_other": "{{count}} PRs",
       "review_one": "{{count}} revisión",
       "review_other": "{{count}} revisiones",
-      "workspace_one": "{{count}} espacio de trabajo",
-      "workspace_other": "{{count}} espacios de trabajo",
+      "workspace_one": "{{count}} workspace",
+      "workspace_other": "{{count}} workspaces",
       "agent_one": "{{count}} agente",
       "agent_other": "{{count}} agentes",
       "project_one": "{{count}} proyecto",
@@ -1069,7 +1069,7 @@
   "gallery": {
     "kind": {
       "image": "Imágenes",
-      "video": "Vídeos",
+      "video": "Videos",
       "pdf": "PDFs",
       "docs": "Documentos y texto",
       "other": "Otros"
@@ -1110,7 +1110,8 @@
       "copy": "Copiar imagen"
     },
     "attachments": {
-      "notesOn": "Notas sobre {{name}}"
+      "notesOn": "Notas sobre {{name}}",
+      "sizeKb": "{{kb}} KB"
     },
     "grid": {
       "open": "Abrir {{name}}",
@@ -1201,5 +1202,23 @@
     "attachOriginal": "Adjuntar original",
     "attaching": "Adjuntando…",
     "attach": "Adjuntar"
+  },
+  "reach": {
+    "merged": {
+      "label": "fusionada",
+      "title": "Todos los commits están en la base tal cual. Se puede eliminar sin riesgo."
+    },
+    "rebased": {
+      "label": "rebaseada",
+      "title": "Los commits se rebasearon o se aplicaron con cherry-pick; los mismos parches están en la base. Se puede eliminar sin riesgo."
+    },
+    "edited": {
+      "label": "integrada con cambios",
+      "title": "Los parches difieren, pero fusionar la rama no cambiaría nada en la base. Se puede eliminar sin riesgo."
+    },
+    "unique": {
+      "label": "trabajo propio",
+      "title": "La rama aún tiene cambios que la base no tiene. Consérvala."
+    }
   }
 }

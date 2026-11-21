@@ -1110,7 +1110,8 @@
       "copy": "Copy image"
     },
     "attachments": {
-      "notesOn": "Notes on {{name}}"
+      "notesOn": "Notes on {{name}}",
+      "sizeKb": "{{kb}} KB"
     },
     "grid": {
       "open": "Open {{name}}",
@@ -1201,5 +1202,23 @@
     "attachOriginal": "Attach original",
     "attaching": "Attaching…",
     "attach": "Attach"
+  },
+  "reach": {
+    "merged": {
+      "label": "merged",
+      "title": "Every commit is in the base as is. Safe to delete."
+    },
+    "rebased": {
+      "label": "rebased",
+      "title": "The commits were rebased or cherry-picked; the same patches are in the base. Safe to delete."
+    },
+    "edited": {
+      "label": "edited in",
+      "title": "The patches differ, but merging the branch would change nothing in the base. Safe to delete."
+    },
+    "unique": {
+      "label": "unique work",
+      "title": "The branch still has changes the base does not. Keep it."
+    }
   }
 }
