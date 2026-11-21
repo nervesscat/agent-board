@@ -129,7 +129,7 @@ describe('collapsed periods on the chart', () => {
     expect(html).toContain('data-kind="review"')
     expect(html).toContain('aria-label="In review, ')
     expect(html).toContain('4 d 23 h 30 min, not drawn to scale')
-    expect(html).toContain('>In review</button>')
+    expect(html).toContain('>In review</span></button>')
     expect(html).toContain('data-kind="axis-break"')
     expect(html).toContain('Not to scale: in review 4 d 23 h 30 min.')
   })

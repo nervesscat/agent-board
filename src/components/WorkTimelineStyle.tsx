@@ -74,9 +74,12 @@ export const OTHER_MARK = { name: 'board event', icon: CircleDot }
 /** The icon of a wait's reason; the human's and any other reason's are the same as the rest. */
 export const waitIcon = (reason: string): LucideIcon => WAIT_ICON[reason] ?? NEUTRAL_WAIT_ICON
 
-/** A style for a segment's box, with its share of the axis. */
+/**
+ * A style for a segment's box, with its share of the axis. A segment is at least 6 px wide, and one that
+ * starts at the very end of the track moves left so that those 6 px stay inside it.
+ */
 export const boxStyle = (left: number, width: number, top: number, height: number): CSSProperties => ({
-  left: `${left * 100}%`,
+  left: `min(${left * 100}%, calc(100% - 6px))`,
   width: `max(6px, ${width * 100}%)`,
   top,
   height,

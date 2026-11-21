@@ -1,6 +1,14 @@
 import { shortName } from '#/lib/actorName'
 import { clock } from '#/lib/format'
-import { clipPieces, planPieces, position, spanOf, type Piece, type Stretch } from '#/lib/timelineCollapse'
+import {
+  clipPieces,
+  fitPieces,
+  planPieces,
+  position,
+  spanOf,
+  type Piece,
+  type Stretch,
+} from '#/lib/timelineCollapse'
 import {
   type Interval,
   type TimelineHandoff,
@@ -41,8 +49,9 @@ export type Axis = {
 
 /** A segment narrower than this share of the axis is a cap: its label is in its tooltip and popover. */
 export const NARROW_SHARE = 0.06
-/** The track's width per minute of axis; a narrow screen's track scrolls sideways past the screen. */
-export const PX_PER_MINUTE = 3
+/** The most ticks on the axis, on a track wide enough for them: one per this many pixels of it, from 2 up to 5. */
+const MAX_TICKS = 5
+const TICK_PX = 100
 
 /** A segment's place on the axis, as shares of the axis length. */
 export type Seg = { left: number; width: number; narrow: boolean }
@@ -134,17 +143,26 @@ export { shortName }
 /** The axis tick steps: 1 to 30 minutes, 1 to 12 hours, a day. */
 const STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440].map((m) => m * MIN)
 
-/** The smallest step that puts at most five ticks in the span. */
-export function tickStep(span: number): number {
-  return STEPS.find((s) => span / s <= 5) ?? STEPS[STEPS.length - 1]!
+/** The smallest step that puts at most `most` ticks in the span. */
+export function tickStep(span: number, most = MAX_TICKS): number {
+  return STEPS.find((s) => span / s <= most) ?? STEPS[STEPS.length - 1]!
 }
+
+/** How many ticks a track `width` px wide has room for: none of the labels crowd on a phone. */
+export const ticksFit = (width: number) => Math.max(2, Math.min(MAX_TICKS, Math.floor(width / TICK_PX)))
 
 /**
  * Ticks on round times (local), at the step tickStep picks for the axis length, from the start to the end.
  * Time inside a piece is skipped; a tick after one carries its date when its day differs from the tick before.
  */
-export function ticksFor(start: number, end: number, pieces: Piece[] = [], span = end - start): Tick[] {
-  const step = tickStep(span)
+export function ticksFor(
+  start: number,
+  end: number,
+  pieces: Piece[] = [],
+  span = end - start,
+  most = MAX_TICKS,
+): Tick[] {
+  const step = tickStep(span, most)
   const offset = -new Date(start).getTimezoneOffset() * MIN
   const ticks: Tick[] = []
   let dated = false
@@ -221,7 +239,7 @@ function stretchesOf(t: WorkTimeline, now: number): Stretch[] {
  * review periods are fixed blocks of it, and a merge after the last work sits right after it
  * (src/lib/timelineCollapse.ts); the axis then ends at the merge.
  */
-export function axisFor(t: WorkTimeline, now: number, win?: Window): Axis {
+export function axisFor(t: WorkTimeline, now: number, win?: Window, width?: number): Axis {
   let start: number
   let end: number
   const agentAt = agentStarts(t)
@@ -243,12 +261,14 @@ export function axisFor(t: WorkTimeline, now: number, win?: Window): Axis {
   })
   if (plan.pinned !== null && !win) end = plan.pinned
   if (end <= start) end = start + MIN
-  const pieces = clipPieces(plan.pieces, start, end)
+  const clipped = clipPieces(plan.pieces, start, end)
+  // With the track's width known, the blocks are a fixed number of pixels and the real time fills the rest.
+  const pieces = width === undefined ? clipped : fitPieces(clipped, start, end, width)
   const span = spanOf(start, end, pieces)
   return {
     start,
     end,
-    ticks: ticksFor(start, end, pieces, span),
+    ticks: ticksFor(start, end, pieces, span, width === undefined ? MAX_TICKS : ticksFit(width)),
     span,
     pieces,
     pinned: plan.pinned !== null && !win ? plan.pinned : null,
@@ -374,8 +394,8 @@ export function summarize(t: WorkTimeline, rows: AgentRow[], axis: Axis): string
 }
 
 /** The whole chart as the view draws it: rows, marks, blocked bands, the creation mark and the summary. */
-export function buildChart(t: WorkTimeline, now: number, win?: Window): Chart {
-  const axis = axisFor(t, now, win)
+export function buildChart(t: WorkTimeline, now: number, win?: Window, width?: number): Chart {
+  const axis = axisFor(t, now, win, width)
   const going = t.live
   // Not live for drawing once the axis ends at a pinned merge: now is days past its right edge.
   const live = going && axis.pinned === null

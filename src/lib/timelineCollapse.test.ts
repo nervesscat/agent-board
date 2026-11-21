@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { COLLAPSED_MS, GAP_MS, planPieces, position } from './timelineCollapse'
-import { axisFor, buildChart, longDuration } from './timelineRows'
+import { CHIP_PX, COLLAPSED_MS, GAP_MS, GAP_PX, fitPieces, planPieces, position } from './timelineCollapse'
+import { axisFor, buildChart, longDuration, share, ticksFit } from './timelineRows'
 import type { TimelineSpan, WorkTimeline } from './workTimeline'
 
 const MIN = 60_000
@@ -423,5 +423,100 @@ describe('longDuration', () => {
     expect(longDuration(5 * DAY - 30 * MIN)).toBe('4 d 23 h 30 min')
     expect(longDuration(2 * DAY + 3 * HOUR)).toBe('2 d 3 h')
     expect(longDuration(125 * MIN)).toBe('2 h 5 min')
+  })
+})
+
+describe('fitting the chart to its width', () => {
+  /** The pixel width a time range takes on a track `width` px wide. */
+  const px = (t: WorkTimeline, width: number, from: number, to: number) => {
+    const axis = axisFor(t, m(0), undefined, width)
+    return (share(axis, to) - share(axis, from)) * width
+  }
+
+  it('gives the collapsed block the same pixels whatever its length, and the work the rest', () => {
+    for (const width of [320, 640, 1200]) {
+      for (const days of [1, 9, 90]) {
+        const t = reviewed(days * DAY)
+        const axis = axisFor(t, m(0), undefined, width)
+        const review = axis.pieces.find((p) => p.kind === 'review')!
+        const gap = axis.pieces.find((p) => p.kind === 'gap')!
+        const shrink = Math.min(1, (0.5 * width) / (CHIP_PX + GAP_PX))
+        expect(px(t, width, review.start, review.end)).toBeCloseTo(CHIP_PX * shrink, 6)
+        expect(px(t, width, gap.start, gap.end)).toBeCloseTo(GAP_PX * shrink, 6)
+        // The work 09:00-10:00 takes everything else: the whole track.
+        expect(px(t, width, m(0), m(60))).toBeCloseTo(width - (CHIP_PX + GAP_PX) * shrink, 6)
+        expect(share(axis, axis.end)).toBeCloseTo(1, 9)
+      }
+    }
+  })
+
+  it('shrinks the blocks together when they would take over half a narrow track', () => {
+    const pieces = [
+      {
+        start: m(10),
+        end: m(20),
+        kind: 'blocked' as const,
+        virtualMs: COLLAPSED_MS,
+        stretch: null,
+        skips: null,
+      },
+      {
+        start: m(30),
+        end: m(40),
+        kind: 'review' as const,
+        virtualMs: COLLAPSED_MS,
+        stretch: null,
+        skips: null,
+      },
+      { start: m(50), end: m(55), kind: 'gap' as const, virtualMs: GAP_MS, stretch: null, skips: null },
+    ]
+    const fitted = fitPieces(pieces, m(0), m(60), 200)
+    const total = fitted.reduce((n, p) => n + p.virtualMs, 0)
+    const real = 60 * MIN - 25 * MIN
+    // Fixed blocks 162 px nominal, held to 100 px (half of 200) and the real 35 min get the other 100 px.
+    expect(total / (total + real)).toBeCloseTo(0.5, 6)
+    expect(fitted[0]!.virtualMs / fitted[2]!.virtualMs).toBeCloseTo(CHIP_PX / GAP_PX, 6)
+  })
+
+  it('leaves a chart with nothing collapsed to scale, and the same at any width', () => {
+    const t = timeline({ spans: [span(1, m(0), m(60))] })
+    for (const width of [200, 700, 1400]) {
+      const axis = axisFor(t, m(0), undefined, width)
+      expect(axis.pieces).toEqual([])
+      expect(axis.span).toBe(60 * MIN)
+    }
+  })
+
+  it('keeps every segment inside the track at any width', () => {
+    const t = timeline({
+      spans: [span(1, m(0), m(60)), span(2, m(60) + 3 * DAY, m(60) + 3 * DAY + 30 * MIN)],
+      blockedStretches: [stretch(m(60), m(60) + 3 * DAY)],
+      reviewStretches: [stretch(m(60) + 3 * DAY + 30 * MIN, m(60) + 8 * DAY)],
+      marks: [merge(9, m(60) + 8 * DAY)],
+      end: iso(m(60) + 8 * DAY),
+    })
+    for (const width of [150, 320, 390, 800, 2000]) {
+      const chart = buildChart(t, m(0), undefined, width)
+      const shares = [
+        ...chart.rows.flatMap((r) => r.items.map((i) => [i.seg.left, i.seg.left + i.seg.width])),
+        ...chart.bands.map((b) => [b.seg.left, b.seg.left + b.seg.width]),
+        ...chart.marks.map((k) => [k.left, k.left]),
+      ]
+      expect(chart.bands.length).toBe(2)
+      for (const [a, b] of shares) {
+        expect(a).toBeGreaterThanOrEqual(-1e-9)
+        expect(b).toBeLessThanOrEqual(1 + 1e-9)
+      }
+    }
+  })
+
+  it('puts fewer ticks on a narrow track', () => {
+    const t = timeline({ spans: [span(1, m(0), m(600))], end: iso(m(600)) })
+    expect(axisFor(t, m(0), undefined, 1200).ticks.length).toBeGreaterThan(
+      axisFor(t, m(0), undefined, 220).ticks.length,
+    )
+    expect(axisFor(t, m(0), undefined, 220).ticks.length).toBeLessThanOrEqual(ticksFit(220) + 1)
+    expect(ticksFit(120)).toBe(2)
+    expect(ticksFit(2000)).toBe(5)
   })
 })

@@ -7,7 +7,7 @@
 
 const MIN = 60_000
 
-/** The axis a collapsed period takes: 72 px at the chart's 3 px per minute. */
+/** The axis a collapsed period takes before the chart knows its width: 72 px at 3 px per minute (`fitPieces` replaces it). */
 export const COLLAPSED_MS = 24 * MIN
 /** The axis the stretch between the last work (or the last collapsed period) and the merge takes. */
 export const GAP_MS = 6 * MIN
@@ -108,6 +108,29 @@ export function planPieces(input: PlanInput): { pieces: Piece[]; pinned: number 
     pieces.push({ start: gap.end, end: Infinity, kind: 'tail', virtualMs: 0, stretch: null, skips: null })
   }
   return { pieces, pinned: pin ? merge : null }
+}
+
+/** A collapsed block's width in pixels, and the short gap's, on a track wide enough for them. */
+export const CHIP_PX = 72
+export const GAP_PX = 18
+/** The share of the track the fixed blocks and gaps may take together; on a narrow track they shrink to it. */
+const FIXED_SHARE = 0.5
+
+/**
+ * The pieces with their length set for a track `width` px wide: each collapsed block and gap is a fixed
+ * number of pixels (CHIP_PX and GAP_PX, shrunk together when they would take more than half the track),
+ * and the rest of the width is the real time at one scale. `start` and `end` are the axis's real ends.
+ */
+export function fitPieces(pieces: Piece[], start: number, end: number, width: number): Piece[] {
+  const px = (p: Piece) =>
+    p.kind === 'blocked' || p.kind === 'review' ? CHIP_PX : p.kind === 'gap' ? GAP_PX : 0
+  const fixed = pieces.reduce((n, p) => n + px(p), 0)
+  if (!fixed || width <= 0) return pieces
+  const shrink = Math.min(1, (FIXED_SHARE * width) / fixed)
+  const real = pieces.reduce((n, p) => n - (p.end - p.start), end - start)
+  // The width left for real time; with no real time at all, 3 px per minute as before.
+  const msPerPx = real > 0 ? real / (width - fixed * shrink) : MIN / 3
+  return pieces.map((p) => (px(p) ? { ...p, virtualMs: px(p) * shrink * msPerPx } : p))
 }
 
 /** The pieces that overlap the window, clipped to it; each still takes its whole fixed block. */
