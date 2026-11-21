@@ -73,7 +73,7 @@ test('the assignee, branch and needs controls keep their shape and say nothing f
   expect(await branch.evaluate((el) => `${el.tagName} ${el.getAttribute('role')}`)).toBe(role)
 })
 
-test('an attachment thumbnail holds its box, with a skeleton until the picture lands or fails', async ({
+test('an attachment thumbnail shows a skeleton in a box of its own until the picture lands or fails', async ({
   page,
   project,
   api,
@@ -94,11 +94,11 @@ test('an attachment thumbnail holds its box, with a skeleton until the picture l
   const height = async (name: string) => (await box(name).boundingBox())!.height
   await expect(box('shot.png')).toBeVisible()
   await expect(box('shot.png').locator('[data-slot=skeleton]')).toBeVisible()
-  const before = [await height('shot.png'), await height('broken.png')]
+  // Until the bytes arrive the box already has a size, so the placeholder is not a thin line.
+  expect(await height('shot.png')).toBeGreaterThan(100)
 
   await expect(box('shot.png').locator('[data-slot=skeleton]')).toHaveCount(0)
   await expect(box('broken.png').locator('[data-slot=skeleton]')).toHaveCount(0)
-  expect([await height('shot.png'), await height('broken.png')]).toEqual(before)
 })
 
 test('the New ticket dialog opens at once; Create waits, with a placeholder, for the project', async ({

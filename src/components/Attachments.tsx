@@ -23,18 +23,12 @@ export function Attachments({ items }: { items: (Attachment & { url: string })[]
         return a.mime.startsWith('image/') ? (
           <div key={a.id} className="group/thumb relative max-w-72">
             <Tip content={a.name}>
-              {/* A box of the thumbnails' fixed height, so it does not grow when the picture lands. */}
-              <a
-                href={a.url}
-                target="_blank"
-                rel="noreferrer"
-                className="relative block h-72 w-fit max-w-72 min-w-48"
-                {...gallery}
-              >
+              <a href={a.url} target="_blank" rel="noreferrer" {...gallery}>
                 <ImageWithPlaceholder
                   src={a.url}
                   alt={a.name}
                   className="block max-h-72 cursor-zoom-in rounded-md border object-contain"
+                  loadingBoxClassName="h-40 w-48"
                 />
               </a>
             </Tip>
