@@ -2038,5 +2038,103 @@
     "searchTickets": "Search tickets",
     "searchPlaceholder": "Search by name or thread",
     "clearSearchAria": "Clear search"
+  },
+  "needs": {
+    "titleIn": "#{{id}} {{title}}: {{branch}} is in {{into}}",
+    "titleNotIn": "#{{id}} {{title}}: {{branch}} not merged into {{into}}",
+    "titleDone": "#{{id}} {{title}}: done",
+    "titleNotDone": "#{{id}} {{title}}: not done, no branch",
+    "markDoneAnyway": "Mark done anyway",
+    "mergeFirst": "Merge first:\n{{list}}",
+    "badge": "needs {{list}}",
+    "statusMerged": "Needs #{{id}} · merged",
+    "statusNotMerged": "Needs #{{id}} · not merged yet",
+    "removeNeed": "Remove the need for #{{id}}",
+    "addPlaceholder": "Add a ticket it needs merged first…",
+    "noOthers": "No other tickets",
+    "includes": "Includes unmerged work from <goto>{{ref}}</goto>",
+    "cannotBeDone": "#{{id}} cannot be done until #{{need}}'s branch is merged into its base",
+    "addAsNeed": "Add as a need"
+  },
+  "verdict": {
+    "approve": "Approve",
+    "disapprove": "Disapprove",
+    "approved": "Approved",
+    "disapproved": "Disapproved",
+    "disapproveTip": "Disapprove: cancels this lane",
+    "approvedBy": "Approved by {{who}} {{when}}. Click to take it back.",
+    "disapprovedBy": "Disapproved by {{who}} {{when}}. Click to take it back (reopens it)."
+  },
+  "reviewResult": {
+    "pr": "PR #{{number}}",
+    "counts": "{{confirmed}} confirmed · {{plausible}} plausible · {{unverified}} unverified",
+    "title": "Review result",
+    "loading": "Loading…"
+  },
+  "thread": {
+    "replyActions": "Reply actions",
+    "replyLabel": "reply",
+    "reply": "Reply",
+    "ask": " · @{{name}} asks that agent",
+    "empty": "No comments yet.",
+    "replyingTo": "replying to {{name}}",
+    "cancel": "cancel",
+    "placeholderCompact": "Reply…{{ask}}",
+    "placeholder": "Leave a reply{{ask}}",
+    "sending": "Sending…"
+  },
+  "prQueue": {
+    "title": "PR queue",
+    "subtitle": "PRs to review and your own, by review state.",
+    "filters": {
+      "me": {
+        "label": "To review",
+        "title": "PRs by others you review: pending your approval, approved by you, or on hold on your comments"
+      },
+      "others": {
+        "label": "Waiting on others",
+        "title": "Your PRs (agents' too): pending approvals, approved by every reviewer, or on hold on their comments"
+      }
+    },
+    "reviewers": {
+      "all": "All PRs",
+      "mine": "Just me as reviewer"
+    },
+    "tabs": {
+      "pending": "Pending",
+      "reviewed": "Reviewed",
+      "on_hold": "On hold",
+      "done": "Done"
+    },
+    "empty": {
+      "me": "Nothing {{stage}} to review.",
+      "others": "Nothing {{stage}} waiting on others."
+    },
+    "refresh": "Refresh",
+    "mergeAfterTip": "Its ticket needs these merged first:\n{{list}}",
+    "mergeAfterItem": "PR #{{number}} (from #{{ticketId}} {{title}})",
+    "mergeAfter": "merge after <refs/>",
+    "updated": "updated {{when}}",
+    "merged": "merged {{when}}",
+    "myReview": "my review: {{state}}",
+    "myReviewState": {
+      "approved": "approved",
+      "changes_requested": "changes requested",
+      "commented": "commented",
+      "dismissed": "dismissed",
+      "pending": "pending"
+    },
+    "forYourReview": "for your review",
+    "yourPr": "your PR",
+    "fromTicket": "from #{{id}} {{title}}",
+    "reviewFresh": "reviewed at this SHA",
+    "reviewStale": "review is for an older SHA",
+    "openTicket": "Open ticket",
+    "release": "release",
+    "hold": "hold",
+    "holdTitle": "Put #{{number}} on hold",
+    "holdText": "A note for you and the agents. GitHub is not touched.",
+    "holdPlaceholder": "Why it waits…",
+    "holdConfirm": "Hold"
   }
 }

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Reply } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
@@ -52,6 +53,7 @@ export function CommentItem({
   label?: string
   depth?: number
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [editing, setEditing] = useState(false)
   const refresh = () => {
@@ -95,9 +97,9 @@ export function CommentItem({
           <Markdown className="mt-1">{c.body}</Markdown>
         )}
         <Attachments items={c.attachments} />
-        <div role="group" aria-label="Reply actions" className="mt-1 flex items-center gap-0.5">
+        <div role="group" aria-label={t('thread.replyActions')} className="mt-1 flex items-center gap-0.5">
           {depth === 0 && onReply && (
-            <ActionButton label="reply" tip="Reply" onClick={onReply}>
+            <ActionButton label={t('thread.replyLabel')} tip={t('thread.reply')} onClick={onReply}>
               <Reply />
             </ActionButton>
           )}
@@ -130,6 +132,7 @@ export function Thread({
   parentId: number
   compact?: boolean
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const { key, comments } = useComments(parentType, parentId)
   const [replyTo, setReplyTo] = useState<number | null>(null)
@@ -140,7 +143,7 @@ export function Thread({
   const annotate = useAnnotations((added) => setFiles((prev) => [...prev, ...added]))
   const drop = useFileDrop(annotate.add)
   const agents = useProjectAgents()
-  const ask = agents.length ? ` · @${agents[0]!.name} asks that agent` : ''
+  const ask = agents.length ? t('thread.ask', { name: agents[0]!.name }) : ''
 
   const send = useMutation({
     mutationFn: async () => {
@@ -160,7 +163,7 @@ export function Thread({
   const roots = comments.filter((c) => !c.replyTo)
   return (
     <div className="space-y-4">
-      {roots.length === 0 && !compact && <p className="text-sm text-muted-foreground">No comments yet.</p>}
+      {roots.length === 0 && !compact && <p className="text-sm text-muted-foreground">{t('thread.empty')}</p>}
       {roots.map((c) => (
         <CommentItem key={c.id} c={c} comments={comments} threadKey={key} onReply={() => setReplyTo(c.id)} />
       ))}
@@ -174,9 +177,9 @@ export function Thread({
       >
         {replyTo && (
           <div className="text-xs text-muted-foreground">
-            replying to {comments.find((c) => c.id === replyTo)?.author} ·{' '}
+            {t('thread.replyingTo', { name: comments.find((c) => c.id === replyTo)?.author })} ·{' '}
             <button type="button" className="underline" onClick={() => setReplyTo(null)}>
-              cancel
+              {t('thread.cancel')}
             </button>
           </div>
         )}
@@ -187,8 +190,8 @@ export function Thread({
           onAttach={() => fileInput.current?.click()}
           onSubmit={() => body.trim() && !send.isPending && send.mutate()}
           minHeight={compact ? 'min-h-12' : 'min-h-20'}
-          label="Reply"
-          placeholder={compact ? `Reply…${ask}` : `Leave a reply${ask}`}
+          label={t('thread.reply')}
+          placeholder={compact ? t('thread.placeholderCompact', { ask }) : t('thread.placeholder', { ask })}
         />
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -205,7 +208,7 @@ export function Thread({
           />
           <PendingFiles files={files} onChange={setFiles} />
           <Button type="submit" size="sm" className="ml-auto" disabled={!body.trim() || send.isPending}>
-            {send.isPending ? 'Sending…' : 'Reply'}
+            {send.isPending ? t('thread.sending') : t('thread.reply')}
           </Button>
         </div>
       </form>

@@ -2038,5 +2038,103 @@
     "searchTickets": "Buscar tickets",
     "searchPlaceholder": "Buscar por nombre o hilo",
     "clearSearchAria": "Borrar la búsqueda"
+  },
+  "needs": {
+    "titleIn": "#{{id}} {{title}}: {{branch}} está en {{into}}",
+    "titleNotIn": "#{{id}} {{title}}: {{branch}} no está fusionada en {{into}}",
+    "titleDone": "#{{id}} {{title}}: hecho",
+    "titleNotDone": "#{{id}} {{title}}: sin hacer, sin branch",
+    "markDoneAnyway": "Marcar como hecho igualmente",
+    "mergeFirst": "Fusionar antes:\n{{list}}",
+    "badge": "necesita {{list}}",
+    "statusMerged": "Necesita #{{id}} · fusionado",
+    "statusNotMerged": "Necesita #{{id}} · sin fusionar aún",
+    "removeNeed": "Quitar la dependencia de #{{id}}",
+    "addPlaceholder": "Añade un ticket que debe fusionarse antes…",
+    "noOthers": "No hay otros tickets",
+    "includes": "Incluye trabajo sin fusionar de <goto>{{ref}}</goto>",
+    "cannotBeDone": "#{{id}} no puede darse por hecho hasta que el branch de #{{need}} se fusione en su base",
+    "addAsNeed": "Añadir como dependencia"
+  },
+  "verdict": {
+    "approve": "Aprobar",
+    "disapprove": "Desaprobar",
+    "approved": "Aprobado",
+    "disapproved": "Desaprobado",
+    "disapproveTip": "Desaprobar: cancela este lane",
+    "approvedBy": "Aprobado por {{who}} {{when}}. Haz clic para deshacerlo.",
+    "disapprovedBy": "Desaprobado por {{who}} {{when}}. Haz clic para deshacerlo (lo reabre)."
+  },
+  "reviewResult": {
+    "pr": "PR #{{number}}",
+    "counts": "{{confirmed}} confirmados · {{plausible}} plausibles · {{unverified}} sin verificar",
+    "title": "Resultado de la revisión",
+    "loading": "Cargando…"
+  },
+  "thread": {
+    "replyActions": "Acciones de la respuesta",
+    "replyLabel": "responder",
+    "reply": "Responder",
+    "ask": " · @{{name}} se lo pregunta a ese agente",
+    "empty": "Aún no hay comentarios.",
+    "replyingTo": "respondiendo a {{name}}",
+    "cancel": "cancelar",
+    "placeholderCompact": "Responder…{{ask}}",
+    "placeholder": "Deja una respuesta{{ask}}",
+    "sending": "Enviando…"
+  },
+  "prQueue": {
+    "title": "Cola de PRs",
+    "subtitle": "PRs por revisar y los tuyos, por estado de revisión.",
+    "filters": {
+      "me": {
+        "label": "Por revisar",
+        "title": "PRs de otros que revisas: pendientes de tu aprobación, aprobados por ti o en pausa por tus comentarios"
+      },
+      "others": {
+        "label": "Esperando a otros",
+        "title": "Tus PRs (los de los agentes también): aprobaciones pendientes, aprobados por todos los revisores o en pausa por sus comentarios"
+      }
+    },
+    "reviewers": {
+      "all": "Todos los PRs",
+      "mine": "Solo yo como revisor"
+    },
+    "tabs": {
+      "pending": "Pendiente",
+      "reviewed": "Revisado",
+      "on_hold": "En pausa",
+      "done": "Hecho"
+    },
+    "empty": {
+      "me": "Nada {{stage}} por revisar.",
+      "others": "Nada {{stage}} esperando a otros."
+    },
+    "refresh": "Actualizar",
+    "mergeAfterTip": "Su ticket necesita que estos se fusionen antes:\n{{list}}",
+    "mergeAfterItem": "PR #{{number}} (de #{{ticketId}} {{title}})",
+    "mergeAfter": "fusionar después de <refs/>",
+    "updated": "actualizado {{when}}",
+    "merged": "fusionado {{when}}",
+    "myReview": "mi revisión: {{state}}",
+    "myReviewState": {
+      "approved": "aprobado",
+      "changes_requested": "cambios solicitados",
+      "commented": "comentado",
+      "dismissed": "descartado",
+      "pending": "pendiente"
+    },
+    "forYourReview": "para tu revisión",
+    "yourPr": "tu PR",
+    "fromTicket": "de #{{id}} {{title}}",
+    "reviewFresh": "revisado en este SHA",
+    "reviewStale": "la revisión es de un SHA anterior",
+    "openTicket": "Abrir ticket",
+    "release": "liberar",
+    "hold": "pausar",
+    "holdTitle": "Poner #{{number}} en pausa",
+    "holdText": "Una nota para ti y los agentes. No se toca GitHub.",
+    "holdPlaceholder": "Por qué espera…",
+    "holdConfirm": "Pausar"
   }
 }

@@ -1,12 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { GitMerge, Plus, TriangleAlert, X } from 'lucide-react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { cn } from 'cn'
 
 import { Button } from '#/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
+import { shared } from '#/i18n'
 import { ApiError, errorMessage, get, type Need, type TicketFull, type TicketRow } from '#/lib/api'
 
 const AMBER = 'bg-amber-500/10 text-amber-700 dark:text-amber-400'
@@ -14,13 +16,20 @@ const GREEN = 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
 
 /** What a need waits for, for a tooltip: its branch into the base it has to reach. */
 const needTitle = (n: Need) =>
-  `#${n.id} ${n.title}${n.branch ? `: ${n.branch} ${n.merged ? 'is in' : 'not merged into'} ${n.into}` : n.merged ? ': done' : ': not done, no branch'}`
+  n.branch
+    ? shared.t(n.merged ? 'needs.titleIn' : 'needs.titleNotIn', {
+        id: n.id,
+        title: n.title,
+        branch: n.branch,
+        into: n.into,
+      })
+    : shared.t(n.merged ? 'needs.titleDone' : 'needs.titleNotDone', { id: n.id, title: n.title })
 
 /**
  * A move refused because something the ticket needs is not merged yet: the reason, with the human's
  * way past it (`force`). Any other error shows as it is.
  */
-export function toastRefusal(err: unknown, force: () => void, label = 'Mark done anyway') {
+export function toastRefusal(err: unknown, force: () => void, label = shared.t('needs.markDoneAnyway')) {
   if (err instanceof ApiError && err.code === 'needs')
     toast.error(err.message, { duration: 15_000, action: { label, onClick: force } })
   else toast.error(errorMessage(err))
@@ -28,10 +37,11 @@ export function toastRefusal(err: unknown, force: () => void, label = 'Mark done
 
 /** "needs #3": what a card or row waits on to be merged first; nothing once all of it is. */
 export function NeedsBadge({ needs, className }: { needs: Need[]; className?: string }) {
+  const { t: tr } = useTranslation()
   const open = needs.filter((n) => !n.merged)
   if (!open.length) return null
   return (
-    <Tip content={`Merge first:\n${open.map(needTitle).join('\n')}`}>
+    <Tip content={tr('needs.mergeFirst', { list: open.map(needTitle).join('\n') })}>
       <span
         className={cn(
           'inline-flex w-fit items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium',
@@ -39,7 +49,7 @@ export function NeedsBadge({ needs, className }: { needs: Need[]; className?: st
           className,
         )}
       >
-        <GitMerge className="size-3" /> needs {open.map((n) => `#${n.id}`).join(', ')}
+        <GitMerge className="size-3" /> {tr('needs.badge', { list: open.map((n) => `#${n.id}`).join(', ') })}
       </span>
     </Tip>
   )
@@ -47,6 +57,7 @@ export function NeedsBadge({ needs, className }: { needs: Need[]; className?: st
 
 /** The ticket page's header: each need, "not merged yet" (amber) or "merged" (green), linking to it. */
 export function NeedsStatus({ t }: { t: TicketFull }) {
+  const { t: tr } = useTranslation()
   return t.needs.map((n) => (
     <Tip key={n.id} content={needTitle(n)}>
       <Link
@@ -57,7 +68,8 @@ export function NeedsStatus({ t }: { t: TicketFull }) {
           n.merged ? GREEN : AMBER,
         )}
       >
-        <GitMerge className="size-3.5" /> Needs #{n.id} · {n.merged ? 'merged' : 'not merged yet'}
+        <GitMerge className="size-3.5" />{' '}
+        {tr(n.merged ? 'needs.statusMerged' : 'needs.statusNotMerged', { id: n.id })}
       </Link>
     </Tip>
   ))
@@ -77,6 +89,7 @@ export function NeedsField({
   includes?: number[]
   onSave: (needs: number[]) => void
 }) {
+  const { t: tr } = useTranslation()
   // Every ticket of the project, lanes too: a branch can stand on any of them.
   const { data: tickets = [] } = useQuery({
     queryKey: ['tickets', String(t.projectId), 'all'],
@@ -109,10 +122,10 @@ export function NeedsField({
                 >
                   #{n.id} {n.title}
                 </Link>
-                <Tip content={`Remove the need for #${n.id}`}>
+                <Tip content={tr('needs.removeNeed', { id: n.id })}>
                   <button
                     type="button"
-                    aria-label={`Remove the need for #${n.id}`}
+                    aria-label={tr('needs.removeNeed', { id: n.id })}
                     className="shrink-0 opacity-70 hover:opacity-100"
                     onClick={() => onSave(ids.filter((id) => id !== n.id))}
                   >
@@ -131,9 +144,7 @@ export function NeedsField({
         disabled={!options.length}
       >
         <SelectTrigger id="needs" size="sm" className="w-full">
-          <SelectValue
-            placeholder={options.length ? 'Add a ticket it needs merged first…' : 'No other tickets'}
-          />
+          <SelectValue placeholder={options.length ? tr('needs.addPlaceholder') : tr('needs.noOthers')} />
         </SelectTrigger>
         <SelectContent>
           {options.map((x) => (
@@ -149,17 +160,21 @@ export function NeedsField({
         <div key={id} className={cn('flex items-start gap-1.5 rounded px-1.5 py-1 text-xs', AMBER)}>
           <TriangleAlert className="mt-px size-3.5 shrink-0" />
           <span className="min-w-0 flex-1">
-            Includes unmerged work from{' '}
-            <Link
-              to="/projects/$id/features/$ticketId"
-              params={{ id: String(t.projectId), ticketId: String(id) }}
-              className="font-medium hover:underline"
-            >
-              #{id}
-              {title(id) ? ` ${title(id)}` : ''}
-            </Link>
+            <Trans
+              i18nKey="needs.includes"
+              values={{ ref: `#${id}${title(id) ? ` ${title(id)}` : ''}` }}
+              components={{
+                goto: (
+                  <Link
+                    to="/projects/$id/features/$ticketId"
+                    params={{ id: String(t.projectId), ticketId: String(id) }}
+                    className="font-medium hover:underline"
+                  />
+                ),
+              }}
+            />
           </span>
-          <Tip content={`#${t.id} cannot be done until #${id}'s branch is merged into its base`}>
+          <Tip content={tr('needs.cannotBeDone', { id: t.id, need: id })}>
             <Button
               type="button"
               variant="outline"
@@ -167,7 +182,7 @@ export function NeedsField({
               className="shrink-0"
               onClick={() => onSave([...ids, id])}
             >
-              <Plus data-icon="inline-start" /> Add as a need
+              <Plus data-icon="inline-start" /> {tr('needs.addAsNeed')}
             </Button>
           </Tip>
         </div>
