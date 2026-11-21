@@ -5,12 +5,10 @@ src/components/NotificationCenter.tsx
 src/components/ReviewResult.tsx
 src/components/Summary.tsx
 src/components/Thread.tsx
-src/components/TicketBoard.tsx
 src/components/Verdict.tsx
 src/components/WorkStatus.tsx
 src/components/WorkTimeline.tsx
 src/components/WorkTimelineCard.tsx
 src/routes/projects.$id.features.$ticketId.tsx
-src/routes/projects.$id.features.index.tsx
 src/routes/projects.$id.prs.tsx
 src/routes/projects.$id.roadmap.tsx

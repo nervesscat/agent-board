@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { cn } from 'cn'
 import { Archive, ChevronDown, CircleDot, Columns3, List, Loader2, Search, Tags, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
@@ -67,6 +68,7 @@ const VIEW_KEY = 'features.view'
 const REMEMBERED_VIEWS = ['board', 'list'] as const
 
 function Features() {
+  const { t } = useTranslation()
   const { id } = Route.useParams()
   const { view: picked, q = '', tag = '', state = '' } = Route.useSearch()
   const navigate = Route.useNavigate()
@@ -92,14 +94,14 @@ function Features() {
   const archiveAll = useMutation({
     mutationFn: (status: string) =>
       post<{ ids: number[] }>(`/api/projects/${id}/tickets/archive`, { status }),
-    onSuccess: (res) => toast.success(`Archived ${res.ids.length} ticket${res.ids.length === 1 ? '' : 's'}`),
+    onSuccess: (res) => toast.success(t('ticketList.archivedToast', { count: res.ids.length })),
     onError: (err) => toast.error(errorMessage(err)),
     onSettled: () => qc.invalidateQueries({ queryKey: ticketsKey(id) }),
   })
   const restore = useMutation({
     mutationFn: (ticketId: number) => post(`/api/tickets/${ticketId}/restore`),
     onSuccess: (_d, ticketId) => {
-      toast.success(`Restored #${ticketId} to the board`)
+      toast.success(t('ticketList.restoredToast', { id: ticketId }))
       qc.invalidateQueries({ queryKey: ['ticket', String(ticketId)] })
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -202,7 +204,7 @@ function Features() {
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="sm:min-w-32 sm:flex-1">
-          <h1 className="text-xl font-semibold tracking-tight">Ongoing features</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{t('ticketList.title')}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto sm:shrink-0">
           {view !== 'archived' && <StateFilter value={chosen} counts={counts} onChange={filterStates} />}
@@ -217,14 +219,14 @@ function Features() {
           )}
           <Tabs value={view} onValueChange={(v) => pickView(v as View)}>
             <TabsList>
-              <TabsTrigger value="board" aria-label="Board">
-                <Columns3 /> Board
+              <TabsTrigger value="board" aria-label={t('ticketList.board')}>
+                <Columns3 /> {t('ticketList.board')}
               </TabsTrigger>
-              <TabsTrigger value="list" aria-label="List">
-                <List /> List
+              <TabsTrigger value="list" aria-label={t('ticketList.list')}>
+                <List /> {t('ticketList.list')}
               </TabsTrigger>
-              <TabsTrigger value="archived" aria-label="Archived">
-                <Archive /> Archived
+              <TabsTrigger value="archived" aria-label={t('ticketList.archived')}>
+                <Archive /> {t('ticketList.archived')}
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -246,9 +248,9 @@ function Features() {
           )
         ) : listed.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No tickets match “{searching}”.{' '}
+            {t('ticketList.noMatch', { query: searching })}{' '}
             <button type="button" className="underline hover:text-foreground" onClick={() => search('')}>
-              Clear the search
+              {t('ticketList.clearSearch')}
             </button>
           </p>
         ) : (
@@ -308,6 +310,7 @@ function StateFilter({
   counts: Record<WorkLineState, number>
   onChange: (states: WorkLineState[]) => void
 }) {
+  const { t } = useTranslation()
   const toggle = (s: WorkLineState, on: boolean) =>
     onChange(WORK_LINE_STATES.filter((x) => (x === s ? on : value.includes(x))))
   return (
@@ -318,7 +321,7 @@ function StateFilter({
           className={cn(comboboxTriggerClass, 'min-w-0', value.length === 0 && 'text-muted-foreground')}
         >
           <CircleDot className="text-muted-foreground" />
-          State
+          {t('ticketList.state')}
           {value.length > 0 && <span className="tabular-nums text-muted-foreground">{value.length}</span>}
           <ChevronDown className="pointer-events-none size-4 text-muted-foreground" />
         </PopoverTrigger>
@@ -348,7 +351,7 @@ function StateFilter({
           variant="ghost"
           size="icon-sm"
           onClick={() => onChange([])}
-          aria-label="Clear the state filter"
+          aria-label={t('ticketList.clearState')}
         >
           <X />
         </Button>
@@ -362,7 +365,6 @@ const TAG_SEARCH_DELAY = 200
 /** "All tags": no tag at all, so no tag, whatever it is spelled, can be taken for it. */
 const ALL_TAGS = { all: true } as const
 type TagChoice = string | typeof ALL_TAGS
-const tagLabel = (c: TagChoice) => (typeof c === 'string' ? c : 'All tags')
 /** Every page of the tag filter's list, under one key per project: dropped whenever it opens. */
 const tagsKey = (projectId: string) => ['projectTags', projectId] as const
 
@@ -385,6 +387,7 @@ function TagFilter({
   value: string
   onChange: (tag: string) => void
 }) {
+  const { t: tr } = useTranslation()
   const qc = useQueryClient()
   const { data: project } = useProject(projectId)
   // The tag picked, in the casing the project uses for it: what the trigger shows and the list holds.
@@ -457,22 +460,22 @@ function TagFilter({
           setQuery('')
           setSearched('')
         }}
-        itemToStringLabel={tagLabel}
+        itemToStringLabel={(c) => (typeof c === 'string' ? c : tr('ticketList.allTags'))}
         itemToStringValue={(c) => (typeof c === 'string' ? c : '')}
       >
         <ComboboxTrigger
           size="sm"
-          aria-label="Filter by tag"
+          aria-label={tr('ticketList.filterByTag')}
           className={cn('max-w-56 min-w-0', !value && 'text-muted-foreground')}
         >
           <Tags className="text-muted-foreground" />
           <ComboboxValue />
         </ComboboxTrigger>
-        <ComboboxContent aria-label="Tags">
-          <ComboboxInput placeholder="Search tags" aria-label="Search tags" />
+        <ComboboxContent aria-label={tr('ticketList.tags')}>
+          <ComboboxInput placeholder={tr('ticketList.searchTags')} aria-label={tr('ticketList.searchTags')} />
           <ComboboxScroller>
             <ComboboxList>
-              <ComboboxItem value={ALL_TAGS}>All tags</ComboboxItem>
+              <ComboboxItem value={ALL_TAGS}>{tr('ticketList.allTags')}</ComboboxItem>
               {!waiting &&
                 shown.map((t) => (
                   <ComboboxItem
@@ -491,7 +494,7 @@ function TagFilter({
             ) : (
               <>
                 {shown.length === 0 && (
-                  <p className="px-1.5 py-1 text-sm text-muted-foreground">No tags match</p>
+                  <p className="px-1.5 py-1 text-sm text-muted-foreground">{tr('ticketList.noTagsMatch')}</p>
                 )}
                 {isFetchNextPageError ? (
                   <TagsError onRetry={() => void fetchNextPage()} />
@@ -507,15 +510,15 @@ function TagFilter({
         <>
           {count !== undefined && (
             <span className="text-xs text-muted-foreground tabular-nums" aria-live="polite">
-              {count} ticket{count === 1 ? '' : 's'}
+              {tr('ticketList.tickets', { count })}
             </span>
           )}
-          <Tip content="Show every tag">
+          <Tip content={tr('ticketList.showEveryTag')}>
             <Button
               variant="ghost"
               size="icon-sm"
               onClick={() => onChange('')}
-              aria-label="Clear the tag filter"
+              aria-label={tr('ticketList.clearTag')}
             >
               <X />
             </Button>
@@ -532,6 +535,7 @@ function TagFilter({
  * Gallery's MoreFiles does.
  */
 function MoreTags({ loading, onNear }: { loading: boolean; onNear?: () => void }) {
+  const { t } = useTranslation()
   const ref = useRef<HTMLDivElement>(null)
   const near = useRef(onNear)
   useEffect(() => {
@@ -551,7 +555,7 @@ function MoreTags({ loading, onNear }: { loading: boolean; onNear?: () => void }
     <div ref={ref} data-slot="more-tags" className="flex min-h-7 items-center justify-center" role="status">
       {loading && (
         <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="size-3.5 animate-spin" /> Loading tags…
+          <Loader2 className="size-3.5 animate-spin" /> {t('ticketList.loadingTags')}
         </span>
       )}
     </div>
@@ -560,11 +564,12 @@ function MoreTags({ loading, onNear }: { loading: boolean; onNear?: () => void }
 
 /** A page of the tag filter's list the server did not give: said quietly, with a way to ask again. */
 function TagsError({ onRetry }: { onRetry: () => void }) {
+  const { t } = useTranslation()
   return (
     <p className="flex items-center gap-2 px-1.5 py-1 text-xs text-muted-foreground" role="status">
-      Couldn't load tags.
+      {t('ticketList.couldNotLoadTags')}
       <button type="button" className="underline hover:text-foreground" onClick={onRetry}>
-        Retry
+        {t('ticketList.retry')}
       </button>
     </p>
   )
@@ -575,6 +580,7 @@ function TagsError({ onRetry }: { onRetry: () => void }) {
  * typing pauses; Escape or the clear button empty it at once.
  */
 function TicketSearch({ q, onSearch }: { q: string; onSearch: (q: string) => void }) {
+  const { t } = useTranslation()
   const [text, setText] = useState(q)
   // The query this field last sent: another one in the URL came from elsewhere (a link, Back).
   const sent = useRef(q)
@@ -604,8 +610,8 @@ function TicketSearch({ q, onSearch }: { q: string; onSearch: (q: string) => voi
       <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         type="search"
-        aria-label="Search tickets"
-        placeholder="Search by name or thread"
+        aria-label={t('ticketList.searchTickets')}
+        placeholder={t('ticketList.searchPlaceholder')}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
@@ -618,7 +624,7 @@ function TicketSearch({ q, onSearch }: { q: string; onSearch: (q: string) => voi
       {text && (
         <button
           type="button"
-          aria-label="Clear search"
+          aria-label={t('ticketList.clearSearchAria')}
           onClick={clear}
           className="absolute top-1/2 right-1.5 flex size-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:text-foreground"
         >
