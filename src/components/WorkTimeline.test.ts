@@ -204,3 +204,25 @@ describe('the chart fits its track', () => {
       expect(left[1]).not.toMatch(/^(100|[1-9]\d\d+)(\.\d+)?%$/)
   })
 })
+
+describe('a ticket that only waits on the human', () => {
+  it('draws its pending decision card as a block, not as no work', () => {
+    const t = buildTimeline(
+      [
+        event('stage', '09:00', { agent: 'board', by: 'board', toStage: 'todo' }),
+        event('stage', '09:05', { agent: 'board', by: 'board', fromStage: 'todo', toStage: 'in_progress' }),
+      ],
+      {
+        now: Date.parse(at('12:00')),
+        stages: DEFAULT_STAGES,
+        ticket: ticket(),
+        stallMinutes: 30,
+        decisions: [{ at: at('09:10'), decidedAt: null }],
+      },
+    )
+    const html = renderToStaticMarkup(createElement(WorkTimelineBar, { timeline: t }))
+    expect(html).not.toContain('No work recorded yet')
+    expect(html).toContain('data-kind="human"')
+    expect(html).toContain('Waiting for a decision')
+  })
+})

@@ -598,12 +598,13 @@ export function WorkTimelineBar({
   )
 }
 
-/** Whether there is something to draw: a span, a wait, a hand-off, a board event or time in a blocked or review stage. */
+/** Whether there is something to draw: a span, a wait, a hand-off, a board event or time the ticket waited on the human (a blocked or review stage, a wait, a decision card). */
 export const hasWork = (t: WorkTimeline) =>
   t.spans.length +
     t.waits.length +
     t.handoffs.length +
     t.marks.length +
     t.blockedStretches.length +
-    t.reviewStretches.length >
+    t.reviewStretches.length +
+    t.humanStretches.length >
   0
