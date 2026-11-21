@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   checkComponents,
+  checkDesktopStrings,
   checkLocales,
   compareLocales,
   findHardcoded,
@@ -53,6 +54,10 @@ describe('every language has every text', () => {
   it("passes on the app's own translation files", () => {
     expect(Object.keys(readLocales()).sort()).toEqual(['en', 'es'])
     expect(checkLocales()).toEqual([])
+  })
+
+  it("passes on the desktop app's table", async () => {
+    expect(await checkDesktopStrings()).toEqual([])
   })
 })
 

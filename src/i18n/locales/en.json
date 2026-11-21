@@ -1955,5 +1955,29 @@
     "toOpen": "to open",
     "toClose": "to close",
     "anywhere": "anywhere"
+  },
+  "signIn": {
+    "finishTitle": "Finish setup on the host",
+    "finishBody": "This board has no account yet. It is created on the machine the board runs on: open {{url}} there. Then come back here to add this device with a link from the board.",
+    "setupTitle": "Set up",
+    "setupHeading": "Set up CrossBoard",
+    "setupIntro": "Create the board's account and its first passkey, on this machine. Other devices are added later from Settings, with a one-time link.",
+    "nameLabel": "Your name on the board",
+    "deviceLabel": "This device",
+    "deviceDefault": "This computer",
+    "devicePlaceholder": "Phone, laptop…",
+    "createPasskey": "Create passkey",
+    "loginTitle": "Sign in",
+    "loginHeading": "Sign in",
+    "loginWelcomeMachine": "Welcome back, {{name}}. Sign in with a passkey of this machine.",
+    "loginWelcomeDevice": "Welcome back, {{name}}. Sign in with a passkey of this device.",
+    "loginButton": "Sign in with a passkey",
+    "enrollTitle": "Add a device",
+    "enrollNeedsLinkHeading": "Add a device",
+    "enrollNeedsLink": "This page needs a link from the board: on a device that is signed in, open Settings, Devices, and press Add a device.",
+    "enrollHeading": "Add this device",
+    "enrollIntro": "Create a passkey for {{name}} on this device. The link works once, for 15 minutes.",
+    "noPasskeys": "This browser cannot use passkeys here.",
+    "promptClosed": "The passkey prompt was closed or timed out. Try again."
   }
 }

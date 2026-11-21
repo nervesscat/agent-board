@@ -206,6 +206,57 @@ describe('first boot: no account yet', () => {
   })
 })
 
+describe('the sign-in pages speak the language of the request', () => {
+  const asked = async (target: string, headers: Record<string, string> = {}, via: Via = 'host') =>
+    (await send('GET', target, { html: true, via, headers })).text()
+
+  it('draws the setup page in English by default, and in Spanish by Accept-Language or the lang cookie', async () => {
+    const en = await asked('/setup')
+    expect(en).toContain('<html lang="en">')
+    expect(en).toContain('<title>Set up · CrossBoard</title>')
+    expect(en).toContain('Create passkey')
+    expect(en).toMatch(/id="device"[^>]*value="This computer"/)
+    expect(en).toContain('"noPasskeys":"This browser cannot use passkeys here."')
+    const variants: Record<string, string>[] = [
+      { 'accept-language': 'es-MX,es;q=0.9,en;q=0.8' },
+      { cookie: 'theme=dark; lang=es' },
+    ]
+    for (const headers of variants) {
+      const es = await asked('/setup', headers)
+      expect(es).toContain('<html lang="es">')
+      expect(es).toContain('<title>Configuración · CrossBoard</title>')
+      expect(es).toContain('Crear passkey')
+      expect(es).toMatch(/id="device"[^>]*value="Este ordenador"/)
+      expect(es).toContain('Este navegador no puede usar passkeys aquí.')
+      expect(es).not.toContain('Create passkey')
+      // The flow's own attributes do not change with the language.
+      expect(es).toContain('data-flow="setup"')
+    }
+    // The cookie wins over the header; a language that is not offered falls to English.
+    expect(await asked('/setup', { cookie: 'lang=en', 'accept-language': 'es' })).toContain(
+      '<html lang="en">',
+    )
+    const fr = await asked('/setup', { 'accept-language': 'fr-FR,fr;q=0.9' })
+    expect(fr).toContain('<html lang="en">')
+    expect(fr).toContain('Create passkey')
+    expect(await asked('/setup', { cookie: 'lang=fr' })).toContain('<html lang="en">')
+  })
+
+  it('translates the host-only notice and keeps the address in it', async () => {
+    const es = await asked('/setup', { 'accept-language': 'es' }, 'tailnet')
+    expect(es).toContain('<html lang="es">')
+    expect(es).toContain('Termina la configuración en el host')
+    expect(es).toContain('<code>http://localhost:47100/setup</code>')
+  })
+
+  it('puts the texts for the page script in an inert JSON block that cannot end the script', async () => {
+    const html = await asked('/setup', { 'accept-language': 'es' })
+    const block = /<script type="application\/json" id="texts">([^]*?)<\/script>/.exec(html)?.[1] ?? ''
+    expect(Object.keys(JSON.parse(block)).sort()).toEqual(['noPasskeys', 'promptClosed'])
+    expect(block).not.toContain('<')
+  })
+})
+
 describe('setup on the host', () => {
   it('creates the account and its first passkey on localhost, once, and signs this browser in', async () => {
     // Two setups at once, both past their options: one creates the account, the other stores nothing.
@@ -272,6 +323,21 @@ describe('signing in on this machine', () => {
     // An API call gets 401 JSON, and so does a cookie the board never gave.
     for (const cookie of [undefined, 'made-up'])
       expect(await (await send('GET', '/api/projects', { cookie })).json()).toEqual({ error: 'sign in' })
+  })
+
+  it('draws the login page in Spanish by Accept-Language, escaping the account name in either language', async () => {
+    const es = await (
+      await send('GET', '/login', { html: true, headers: { 'accept-language': 'es' } })
+    ).text()
+    expect(es).toContain('<html lang="es">')
+    expect(es).toContain('<title>Iniciar sesión · CrossBoard</title>')
+    expect(es).toContain(
+      'Te damos la bienvenida de nuevo, Enrique. Inicia sesión con una passkey de esta máquina.',
+    )
+    expect(es).toContain('Iniciar sesión con una passkey')
+    const en = await (await send('GET', '/login', { html: true })).text()
+    expect(en).toContain('<html lang="en">')
+    expect(en).toContain('Welcome back, Enrique. Sign in with a passkey of this machine.')
   })
 
   it('serves the login page, coming back only to a path of this origin', async () => {
@@ -432,6 +498,27 @@ describe('another device, through the tailnet entrance', () => {
   }
   const newCode = async () =>
     new URL((await json(makeLink({ cookie: hostSession }))).links[0].url).searchParams.get('code')!
+
+  it('draws the enroll page in Spanish or English, with the link and the placeholder of the language', async () => {
+    const code = await newCode()
+    const es = await (
+      await send('GET', `/enroll?code=${code}`, {
+        via: 'tailnet',
+        html: true,
+        headers: { cookie: 'lang=es' },
+      })
+    ).text()
+    expect(es).toContain('<html lang="es">')
+    expect(es).toContain('placeholder="Teléfono, portátil…"')
+    expect(es).toContain('Crea una passkey para Enrique en este dispositivo.')
+    expect(es).toContain(`data-code="${code}"`)
+    const en = await (await send('GET', `/enroll?code=${code}`, { via: 'tailnet', html: true })).text()
+    expect(en).toContain('placeholder="Phone, laptop…"')
+    const bare = await (
+      await send('GET', '/enroll', { via: 'tailnet', html: true, headers: { 'accept-language': 'es' } })
+    ).text()
+    expect(bare).toContain('Esta página necesita un enlace del tablero')
+  })
 
   it('enrols a passkey on the public RP ID with the link, once, and signs it in with a Secure cookie', async () => {
     const code = await newCode()
