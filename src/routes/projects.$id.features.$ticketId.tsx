@@ -42,8 +42,11 @@ import {
   useRef,
   useState,
 } from 'react'
+import type { TFunction } from 'i18next'
 import { toast } from 'sonner'
 import { Trans, useTranslation } from 'react-i18next'
+
+import { currentLocale } from '#/i18n'
 
 import { Actor, useActorKinds } from '#/components/Actor'
 import { AnnotateImage, useAnnotations } from '#/components/AnnotateImage'
@@ -129,7 +132,7 @@ import {
   verdictOk,
   validateLaneSearch,
 } from '#/lib/lanes'
-import { type AreaId, type Layout, defaultLayout, layoutElement, shownIn } from '#/lib/layout'
+import { type AreaId, type Layout, defaultLayout, layoutLabel, shownIn } from '#/lib/layout'
 import { useProject, useStages } from '#/lib/project'
 import { type Anchor, anchorId, cameBack, useAnchor, useReveal } from '#/lib/reveal'
 import { addTags, overTagLimits } from '#/lib/tags'
@@ -404,7 +407,7 @@ function TicketPage() {
   // (it is the ticket's own text, at the top, not something to jump to).
   const tabs: { key: string; label: string }[] = [
     ...(t.summary ? [{ key: 'summary', label: tr('ticketPage.summary') }] : []),
-    ...main.filter(hasTab).map(tabOf),
+    ...main.filter(hasTab).map((a) => tabOf(a, tr)),
   ]
 
   return (
@@ -2099,12 +2102,8 @@ function Activity({
           onFiles={annotate.add}
           onAttach={() => fileInput.current?.click()}
           onSubmit={submit}
-          label="New post"
-          placeholder={
-            tab === 'main'
-              ? 'Write a post: a question, an answer, progress. Paste or drop screenshots and recordings.'
-              : "Write in the agents' record: a note for whoever works it. Paste or drop files."
-          }
+          label={tr('ticketPage.newPost')}
+          placeholder={tab === 'main' ? tr('ticketPage.postPlaceholder') : tr('ticketPage.agentsPlaceholder')}
         />
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -2121,7 +2120,11 @@ function Activity({
           />
           <PendingFiles files={files} onChange={setFiles} />
           <Button type="submit" size="sm" className="ml-auto" disabled={!body.trim() || send.isPending}>
-            {send.isPending ? 'Posting…' : tab === 'main' ? 'Post' : 'Post in Agents'}
+            {send.isPending
+              ? tr('ticketPage.posting')
+              : tab === 'main'
+                ? tr('ticketPage.post')
+                : tr('ticketPage.postInAgents')}
           </Button>
         </div>
       </form>
@@ -2135,10 +2138,10 @@ function Activity({
       {feed.length === 0 ? (
         <Empty>
           {t.updates.length === 0
-            ? 'No posts yet.'
+            ? tr('ticketPage.noPosts')
             : tab === 'main'
-              ? 'No posts here yet.'
-              : 'No agent posts yet.'}
+              ? tr('ticketPage.noPostsHere')
+              : tr('ticketPage.noAgentPosts')}
         </Empty>
       ) : (
         <Timeline>
@@ -2158,7 +2161,10 @@ function Activity({
 const TAB_AREAS = ['ticket.tasks', 'ticket.timeline', 'ticket.lanes', 'ticket.activity'] as const
 type TabArea = (typeof TAB_AREAS)[number]
 const hasTab = (id: AreaId<'ticket.main'>): id is TabArea => (TAB_AREAS as readonly string[]).includes(id)
-const tabOf = (area: TabArea) => ({ key: area.slice('ticket.'.length), label: layoutElement(area).label })
+const tabOf = (area: TabArea, tr: TFunction) => ({
+  key: area.slice('ticket.'.length),
+  label: layoutLabel(area, tr),
+})
 
 /**
  * How far below the stuck header's bottom a section's top counts as the one being read: a tab's jump
@@ -2182,6 +2188,7 @@ const SPY_SETTLE_MS = 1200
  * where the page is, not only where it was last tapped.
  */
 function TicketSectionNav({ items }: { items: readonly { key: string; label: string }[] }) {
+  const { t: tr } = useTranslation()
   const [active, setActive] = useState(items[0]?.key ?? '')
   const root = useRef<HTMLDivElement | null>(null)
   // The tab a click asked for, while the scroll it started runs: no section passing the header on the
@@ -2278,7 +2285,7 @@ function TicketSectionNav({ items }: { items: readonly { key: string; label: str
   return (
     <div ref={root} className="-my-1 flex min-w-0 grow basis-40 overflow-x-auto py-1">
       <Tabs value={current} onValueChange={(v) => go(String(v))}>
-        <TabsList aria-label="Ticket sections" className="w-max">
+        <TabsList aria-label={tr('ticketPage.sections')} className="w-max">
           {items.map((s) => (
             <TabsTrigger
               key={s.key}
@@ -2304,6 +2311,7 @@ function TicketSectionNav({ items }: { items: readonly { key: string; label: str
  * progress post stands in for it.
  */
 function SummaryCard({ t }: { t: TicketFull }) {
+  const { t: tr } = useTranslation()
   const s = t.summary!
   const [history, setHistory] = useState(false)
   // Every version's replies, from the feed (the versions are its posts).
@@ -2322,37 +2330,40 @@ function SummaryCard({ t }: { t: TicketFull }) {
     enabled: history,
   })
   const earlier = data?.versions.filter((v) => v.postId !== s.postId) ?? []
-  const when = s.fallback ? 'posted' : s.versions > 1 ? 'updated' : 'written'
+  const when = tr(
+    s.fallback ? 'ticketPage.summaryPosted' : s.versions > 1 ? 'ticketPage.summaryUpdated' : 'ticketPage.summaryWritten',
+    { when: ago(s.at) },
+  )
   return (
     // A link to the summary's post (#post-<id>) lands here, below the stuck header. Not the stand-in's:
     // that post is in the feed too (in Agents, with its replies), and a link to it opens that tab, which
     // would take this card away from under the mark, so the id stays with the post.
     <article
       id={s.fallback ? undefined : `post-${s.postId}`}
-      aria-label="Summary"
+      aria-label={tr('ticketPage.summary')}
       className="relative mb-4 scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border border-primary/30 bg-primary/5 p-3"
     >
       {/* pr-9 keeps the header's line clear of the history button, floating in the card's top-right. */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pr-9 text-xs text-muted-foreground">
         <h3 className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground">
-          <ScrollText className="size-4" /> Summary
+          <ScrollText className="size-4" /> {tr('ticketPage.summary')}
         </h3>
         <Actor name={s.by} via={s.via} className="text-foreground" />
         <Tip content={stamp(s.at)}>
           <span className="min-w-0 break-words">
-            {when} {ago(s.at)}
+            {when}
             {s.change && `: ${s.change}`}
           </span>
         </Tip>
         {s.versions > 1 && (
-          <Tip content={`History (${s.versions - 1})`}>
+          <Tip content={tr('ticketPage.history', { count: s.versions - 1 })}>
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
               className="absolute top-2 right-2 text-muted-foreground"
               aria-expanded={history}
-              aria-label={`History (${s.versions - 1})`}
+              aria-label={tr('ticketPage.history', { count: s.versions - 1 })}
               onClick={() => setHistory((v) => !v)}
             >
               <History />
@@ -2362,7 +2373,7 @@ function SummaryCard({ t }: { t: TicketFull }) {
       </div>
       {s.fallback && (
         <p className="mt-1 text-xs text-muted-foreground">
-          No summary yet: the latest progress post stands in for it until an agent writes one.
+          {tr('ticketPage.noSummary')}
         </p>
       )}
       <Markdown className="mt-2">{s.body}</Markdown>
@@ -2372,8 +2383,8 @@ function SummaryCard({ t }: { t: TicketFull }) {
           old one must not go to the new one. */}
       {!s.fallback && <SummaryReplies key={s.postId} postId={s.postId} count={replies(s.postId)} />}
       {history && (
-        <ol aria-label="Earlier versions" className="mt-3 space-y-3 border-t pt-3">
-          {!data && <li className="text-xs text-muted-foreground">Loading…</li>}
+        <ol aria-label={tr('ticketPage.earlierVersions')} className="mt-3 space-y-3 border-t pt-3">
+          {!data && <li className="text-xs text-muted-foreground">{tr('files.viewer.loading')}</li>}
           {earlier.map((v) => (
             <li
               key={v.postId}
@@ -2384,7 +2395,7 @@ function SummaryCard({ t }: { t: TicketFull }) {
                 <Actor name={v.by} via={v.via} className="text-foreground" />
                 <Tip content={stamp(v.at)}>
                   <span className="min-w-0 break-words">
-                    {ago(v.at)}: {v.change || 'the first version'}
+                    {ago(v.at)}: {v.change || tr('ticketPage.firstVersion')}
                   </span>
                 </Tip>
               </div>
@@ -2405,19 +2416,26 @@ function SummaryCard({ t }: { t: TicketFull }) {
  * of them (#post-<id>-reply-<id>) opens the thread, once per link.
  */
 function SummaryReplies({ postId, count }: { postId: number; count: number }) {
+  const { t: tr } = useTranslation()
   const [open, setOpen] = useState(false)
   const anchor = useContext(ShownAnchor)
   const opensFor = anchor?.holder === `post-${postId}` ? anchor.hash : null
   useEffect(() => {
     if (opensFor) setOpen(true)
   }, [opensFor])
-  const label = `${count} ${count === 1 ? 'reply' : 'replies'}`
+  const label = tr('ticketPage.replies', { count })
   return (
     <>
-      <div role="group" aria-label="Summary actions" className="mt-2 flex items-center gap-0.5">
+      <div role="group" aria-label={tr('ticketPage.summaryActions')} className="mt-2 flex items-center gap-0.5">
         <ActionButton
-          label={open ? 'hide replies' : count ? label : 'reply'}
-          tip={open ? 'Hide replies' : count ? `Show ${label}` : 'Reply to the summary'}
+          label={open ? tr('ticketPage.hideRepliesLabel') : count ? label : tr('ticketPage.replyLabel')}
+          tip={
+            open
+              ? tr('ticketPage.hideReplies')
+              : count
+                ? tr('ticketPage.showReplies', { replies: label })
+                : tr('ticketPage.replySummary')
+          }
           size={count && !open ? 'xs' : 'icon-xs'}
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
@@ -2485,7 +2503,7 @@ function TimelineRow({
           <span className="block text-[11px] opacity-70" suppressHydrationWarning>
             {today
               ? clock(at)
-              : new Date(at).toLocaleString([], {
+              : new Date(at).toLocaleString(currentLocale(), {
                   month: 'short',
                   day: 'numeric',
                   hour: '2-digit',
@@ -2513,6 +2531,7 @@ function TimelineRow({
  * the first of them, opening right under the row.
  */
 function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string; onChange: () => void }) {
+  const { t: tr } = useTranslation()
   const [thread, setThread] = useState(false)
   const [editing, setEditing] = useState(false)
   const onError = (err: unknown) => toast.error(errorMessage(err))
@@ -2532,7 +2551,7 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
     if (opensFor) setThread(true)
   }, [opensFor])
   const replies = u.thread.count
-  const count = `${replies} ${replies === 1 ? 'reply' : 'replies'}`
+  const count = tr('ticketPage.replies', { count: replies })
   return (
     // A link lands on it as #post-<id>, below the stuck header.
     <article
@@ -2548,14 +2567,16 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <Actor name={u.author} via={u.via} className="text-foreground" />
           {u.summary ? (
-            <Tip content="The lane's summary: where its work stands, as its agents keep it">
+            <Tip content={tr('ticketPage.laneSummaryTip')}>
               <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">
-                <ScrollText className="size-3" /> summary
+                <ScrollText className="size-3" /> {tr('ticketPage.summaryChip')}
               </span>
             </Tip>
           ) : (
             u.progress && (
-              <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">progress</span>
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">
+                {tr('ticketPage.progress')}
+              </span>
             )
           )}
           {u.lane && (
@@ -2581,10 +2602,16 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
         )}
         {u.decision && <DecisionCard u={u} onChange={onChange} />}
         <Attachments items={u.attachments} />
-        <div role="group" aria-label="Post actions" className="mt-2 flex items-center gap-0.5">
+        <div role="group" aria-label={tr('ticketPage.postActions')} className="mt-2 flex items-center gap-0.5">
           <ActionButton
-            label={thread ? 'hide replies' : replies ? count : 'reply'}
-            tip={thread ? 'Hide replies' : replies ? `Show ${count}` : 'Reply'}
+            label={thread ? tr('ticketPage.hideRepliesLabel') : replies ? count : tr('ticketPage.replyLabel')}
+            tip={
+              thread
+                ? tr('ticketPage.hideReplies')
+                : replies
+                  ? tr('ticketPage.showReplies', { replies: count })
+                  : tr('thread.reply')
+            }
             size={replies && !thread ? 'xs' : 'icon-xs'}
             aria-expanded={thread}
             onClick={() => setThread((v) => !v)}
@@ -2600,8 +2627,8 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
               onDelete={() => remove.mutate()}
             >
               <ActionButton
-                label={u.progress ? 'not progress' : 'mark progress'}
-                tip={u.progress ? 'Not progress: make it a plain post' : 'Mark as progress'}
+                label={u.progress ? tr('ticketPage.notProgressLabel') : tr('ticketPage.markProgressLabel')}
+                tip={u.progress ? tr('ticketPage.notProgressTip') : tr('ticketPage.markProgressTip')}
                 onClick={() => edit.mutate({ progress: !u.progress })}
               >
                 {u.progress ? <FlagOff /> : <Flag />}
