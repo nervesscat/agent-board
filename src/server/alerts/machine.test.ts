@@ -329,6 +329,26 @@ describe('4 agent login or CLI problem', () => {
     expect(await check('agent-login')).toEqual([])
   })
 
+  it.each([
+    ['Invalid API key. Please run /login', true],
+    ['invalid key', true],
+    ['Please run /login to continue', true],
+    ['Error: Not logged in', true],
+    ['not authenticated', true],
+    ['Authentication failed', true],
+    ['Authentication required', true],
+    ['API Error: 401 Unauthorized', true],
+    ['Login required', true],
+    ['Credit balance is too low', false],
+    ['OAuth token has expired', false],
+    ['token expired', false],
+    ['oauth', false],
+    ['rate limit reached', false],
+    ['connection reset', false],
+  ])('reads %j as a sign-in problem: %s', (text, expected) => {
+    expect(machine.needsLogin(text)).toBe(expected)
+  })
+
   it('is not raised for a report that failed for another reason', async () => {
     const p = reportingProject('fail')
     await expect(gen.generateReport(p)).rejects.toThrow(/asked to fail/)
@@ -528,13 +548,12 @@ describe('11 resources', () => {
     expect(await check('machine-resources')).toEqual([])
   })
 
-  it('links the disk alert to the Cleanup page of a project', async () => {
-    const first = projects.listProjects()[0]!
+  it('has no button tied to one project: the alert shows in every project, so a link would be wrong in all but one', async () => {
     machine.edges.disk = () => ({ free: GB, total: 100 * GB })
     const [found] = await check('machine-resources')
-    expect(found!.buttons).toEqual([
-      { id: 'cleanup', label: 'Open Cleanup', kind: 'link', href: `/projects/${first.id}/cleanup` },
-    ])
+    expect(found!.buttons ?? []).toEqual([])
+    expect(JSON.stringify(found)).not.toMatch(/\/projects\//)
+    expect(found!.details).toEqual([expect.stringContaining('Data folder:')])
   })
 
   it('is raised for a load that stays high over several checks, and not for one spike', async () => {

@@ -263,9 +263,15 @@ const projectOf = (ctx: AlertContext) => {
 
 // --- 4: agent login / CLI problem ---
 
-/** What claude (the agent CLI) printed when it was refused: a sign-in or a token that does not hold. */
+/**
+ * What claude (the agent CLI) printed when it was refused for want of a sign-in: only errors that signing
+ * in again fixes. A credit balance, an expired token the CLI refreshes itself or any other failure is no
+ * login problem.
+ */
 const LOGIN_FAILURE =
-  /\b401\b|authenticat|unauthori[sz]ed|not logged in|please run \/login|invalid (api )?key|oauth|token (has )?expired|credit balance/i
+  /invalid (api )?key|please run \/login|not logged in|not authenticated|authentication (failed|required)|\b401 unauthori[sz]ed|login required/i
+
+export const needsLogin = (message: string) => LOGIN_FAILURE.test(message)
 
 function agentLoginAlerts(ctx: AlertContext): AlertCandidate[] {
   const out: AlertCandidate[] = []
@@ -289,7 +295,7 @@ function agentLoginAlerts(ctx: AlertContext): AlertCandidate[] {
     })
   const failed = ctx.projects.list().flatMap((p) => {
     const error = generationState(p.id).error
-    return error && LOGIN_FAILURE.test(error.message) ? [{ project: p, error }] : []
+    return error && needsLogin(error.message) ? [{ project: p, error }] : []
   })
   if (failed.length) {
     const first = failed[0]!.project
@@ -460,11 +466,6 @@ const leftover: AlertType = {
 function resourceAlerts(ctx: AlertContext): AlertCandidate[] {
   const now = ctx.now()
   const out: AlertCandidate[] = []
-  const first = ctx.projects.list()[0]
-  const cleanup: AlertButton[] = first
-    ? [{ id: 'cleanup', label: 'Open Cleanup', kind: 'link', href: `/projects/${first.id}/cleanup` }]
-    : []
-
   const disk = edges.disk()
   if (disk && disk.total > 0) {
     const fraction = disk.free / disk.total
@@ -476,9 +477,9 @@ function resourceAlerts(ctx: AlertContext): AlertCandidate[] {
         title: `The disk is almost full: ${gigabytes(disk.free)} free`,
         body:
           `The volume of the board's data folder has ${gigabytes(disk.free)} free of ${gigabytes(disk.total)} ` +
-          `(${percent(fraction)}). Attachments, previews and the database stop working when it is full.`,
+          `(${percent(fraction)}). Attachments, previews and the database stop working when it is full. ` +
+          'The Cleanup page of each project lists the branches and worktrees to delete. No link here: this alert shows in every project.',
         details: [`Data folder: ${config.dataDir}`],
-        buttons: cleanup,
       })
   }
 
