@@ -1,6 +1,7 @@
 import type { APIRequestContext, Page } from '@playwright/test'
 
 import type { FeedItem, Project } from '#/lib/api'
+import { ALERT_GROUP_LABELS } from '#/lib/alerts'
 import { expect, ok, seedProject, test } from './fixtures'
 
 const bellOf = (page: Page) => page.getByRole('button', { name: 'Notifications' })
@@ -149,9 +150,16 @@ test('muting a kind from the panel hides it here, and the project settings switc
   const types = section.getByRole('group', { name: 'Work' })
   const toggle = types.getByRole('switch', { name: 'Show Test alert' })
   await expect(toggle).not.toBeChecked()
-  // The groups nothing fills yet say so.
-  await expect(section.getByRole('group', { name: 'Setup and versions' })).toContainText('No alerts yet')
-  await expect(section.getByRole('group', { name: 'Housekeeping' })).toContainText('No alerts yet')
+  // Every group lists a switch for each alert kind this board can raise, or says it has none yet.
+  const kinds = await ok<{ type: string; label: string; group: string; applies: boolean }[]>(
+    human.get(`/api/projects/${project.id}/alert-types`),
+  )
+  for (const [group, name] of Object.entries(ALERT_GROUP_LABELS)) {
+    const here = kinds.filter((k) => k.group === group && k.applies)
+    const box = section.getByRole('group', { name, exact: true })
+    if (here.length === 0) await expect(box).toContainText('No alerts yet')
+    else await expect(box.getByRole('switch')).toHaveCount(here.length)
+  }
 
   await toggle.click()
   await expect(toggle).toBeChecked()
