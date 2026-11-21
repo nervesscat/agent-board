@@ -390,6 +390,7 @@ describe('resume: failure', () => {
       spawn: () => ({ pid: undefined, exited: Promise.resolve(null) }),
       killTree: async () => {},
       alive: () => false,
+      identity: () => null,
     })
     setCommand('anything')
     const { ticket, post } = asked()
@@ -555,5 +556,194 @@ describe('resume: who may set it', () => {
     const tools = await call('GET', '/api/resume/tools')
     expect(tools.body.map((t: { id: string }) => t.id)).toEqual(['claude', 'codex', 'opencode'])
     expect(tools.body.every((t: { found: boolean }) => typeof t.found === 'boolean')).toBe(true)
+  })
+})
+
+describe('resume: Retry and the cards that are not questions', () => {
+  const noProc = { spawn: () => ({ pid: undefined, exited: Promise.resolve(null) }) }
+  const fake = (extra: Partial<import('./resume').ResumeRunner> = {}) => ({
+    spawn: noProc.spawn,
+    killTree: async () => {},
+    alive: () => false,
+    identity: () => null,
+    ...extra,
+  })
+  const ticketRow = (id: number) =>
+    dbm.db.select().from(dbm.schema.tickets).where(eq(dbm.schema.tickets.id, id)).get()!
+
+  /** The agent went quiet long ago: its earlier signals no longer make a live agent. */
+  const quiet = (ticketId: number) => {
+    const old = new Date(Date.now() - 3_600_000).toISOString()
+    dbm.db
+      .update(dbm.schema.ticketEvents)
+      .set({ at: old })
+      .where(eq(dbm.schema.ticketEvents.ticketId, ticketId))
+      .run()
+    dbm.db
+      .update(dbm.schema.updates)
+      .set({ createdAt: old })
+      .where(eq(dbm.schema.updates.ticketId, ticketId))
+      .run()
+  }
+
+  it('a Retry whose command cannot start answers an error and leaves the ticket blocked', async () => {
+    resume.setResumeRunner(fake())
+    setCommand('anything')
+    const { ticket, post } = asked()
+    features.decide(post.id, 0, '', HUMAN)
+    expect(rowsOf(ticket.id)[0]!.state).toBe('failed')
+    quiet(ticket.id)
+    const res = await call('POST', `/api/tickets/${ticket.id}/resume`)
+    expect(res.status).toBe(502)
+    expect(statusOf(ticket.id)).toBe('blocked')
+  })
+
+  it('Resume on a done ticket reopens it and clears its approval', async () => {
+    const out = outFile()
+    setCommand(commandFor(out))
+    const { ticket } = asked()
+    dbm.db
+      .update(dbm.schema.tickets)
+      .set({
+        status: 'done',
+        approvedAt: new Date().toISOString(),
+        approvedBy: HUMAN,
+        closedByApproval: true,
+      })
+      .where(eq(dbm.schema.tickets.id, ticket.id))
+      .run()
+    quiet(ticket.id)
+    const res = await call('POST', `/api/tickets/${ticket.id}/resume`)
+    expect(res.status).toBe(202)
+    expect(ticketRow(ticket.id)).toMatchObject({
+      status: 'in_progress',
+      approvedAt: null,
+      approvedBy: '',
+      closedByApproval: false,
+    })
+    await until(() => rowsOf(ticket.id).every((r) => r.state !== 'running'))
+  })
+
+  it('an archive request answered Keep starts no resume, and leaves no reply', () => {
+    setCommand(commandFor(outFile()))
+    const { ticket } = asked()
+    dbm.db
+      .update(dbm.schema.tickets)
+      .set({ status: 'done' })
+      .where(eq(dbm.schema.tickets.id, ticket.id))
+      .run()
+    const card = features.requestArchive([ticket.id], {}, AGENT)
+    features.decide(card.id, 1, '', HUMAN)
+    const rows = rowsOf(ticket.id)
+    expect(rows.every((r) => r.state === 'skipped' && r.pid === null)).toBe(true)
+    expect(repliesOf(card.id).some((c) => c.body.includes('did not resume'))).toBe(false)
+  })
+
+  it('an answer on a finished ticket starts no resume; the human pressing Resume still may', async () => {
+    const out = outFile()
+    setCommand(commandFor(out))
+    const { ticket, post } = asked()
+    dbm.db
+      .update(dbm.schema.tickets)
+      .set({ status: 'done' })
+      .where(eq(dbm.schema.tickets.id, ticket.id))
+      .run()
+    features.decide(post.id, 0, '', HUMAN)
+    expect(rowsOf(ticket.id).every((r) => r.state === 'skipped')).toBe(true)
+    expect(rowsOf(ticket.id)[0]!.reason).toContain('finished')
+    quiet(ticket.id)
+    const res = await call('POST', `/api/tickets/${ticket.id}/resume`)
+    expect(res.status).toBe(202)
+    await until(() => rowsOf(ticket.id).every((r) => r.state !== 'running'))
+  })
+
+  it('Retry right after a failed run does not count that run own signals as a live agent', async () => {
+    setCommand(commandFor(outFile(), '3'))
+    const { ticket, post } = asked()
+    askedLongAgo(post.id)
+    features.decide(post.id, 0, '', HUMAN)
+    const first = rowsOf(ticket.id)[0]!
+    await until(() => rowState(first.id).state === 'failed')
+    const ago = (ms: number) => new Date(Date.now() - ms).toISOString()
+    dbm.db
+      .update(dbm.schema.ticketResumes)
+      .set({ startedAt: ago(5 * 60_000), endedAt: ago(60_000) })
+      .where(eq(dbm.schema.ticketResumes.id, first.id))
+      .run()
+    dbm.db
+      .insert(dbm.schema.ticketEvents)
+      .values({
+        ticketId: ticket.id,
+        projectId,
+        kind: 'heartbeat',
+        agent: AGENT,
+        by: 'gate_test',
+        at: ago(120_000),
+      })
+      .run()
+    setCommand(commandFor(outFile()))
+    const res = await call('POST', `/api/tickets/${ticket.id}/resume`)
+    expect(res.status).toBe(202)
+    await until(() => rowsOf(ticket.id).every((r) => r.state !== 'running'))
+  })
+
+  it('a restart does not kill, or keep watching, a pid that now belongs to another process', async () => {
+    const killed: number[] = []
+    resume.setResumeRunner(
+      fake({ alive: () => true, killTree: async (pid) => void killed.push(pid), identity: () => 'now' }),
+    )
+    setCommand('x')
+    const mk = (identity: string | null, hours = 0) =>
+      dbm.db
+        .insert(dbm.schema.ticketResumes)
+        .values({
+          ticketId: asked().ticket.id,
+          trigger: 'answer',
+          state: 'running',
+          pid: 4242,
+          pidIdentity: identity,
+          startedAt: new Date(Date.now() - hours * 3_600_000).toISOString(),
+        })
+        .returning()
+        .get()
+    const recycled = mk('then', 10)
+    const ours = mk('now')
+    const unknown = mk(null)
+    resume.sweepResumes()
+    expect(rowState(recycled.id)).toMatchObject({ state: 'succeeded', exitCode: null })
+    expect(rowState(recycled.id).reason).toContain('not known')
+    expect(rowState(ours.id).state).toBe('running')
+    expect(rowState(unknown.id).state).toBe('running')
+    expect(killed).toEqual([])
+  })
+
+  it('stores the process identity when it starts, and reads the real one on this machine', async () => {
+    resume.setResumeRunner(
+      fake({
+        spawn: () => ({ pid: 777, exited: new Promise(() => {}) }),
+        identity: (pid) => `id-${pid}`,
+      }),
+    )
+    setCommand('anything')
+    const { ticket, post } = asked()
+    features.decide(post.id, 0, '', HUMAN)
+    expect(rowsOf(ticket.id)[0]).toMatchObject({ state: 'running', pid: 777, pidIdentity: 'id-777' })
+    const mine = resume.processIdentity(process.pid)
+    if (process.platform === 'win32') expect(mine).toBeNull()
+    else {
+      expect(mine).toBeTruthy()
+      expect(resume.processIdentity(process.pid)).toBe(mine)
+      const child = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore' })
+      const theirs = resume.processIdentity(child.pid!)
+      expect(theirs).toBeTruthy()
+      child.kill()
+      await new Promise((r) => child.once('exit', r))
+      expect(resume.processIdentity(child.pid!)).toBeNull()
+    }
+    if (process.platform === 'linux') {
+      expect(
+        resume.procStartTime('12 (a b) c) S 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23'),
+      ).toBe('19')
+    }
   })
 })

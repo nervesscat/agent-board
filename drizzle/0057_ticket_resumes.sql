@@ -5,6 +5,7 @@ CREATE TABLE `ticket_resumes` (
 	`trigger` text NOT NULL,
 	`state` text NOT NULL,
 	`pid` integer,
+	`pid_identity` text,
 	`command` text DEFAULT '' NOT NULL,
 	`exit_code` integer,
 	`reason` text DEFAULT '' NOT NULL,

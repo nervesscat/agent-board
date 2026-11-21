@@ -1762,6 +1762,16 @@ describe('0057_ticket_resumes', () => {
         .prepare("INSERT INTO ticket_resumes (ticket_id, trigger, state) VALUES (?, 'answer', 'lost')")
         .run(ticket),
     ).toThrow(/CHECK/)
+    // The process identity is optional: a row without one is as it was.
+    sqlite
+      .prepare(
+        "INSERT INTO ticket_resumes (ticket_id, trigger, state, pid, pid_identity) VALUES (?, 'move', 'running', 1, '12345')",
+      )
+      .run(ticket)
+    expect(sqlite.prepare('SELECT pid_identity FROM ticket_resumes ORDER BY id').all()).toEqual([
+      { pid_identity: null },
+      { pid_identity: '12345' },
+    ])
     // A ticket that goes takes its resumes with it.
     sqlite.prepare('DELETE FROM tickets WHERE id = ?').run(ticket)
     expect(sqlite.prepare('SELECT count(*) AS n FROM ticket_resumes').get()).toEqual({ n: 0 })

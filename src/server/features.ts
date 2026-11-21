@@ -53,6 +53,7 @@ import {
   listStages,
   matchStages,
   movePatch,
+  reopenPatch,
   projectWorkStage,
   resolveStage,
   startStage,
@@ -834,10 +835,7 @@ export function updateTicket(
     .set({
       ...patch,
       ...(patch.status ? movePatch(stages, before.status, patch.status, before.startedAt) : {}),
-      // A ticket sent back from done is no longer approved: the approval was for the work it closed.
-      ...(patch.status && kindOf(stages, before.status) === 'done' && kindOf(stages, patch.status) !== 'done'
-        ? { approvedAt: null, approvedBy: '', closedByApproval: false }
-        : {}),
+      ...(patch.status ? reopenPatch(stages, before.status, patch.status) : {}),
       updatedAt: new Date().toISOString(),
     })
     .where(eq(schema.tickets.id, id))

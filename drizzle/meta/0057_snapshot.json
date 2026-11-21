@@ -3331,6 +3331,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "pid_identity": {
+          "name": "pid_identity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "command": {
           "name": "command",
           "type": "text",

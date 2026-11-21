@@ -44,6 +44,15 @@ export function hasWaiter(ticketId: number, postId: number): boolean {
   return (waiters.get(keyOf(ticketId, postId))?.size ?? 0) > 0
 }
 
+/** Whether any wait of the ticket is registered, whatever card it waits on. */
+export function ticketHasWaiter(ticketId: number): boolean {
+  for (const [key, set] of waiters) if (set.size > 0 && key.startsWith(`${ticketId}:`)) return true
+  return false
+}
+
+/** The note of the lease refresh a wait writes: once the wait has ended it says nothing of an agent. */
+export const WAIT_NOTE = 'waiting for an answer'
+
 /** How many waits are registered, for tests: zero means nothing leaked. */
 export function waiterCount(): number {
   let n = 0
@@ -219,7 +228,7 @@ export async function waitAndReport(opts: {
     signal: opts.signal,
     onHeartbeat: async () => {
       const ticket = db.select().from(schema.tickets).where(eq(schema.tickets.id, opts.ticketId)).get()
-      if (ticket) heartbeat(ticket.projectId, ticket.id, {}, opts.actor)
+      if (ticket) heartbeat(ticket.projectId, ticket.id, { note: WAIT_NOTE }, opts.actor)
       await opts.onBeat?.()
     },
   })

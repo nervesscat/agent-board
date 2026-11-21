@@ -717,6 +717,9 @@ export const ticketResumes = sqliteTable(
     state: text().$type<'queued' | 'running' | 'succeeded' | 'failed' | 'skipped'>().notNull(),
     // The process, while it runs and after (the board that restarted looks it up by this).
     pid: integer(),
+    // The process's start time as the OS reports it, to tell it from a later process that got the same pid
+    // (null where the OS gives none).
+    pidIdentity: text('pid_identity'),
     // The command's name as shown (its first word); the command itself is the project's setting.
     command: text().notNull().default(''),
     exitCode: integer('exit_code'),

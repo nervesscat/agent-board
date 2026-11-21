@@ -312,6 +312,34 @@ describe('wait_for_answer: one answer is delivered or resumed, never both and ne
     })
   })
 
+  it('an answer after an aborted wait is resumed: the wait own heartbeat is not a live agent', async () => {
+    const out = path.join(tmp, 'aborted.txt')
+    dbm.db
+      .update(dbm.schema.projects)
+      .set({ resumeCommand: commandFor(out) })
+      .where(eq(dbm.schema.projects.id, projectId))
+      .run()
+    const { ticket, post } = asked()
+    const ctl = new AbortController()
+    const p = wait.waitAndReport({
+      ticketId: ticket.id,
+      postId: post.id,
+      timeoutSeconds: 60,
+      signal: ctl.signal,
+      actor: AGENT,
+    })
+    expect(heartbeatsOf(ticket.id)).toHaveLength(1)
+    ctl.abort()
+    expect(await p).toMatchObject({ aborted: true })
+    features.decide(post.id, 0, '', HUMAN)
+    const rows = rowsOf(ticket.id)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.state).not.toBe('skipped')
+    const end = Date.now() + 10_000
+    while (!fs.existsSync(out) && Date.now() < end) await sleep(20)
+    expect(fs.existsSync(out)).toBe(true)
+  })
+
   it('a relayed answer reaches the waiter and starts no resume', async () => {
     const { ticket, post } = asked()
     const p = wait.waitForAnswer({ ticketId: ticket.id, postId: post.id, ...quick })

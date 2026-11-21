@@ -1,4 +1,4 @@
-import { execFile, spawn as nodeSpawn } from 'node:child_process'
+import { execFile, execFileSync, spawn as nodeSpawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -11,13 +11,13 @@ import { isBoardRecord } from '#/lib/roles'
 import { listActors } from './actors'
 import { postNotice } from './agentCards'
 import { logActivity } from './activity'
-import { hasWaiter } from './answerWait'
+import { WAIT_NOTE, hasWaiter, ticketHasWaiter } from './answerWait'
 import { config, logsDir } from './config'
 import { resolveTool } from './hostTools'
 import { HttpError, notFound } from './http'
 import { ticketRepo } from './repos'
 import { worktreeEnv } from './runs'
-import { firstOfKind, kindOf, listStages, movePatch, projectWorkStage } from './stages'
+import { firstOfKind, kindOf, listStages, movePatch, projectWorkStage, reopenPatch } from './stages'
 import { noteStageMove } from './workTimeline'
 
 /**
@@ -74,6 +74,32 @@ export interface ResumeRunner {
   /** Kills a process and everything it started. */
   killTree(pid: number): Promise<void>
   alive(pid: number): boolean
+  /**
+   * The process's start time as the OS reports it, to tell it from a later process that got the same
+   * pid; null where the OS gives none (or the process is gone).
+   */
+  identity(pid: number): string | null
+}
+
+/** Field 22 of `/proc/<pid>/stat` (Linux); the name in field 2 may hold spaces and brackets, so count after its `)`. */
+export function procStartTime(stat: string): string | null {
+  const rest = stat.slice(stat.lastIndexOf(')') + 2).split(' ')
+  return rest[19] || null
+}
+
+/** The start time of a process as the OS reports it; null where it cannot be read (Windows, a gone process). */
+export function processIdentity(pid: number): string | null {
+  try {
+    if (process.platform === 'linux') return procStartTime(fs.readFileSync(`/proc/${pid}/stat`, 'utf8'))
+    if (WIN) return null
+    const out = execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+    return out || null
+  } catch {
+    return null
+  }
 }
 
 const realRunner: ResumeRunner = {
@@ -125,6 +151,15 @@ const realRunner: ResumeRunner = {
       return (err as NodeJS.ErrnoException).code === 'EPERM'
     }
   },
+  identity: processIdentity,
+}
+
+/** False when the row's pid now belongs to another process (a recycled pid): never ours to watch or kill. */
+function isOurs(row: schema.TicketResume): boolean {
+  if (!row.pid) return false
+  if (!row.pidIdentity) return true
+  const now = runner.identity(row.pid)
+  return now === null || now === row.pidIdentity
 }
 
 let runner: ResumeRunner = realRunner
@@ -253,13 +288,22 @@ function liveAgent(ticketId: number, since: string | null): string | null {
   const now = Date.now()
   const after = Math.max(since ? Date.parse(since) + WIND_DOWN_MS : 0, now - LEASE_TTL_MINUTES * 60_000)
   const fresh = (at: string) => Date.parse(at) > after
+  // A wait's own lease refresh counts only while a wait of the ticket is still registered.
+  const waiting = ticketHasWaiter(ticketId)
   const event = db
     .select()
     .from(schema.ticketEvents)
     .where(eq(schema.ticketEvents.ticketId, ticketId))
     .orderBy(desc(schema.ticketEvents.id))
     .all()
-    .find((e) => e.kind !== 'span_end' && e.kind !== 'stage' && !isBoardRecord(e.agent, e.by) && fresh(e.at))
+    .find(
+      (e) =>
+        e.kind !== 'span_end' &&
+        e.kind !== 'stage' &&
+        !isBoardRecord(e.agent, e.by) &&
+        !(e.kind === 'heartbeat' && e.note === WAIT_NOTE && !waiting) &&
+        fresh(e.at),
+    )
   if (event) return event.agent
   const humans = humanNames()
   const post = db
@@ -366,7 +410,11 @@ function moveTo(ticket: schema.Ticket, key: string) {
   const stages = listStages(ticket.projectId)
   if (key === ticket.status) return
   db.update(schema.tickets)
-    .set({ status: key, ...movePatch(stages, ticket.status, key, ticket.startedAt) })
+    .set({
+      status: key,
+      ...movePatch(stages, ticket.status, key, ticket.startedAt),
+      ...reopenPatch(stages, ticket.status, key),
+    })
     .where(eq(schema.tickets.id, ticket.id))
     .run()
   noteStageMove(ticket.id, ticket.status, key)
@@ -401,6 +449,18 @@ export function startResume(s: Start): schema.TicketResume {
   const command = project.resumeCommand.trim()
   if (!command) return skipped(s, SKIP_OFF, true)
   if (ticket.archivedAt) return skipped(s, 'the ticket is archived')
+  if (s.trigger === 'answer') {
+    // Only a question an agent waits on is continued: a request to the board (archive, a repo) is answered
+    // for the board, and a finished ticket has nothing to continue (Resume on it stays the human's choice).
+    const card = s.postId
+      ? db.select().from(schema.updates).where(eq(schema.updates.id, s.postId)).get()
+      : undefined
+    if (card?.archiveTickets || card?.repoRequest)
+      return skipped(s, 'the card is a request to the board, not a question an agent waits on', true)
+    const kind = kindOf(listStages(ticket.projectId), ticket.status)
+    if (kind === 'done' || kind === 'cancelled')
+      return skipped(s, 'the ticket is finished: press Resume on it to run the work again', true)
+  }
   if (!ticket.assignee) return skipped(s, 'no agent holds the ticket: there is nobody to continue it')
   const running = db
     .select()
@@ -470,6 +530,7 @@ export function startResume(s: Start): schema.TicketResume {
       .set({
         state: 'running',
         pid: proc.pid,
+        pidIdentity: runner.identity(proc.pid),
         startedAt: new Date().toISOString(),
         logPath: logPathOf(row.id),
       })
@@ -518,12 +579,13 @@ function rewatch(row: schema.TicketResume, timeoutMinutes: number) {
   const left = Math.max(0, Date.parse(row.startedAt ?? row.createdAt) + timeoutMinutes * 60_000 - Date.now())
   const stop = setTimeout(() => {
     void (async () => {
+      if (!isOurs(row)) return end(row.id, undefined, null)
       await runner.killTree(pid)
       end(row.id, null, `it did not finish within ${timeoutMinutes} minutes: the board stopped it`)
     })()
   }, left)
   const poll = setInterval(() => {
-    if (!runner.alive(pid)) end(row.id, undefined, null)
+    if (!runner.alive(pid) || !isOurs(row)) end(row.id, undefined, null)
   }, POLL_MS)
   stop.unref?.()
   poll.unref?.()
@@ -676,9 +738,12 @@ export function retryResume(ticketId: number): schema.TicketResume {
     trigger: 'retry',
     postId: post?.id ?? null,
     answer,
-    since: last?.startedAt ?? null,
+    // Signals of the run that ended are its own, not another agent's.
+    since: last?.endedAt ?? last?.startedAt ?? null,
   })
   if (row.state === 'skipped') throw new HttpError(409, row.reason)
+  // A command that could not start leaves the ticket where it was: still blocked.
+  if (row.state !== 'running') throw new HttpError(502, `the board could not resume the work: ${row.reason}`)
   // The ticket is where the work is again.
   const stages = listStages(ticket.projectId)
   const fresh = ticketOf(ticketId)
@@ -722,7 +787,7 @@ export function sweepResumes() {
       .innerJoin(schema.tickets, eq(schema.tickets.projectId, schema.projects.id))
       .where(eq(schema.tickets.id, row.ticketId))
       .get()
-    if (runner.alive(row.pid)) rewatch(row, project?.minutes ?? 240)
+    if (runner.alive(row.pid) && isOurs(row)) rewatch(row, project?.minutes ?? 240)
     else end(row.id, undefined, null)
   }
 }
