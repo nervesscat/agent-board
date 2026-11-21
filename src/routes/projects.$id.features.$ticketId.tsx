@@ -59,6 +59,7 @@ import { NewTicket } from '#/components/NewTicket'
 import { hasGitSide } from '#/lib/kinds'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
+import { ResumeCard, useTicketResume } from '#/components/ResumeCard'
 import { RunsCard, useTicketRuns } from '#/components/RunsCard'
 import { PrState } from '#/components/PrState'
 import type { FeedTab } from '#/lib/constants'
@@ -316,6 +317,7 @@ function TicketPage() {
   const git = t && t.id === Number(ticketId) ? ticketGit : undefined
   // Here, not only in the Runs card: with none to show the card is left out, and its column with it.
   const runs = useTicketRuns(t, git)
+  const resume = useTicketResume(t)
 
   if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
   if (!t) return null
@@ -389,6 +391,7 @@ function TicketPage() {
       </div>
     ),
     'ticket.runs': gitSide && runs.shown ? <RunsCard t={t} git={git} onChange={invalidate} /> : null,
+    'ticket.resume': resume.shown ? <ResumeCard t={t} onChange={invalidate} /> : null,
     'ticket.details': (
       <Details key={t.id} t={t} git={gitSide} includes={git?.includes} onSave={(p) => update.mutate(p)} />
     ),

@@ -37,6 +37,7 @@ import type { JobState } from '#/server/jobs'
 import type { AgentCard, NoticeCard, TrackedCard } from '#/server/agentCards'
 import type { ManagedPreview } from '#/server/managedPreview'
 import type { OpencodeConfig } from '#/server/opencodeConfig'
+import type { ResumeView, ticketResume } from '#/server/resume'
 import type { RunState } from '#/server/runs'
 import type {
   AlsoRunning,
@@ -59,6 +60,10 @@ import type { ActorRole, ActorRow } from '#/server/actors'
 import type { AgentTokenRow } from '#/server/tokens'
 import type { ProjectWork, TicketEvent } from '#/server/workTimeline'
 import type { WorkTimeline } from './workTimeline'
+
+/** What the ticket's Resume card reads: whether resuming is on, the resume in hand with its log tail, the earlier ones. */
+export type TicketResume = ReturnType<typeof ticketResume>
+export type TicketResumeRow = ResumeView
 
 /** A project as the API returns it: always with its repos. */
 export type Project = ProjectFull

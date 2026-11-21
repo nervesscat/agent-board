@@ -271,7 +271,9 @@ short message shape with the numbered list of what needs the human. Its line is
    where each new thread is, without bodies. For each one: read it, fix what it asks in the
    ticket's worktree (checks, commit, push, preview), reply in the thread with what changed, and
    keep the cursor. `list_my_threads` takes the same `since` and returns `{ cursor, threads }`; the
-   cursor is yours to hold, the board stores nothing per agent.
+   cursor is yours to hold, the board stores nothing per agent. When the project has a resume command
+   (its Settings), the board itself runs it when the human answers a card on the board or moves the
+   ticket from blocked or review to an active stage, so you may be started again with the answer.
    **Record your work on the ticket's timeline** as you go: the Roadmap and the ticket page draw it,
    so the human sees who worked when, who waited on what, and what is going on now. Each call takes
    `projectId` and `ticketId`, and only a ticket of that project (another project's is a 403 and

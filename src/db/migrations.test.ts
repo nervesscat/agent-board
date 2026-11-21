@@ -1569,14 +1569,14 @@ describe('0051_agent_cards', () => {
 
     migrate(drizzle(sqlite), { migrationsFolder: folder })
 
-    // The existing tables are exactly what they were. Projects gained a column later (0055 kinds): every
-    // project that existed is software now, and every column 0050 had is unchanged.
+    // The existing tables are exactly what they were. Projects gained columns later (0055 kinds, 0057 the
+    // resume command): every project that existed is software now, and every column 0050 had is unchanged.
     expect(before.projects.length).toBeGreaterThan(0)
     const projects = sqlite.prepare('SELECT * FROM projects ORDER BY id').all() as Record<string, unknown>[]
     expect(projects.map((row) => row.kinds)).toEqual(before.projects.map(() => '["software"]'))
     expect(
       projects.map((row) => {
-        const { kinds: _kinds, ...kept } = row
+        const { kinds: _kinds, resume_command: _command, resume_timeout_minutes: _timeout, ...kept } = row
         return kept
       }),
     ).toEqual(before.projects)
@@ -1733,6 +1733,38 @@ describe('0051_agent_cards', () => {
     sqlite.prepare('DELETE FROM projects WHERE id = ?').run(project)
     expect(sqlite.prepare('SELECT count(*) AS n FROM agent_cards').get()).toEqual({ n: 0 })
     expect([tracked, notice].every((id) => Number.isInteger(id))).toBe(true)
+    sqlite.close()
+  })
+})
+
+describe('0057_ticket_resumes', () => {
+  it('adds the resume table and the project settings, off for every project that existed', () => {
+    const sqlite = databaseAt('0056_closed_by_approval')
+    const project = Number(
+      sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('resumes').lastInsertRowid,
+    )
+    const ticket = Number(
+      sqlite
+        .prepare('INSERT INTO tickets (project_id, title, created_by) VALUES (?, ?, ?)')
+        .run(project, 'Kept', 'claude').lastInsertRowid,
+    )
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+    expect(
+      sqlite.prepare('SELECT resume_command, resume_timeout_minutes FROM projects WHERE id = ?').get(project),
+    ).toEqual({ resume_command: '', resume_timeout_minutes: 240 })
+    sqlite
+      .prepare(
+        "INSERT INTO ticket_resumes (ticket_id, trigger, state, reason) VALUES (?, 'answer', 'skipped', 'off')",
+      )
+      .run(ticket)
+    expect(() =>
+      sqlite
+        .prepare("INSERT INTO ticket_resumes (ticket_id, trigger, state) VALUES (?, 'answer', 'lost')")
+        .run(ticket),
+    ).toThrow(/CHECK/)
+    // A ticket that goes takes its resumes with it.
+    sqlite.prepare('DELETE FROM tickets WHERE id = ?').run(ticket)
+    expect(sqlite.prepare('SELECT count(*) AS n FROM ticket_resumes').get()).toEqual({ n: 0 })
     sqlite.close()
   })
 })

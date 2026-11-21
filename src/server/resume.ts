@@ -143,7 +143,7 @@ function unwatch(rowId: number) {
 
 /** Stops watching every running resume (the processes go on). */
 export function stopWatching() {
-  for (const id of [...watching.keys()]) unwatch(id)
+  for (const id of watching.keys()) unwatch(id)
 }
 
 // --- reads ---
