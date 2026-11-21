@@ -232,7 +232,7 @@ function recheck(
     await again(ctx)
     const raised = await type().check(ctx)
     const gone = !raised.some((c) => (c.subject ?? '') === ctx.alert.subject)
-    return { message: gone ? done : still, resolve: gone }
+    return { ok: gone, message: gone ? done : still, resolve: gone }
   }
 }
 
@@ -776,6 +776,7 @@ const tailnet: AlertType = {
       await ask(entranceCell, askEntrance, ctx.now())
       const ok = entranceCell.value?.ok === true
       return {
+        ok,
         message: ok ? 'The entrance answers.' : (entranceCell.value?.message ?? 'No answer.'),
         resolve: ok,
       }
@@ -911,6 +912,7 @@ const storage: AlertType = {
       await ask(storageCell, probeStorage, ctx.now())
       const answer = storageCell.value
       return {
+        ok: answer?.ok === true,
         message: answer?.ok ? 'The file storage answers.' : `No answer: ${answer?.message}`,
         resolve: answer?.ok === true,
       }

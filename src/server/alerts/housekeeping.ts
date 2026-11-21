@@ -152,7 +152,7 @@ async function retryGeneration(ctx: AlertActionContext) {
     await generateReport(projectId, { period: ctx.alert.subject }, new Date(ctx.now()))
   } catch (e) {
     const why = e instanceof HttpError || e instanceof Error ? e.message : String(e)
-    return { message: `Could not generate the report: ${why}` }
+    return { ok: false, message: `Could not generate the report: ${why}` }
   }
   return { message: 'claude wrote the report', resolve: true }
 }

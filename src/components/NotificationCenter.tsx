@@ -171,9 +171,17 @@ export function NotificationCenter() {
   })
   const act = useMutation({
     mutationFn: ({ item, button }: { item: FeedItem; button: AlertButton }) =>
-      post<{ message: string | null }>(`/api/alerts/${item.id}/actions/${button.id}`),
+      post<{ ok: boolean; resolved: boolean; message: string | null }>(
+        `/api/alerts/${item.id}/actions/${button.id}`,
+      ),
     onSuccess: (answer) => {
-      if (answer.message) toast.success(answer.message)
+      // Green only for what worked and finished the alert; a failure is red, and a step that worked
+      // without finishing it (the agent was asked, the download started) is neutral.
+      if (answer.message) {
+        if (!answer.ok) toast.error(answer.message)
+        else if (answer.resolved) toast.success(answer.message)
+        else toast(answer.message)
+      }
       refresh()
     },
     onError: (err) => toast.error(errorMessage(err)),

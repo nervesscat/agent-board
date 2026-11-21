@@ -1,8 +1,14 @@
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, isNotNull, isNull, lt } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { getProject, listProjects } from '../projects'
-import { applicableAlertTypes, type AlertCandidate, type AlertContext, type AlertType } from './registry'
+import {
+  applicableAlertTypes,
+  findAlertType,
+  type AlertCandidate,
+  type AlertContext,
+  type AlertType,
+} from './registry'
 
 /** A check that takes longer than this is given up on for the run: its alerts stay as they are. */
 export const CHECK_TIMEOUT_MS = 10_000
@@ -92,7 +98,29 @@ export async function evaluateAlerts(opts: EvaluateOptions = {}): Promise<Evalua
       reconcile(type, projectId, candidates, new Date(now()).toISOString(), result)
     }
   }
+  pruneResolved(now())
   return result
+}
+
+/** How long a resolved row is kept: a condition that comes back within it starts the same row again. */
+export const KEEP_RESOLVED_MS = 30 * 24 * 60 * 60_000
+
+/** Deletes rows resolved for longer than that, except a sticky dismissal, which is kept for good. */
+function pruneResolved(at: number) {
+  const old = db
+    .select()
+    .from(schema.alerts)
+    .where(
+      and(
+        isNotNull(schema.alerts.resolvedAt),
+        lt(schema.alerts.resolvedAt, new Date(at - KEEP_RESOLVED_MS).toISOString()),
+      ),
+    )
+    .all()
+  for (const row of old) {
+    if (row.dismissedAt && findAlertType(row.type)?.stickyDismiss) continue
+    db.delete(schema.alerts).where(eq(schema.alerts.id, row.id)).run()
+  }
 }
 
 function tryProject(id: number) {

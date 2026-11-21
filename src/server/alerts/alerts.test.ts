@@ -322,7 +322,7 @@ describe('snooze, mute and what the human does', () => {
   it('runs the handler of an action button and resolves when it says so', async () => {
     const projectId = newProject('action')
     const seen: string[] = []
-    const { state } = typeWith({
+    const { type, state } = typeWith({
       actions: {
         fix: (ctx) => {
           seen.push(`${ctx.alert.subject}@${ctx.projectId}`)
@@ -347,6 +347,14 @@ describe('snooze, mute and what the human does', () => {
     const failed = await rest('POST', `/api/alerts/${id}/actions/boom`)
     expect(failed.status).toBe(500)
     expect(failed.body.error).toMatch(/it broke/)
+    expect(await feed(projectId)).toHaveLength(1)
+
+    // A handler that says it did not work: the answer says so, and the alert stays.
+    state.found[0]!.buttons!.push({ id: 'nope', label: 'Nope', kind: 'action' })
+    type.actions!.nope = () => ({ ok: false, message: 'It did not work' })
+    await evaluate.evaluateAlerts({ projectId })
+    const refused = await rest('POST', `/api/alerts/${id}/actions/nope`)
+    expect(refused.body).toEqual({ ok: false, message: 'It did not work', resolved: false })
     expect(await feed(projectId)).toHaveLength(1)
 
     const ran = await rest('POST', `/api/alerts/${id}/actions/fix`)
@@ -508,6 +516,37 @@ describe('a check that fails', () => {
     expect(out.failed).toHaveLength(1)
     expect(out.failed[0]!.error).toMatch(/took longer than 50 ms/)
     expect(await titles(projectId)).toContain('still here')
+  })
+})
+
+describe('resolved rows', () => {
+  it('are deleted after 30 days, except a sticky dismissal, and a live or recent one stays', async () => {
+    const projectId = newProject('prune')
+    const plain = typeWith()
+    const sticky = typeWith({ stickyDismiss: true })
+    const live = typeWith()
+    for (const t of [plain, sticky, live]) t.state.found = [candidate({ title: t.type.type })]
+    const day = 24 * HOUR
+    const t0 = Date.parse('2031-01-01T00:00:00.000Z')
+    const out = await evaluate.evaluateAlerts({ projectId, now: () => t0 })
+    const idOf = (type: string) => out.started.find((r) => r.type === type)!.id
+    await rest('POST', `/api/alerts/${idOf(sticky.type.type)}/dismiss`)
+    plain.state.found = []
+    sticky.state.found = []
+    await evaluate.evaluateAlerts({ projectId, now: () => t0 })
+    const ids = () =>
+      db
+        .select()
+        .from(schema.alerts)
+        .all()
+        .map((r) => r.id)
+
+    await evaluate.evaluateAlerts({ projectId, now: () => t0 + 29 * day })
+    expect(ids()).toEqual(expect.arrayContaining([idOf(plain.type.type), idOf(sticky.type.type)]))
+    await evaluate.evaluateAlerts({ projectId, now: () => t0 + 31 * day })
+    expect(ids()).not.toContain(idOf(plain.type.type))
+    expect(ids()).toContain(idOf(sticky.type.type))
+    expect(ids()).toContain(idOf(live.type.type))
   })
 })
 

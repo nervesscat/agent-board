@@ -561,7 +561,7 @@ function hostToolType(edges: SetupEdges): AlertType {
       async 'check-again'(ctx) {
         const result = await edges.tools.check()
         const still = faults(result).some((f) => f.tool.name === ctx.alert.subject)
-        return { message: still ? 'Still not working' : 'Working now', resolve: !still }
+        return { ok: !still, message: still ? 'Still not working' : 'Working now', resolve: !still }
       },
     },
   }

@@ -66,6 +66,8 @@ export interface AlertActionContext extends AlertContext {
 
 /** What an action handler answers: a message for the toast, and whether the alert is done. */
 export interface AlertActionResult {
+  /** False when the action did not do what the button promises: the message is then shown as a failure. */
+  ok?: boolean
   message?: string
   resolve?: boolean
 }

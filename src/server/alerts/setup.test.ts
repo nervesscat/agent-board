@@ -618,9 +618,14 @@ describe('idea 19: a host tool is missing or broken', () => {
   it('Check again runs the check, resolves the alert when the tool works now, and says so when it does not', async () => {
     fakes.tools = toolsWith({ pnpm: { path: null } })
     fakes.checked = toolsWith({})
-    expect(await action(tool(), 'check-again', 'pnpm')).toEqual({ message: 'Working now', resolve: true })
+    expect(await action(tool(), 'check-again', 'pnpm')).toEqual({
+      ok: true,
+      message: 'Working now',
+      resolve: true,
+    })
     fakes.checked = toolsWith({ pnpm: { path: null } })
     expect(await action(tool(), 'check-again', 'pnpm')).toEqual({
+      ok: false,
       message: 'Still not working',
       resolve: false,
     })

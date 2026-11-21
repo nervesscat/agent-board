@@ -92,6 +92,21 @@ test('an action button runs on the server and the alert goes', async ({ page, pr
   expect((await feedOf(human, project)).some((i) => i.title === 'Needs acknowledging')).toBe(false)
 })
 
+test('an action that did not work shows a red toast and leaves the alert', async ({
+  page,
+  project,
+  human,
+}) => {
+  await seed(human, project, { title: 'Will not work' })
+  await page.goto(`/projects/${project.id}`)
+  await bellOf(page).click()
+  const item = itemOf(page, 'Will not work')
+  await item.getByRole('button', { name: 'Try and fail' }).click()
+  const toast = page.locator('[data-sonner-toast]').filter({ hasText: 'It did not work' })
+  await expect(toast).toHaveAttribute('data-type', 'error')
+  await expect(item).toBeVisible()
+})
+
 test('dismiss and snooze hide an alert, and a snooze offers hours and days', async ({
   page,
   project,

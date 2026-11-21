@@ -114,7 +114,7 @@ export async function runAlertAction(
   }
   const resolve = result?.resolve === true
   if (resolve) touch(alertId, { resolvedAt: new Date(now()).toISOString() })
-  return { ok: true, message: result?.message ?? null, resolved: resolve }
+  return { ok: result?.ok !== false, message: result?.message ?? null, resolved: resolve }
 }
 
 export interface AlertTypeView {

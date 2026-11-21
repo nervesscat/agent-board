@@ -1072,7 +1072,10 @@ api.post('/api/test/alerts', async ({ request }) => {
     description: 'An alert the browser tests write by hand',
     scope: 'project',
     check: () => [],
-    actions: { ack: () => ({ message: 'Acknowledged', resolve: true }) },
+    actions: {
+      ack: () => ({ message: 'Acknowledged', resolve: true }),
+      nope: () => ({ ok: false, message: 'It did not work' }),
+    },
   })
   const at = new Date().toISOString()
   const row = db
@@ -1094,6 +1097,7 @@ api.post('/api/test/alerts', async ({ request }) => {
         },
         { id: 'copy', label: 'Copy command', kind: 'copy', text: 'echo test' },
         { id: 'ack', label: 'Acknowledge', kind: 'action', primary: true },
+        { id: 'nope', label: 'Try and fail', kind: 'action' },
       ]),
       createdAt: at,
       updatedAt: at,

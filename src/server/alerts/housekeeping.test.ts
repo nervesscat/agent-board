@@ -296,7 +296,7 @@ describe('report generation failed (35)', () => {
     // Still failing: the answer says why, and the alert stays.
     const again = await actions.runAlertAction(HUMAN, row.id, 'retry', nowMs)
     expect(again).toMatchObject({
-      ok: true,
+      ok: false,
       resolved: false,
       message: expect.stringContaining('claude exited with 3'),
     })

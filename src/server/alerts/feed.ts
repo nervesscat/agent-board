@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull, or } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { listCards, type AgentCard } from '../agentCards'
@@ -84,9 +84,14 @@ export function visibleAlerts(projectId: number, at = Date.now()) {
   return db
     .select()
     .from(schema.alerts)
+    .where(
+      and(
+        isNull(schema.alerts.resolvedAt),
+        isNull(schema.alerts.dismissedAt),
+        or(isNull(schema.alerts.projectId), eq(schema.alerts.projectId, projectId)),
+      ),
+    )
     .all()
-    .filter((row) => row.projectId === null || row.projectId === projectId)
-    .filter((row) => !row.resolvedAt && !row.dismissedAt)
     .filter((row) => !row.snoozedUntil || Date.parse(row.snoozedUntil) <= at)
     .filter((row) => !muted.has(row.type))
     .flatMap((row) => {
