@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { LoaderCircle, Sparkles } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { refreshReports } from '#/components/daily/refresh'
@@ -24,6 +25,7 @@ export function GenerateReportButton({
   period: string | null
   list: ReportList | undefined
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const { data: tools } = useQuery({
     queryKey: ['host-tools'],
@@ -41,32 +43,31 @@ export function GenerateReportButton({
         old && !Array.isArray(old) ? { ...old, generating: period, generateError: null } : old,
       )
     },
-    onSuccess: () => toast.success('claude wrote the report'),
+    onSuccess: () => toast.success(t('generateReport.wrote')),
     onError: (err) => toast.error(errorMessage(err)),
     onSettled: () => refreshReports(qc, projectId),
   })
 
   const busy = generate.isPending || Boolean(list?.generating)
   const why = !list
-    ? 'Loading…'
+    ? t('generateReport.loading')
     : list.cadence === 'off'
-      ? 'Reports are off: set a cadence in the report settings first'
+      ? t('generateReport.off')
       : list.format === 'file'
-        ? "This project's reports are files: claude only writes text reports"
+        ? t('generateReport.file')
         : !period
-          ? 'No report is asked for on this day'
+          ? t('generateReport.none')
           : null
   const failed =
     !busy && list?.generateError && list.generateError.period === period ? list.generateError : null
-  const claude = tools?.tools.find((t) => t.name === 'claude')
-  const missing = claude && !claude.ok ? `${claude.problem}. Fix: ${claude.fix}.` : null
+  const claude = tools?.tools.find((x) => x.name === 'claude')
+  const missing =
+    claude && !claude.ok ? t('generateReport.fix', { problem: claude.problem, fix: claude.fix }) : null
 
   return (
     <div className="flex min-w-0 flex-col items-end gap-1">
       {/* The reason is on the wrapper: a disabled button takes no pointer, so shows no tooltip. */}
-      <Tip
-        content={why ?? missing ?? 'claude writes the report from the prompt, the template and the activity'}
-      >
+      <Tip content={why ?? missing ?? t('generateReport.tip')}>
         <span className="inline-flex">
           <Button
             type="button"
@@ -78,11 +79,12 @@ export function GenerateReportButton({
           >
             {busy ? (
               <>
-                <LoaderCircle data-icon="inline-start" className="animate-spin" /> claude is writing…
+                <LoaderCircle data-icon="inline-start" className="animate-spin" />{' '}
+                {t('generateReport.writing')}
               </>
             ) : (
               <>
-                <Sparkles data-icon="inline-start" /> Generate with claude
+                <Sparkles data-icon="inline-start" /> {t('generateReport.generate')}
               </>
             )}
           </Button>
@@ -93,7 +95,7 @@ export function GenerateReportButton({
       )}
       {failed && (
         <p role="alert" className="max-w-full text-right sm:max-w-80 text-xs wrap-anywhere text-destructive">
-          claude could not write it: {failed.message}
+          {t('generateReport.failed', { message: failed.message })}
         </p>
       )}
     </div>

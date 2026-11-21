@@ -1,5 +1,7 @@
 import { Link } from '@tanstack/react-router'
+import type { TFunction } from 'i18next'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Actor } from '#/components/Actor'
 import { Empty } from '#/components/Empty'
@@ -12,36 +14,23 @@ import type { DailyPayload } from '#/lib/api'
 import { clock } from '#/lib/format'
 import { remember } from '#/lib/remembered'
 
-const KIND_LABEL: Record<string, string> = {
-  ticket: 'tickets',
-  task: 'tasks',
-  update: 'updates',
-  comment: 'comments',
-  pr: 'PRs',
-  review: 'reviews',
-  workspace: 'workspaces',
-  agent: 'agents',
-  project: 'projects',
-  summary: 'summaries',
-  report: 'reports',
-  handoff: 'handoffs',
-}
-const KIND_ONE: Record<string, string> = {
-  ticket: 'ticket',
-  task: 'task',
-  update: 'update',
-  comment: 'comment',
-  pr: 'PR',
-  review: 'review',
-  workspace: 'workspace',
-  agent: 'agent',
-  project: 'project',
-  summary: 'summary',
-  report: 'report',
-  handoff: 'handoff',
-}
-const kindCount = (kind: string, n: number) =>
-  `${n} ${n === 1 ? (KIND_ONE[kind] ?? kind) : (KIND_LABEL[kind] ?? kind)}`
+const KINDS = [
+  'ticket',
+  'task',
+  'update',
+  'comment',
+  'pr',
+  'review',
+  'workspace',
+  'agent',
+  'project',
+  'summary',
+  'report',
+  'handoff',
+] as const
+const isKind = (kind: string): kind is (typeof KINDS)[number] => (KINDS as readonly string[]).includes(kind)
+const kindCount = (kind: string, n: number, t: TFunction) =>
+  isKind(kind) ? t(`activityLog.kind.${kind}`, { count: n }) : `${n} ${kind}`
 
 type Line = DailyPayload['activity'][number]
 
@@ -60,9 +49,10 @@ export function ActivityLog({
   projectId?: number
   date: string
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useOpenHours(projectId ?? 'all', date)
   if (!activity) return null
-  if (!activity.length) return <Empty>Nothing happened on {date}.</Empty>
+  if (!activity.length) return <Empty>{t('activityLog.empty', { date })}</Empty>
 
   const hours = new Map<string, Line[]>()
   for (const a of activity) {
@@ -75,14 +65,12 @@ export function ActivityLog({
   const shown = open.filter((h) => hours.has(h))
 
   return (
-    <section className="space-y-3" aria-label="Activity">
+    <section className="space-y-3" aria-label={t('activityLog.region')}>
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span>
-          {activity.length} {activity.length === 1 ? 'action' : 'actions'}
-        </span>
+        <span>{t('activityLog.actions', { count: activity.length })}</span>
         {[...kinds].map(([k, n]) => (
           <span key={k} className="rounded bg-muted px-1.5 py-0.5">
-            {kindCount(k, n)}
+            {kindCount(k, n, t)}
           </span>
         ))}
         <Popover>
@@ -91,10 +79,10 @@ export function ActivityLog({
               <button type="button" className="underline-offset-4 hover:text-foreground hover:underline" />
             }
           >
-            by {actors.size} contributor{actors.size === 1 ? '' : 's'}
+            {t('activityLog.contributors', { count: actors.size })}
           </PopoverTrigger>
           <PopoverContent align="start" className="w-64 text-xs">
-            <p className="mb-2 font-medium">Contributors</p>
+            <p className="mb-2 font-medium">{t('activityLog.contributorsTitle')}</p>
             <ul className="space-y-1">
               {[...actors]
                 .sort((a, b) => a.localeCompare(b))
@@ -114,7 +102,7 @@ export function ActivityLog({
             disabled={shown.length === hours.size}
             onClick={() => setOpen([...hours.keys()])}
           >
-            Open all
+            {t('activityLog.openAll')}
           </Button>
           <Button
             type="button"
@@ -123,7 +111,7 @@ export function ActivityLog({
             disabled={!shown.length}
             onClick={() => setOpen([])}
           >
-            Close all
+            {t('activityLog.closeAll')}
           </Button>
         </div>
       </div>
@@ -139,10 +127,10 @@ export function ActivityLog({
             <AccordionTrigger>
               <span className="font-mono text-xs">{hour}</span>
               <span className="shrink-0 text-xs font-normal text-muted-foreground">
-                {items.length} {items.length === 1 ? 'action' : 'actions'}
+                {t('activityLog.actions', { count: items.length })}
               </span>
               <span className="min-w-0 truncate text-xs font-normal text-muted-foreground">
-                by {[...new Set(items.map((a) => a.actor))].join(', ')}
+                {t('activityLog.by', { names: [...new Set(items.map((a) => a.actor))].join(', ') })}
               </span>
             </AccordionTrigger>
             <AccordionContent>
@@ -160,6 +148,7 @@ export function ActivityLog({
 }
 
 function ActivityLine({ line: a, withProject }: { line: Line; withProject: boolean }) {
+  const { t } = useTranslation()
   return (
     <li className="flex flex-wrap items-baseline gap-x-2 text-sm">
       <span className="font-mono text-[11px] text-muted-foreground">{clock(a.createdAt)}</span>
@@ -170,7 +159,7 @@ function ActivityLine({ line: a, withProject }: { line: Line; withProject: boole
         <ReviewResultButton
           resultId={a.refId}
           className="min-w-0 text-left wrap-anywhere hover:underline"
-          tip="Open the review result"
+          tip={t('activityLog.openReview')}
         >
           {a.text}
         </ReviewResultButton>

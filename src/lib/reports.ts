@@ -1,6 +1,10 @@
 // Report periods and when they are due. Pure and in local time (a day is a local calendar day, as on
 // the Daily page), so the server and the UI agree on them.
 
+import type { TFunction } from 'i18next'
+
+import { currentLocale, shared } from '#/i18n'
+
 import type { ReportCadence, ReportFormat } from './constants'
 import { localDate, shiftDate } from './format'
 
@@ -31,6 +35,16 @@ export interface ReportDueState {
 }
 
 export const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+const DAY_KEYS = ['1', '2', '3', '4', '5', '6', '7'] as const
+
+/** An ISO weekday's name (1 is Monday) in the language shown. */
+export const weekdayName = (day: number, t: TFunction = shared.t): string =>
+  t(`reports.weekday.${DAY_KEYS[day - 1] ?? '1'}`)
+
+/** An ISO weekday's short name ("Mon"). */
+export const weekdayShort = (day: number, t: TFunction = shared.t): string =>
+  t(`reports.weekdayShort.${DAY_KEYS[day - 1] ?? '1'}`)
 
 /** A local time of day, `HH:MM` on a 24-hour clock. */
 export const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
@@ -133,19 +147,24 @@ export function periodsBetween(cadence: TrackedCadence, from: string, to: string
   return out
 }
 
-/** "Sun, Oct 4" for a day, "week of Sep 28" for a week. */
-export function periodLabel(cadence: TrackedCadence, period: string): string {
+/** "Sun, Oct 4" for a day, "week of Sep 28" for a week (in the language shown). */
+export function periodLabel(cadence: TrackedCadence, period: string, t: TFunction = shared.t): string {
   const d = new Date(`${period}T00:00:00`)
   if (cadence === 'weekly')
-    return `week of ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+    return t('reports.weekOf', {
+      date: d.toLocaleDateString(currentLocale(), { month: 'short', day: 'numeric' }),
+    })
+  return d.toLocaleDateString(currentLocale(), { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
 /** "daily by 18:00, a file", "weekly on Fridays by 17:00, text", "off". */
 export function describeSchedule(
   s: Pick<ReportSchedule, 'cadence' | 'weekday' | 'shiftEnd'> & { format: ReportFormat },
+  t: TFunction = shared.t,
 ): string {
-  if (s.cadence === 'off') return 'off'
-  const when = s.cadence === 'weekly' ? `weekly on ${WEEKDAYS[s.weekday - 1] ?? '?'}s` : 'daily'
-  return `${when} by ${s.shiftEnd}, ${s.format === 'file' ? 'a file' : 'text'}`
+  if (s.cadence === 'off') return t('reports.scheduleOff')
+  const format = s.format === 'file' ? t('reports.formatFile') : t('reports.formatText')
+  return s.cadence === 'weekly'
+    ? t('reports.scheduleWeekly', { day: weekdayName(s.weekday, t), end: s.shiftEnd, format })
+    : t('reports.scheduleDaily', { end: s.shiftEnd, format })
 }

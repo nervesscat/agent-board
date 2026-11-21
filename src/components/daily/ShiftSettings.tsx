@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { AnalogClock } from '#/components/AnalogClock'
@@ -12,10 +13,9 @@ import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { errorMessage, patch, type ReportSettingsView } from '#/lib/api'
 import type { ReportCadence } from '#/lib/constants'
-import { WEEKDAYS } from '#/lib/reports'
+import { weekdayName, weekdayShort } from '#/lib/reports'
 
-const CADENCES: Record<ReportCadence, string> = { off: 'Off', daily: 'Daily', weekly: 'Weekly' }
-const WEEKDAY_ITEMS = Object.fromEntries(WEEKDAYS.map((d, i) => [String(i + 1), d]))
+const DAYS = [1, 2, 3, 4, 5, 6, 7]
 
 /**
  * When the report is due: how often (a weekly one on which day), the shift whose end it is due at,
@@ -23,7 +23,14 @@ const WEEKDAY_ITEMS = Object.fromEntries(WEEKDAYS.map((d, i) => [String(i + 1), 
  * Save.
  */
 export function ShiftSettings({ projectId, settings }: { projectId: number; settings: ReportSettingsView }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
+  const CADENCES: Record<ReportCadence, string> = {
+    off: t('shift.cadence.off'),
+    daily: t('shift.cadence.daily'),
+    weekly: t('shift.cadence.weekly'),
+  }
+  const WEEKDAY_ITEMS = Object.fromEntries(DAYS.map((d) => [String(d), weekdayName(d, t)]))
   const [cadence, setCadence] = useState<ReportCadence>(settings.cadence)
   const [weekday, setWeekday] = useState(String(settings.weekday))
   const [shiftStart, setShiftStart] = useState(settings.shiftStart)
@@ -42,11 +49,11 @@ export function ShiftSettings({ projectId, settings }: { projectId: number; sett
   const badAlert = !/^\d+$/.test(alert) || next.alertMinutes > 720
   const problem =
     shiftEnd <= shiftStart
-      ? 'The shift must end after it starts.'
+      ? t('shift.badOrder')
       : !workdays.length
-        ? 'Pick at least one workday.'
+        ? t('shift.noWorkday')
         : badAlert
-          ? 'Remind between 0 and 720 minutes before the end.'
+          ? t('shift.badAlert')
           : null
   const changed =
     next.cadence !== settings.cadence ||
@@ -62,12 +69,12 @@ export function ShiftSettings({ projectId, settings }: { projectId: number; sett
   })
 
   return (
-    <div role="group" aria-label="Schedule" className="space-y-4">
-      <h3 className="text-sm font-medium">Schedule</h3>
+    <div role="group" aria-label={t('shift.schedule')} className="space-y-4">
+      <h3 className="text-sm font-medium">{t('shift.schedule')}</h3>
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
           <Label htmlFor="report-cadence" className="text-xs">
-            Due
+            {t('shift.due')}
           </Label>
           <Select value={cadence} onValueChange={(v) => setCadence(v as ReportCadence)} items={CADENCES}>
             <SelectTrigger id="report-cadence" size="sm" className="w-28">
@@ -85,7 +92,7 @@ export function ShiftSettings({ projectId, settings }: { projectId: number; sett
         {cadence === 'weekly' && (
           <div className="space-y-1">
             <Label htmlFor="report-weekday" className="text-xs">
-              On
+              {t('shift.weekdayLabel')}
             </Label>
             <Select value={weekday} onValueChange={(v) => setWeekday(v as string)} items={WEEKDAY_ITEMS}>
               <SelectTrigger id="report-weekday" size="sm" className="w-32">
@@ -105,24 +112,22 @@ export function ShiftSettings({ projectId, settings }: { projectId: number; sett
 
       <div className="space-y-2">
         <p className="text-xs text-muted-foreground">
-          The shift: the report is due when it ends{cadence === 'weekly' ? ', on the day above' : ''}.
+          {cadence === 'weekly' ? t('shift.hintWeekly') : t('shift.hintDaily')}
         </p>
         <div className="flex flex-wrap gap-x-8 gap-y-4">
-          <AnalogClock label="Shift start" value={shiftStart} onChange={setShiftStart} />
-          <AnalogClock label="Shift end" value={shiftEnd} onChange={setShiftEnd} />
+          <AnalogClock label={t('shift.start')} value={shiftStart} onChange={setShiftStart} />
+          <AnalogClock label={t('shift.end')} value={shiftEnd} onChange={setShiftEnd} />
         </div>
       </div>
 
       <fieldset className="space-y-1.5">
-        <legend className="text-xs font-medium">Workdays</legend>
-        <p className="text-xs text-muted-foreground">
-          A daily report is asked for on these days; the others are off, never missing.
-        </p>
+        <legend className="text-xs font-medium">{t('shift.workdays')}</legend>
+        <p className="text-xs text-muted-foreground">{t('shift.workdaysHint')}</p>
         <div className="flex flex-wrap gap-x-3 gap-y-2">
-          {WEEKDAYS.map((name, i) => {
-            const day = i + 1
+          {DAYS.map((day) => {
+            const name = weekdayName(day, t)
             return (
-              <label key={name} className="flex min-h-7 items-center gap-1.5 text-sm">
+              <label key={day} className="flex min-h-7 items-center gap-1.5 text-sm">
                 <Checkbox
                   aria-label={name}
                   checked={workdays.includes(day)}
@@ -130,7 +135,7 @@ export function ShiftSettings({ projectId, settings }: { projectId: number; sett
                     setWorkdays(on ? [...workdays, day] : workdays.filter((d) => d !== day))
                   }
                 />
-                <span aria-hidden>{name.slice(0, 3)}</span>
+                <span aria-hidden>{weekdayShort(day, t)}</span>
               </label>
             )
           })}
@@ -140,7 +145,7 @@ export function ShiftSettings({ projectId, settings }: { projectId: number; sett
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
           <Label htmlFor="report-alert-minutes" className="text-xs">
-            Remind from (minutes before the end)
+            {t('shift.remind')}
           </Label>
           <Input
             id="report-alert-minutes"
@@ -170,7 +175,7 @@ export function ShiftSettings({ projectId, settings }: { projectId: number; sett
           onClick={() => save.mutate()}
           disabled={!changed || Boolean(problem) || save.isPending}
         >
-          {save.isPending ? 'Saving…' : 'Save'}
+          {save.isPending ? t('shift.saving') : t('shift.save')}
         </Button>
       </div>
     </div>
