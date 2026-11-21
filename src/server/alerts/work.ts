@@ -71,8 +71,33 @@ export function span(ms: number): string {
   return plural(Math.round(hours / 24), 'day')
 }
 
-/** The project's summary at the check's clock: what the Needs-you list and the work timeline say. */
-const summaryOf = (ctx: AlertContext) => getSummary(projectOf(ctx), { now: new Date(ctx.now()) }).projects[0]!
+/** How long one evaluation's summary of a project is reused by the checks that read it. */
+export const SUMMARY_TTL_MS = 15_000
+
+/** Where the summary comes from; a test wraps `build` to count the builds. */
+export const summarySource = {
+  build: (projectId: number, now: Date) => getSummary(projectId, { now }).projects[0]!,
+}
+
+const kept = new Map<number, { at: number; summary: ReturnType<typeof summarySource.build> }>()
+
+/** Forgets the kept summaries (the tests start each case without them). */
+export const clearSummaries = () => kept.clear()
+
+/**
+ * The project's summary at the check's clock: what the Needs-you list and the work timeline say. The
+ * checks of one evaluation share one build: it is reused while the clock is within `SUMMARY_TTL_MS` after
+ * it, and never across a clock that went back or jumped past the TTL.
+ */
+function summaryOf(ctx: AlertContext) {
+  const projectId = projectOf(ctx)
+  const now = ctx.now()
+  const hit = kept.get(projectId)
+  if (hit && now >= hit.at && now - hit.at < SUMMARY_TTL_MS) return hit.summary
+  const summary = summarySource.build(projectId, new Date(now))
+  kept.set(projectId, { at: now, summary })
+  return summary
+}
 
 /** The name the board writes the human's actions under. */
 const human = () => lastHuman() ?? 'human'

@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { eq } from 'drizzle-orm'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import type { AlertCandidate, AlertContext, AlertType } from './registry'
 
@@ -42,6 +42,8 @@ beforeAll(async () => {
   actors = await import('../actors')
 }, 60_000)
 
+beforeEach(() => work.clearSummaries())
+
 let count = 0
 /** A project with one repo, as a ticket needs. */
 function newProject() {
@@ -67,8 +69,11 @@ const typeOf = (id: string): AlertType => {
   if (!found) throw new Error(`no work alert type ${id}`)
   return found
 }
-const check = async (type: string, projectId: number, offset = 0): Promise<AlertCandidate[]> =>
-  typeOf(type).check(ctxOf(projectId, offset))
+// Each call is its own evaluation: the kept summary is dropped, so a change made between two calls shows.
+const check = async (type: string, projectId: number, offset = 0): Promise<AlertCandidate[]> => {
+  work.clearSummaries()
+  return typeOf(type).check(ctxOf(projectId, offset))
+}
 
 const ticket = (projectId: number, over: Partial<Parameters<typeof features.createTicket>[1]> = {}) =>
   features.createTicket(projectId, { title: `Ticket ${++count}`, status: 'in_progress', ...over }, 'claude')
@@ -135,6 +140,32 @@ describe('the work alert types', () => {
     for (const t of work.alertTypes) {
       expect(t.group).toBe('work')
       expect(t.scope).toBe('project')
+    }
+  })
+})
+
+describe('the shared summary', () => {
+  it('is built once for the checks of one run and again after the TTL or a clock that went back', async () => {
+    const pid = newProject()
+    const real = work.summarySource.build
+    let builds = 0
+    work.summarySource.build = (...args) => {
+      builds++
+      return real(...args)
+    }
+    try {
+      const base = Date.now()
+      const at = (ms: number): AlertContext => ({ ...ctxOf(pid), now: () => base + ms })
+      for (const type of ['decision-waiting', 'ticket-stalled', 'task-waits-on-you', 'ready-for-you'])
+        await typeOf(type).check(at(1_000))
+      await typeOf('needs-you-digest').check(at(5_000))
+      expect(builds).toBe(1)
+      await typeOf('ticket-stalled').check(at(work.SUMMARY_TTL_MS + 1_000))
+      expect(builds).toBe(2)
+      await typeOf('ticket-stalled').check(at(work.SUMMARY_TTL_MS))
+      expect(builds).toBe(3)
+    } finally {
+      work.summarySource.build = real
     }
   })
 })
