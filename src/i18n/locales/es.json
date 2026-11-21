@@ -8,7 +8,7 @@
     "pages": "Páginas",
     "connect": "Conectar",
     "settings": "Ajustes",
-    "testMode": "modo prueba",
+    "testMode": "prueba",
     "authOff": "sin auth",
     "authOffTip": "BOARD_ENV={{env}}, inicio de sesión desactivado: sesión iniciada como {{actor}}. No es el tablero real."
   },
@@ -268,7 +268,7 @@
     },
     "fileStatus": {
       "current": "al día",
-      "outdated": "desactualizado",
+      "outdated": "obsoleto",
       "missing": "falta"
     },
     "intro": "<code>/todo-review</code> trabaja los tickets de To do hasta la entrega y <code>/review-queue</code> revisa la cola de PR, ambos delegando en estos agentes. <code>/feature-review</code> es la revisión que ejecutan sobre cada cambio. Una línea instala las tres, con sus agentes, en <code>~/.claude</code> (Claude Code; OpenCode también lee sus skills), reemplazando los archivos del mismo nombre.",
@@ -1439,7 +1439,7 @@
       "title": "Agentes predeterminados",
       "files": "El maker hace los archivos del trabajo en la carpeta del proyecto y los adjunta al ticket; la persona los aprueba o devuelve el ticket. Edítalo después. Un agente que trabaja en este proyecto se conecta a <code>{{path}}</code> en la dirección del tablero (el mismo MCP que la página Conectar un agente, con el texto y las herramientas de este proyecto).",
       "software": "El ciclo de construcción y revisión: <strong>spec</strong> escribe los criterios de aceptación, <strong>builder</strong> escribe el código, <strong>runner</strong> lo revisa y las fases de la revisión (<strong>env</strong>, <strong>verify</strong>, <strong>hunt</strong>, <strong>refute</strong>, <strong>merge</strong>) intentan romperlo; los hallazgos vuelven al builder. Después <strong>intent</strong> comprueba el resultado con las propias palabras de la persona. Cada uno viene con sus instrucciones y las notas con las que el orquestador delega. Edita cualquiera después.",
-      "addAll": "Añadir los predeterminados",
+      "addAll": "Añadir predeterminados",
       "addNames": "Añadir {{names}}",
       "allAdded": "Todos añadidos",
       "skills": "Las skills que ejecutan este ciclo y la conexión MCP del agente se instalan en <goto>Conectar un agente</goto>."

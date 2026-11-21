@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 
-import { expect, test } from './fixtures'
+import { expect, ok, test } from './fixtures'
 
 // Each test is its own person on the board (the test-mode actor), so the language one of them picks is
 // never another test's: the language is kept per person.
@@ -110,7 +110,10 @@ test.describe('before a choice is made, the browser decides between the supporte
 test('the Daily page in Spanish draws without a hydration error, with a calendar in Spanish', async ({
   page,
   project,
+  human,
 }) => {
+  // The report calendar is there once the project has a cadence.
+  await ok(human.patch(`/api/projects/${project.id}/report-settings`, { data: { cadence: 'daily' } }))
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
   await page.goto('/settings')
@@ -122,7 +125,7 @@ test('the Daily page in Spanish draws without a hydration error, with a calendar
   await expect(page.getByRole('heading', { level: 1, name: 'Diario' })).toBeVisible()
   // The calendar: the month's name and the weekdays are Spanish, the labels read out too.
   const month = new Date().toLocaleDateString('es', { month: 'long' })
-  await expect(page.getByRole('region', { name: /calendario|informes/i }).first()).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Calendario de informes' })).toBeVisible()
   await expect(page.getByText(new RegExp(month, 'i')).first()).toBeVisible()
   await expect(page.getByRole('button', { name: /^Ir al mes anterior|mes anterior/i }).first()).toBeVisible()
   expect(errors.filter((e) => /#418|Hydration/i.test(e))).toEqual([])
