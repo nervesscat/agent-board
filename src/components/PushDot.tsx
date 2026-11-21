@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { cn } from 'cn'
+import type { TFunction } from 'i18next'
 import { RefreshCw } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Button } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
+import { shared } from '#/i18n'
 import { errorMessage, get, post, type ProjectPush, type Push } from '#/lib/api'
 import { ago } from '#/lib/format'
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 const DOT: Record<Push['state'], string> = {
   pushed: 'bg-emerald-500',
@@ -23,44 +24,49 @@ const DOT: Record<Push['state'], string> = {
 export const isUnpushed = (p: Push | undefined) => p?.state === 'ahead' || p?.state === 'local-only'
 
 /** A short label and the sentence behind it, for a branch's push state. */
-export function pushText(p: Push): { label: string; title: string } {
+export function pushText(p: Push, t: TFunction = shared.t): { label: string; title: string } {
   switch (p.state) {
     case 'pushed':
       return p.behind
         ? {
-            label: `pushed, behind ${p.behind}`,
-            title: `pushed; origin has ${plural(p.behind, 'commit')} more`,
+            label: t('pushDot.pushedBehind', { count: p.behind }),
+            title: t('pushDot.pushedBehindTitle', { count: p.behind }),
           }
-        : { label: 'pushed', title: 'pushed' }
+        : { label: t('pushDot.pushed'), title: t('pushDot.pushed') }
     case 'ahead':
       return {
-        label: `${p.ahead} not pushed`,
-        title: `not pushed: ${plural(p.ahead, 'commit')} only here${p.behind ? `; origin also has ${p.behind} this branch lacks` : ''}`,
+        label: t('pushDot.ahead', { count: p.ahead }),
+        title: p.behind
+          ? t('pushDot.aheadBehindTitle', { count: p.ahead, behind: p.behind })
+          : t('pushDot.aheadTitle', { count: p.ahead }),
       }
     case 'local-only':
       return {
-        label: 'not on origin',
-        title: `not pushed: no such branch on origin${p.ahead ? `, ${plural(p.ahead, 'commit')} only here` : ''}`,
+        label: t('pushDot.localOnly'),
+        title: p.ahead ? t('pushDot.localOnlyAheadTitle', { count: p.ahead }) : t('pushDot.localOnlyTitle'),
       }
-    case 'merged':
+    case 'merged': {
+      const into = p.into ?? t('pushDot.itsBase')
       return {
-        label: `merged into ${p.into ?? 'its base'}`,
-        title: `merged into ${p.into ?? 'its base'}; the branch is gone from origin`,
+        label: t('pushDot.merged', { into }),
+        title: t('pushDot.mergedTitle', { into }),
       }
+    }
     case 'remote-only':
-      return { label: 'only on origin', title: 'only on origin: no local branch' }
+      return { label: t('pushDot.remoteOnly'), title: t('pushDot.remoteOnlyTitle') }
     case 'none':
-      return { label: 'not found', title: 'no such branch here or on origin' }
+      return { label: t('pushDot.none'), title: t('pushDot.noneTitle') }
   }
 }
 
 /** When origin was last fetched into the checkout. */
-export const checkedText = (p: Pick<Push, 'checkedAt'>) =>
-  p.checkedAt ? `checked ${ago(p.checkedAt)}` : 'origin not fetched yet'
+export const checkedText = (p: Pick<Push, 'checkedAt'>, t: TFunction = shared.t) =>
+  p.checkedAt ? t('pushDot.checked', { ago: ago(p.checkedAt) }) : t('pushDot.notFetched')
 
 /** A red or green dot for whether a branch is on origin, the details in its tooltip. */
 export function PushDot({ push, className }: { push: Push; className?: string }) {
-  const title = `${pushText(push).title}\n${checkedText(push)}`
+  const { t } = useTranslation()
+  const title = `${pushText(push, t).title}\n${checkedText(push, t)}`
   return (
     <Tip content={title}>
       <span
@@ -74,13 +80,14 @@ export function PushDot({ push, className }: { push: Push; className?: string })
 
 /** The dot with its label and when origin was last fetched, for the ticket page. */
 export function PushBadge({ push, className }: { push: Push; className?: string }) {
-  const { label, title } = pushText(push)
+  const { t } = useTranslation()
+  const { label, title } = pushText(push, t)
   return (
     <Tip content={title}>
       <span className={cn('inline-flex min-w-0 items-center gap-1.5 text-xs', className)}>
         <PushDot push={push} />
         <span className={isUnpushed(push) ? 'font-medium text-red-700 dark:text-red-400' : ''}>{label}</span>
-        <span className="truncate text-muted-foreground">· {checkedText(push)}</span>
+        <span className="truncate text-muted-foreground">· {checkedText(push, t)}</span>
       </span>
     </Tip>
   )
@@ -97,6 +104,7 @@ export function useProjectPush(projectId: string) {
 
 /** Fetches origin into the project's checkouts now, then refreshes what shows push states. */
 export function RefreshPush({ projectId, className }: { projectId: string | number; className?: string }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const refresh = useMutation({
     mutationFn: () => post<ProjectPush>(`/api/projects/${projectId}/push/refresh`),
@@ -112,7 +120,7 @@ export function RefreshPush({ projectId, className }: { projectId: string | numb
     },
   })
   return (
-    <Tip content="Fetch origin now">
+    <Tip content={t('pushDot.fetchNow')}>
       <Button
         type="button"
         variant="ghost"
@@ -124,7 +132,7 @@ export function RefreshPush({ projectId, className }: { projectId: string | numb
           e.stopPropagation()
           refresh.mutate()
         }}
-        aria-label="Fetch origin now"
+        aria-label={t('pushDot.fetchNow')}
       >
         <RefreshCw className={refresh.isPending ? 'animate-spin' : ''} />
       </Button>

@@ -1,4 +1,7 @@
+import type { TFunction } from 'i18next'
 import { useCallback, useEffect, useState } from 'react'
+
+import { shared } from '#/i18n'
 
 /**
  * How the project sidebar shows on desktop: in full, shrunk to its icons, or hidden (a hover on the left
@@ -14,11 +17,21 @@ export function nextSidebarMode(mode: SidebarMode): SidebarMode {
   return SIDEBAR_MODES[(SIDEBAR_MODES.indexOf(mode) + 1) % SIDEBAR_MODES.length]
 }
 
-/** The toggle's name: what its next press does. */
+/** The toggle's name in the language shown: what its next press does. */
+export const sidebarToggleLabel = (mode: SidebarMode, t: TFunction = shared.t): string =>
+  t(`projectNav.toggle.${mode}`)
+
+/** The same, as a table, in the language shown when it is read. */
 export const SIDEBAR_TOGGLE_LABEL: Record<SidebarMode, string> = {
-  expanded: 'Shrink sidebar',
-  shrunk: 'Hide sidebar',
-  hidden: 'Show sidebar',
+  get expanded() {
+    return sidebarToggleLabel('expanded')
+  },
+  get shrunk() {
+    return sidebarToggleLabel('shrunk')
+  },
+  get hidden() {
+    return sidebarToggleLabel('hidden')
+  },
 }
 
 /** A stored value that is not a mode (or no value at all) means the sidebar as it always was. */

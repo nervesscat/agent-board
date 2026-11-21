@@ -27,6 +27,7 @@ import {
   Strikethrough,
 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Tip } from '#/components/ui/tooltip'
 import { cn } from '#/lib/utils'
@@ -267,7 +268,7 @@ export function RichEditor({
   onCancel,
   autoFocus = false,
   minHeight = 'min-h-20',
-  label = 'Text',
+  label,
   className,
   caretRoom,
 }: {
@@ -294,6 +295,7 @@ export function RichEditor({
    */
   caretRoom?: { top: number; bottom: number }
 }) {
+  const { t } = useTranslation()
   // The latest callbacks, for handlers the editor captured when it was created.
   const handlers = useRef({ onChange, onFiles, onSubmit, onCancel })
   handlers.current = { onChange, onFiles, onSubmit, onCancel }
@@ -314,7 +316,7 @@ export function RichEditor({
       attributes: {
         role: 'textbox',
         'aria-multiline': 'true',
-        'aria-label': label,
+        'aria-label': label ?? t('editor.text'),
         class: cn(
           'prose prose-sm dark:prose-invert max-w-none break-words px-3 py-2 focus:outline-none',
           minHeight,
@@ -882,6 +884,7 @@ function Toolbar({
   onAttach?: () => void
   attaching: boolean
 }) {
+  const { t } = useTranslation()
   const state = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
@@ -901,60 +904,64 @@ function Toolbar({
   const chain = () => editor.chain().focus()
   const link = () => {
     if (state.link) return chain().unsetLink().run()
-    const href = window.prompt('Link to')?.trim()
+    const href = window.prompt(t('editor.linkTo'))?.trim()
     if (href) chain().extendMarkRange('link').setLink({ href }).run()
   }
   const buttons = [
-    { label: 'Bold', icon: Bold, on: state.bold, run: () => chain().toggleBold().run() },
-    { label: 'Italic', icon: Italic, on: state.italic, run: () => chain().toggleItalic().run() },
+    { label: t('editor.bold'), icon: Bold, on: state.bold, run: () => chain().toggleBold().run() },
+    { label: t('editor.italic'), icon: Italic, on: state.italic, run: () => chain().toggleItalic().run() },
     {
-      label: 'Strikethrough',
+      label: t('editor.strikethrough'),
       icon: Strikethrough,
       on: state.strike,
       run: () => chain().toggleStrike().run(),
     },
-    { label: 'Inline code', icon: Code, on: state.code, run: () => chain().toggleCode().run() },
+    { label: t('editor.inlineCode'), icon: Code, on: state.code, run: () => chain().toggleCode().run() },
     {
-      label: 'Heading',
+      label: t('editor.heading'),
       icon: Heading2,
       on: state.heading,
       run: () => toggleBlock(editor, 'heading'),
     },
     {
-      label: 'Bullet list',
+      label: t('editor.bulletList'),
       icon: List,
       on: state.bullet,
       run: () => toggleBlock(editor, 'bulletList'),
     },
     {
-      label: 'Numbered list',
+      label: t('editor.numberedList'),
       icon: ListOrdered,
       on: state.ordered,
       run: () => toggleBlock(editor, 'orderedList'),
     },
     {
-      label: 'Checklist',
+      label: t('editor.checklist'),
       icon: ListChecks,
       on: state.task,
       run: () => toggleBlock(editor, 'taskList'),
     },
     {
-      label: 'Quote',
+      label: t('editor.quote'),
       icon: Quote,
       on: state.quote,
       run: () => toggleBlock(editor, 'quote'),
     },
     {
-      label: 'Code block',
+      label: t('editor.codeBlock'),
       icon: SquareCode,
       on: state.codeBlock,
       run: () => toggleBlock(editor, 'code'),
     },
-    { label: 'Link', icon: Link2, on: state.link, run: link },
+    { label: t('editor.link'), icon: Link2, on: state.link, run: link },
   ]
-  const attachLabel = attaching ? 'Attaching files…' : 'Attach files'
+  const attachLabel = attaching ? t('editor.attaching') : t('editor.attach')
   return (
-    <div role="toolbar" aria-label="Formatting" className="flex flex-wrap gap-0.5 border-b px-1.5 py-1">
+    <div
+      role="toolbar"
+      aria-label={t('editor.formatting')}
+      className="flex flex-wrap gap-0.5 border-b px-1.5 py-1"
+    >
       {onAttach && (
         <Tip content={attachLabel}>
           <button
