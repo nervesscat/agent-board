@@ -68,6 +68,7 @@ import { PrState } from '#/components/PrState'
 import type { FeedTab } from '#/lib/constants'
 import { PushBadge, PushDot, RefreshPush } from '#/components/PushDot'
 import { Tag, compareTags } from '#/components/Tag'
+import { TicketLine } from '#/components/TicketLine'
 import { TrashIcon } from '#/components/TrashIcon'
 import { TagsInput, useTagChoices } from '#/components/TagsInput'
 import { ReachBadge } from '#/components/ReachBadge'
@@ -436,13 +437,9 @@ function TicketPage() {
         {/* At least 12rem wide: a toolbar too wide to sit beside it wraps under it, not squeezes the title. */}
         <div className="min-w-48 flex-1">
           <InlineTitle key={t.id} t={t} onSave={(title) => update.mutate({ title })} />
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <span>
-              opened by <Actor name={t.createdBy} short /> {ago(t.createdAt)}
-            </span>
-            <span>updated {ago(t.updatedAt)}</span>
+          <TicketLine createdBy={t.createdBy} createdAt={t.createdAt} updatedAt={t.updatedAt}>
             <InlineTags key={t.id} t={t} projectId={id} onSave={(tags) => update.mutate({ tags })} />
-          </div>
+          </TicketLine>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {t.archivedAt && (
