@@ -87,6 +87,8 @@ function Roadmap() {
   const review = tickets.filter((t) => t.stage.kind === 'review')
   const shown = show === 'blocked' ? blocked : show === 'review' ? review : tickets
   const every = tickets.flatMap((t) => [t, ...t.lanes])
+  // An en dash, not a 0, until the tickets are known.
+  const n = (count: number) => (isLoading ? '–' : count)
   // The one time axis for every row shown: computed here, from the shown rows' work, and ending now.
   const range = windowFor(
     parseWindowChoice(windowParam),
@@ -107,9 +109,9 @@ function Roadmap() {
         </div>
         <ChipTabs
           chips={[
-            { key: 'all', label: 'All', count: tickets.length },
-            { key: 'blocked', label: 'Blocked', count: blocked.length },
-            { key: 'review', label: 'Needs review', count: review.length },
+            { key: 'all', label: 'All', count: n(tickets.length) },
+            { key: 'blocked', label: 'Blocked', count: n(blocked.length) },
+            { key: 'review', label: 'Needs review', count: n(review.length) },
           ]}
           value={show}
           onChange={(v: Filter) =>
@@ -134,12 +136,12 @@ function Roadmap() {
       </div>
       <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2 text-xs text-muted-foreground">
         <div className="flex flex-wrap gap-4">
-          <Stat n={tickets.length} label="tickets" />
-          <Stat n={every.length - tickets.length} label="lanes" />
-          <Stat n={every.filter((b) => hasState(b, 'now')).length} label="working now" />
-          <Stat n={every.filter(isBlocked).length} label="blocked" amber />
-          <Stat n={review.length} label="in review" />
-          <Stat n={every.filter((b) => b.row.work.stalled).length} label="no word" amber />
+          <Stat n={n(tickets.length)} label="tickets" />
+          <Stat n={n(every.length - tickets.length)} label="lanes" />
+          <Stat n={n(every.filter((b) => hasState(b, 'now')).length)} label="working now" />
+          <Stat n={n(every.filter(isBlocked).length)} label="blocked" amber />
+          <Stat n={n(review.length)} label="in review" />
+          <Stat n={n(every.filter((b) => b.row.work.stalled).length)} label="no word" amber />
         </div>
       </div>
       {work && (
@@ -205,11 +207,11 @@ function Roadmap() {
   )
 }
 
-function Stat({ n, label, amber = false }: { n: number; label: string; amber?: boolean }) {
+function Stat({ n, label, amber = false }: { n: number | string; label: string; amber?: boolean }) {
   return (
     <span>
       <b
-        className={`font-semibold tabular-nums ${amber && n ? 'text-amber-700 dark:text-amber-400' : 'text-foreground'}`}
+        className={`font-semibold tabular-nums ${amber && typeof n === 'number' && n ? 'text-amber-700 dark:text-amber-400' : 'text-foreground'}`}
       >
         {n}
       </b>{' '}
