@@ -34,7 +34,7 @@ Natural Spanish for a software tool, addressed informally (tú, imperative: "Gua
 Spain and Latin America. Sentence case in titles and buttons, like the English. Short: a button is a verb.
 
 Kept in English, as Spanish-speaking developers say them: **ticket**, **lane**, **PR**, **preview**, **commit**,
-**branch**, **merge** (the noun; the verb is "fusionar"), **worktree**, **token**, **webhook**, **CLI**, **skill**,
+**branch**, **merge** (the noun; the verb is "fusionar"), **worktree**, **checkout**, **token**, **webhook**, **CLI**, **skill**,
 **passkey**, **tailnet**, **Funnel**, **Overview** only where it is a product name (the page is "Resumen").
 
 Translated, always the same word:
