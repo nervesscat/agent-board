@@ -725,20 +725,21 @@ function SideEdge({
             : 'from-transparent via-background/70 to-background [mask-image:linear-gradient(to_top,#000_30%,transparent)]',
         )}
       />
-      <button
-        ref={button}
-        type="button"
-        tabIndex={shown ? 0 : -1}
-        aria-label={label}
-        title={label}
-        onClick={onGo}
-        className={cn(
-          'pointer-events-auto absolute left-1/2 flex size-5 -translate-x-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-          top ? 'top-0.5' : 'bottom-0.5',
-        )}
-      >
-        <Arrow className="size-3.5" aria-hidden />
-      </button>
+      <Tip content={label}>
+        <button
+          ref={button}
+          type="button"
+          tabIndex={shown ? 0 : -1}
+          aria-label={label}
+          onClick={onGo}
+          className={cn(
+            'pointer-events-auto absolute left-1/2 flex size-5 -translate-x-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+            top ? 'top-0.5' : 'bottom-0.5',
+          )}
+        >
+          <Arrow className="size-3.5" aria-hidden />
+        </button>
+      </Tip>
     </div>
   )
 }
