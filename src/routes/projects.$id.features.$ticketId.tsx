@@ -11,8 +11,10 @@ import {
   Archive,
   ArchiveRestore,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   ExternalLink,
   Flag,
   FlagOff,
@@ -35,6 +37,7 @@ import {
 import {
   Fragment,
   type ReactNode,
+  type RefObject,
   createContext,
   useCallback,
   useContext,
@@ -609,12 +612,15 @@ function TicketPage() {
 /**
  * The ticket page's side column. Side by side, it stays under the stuck header while the main column scrolls
  * with the page, and scrolls by itself when it is taller than what is left of the window. Its scrollbar is
- * not drawn, so it never stands beside the window's: it fades out at the edge that has more behind it
- * instead. Stacked, it is part of the page's one scroll. The padding and the negative margin keep the focus
- * rings of its cards inside the box the scroll clips to.
+ * not drawn, so it never stands beside the window's: the edge that has more behind it is blurred and faded
+ * instead, with a tiny arrow on it that scrolls a screenful that way. Stacked, it is part of the page's one
+ * scroll, with no fade and no arrow. The padding and the negative margin keep the focus rings of its cards
+ * inside the box the scroll clips to.
  */
 function SideColumn({ children }: { children: ReactNode }) {
   const column = useRef<HTMLElement>(null)
+  const up = useRef<HTMLButtonElement>(null)
+  const down = useRef<HTMLButtonElement>(null)
   const [more, setMore] = useState({ above: false, below: false })
   useEffect(() => {
     const el = column.current
@@ -641,24 +647,99 @@ function SideColumn({ children }: { children: ReactNode }) {
       added.disconnect()
     }
   }, [])
-  const fade = '1.5rem'
+  // An arrow that goes away under the keyboard (the end was reached) hands the focus to the other one.
+  useEffect(() => {
+    if (!more.below && document.activeElement === down.current) up.current?.focus()
+    if (!more.above && document.activeElement === up.current) down.current?.focus()
+  }, [more])
+  const go = (direction: 1 | -1) => {
+    const el = column.current
+    if (!el) return
+    const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    el.scrollBy({ top: direction * el.clientHeight * 0.85, behavior: calm ? 'auto' : 'smooth' })
+  }
   return (
-    <aside
-      ref={column}
-      data-ticket-column="side"
-      data-more-above={more.above}
-      data-more-below={more.below}
-      className="min-w-0 space-y-4 lg:sticky lg:top-[calc(var(--ticket-header,4rem)+1rem)] lg:max-h-[calc(100dvh-var(--ticket-header,4rem)-1.5rem)] lg:-m-1 lg:self-start lg:overflow-y-auto lg:p-1 lg:[scrollbar-width:none] lg:[&::-webkit-scrollbar]:hidden"
-      style={
-        more.above || more.below
-          ? {
-              maskImage: `linear-gradient(to bottom, ${more.above ? 'transparent' : '#000'} 0, #000 ${fade}, #000 calc(100% - ${fade}), ${more.below ? 'transparent' : '#000'} 100%)`,
-            }
-          : undefined
-      }
+    <div className="relative min-w-0 lg:sticky lg:top-[calc(var(--ticket-header,4rem)+1rem)] lg:-m-1 lg:self-start">
+      <aside
+        ref={column}
+        data-ticket-column="side"
+        data-more-above={more.above}
+        data-more-below={more.below}
+        className="min-w-0 space-y-4 lg:max-h-[calc(100dvh-var(--ticket-header,4rem)-1.5rem)] lg:overflow-y-auto lg:p-1 lg:[scrollbar-width:none] lg:[&::-webkit-scrollbar]:hidden"
+      >
+        {children}
+      </aside>
+      <SideEdge
+        edge="top"
+        shown={more.above}
+        label="Scroll the side column up"
+        onGo={() => go(-1)}
+        button={up}
+      />
+      <SideEdge
+        edge="bottom"
+        shown={more.below}
+        label="Scroll the side column down"
+        onGo={() => go(1)}
+        button={down}
+      />
+    </div>
+  )
+}
+
+/**
+ * One edge of the side column that has more behind it: the cards under it are blurred and fade into the
+ * page's background, and a tiny arrow sits centred on it. Side by side only; never in the way of the
+ * pointer except on the arrow itself.
+ */
+function SideEdge({
+  edge,
+  shown,
+  label,
+  onGo,
+  button,
+}: {
+  edge: 'top' | 'bottom'
+  shown: boolean
+  label: string
+  onGo: () => void
+  button: RefObject<HTMLButtonElement | null>
+}) {
+  const top = edge === 'top'
+  const Arrow = top ? ChevronUp : ChevronDown
+  return (
+    <div
+      data-side-edge={edge}
+      aria-hidden={!shown}
+      className={cn(
+        'pointer-events-none absolute inset-x-0 hidden h-11 transition-opacity duration-150 motion-reduce:transition-none lg:block',
+        top ? 'top-0' : 'bottom-0',
+        shown ? 'opacity-100' : 'invisible opacity-0',
+      )}
     >
-      {children}
-    </aside>
+      <div
+        className={cn(
+          'absolute inset-0 bg-linear-to-b backdrop-blur-[3px]',
+          top
+            ? 'from-background via-background/70 to-transparent [mask-image:linear-gradient(to_bottom,#000_30%,transparent)]'
+            : 'from-transparent via-background/70 to-background [mask-image:linear-gradient(to_top,#000_30%,transparent)]',
+        )}
+      />
+      <button
+        ref={button}
+        type="button"
+        tabIndex={shown ? 0 : -1}
+        aria-label={label}
+        title={label}
+        onClick={onGo}
+        className={cn(
+          'pointer-events-auto absolute left-1/2 flex size-5 -translate-x-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+          top ? 'top-0.5' : 'bottom-0.5',
+        )}
+      >
+        <Arrow className="size-3.5" aria-hidden />
+      </button>
+    </div>
   )
 }
 
