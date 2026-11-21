@@ -103,6 +103,8 @@ export function Actor({
   via,
   truncate,
   short,
+  bare,
+  tip,
   className = '',
 }: {
   name: string
@@ -111,6 +113,10 @@ export function Actor({
   truncate?: boolean
   /** On a card, show only the leaf of a sub-identity (`builder-832`); the tooltip keeps the whole chain. */
   short?: boolean
+  /** Just the picture and the name: no role badge, no "under"; the caller's `tip` says the rest. */
+  bare?: boolean
+  /** What the tooltip says instead of the chain and how the name signs in. */
+  tip?: string
   className?: string
 }) {
   const who = useWho()
@@ -120,28 +126,31 @@ export function Actor({
   if (agent)
     return (
       <Tip
-        content={`${agent.name} (one of the project's agents${via ? `, posted via ${chainOf(via, who)}` : ''})`}
+        content={
+          tip ??
+          `${agent.name} (one of the project's agents${via ? `, posted via ${chainOf(via, who)}` : ''})`
+        }
       >
         <span className={`${ROOT} ${className}`}>
           <Picture>
             <AgentAvatar agent={agent} />
           </Picture>
           <Name name={agent.name} truncate={truncate} />
-          {via && <span className="min-w-0 font-normal text-muted-foreground">via {via}</span>}
+          {via && !bare && <span className="min-w-0 font-normal text-muted-foreground">via {via}</span>}
         </span>
       </Tip>
     )
   const me = who(name)
   const Icon = me.kind === 'board' ? Cog : me.kind === 'agent' ? Bot : User
   return (
-    <Tip content={me.role === 'board' ? how(me) : `${chainOf(name, who)}: ${how(me)}`}>
+    <Tip content={tip ?? (me.role === 'board' ? how(me) : `${chainOf(name, who)}: ${how(me)}`)}>
       <span className={`${ROOT} ${className}`} data-role={me.role}>
         <Picture>
           <Icon className="size-3.5 text-muted-foreground" />
         </Picture>
         <Name name={shown} truncate={truncate} />
-        <RoleBadge role={me.role} />
-        {!short && me.role === 'worker' && me.parent && (
+        {!bare && <RoleBadge role={me.role} />}
+        {!short && !bare && me.role === 'worker' && me.parent && (
           // Kept on one line, cut short with an ellipsis where it cannot fit (the tooltip has the chain).
           <span className="min-w-0 truncate font-normal text-muted-foreground">under {me.parent}</span>
         )}
