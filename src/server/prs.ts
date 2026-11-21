@@ -310,6 +310,12 @@ const prState = (pr: schema.Pr, merge: Merge) => ({
 
 const REFRESH_MS = 5 * 60_000
 const lastRefresh = new Map<number, number>()
+/** Per project: why its last refresh failed outright (every repo failed), until a later one succeeds. */
+const refreshFailures = new Map<number, { message: string; at: string }>()
+
+/** The projects whose last PR refresh failed, with why: what the alerts say of GitHub access. */
+export const prRefreshFailures = () =>
+  [...refreshFailures].map(([projectId, f]) => ({ projectId, message: f.message, at: f.at }))
 /** The repos whose PRs a refresh read from GitHub since the board started. */
 const refreshedRepos = new Set<number>()
 /** Per project: the last refresh queued, which never rejects, so the next one can wait on it. */
@@ -355,13 +361,19 @@ async function runRefresh(projectId: number) {
   })
   if (repos.length && failed.length === repos.length) {
     const gh = toolProblem('gh', failed[0]!.err)
-    throw gh ? new HttpError(502, gh) : failed[0]!.err
+    const err = gh ? new HttpError(502, gh) : failed[0]!.err
+    refreshFailures.set(projectId, {
+      message: err instanceof Error ? err.message : String(err),
+      at: new Date().toISOString(),
+    })
+    throw err
   }
   await syncPrTickets(
     projectId,
     results.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])),
   )
   lastRefresh.set(projectId, Date.now())
+  refreshFailures.delete(projectId)
   followUnknowns(projectId)
   // A PR opened, merged or closed, CI turning green or red: the tickets' automatic phases follow.
   await reconcileProject(projectId).catch((err: unknown) =>
