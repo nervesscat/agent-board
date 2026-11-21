@@ -340,7 +340,7 @@ describe('the hint for what the board cannot decide', () => {
     for (const t of [x1, x2]) expect(needIds(t.id)).toEqual([])
   })
 
-  it('stops naming one once it is declared, and names nothing for an automatic need the human removed', async () => {
+  it('stops naming one once it is declared, and never again once the human removed that need', async () => {
     const p = project()
     branch('gone/a', 'main')
     branch('gone/b', 'gone/a')
@@ -356,16 +356,41 @@ describe('the hint for what the board cannot decide', () => {
     expect(await includes(up.id)).toEqual([low.id])
     needs.setNeeds(up.id, [low.id], 'me')
     expect(await includes(up.id)).toEqual([])
-    // The human removes the automatic one: it is not added again, and it is not hinted either.
+    // The human takes the need they declared off: the row does not come back.
+    needs.setNeeds(up.id, [], 'me')
+    await p.sweep()
+    expect(needIds(up.id)).toEqual([])
+    expect(await includes(up.id)).toEqual([])
+    // The same for an automatic need the human removed, also once its case turns undecidable (a moved on).
     needs.setNeeds(b.id, [], 'me')
+    await p.sweep()
+    expect(await includes(b.id)).toEqual([])
+    more('gone/a')
     await p.sweep()
     expect(needIds(b.id)).toEqual([])
     expect(await includes(b.id)).toEqual([])
     // Left as it was found: the other tests count the human's removals.
-    dbm.db
-      .delete(dbm.schema.ticketNeedDismissals)
-      .where(eq(dbm.schema.ticketNeedDismissals.ticketId, b.id))
-      .run()
+    for (const id of [up.id, b.id])
+      dbm.db
+        .delete(dbm.schema.ticketNeedDismissals)
+        .where(eq(dbm.schema.ticketNeedDismissals.ticketId, id))
+        .run()
+  })
+
+  it('does not name the lower ticket a stack stands on: its need is automatic, and adding one the other way is a cycle', async () => {
+    const p = project()
+    branch('cyc/low', 'main')
+    branch('cyc/up', 'cyc/low')
+    const low = p.ticket('low', 'cyc/low')
+    const up = p.ticket('up', 'cyc/up')
+    await p.sweep()
+    expect(needIds(up.id)).toEqual([low.id])
+    // The lower branch moves on: each holds commits of the other's, but up needs low already.
+    more('cyc/low')
+    await p.sweep()
+    expect(needIds(up.id)).toEqual([low.id])
+    expect(await includes(low.id)).toEqual([])
+    expect(() => needs.checkNeeds(low, [up.id])).toThrow(/cycle/)
   })
 })
 

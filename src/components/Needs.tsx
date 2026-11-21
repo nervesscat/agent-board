@@ -99,7 +99,7 @@ export function NeedsField({ t, onSave }: { t: TicketFull; onSave: (needs: numbe
     refetchInterval: 60_000,
   })
   const ids = t.needs.map((n) => n.id)
-  const suggested = (included ?? []).filter((id) => !ids.includes(id))
+  const suggested = (included ?? []).filter((id) => !ids.includes(id) && !t.neededBy.some((n) => n.id === id))
   const title = (id: number) => tickets.find((x) => x.id === id)?.title
   // Not itself, not twice, and not one that needs it already (the server checks longer loops).
   const blocked = new Set([t.id, ...ids, ...t.neededBy.map((n) => n.id)])

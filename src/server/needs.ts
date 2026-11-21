@@ -457,7 +457,8 @@ async function certainWork(t: Ticket, ctx: Context): Promise<Map<number, string>
  * bases, or a copy of them under other shas (`holdsWorkOf`), as two branches do that took each other's
  * work in (a partial merge-in), stacked and then moved apart, or had commits cherry-picked across. Two
  * branches off the same base are not here. Not those it needs already, nor those it certainly holds
- * (`certainWork`: the board adds those itself, or the human removed the need). Every open ticket of
+ * (`certainWork`: the board adds those itself), nor those the human removed a need for, nor those that need
+ * this ticket (adding one would be a cycle). Every open ticket of
  * the repo is checked. The git answers are kept for the commits they were worked out for, and the whole
  * answer for the state of the project's branches and tickets and this ticket's needs, so a ticket page
  * read again (the page asks every minute) costs a fingerprint until something changes.
@@ -466,7 +467,26 @@ async function includedWork(t: Ticket, ctx: Context): Promise<number[]> {
   // The whole answer is kept for the state of the project's branches and tickets it was worked out for
   // (and this ticket's needs), so a ticket page opened again, or by someone else, costs a fingerprint.
   const key = [t.id, needIds(t.id).join(','), await projectState(ctx)].join('\0')
-  return memo(includedMemo, 2_000, key, () => scanIncluded(t, ctx))
+  const found = await memo(includedMemo, 2_000, key, () => scanIncluded(t, ctx))
+  // Read as it is now, not kept: what the human removed is not asked about again, and neither is what
+  // "Add as a need" would refuse (one that needs this ticket already, directly or through others).
+  const removed = new Set(
+    db
+      .select({ id: schema.ticketNeedDismissals.needsId })
+      .from(schema.ticketNeedDismissals)
+      .where(eq(schema.ticketNeedDismissals.ticketId, t.id))
+      .all()
+      .map((r) => r.id),
+  )
+  return found.filter((id) => {
+    if (removed.has(id)) return false
+    try {
+      checkNeeds(t, [id])
+      return true
+    } catch {
+      return false
+    }
+  })
 }
 
 async function scanIncluded(t: Ticket, ctx: Context): Promise<number[]> {

@@ -268,4 +268,17 @@ test('a branch that holds work of another the board cannot tell is its own gets 
   expect((await ok<TicketFull>(human.get(`/api/tickets/${upper.id}`))).needs).toMatchObject([
     { id: lower.id, auto: false },
   ])
+  // Taking the need off again does not bring the row back, on this page or on the lower ticket's.
+  await details
+    .getByRole('listitem')
+    .filter({ hasText: `#${lower.id} ${lower.title}` })
+    .getByRole('button', { name: `Remove the need for #${lower.id}` })
+    .click()
+  await expect
+    .poll(async () => (await ok<TicketFull>(human.get(`/api/tickets/${upper.id}`))).needs)
+    .toEqual([])
+  expect((await ok<TicketGit>(human.get(row(upper.id)))).includes).toEqual([])
+  await page.reload()
+  await expect(details.getByRole('button', { name: 'Add as a need' })).toHaveCount(0)
+  await expect(details.getByText('Add a ticket it needs merged first…')).toBeVisible()
 })
