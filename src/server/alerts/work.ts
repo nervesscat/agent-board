@@ -12,7 +12,6 @@ import { readReportSettings } from '../reports'
 import { kindOf, listStages, startStage } from '../stages'
 import { getSummary } from '../summary'
 import {
-  HOUR_MS,
   type AlertActionContext,
   type AlertButton,
   type AlertCandidate,
@@ -27,6 +26,8 @@ import {
  * and never waits on the network.
  */
 
+// Not imported from the registry: it imports this file, so its constants are not set yet when this one loads.
+const HOUR_MS = 60 * 60_000
 const DAY_MS = 24 * HOUR_MS
 
 /** A decision card unanswered for this long is raised again as an alert (idea 6). */
