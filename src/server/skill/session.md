@@ -104,7 +104,8 @@ the builder and the `/feature-review` rounds that try to break the change before
 Whoever moves a ticket to review starts its
 preview first, whenever the project has a preview setup and the change can be previewed; when it
 cannot, the hand-off says why. A ticket that reached review without its preview and
-without that reason is not handed off: send its agent back to start it.
+without that reason is not handed off (unless the ticket's workflow lists the preview step as skipped, turned
+off on the Workflow page, which the summary says): send its agent back to start it.
 
 ## Short UI comments: confirm first
 

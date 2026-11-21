@@ -242,8 +242,8 @@ fixes them while the ticket has a round left.`,
     instructions: brief('intent'),
     delegation: `**When:** after the last review round passes and before every hand-off, on every ticket of any
 complexity (a low ticket included: it has no review rounds, never skips this), and again after any
-human comment that sent the ticket back. Run it at effort low (the Agent tool's \`effort: low\`) for
-every complexity.
+human comment that sent the ticket back. Run it at the effort its workflow step gives (\`low\` by default in every preset), whatever the ticket's
+complexity.
 
 **Give it:** only the human's own words and attachments (the ticket's instructions, and every post and
 reply by the human, newest last, and the human's own answer on a decision card, the latest comment that sent the ticket back weighing most) and the

@@ -385,7 +385,9 @@ describe('the review texts the board ships', () => {
       )
       expect(d).toContain('a low ticket included')
       expect(d).toContain('again after any human comment that sent the ticket back')
-      expect(d).toContain("(the Agent tool's `effort: low`) for every complexity")
+      expect(d).toContain(
+        "at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity",
+      )
       expect(d).toContain(
         "Never the builder's plan, the spec, the review's findings or the options an agent put on a card",
       )

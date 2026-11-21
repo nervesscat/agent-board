@@ -486,6 +486,33 @@ test('a hand-off instruction is edited in place with a limit, reset to the defau
   expect((await presetOf(human, project.id, 'standard')).tweaked).toBe(false)
 })
 
+test('an open hand-off editor does not survive a switch to another preset, and nothing is stored for it (F10)', async ({
+  page,
+  project,
+  human,
+}) => {
+  await open(page, project.id)
+  const presets = page.getByRole('group', { name: 'Workflow presets' })
+  const standardIntent = page.locator('[data-handoff="intent"]')
+  await standardIntent.getByRole('button', { name: 'Edit the Intent check hand-off' }).click()
+  const field = standardIntent.getByRole('textbox', { name: 'Intent check hand-off instruction' })
+  await field.fill('A draft written on Standard.')
+
+  await presets.getByRole('button', { name: /^Thorough/ }).click()
+  await expect(page.getByRole('tree')).toHaveAccessibleName(/^Thorough workflow/)
+  const thoroughIntent = page.locator('[data-handoff="intent"]')
+  // The editor is closed and the text shown is Thorough's own.
+  await expect(thoroughIntent.getByRole('textbox')).toHaveCount(0)
+  await expect(thoroughIntent.locator('[data-handoff-text]')).toHaveText(
+    (await presetOf(human, project.id, 'thorough')).steps.find((s) => s.id === 'intent')!.handoff,
+  )
+  await expect(thoroughIntent.locator('[data-handoff-text]')).not.toContainText(
+    'A draft written on Standard.',
+  )
+  expect((await presetOf(human, project.id, 'thorough')).tweaked).toBe(false)
+  expect((await presetOf(human, project.id, 'standard')).tweaked).toBe(false)
+})
+
 test('the order is changed with Move up and Move down, refused where it would break the flow, and kept (F11)', async ({
   page,
   project,

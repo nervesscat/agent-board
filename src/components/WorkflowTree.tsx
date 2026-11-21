@@ -14,6 +14,7 @@ import {
   type ResolvedStep,
   type ResolvedWorkflow,
   type WorkflowEffort,
+  type WorkflowPresetId,
   type WorkflowStepId,
 } from '#/lib/workflow'
 import {
@@ -97,6 +98,7 @@ export function WorkflowTree({
           step={step}
           next={workflow.steps[i + 1]?.label ?? null}
           last={i === workflow.steps.length - 1}
+          preset={workflow.preset}
           complexity={complexity}
           edits={edits}
           open={!collapsed.has(step.id)}
@@ -116,6 +118,7 @@ function StepNode({
   step,
   next,
   last,
+  preset,
   complexity,
   edits,
   open,
@@ -126,6 +129,7 @@ function StepNode({
   step: ResolvedStep
   next: string | null
   last: boolean
+  preset: WorkflowPresetId
   complexity: Complexity
   edits: WorkflowEdits
   open: boolean
@@ -237,7 +241,9 @@ function StepNode({
           )}
         </div>
       </div>
+      {/* An editor opened on one view (preset, complexity) does not carry its draft to another. */}
       <WorkflowHandoff
+        key={`${preset}:${complexity}`}
         step={step}
         next={next}
         last={last}

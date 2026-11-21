@@ -332,6 +332,13 @@ describe('the board skill, AGENTS.md, the session skill and review-queue point a
     expect(session).not.toMatch(/writes the spec, starts the builder/)
   })
 
+  it('lets the session skill send back a ticket without a preview only when the workflow does not skip the step', () => {
+    const session = flat(read(skillDir, 'session.md'))
+    expect(session).toContain(
+      "is not handed off (unless the ticket's workflow lists the preview step as skipped, turned off on the Workflow page, which the summary says)",
+    )
+  })
+
   it('has review-queue hand the build cycle to the project’s workflow', () => {
     const queue = flat(review('skills/review-queue/SKILL.md'))
     expect(queue).toContain("the build cycle of the project's workflow (`get_workflow`")
@@ -621,7 +628,12 @@ describe('review fix pass: one folder per review, the plan of a skipped review, 
 
 describe('review fix pass: the intent effort, the browser rule and the screenshot source', () => {
   it('says the intent agent runs at the effort its workflow step gives, in every text that names its effort (C4)', async () => {
-    const stale = [/always runs at/i, /runs at `?low`? effort,? whatever/i, /at `low` effort,? whatever/i]
+    const stale = [
+      /always runs at/i,
+      /runs at `?low`? effort,? whatever/i,
+      /at `low` effort,? whatever/i,
+      /effort low \(the Agent tool's `effort: low`\) for every complexity/i,
+    ]
     const texts: Record<string, string> = {
       ...(await servedTexts()),
       'feature-review-intent.md': review('agents/feature-review-intent.md'),
