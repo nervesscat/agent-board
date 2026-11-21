@@ -135,7 +135,7 @@ export function petsOf(
     }
   }
 
-  // Waiting, working, asleep, done; ties by ticket then name. A subagent follows its parent's character.
+  // Waiting, working, asleep; ties by ticket then name. A subagent follows its parent's character.
   const order = (a: Pet, b: Pet) =>
     RANK[a.state] - RANK[b.state] || a.ticketId - b.ticketId || (a.agent ?? '').localeCompare(b.agent ?? '')
   const kids = all.filter((p) => parents.has(p))
