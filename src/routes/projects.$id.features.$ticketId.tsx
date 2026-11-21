@@ -596,18 +596,11 @@ function TicketPage() {
           </div>
         )}
         {side.length > 0 && (
-          // Side by side, the column stays under the stuck header while the main column scrolls with the
-          // page, and scrolls by itself when it is taller than what is left of the window. Stacked, it is
-          // part of the page's one scroll. The padding and the negative margin keep the focus rings of
-          // its cards inside the box the scroll clips to.
-          <aside
-            data-ticket-column="side"
-            className="min-w-0 space-y-4 lg:sticky lg:top-[calc(var(--ticket-header,4rem)+1rem)] lg:max-h-[calc(100dvh-var(--ticket-header,4rem)-1.5rem)] lg:self-start lg:overflow-y-auto lg:-m-1 lg:p-1"
-          >
+          <SideColumn>
             {side.map((s) => (
               <Fragment key={s}>{sections[s]}</Fragment>
             ))}
-          </aside>
+          </SideColumn>
         )}
       </div>
     </div>
@@ -694,6 +687,62 @@ function useCrumbsAway(page: RefObject<HTMLElement | null>, drawn: boolean) {
     }
   }, [page, drawn])
   return away
+}
+
+/**
+ * The ticket page's side column. Side by side, it stays under the stuck header while the main column scrolls
+ * with the page, and scrolls by itself when it is taller than what is left of the window. Its scrollbar is
+ * not drawn, so it never stands beside the window's: it fades out at the edge that has more behind it
+ * instead. Stacked, it is part of the page's one scroll. The padding and the negative margin keep the focus
+ * rings of its cards inside the box the scroll clips to.
+ */
+function SideColumn({ children }: { children: ReactNode }) {
+  const column = useRef<HTMLElement>(null)
+  const [more, setMore] = useState({ above: false, below: false })
+  useEffect(() => {
+    const el = column.current
+    if (!el) return
+    const read = () => {
+      const above = el.scrollTop > 1
+      const below = el.scrollTop + el.clientHeight < el.scrollHeight - 1
+      setMore((m) => (m.above === above && m.below === below ? m : { above, below }))
+    }
+    read()
+    el.addEventListener('scroll', read, { passive: true })
+    // Its cards grow and shrink, and the window's height changes how much of it shows.
+    const resized = new ResizeObserver(read)
+    resized.observe(el)
+    for (const c of Array.from(el.children)) resized.observe(c)
+    const added = new MutationObserver(() => {
+      for (const c of Array.from(el.children)) resized.observe(c)
+      read()
+    })
+    added.observe(el, { childList: true })
+    return () => {
+      el.removeEventListener('scroll', read)
+      resized.disconnect()
+      added.disconnect()
+    }
+  }, [])
+  const fade = '1.5rem'
+  return (
+    <aside
+      ref={column}
+      data-ticket-column="side"
+      data-more-above={more.above}
+      data-more-below={more.below}
+      className="min-w-0 space-y-4 lg:sticky lg:top-[calc(var(--ticket-header,4rem)+1rem)] lg:max-h-[calc(100dvh-var(--ticket-header,4rem)-1.5rem)] lg:-m-1 lg:self-start lg:overflow-y-auto lg:p-1 lg:[scrollbar-width:none] lg:[&::-webkit-scrollbar]:hidden"
+      style={
+        more.above || more.below
+          ? {
+              maskImage: `linear-gradient(to bottom, ${more.above ? 'transparent' : '#000'} 0, #000 ${fade}, #000 calc(100% - ${fade}), ${more.below ? 'transparent' : '#000'} 100%)`,
+            }
+          : undefined
+      }
+    >
+      {children}
+    </aside>
+  )
 }
 
 /** The anchor of the URL to the feed's posts, once the ticket it is on is the one shown. */

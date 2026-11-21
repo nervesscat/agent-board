@@ -31,14 +31,25 @@ test.describe('side by side', () => {
     expect(at.y + at.height).toBeLessThanOrEqual(380)
     await expect(side(page)).toBeInViewport()
 
-    // It is taller than its area, so it scrolls inside itself and leaves the page where it is.
+    // It is taller than its area, so it scrolls inside itself and leaves the page where it is. Its own
+    // scrollbar is not drawn (the window's is the only one), so it fades where there is more behind it.
     const before = await sideScroll(page)
     expect(before.room).toBeGreaterThan(0)
     expect(before.top).toBe(0)
+    expect(await side(page).evaluate((el) => getComputedStyle(el).scrollbarWidth)).toBe('none')
+    await expect(side(page)).toHaveAttribute('data-more-above', 'false')
+    await expect(side(page)).toHaveAttribute('data-more-below', 'true')
+    expect(await side(page).evaluate((el) => getComputedStyle(el).maskImage)).toContain('linear-gradient')
     await side(page).hover()
     await page.mouse.wheel(0, 120)
     await expect.poll(async () => (await sideScroll(page)).top).toBeGreaterThan(0)
     expect(await page.evaluate(() => window.scrollY)).toBe(end)
+    await expect(side(page)).toHaveAttribute('data-more-above', 'true')
+
+    // At its end only the top fades.
+    await side(page).evaluate((el) => el.scrollTo(0, el.scrollHeight))
+    await expect(side(page)).toHaveAttribute('data-more-below', 'false')
+    await expect(side(page)).toHaveAttribute('data-more-above', 'true')
 
     // And the main column keeps scrolling by the page, apart from it.
     const kept = (await sideScroll(page)).top
@@ -63,6 +74,8 @@ test.describe('stacked', () => {
     })
     expect(style).toEqual({ position: 'static', overflowY: 'visible' })
     expect((await sideScroll(page)).top).toBe(0)
+    await expect(side(page)).toHaveAttribute('data-more-below', 'false')
+    expect(await side(page).evaluate((el) => getComputedStyle(el).maskImage)).toBe('none')
     // Scrolled to the bottom of the page, the side column's cards went by with the page.
     await scrollTo(page, 'bottom')
     expect((await box(side(page))).y).toBeLessThan(0)
