@@ -1,5 +1,6 @@
 import { CheckIcon, CopyIcon, CopyXIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Button } from '#/components/ui/button'
@@ -35,6 +36,7 @@ export function CopyImageButton({
   name: string
   className?: string
 }) {
+  const { t } = useTranslation()
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle')
   const busy = useRef(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -54,11 +56,16 @@ export function CopyImageButton({
     if (timer.current) clearTimeout(timer.current)
     setState(result === 'copied' ? 'copied' : 'failed')
     timer.current = setTimeout(() => setState('idle'), SHOWN_FOR)
-    if (result === 'unsupported') toast.error('This browser cannot copy images to the clipboard')
-    else if (result === 'failed') toast.error(`Could not copy ${name}`)
+    if (result === 'unsupported') toast.error(t('files.copyImage.unsupported'))
+    else if (result === 'failed') toast.error(t('files.copyImage.failedNamed', { name }))
   }
 
-  const tip = state === 'copied' ? 'Copied' : state === 'failed' ? 'Could not copy' : 'Copy image'
+  const tip =
+    state === 'copied'
+      ? t('files.copyImage.copied')
+      : state === 'failed'
+        ? t('files.copyImage.failed')
+        : t('files.copyImage.copy')
 
   return (
     <Tip content={tip}>
@@ -66,7 +73,7 @@ export function CopyImageButton({
         type="button"
         variant="secondary"
         size="icon-sm"
-        aria-label="Copy image"
+        aria-label={t('files.copyImage.copy')}
         data-slot="copy-image"
         data-state={state}
         onClick={copy}
@@ -74,7 +81,11 @@ export function CopyImageButton({
         className={cn('size-11 shadow-sm sm:size-7', state !== 'idle' && 'opacity-100', className)}
       >
         <span aria-live="polite" className="sr-only">
-          {state === 'copied' ? 'Copied' : state === 'failed' ? 'Could not copy' : ''}
+          {state === 'copied'
+            ? t('files.copyImage.copied')
+            : state === 'failed'
+              ? t('files.copyImage.failed')
+              : ''}
         </span>
         {state === 'copied' ? (
           <CheckIcon />

@@ -2,22 +2,16 @@
 # A file comes off this list when it is extracted; the list never grows.
 src/components/Actor.tsx
 src/components/AnalogClock.tsx
-src/components/AnnotateImage.tsx
 src/components/AssigneeSelect.tsx
-src/components/Attachments.tsx
 src/components/BranchSelect.tsx
 src/components/CommandPalette.tsx
-src/components/CopyImage.tsx
 src/components/DatePicker.tsx
-src/components/FileGallery.tsx
-src/components/Gallery.tsx
 src/components/GettingStarted.tsx
 src/components/Markdown.tsx
 src/components/Needs.tsx
 src/components/NewTicket.tsx
 src/components/Notes.tsx
 src/components/NotificationCenter.tsx
-src/components/PendingFiles.tsx
 src/components/PostTools.tsx
 src/components/PrState.tsx
 src/components/Preview.tsx
@@ -36,10 +30,8 @@ src/components/WorkTimeline.tsx
 src/components/WorkTimelineCard.tsx
 src/routes/index.tsx
 src/routes/projects.$id.agents.tsx
-src/routes/projects.$id.cleanup.tsx
 src/routes/projects.$id.features.$ticketId.tsx
 src/routes/projects.$id.features.index.tsx
-src/routes/projects.$id.gallery.tsx
 src/routes/projects.$id.index.tsx
 src/routes/projects.$id.previews.tsx
 src/routes/projects.$id.prs.tsx
