@@ -40,7 +40,17 @@ function recorder(dir: string) {
   return { command: `"${process.execPath}" "${script}" "${out}"`, runs }
 }
 
-const tempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-resume-'))
+const dirs: string[] = []
+/** A throwaway folder, removed when the test ends, passed or failed. */
+const tempDir = () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-resume-'))
+  dirs.push(dir)
+  return dir
+}
+
+test.afterEach(() => {
+  for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true })
+})
 
 /** A ticket held by the agent that asked a decision: the answer on its card is what resumes it. */
 async function askedTicket(api: Api, human: APIRequestContext, agent: APIRequestContext) {
@@ -163,7 +173,6 @@ test('a resume that fails shows Failed on the ticket, with Retry starting a new 
   agent,
   project,
 }) => {
-  const dir = tempDir()
   await ok(
     human.patch(`/api/projects/${project.id}`, {
       data: { resumeCommand: `"${process.execPath}" -e "console.log('about to fail');process.exit(1)"` },
@@ -191,7 +200,6 @@ test('a resume that fails shows Failed on the ticket, with Retry starting a new 
     )
     .toBeGreaterThan(before.current.id)
   await expect(card).toContainText('Failed')
-  fs.rmSync(dir, { recursive: true, force: true })
 })
 
 test('a command that is not on the machine fails the resume without a crash', async ({

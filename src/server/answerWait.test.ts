@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { and, eq } from 'drizzle-orm'
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
 const tmp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-answerwait-')))
@@ -86,6 +86,10 @@ afterEach(() => {
     .run()
   // Nothing leaks, however the wait ended.
   expect(wait.waiterCount()).toBe(0)
+})
+
+afterAll(() => {
+  fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 })
 })
 
 describe('wait_for_answer: waiting', () => {

@@ -1,10 +1,10 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 
 import { and, eq } from 'drizzle-orm'
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
 const tmp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-resume-')))
@@ -25,7 +25,7 @@ const script = path.join(tmp, 'agent.mjs')
 fs.writeFileSync(
   script,
   `import fs from 'node:fs'
-const [out, mode = '0'] = process.argv.slice(2)
+const [out, mode = '0', owner] = process.argv.slice(2)
 let stdin = ''
 process.stdin.setEncoding('utf8')
 for await (const chunk of process.stdin) stdin += chunk
@@ -38,14 +38,17 @@ fs.writeFileSync(out, JSON.stringify({
   pid: process.pid,
 }))
 console.log('recorded for the test')
-if (mode === 'hang') setInterval(() => {}, 1000)
+// A hanging stand-in ends by itself once the test run that started it is gone.
+if (mode === 'hang') setInterval(() => {
+  try { process.kill(Number(owner), 0) } catch { process.exit(0) }
+}, 1000)
 else process.exit(Number(mode))
 `,
 )
 
 const node = `"${process.execPath}"`
 /** The command of a test: runs the script, which writes to `out`. */
-const commandFor = (out: string, mode = '0') => `${node} "${script}" "${out}" ${mode}`
+const commandFor = (out: string, mode = '0') => `${node} "${script}" "${out}" ${mode} ${process.pid}`
 
 let n = 0
 const outFile = () => path.join(tmp, `out-${++n}.json`)
@@ -133,10 +136,90 @@ beforeAll(async () => {
   handle = (request) => guarded({ request })
 })
 
-afterEach(() => {
+/** Helper processes a test starts itself; each is stopped when the test ends. */
+const strays: ChildProcess[] = []
+const trackStray = (child: ChildProcess) => {
+  strays.push(child)
+  return child
+}
+
+/** Every live process whose command line mentions `needle`, as `[pid, group]` (none on Windows). */
+function processesWith(needle: string): [number, number][] {
+  if (process.platform === 'win32') return []
+  let text = ''
+  try {
+    text = execFileSync('ps', ['-eo', 'pid=,pgid=,args='], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+  } catch {
+    return []
+  }
+  const found: [number, number][] = []
+  for (const line of text.split('\n')) {
+    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line)
+    if (m && m[3]!.includes(needle) && Number(m[1]) !== process.pid) found.push([Number(m[1]), Number(m[2])])
+  }
+  return found
+}
+
+const isAlive = (pid: number) => {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+/** The group of this test run itself: never killed. */
+const ownGroup = () => {
+  try {
+    return Number(execFileSync('ps', ['-o', 'pgid=', '-p', String(process.pid)], { encoding: 'utf8' }).trim())
+  } catch {
+    return 0
+  }
+}
+
+/** Kills a process and the group it was started in, unless that is the test run's own. */
+function kill(pid: number, group: number) {
+  try {
+    process.kill(group > 1 && group !== ownGroup() ? -group : pid, 'SIGKILL')
+  } catch {
+    // already gone
+  }
+}
+
+/**
+ * Stops every process a test started and waits for it to go, passed or failed: nothing outlives the run.
+ * The stand-ins are found by their script's path, since the shell that started one may be gone while it lives.
+ */
+async function stopStrangers() {
+  const pids: number[] = []
+  for (const child of strays.splice(0)) {
+    if (child.pid && child.exitCode === null && child.signalCode === null) {
+      try {
+        process.kill(-child.pid, 'SIGKILL')
+      } catch {
+        child.kill('SIGKILL')
+      }
+      pids.push(child.pid)
+    }
+  }
+  for (const [pid, group] of processesWith(script)) {
+    kill(pid, group)
+    pids.push(pid)
+  }
+  const end = Date.now() + 5_000
+  while (pids.some(isAlive) && Date.now() < end) await new Promise((r) => setTimeout(r, 20))
+}
+
+afterEach(async () => {
   resume.stopWatching()
   resume.setResumeRunner(null)
   setCommand('')
+  await stopStrangers()
+})
+
+afterAll(() => {
+  fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 })
 })
 
 async function call(method: string, pathname: string, body?: unknown, as: 'human' | 'agent' = 'human') {
@@ -257,7 +340,8 @@ describe('resume: an answer on the board', () => {
 /** Ends a hanging test process, and waits for the board to see it go. */
 async function resumeKill(rowId: number) {
   const row = rowState(rowId)
-  process.kill(row.pid!, 'SIGKILL')
+  // The command's whole group: its shell and the stand-in it started.
+  process.kill(process.platform === 'win32' ? row.pid! : -row.pid!, 'SIGKILL')
   await until(() => rowState(rowId).state !== 'running')
 }
 
@@ -510,10 +594,12 @@ describe('resume: a board restart', () => {
     const { ticket } = asked()
     const gone = openRow(ticket.id, await deadPid())
     const queued = openRow(asked().ticket.id, null, 'queued')
-    const child = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], {
-      detached: true,
-      stdio: 'ignore',
-    })
+    const child = trackStray(
+      spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], {
+        detached: true,
+        stdio: 'ignore',
+      }),
+    )
     child.unref()
     const t2 = asked().ticket
     const alive = openRow(t2.id, child.pid!)
@@ -790,7 +876,9 @@ describe('resume: Retry and the cards that are not questions', () => {
     else {
       expect(mine).toBeTruthy()
       expect(resume.processIdentity(process.pid)).toBe(mine)
-      const child = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore' })
+      const child = trackStray(
+        spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore' }),
+      )
       const theirs = resume.processIdentity(child.pid!)
       expect(theirs).toBeTruthy()
       child.kill()
