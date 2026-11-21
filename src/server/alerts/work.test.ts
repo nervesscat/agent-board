@@ -261,6 +261,26 @@ describe('8: approved but not merged', () => {
   })
 })
 
+describe('a local green run counts as green', () => {
+  const failing = [{ name: 'e2e', state: 'fail' as const, url: null }]
+
+  it('raises neither 8 nor 9 for a PR whose failing check a "CI run locally: green" comment on its head overrides', async () => {
+    const pid = newProject()
+    const repo = repoOf(pid)
+    const review = prRow(pid, repo.id, { checks: failing, localCiSha: 'abc123' })
+    const approved = prRow(pid, repo.id, { checks: failing, localCiSha: 'abc123' })
+    withPr(pid, repo.id, review.number, 'review')
+    withPr(pid, repo.id, approved.number, 'approved')
+    expect(await check('pr-checks-failed', pid)).toEqual([])
+    expect(await check('approved-not-merged', pid)).toEqual([])
+    // A comment naming an older head does not.
+    db.update(schema.prs).set({ localCiSha: 'old999' }).where(eq(schema.prs.id, review.id)).run()
+    db.update(schema.prs).set({ localCiSha: 'old999' }).where(eq(schema.prs.id, approved.id)).run()
+    expect(await check('pr-checks-failed', pid)).toHaveLength(1)
+    expect(await check('approved-not-merged', pid)).toHaveLength(1)
+  })
+})
+
 describe('9: PR checks failed, behind or conflicting', () => {
   it('is raised for each trouble of a ticket in review, and not for a clean PR or an Approved ticket', async () => {
     const pid = newProject()
@@ -320,6 +340,24 @@ describe('24: a task waits on you', () => {
     expect(typeOf('task-waits-on-you').snoozeOptions).toContain(DAY)
     features.updateTask(task!.id, { blocked: false }, 'claude')
     expect(await check('task-waits-on-you', pid, 2 * DAY)).toEqual([])
+  })
+
+  it('keeps the clock when only the reason of an already blocked task is reworded', async () => {
+    const pid = newProject()
+    const t = ticket(pid, { tasks: ['Write the code'] })
+    const [task] = features.getTicketFull(t.id).tasks
+    features.updateTask(task!.id, { blocked: true, blockedReason: 'Paste the key' }, 'claude')
+    // The flag was raised six hours ago.
+    db.update(schema.activity)
+      .set({ createdAt: new Date(Date.now() - 6 * HOUR).toISOString() })
+      .where(eq(schema.activity.refId, t.id))
+      .run()
+    features.updateTask(task!.id, { blockedReason: 'Paste the production key' }, 'claude')
+    expect(await check('task-waits-on-you', pid)).toMatchObject([{ body: 'Paste the production key' }])
+    // Cleared and flagged again: a new wait.
+    features.updateTask(task!.id, { blocked: false }, 'claude')
+    features.updateTask(task!.id, { blocked: true, blockedReason: 'Again' }, 'claude')
+    expect(await check('task-waits-on-you', pid)).toEqual([])
   })
 
   it('counts a task a later step waits behind as not blocking, as Needs you does', async () => {
@@ -531,6 +569,18 @@ describe('29: no agent has called in while work waits', () => {
         buttons: [{ kind: 'link', label: 'Open Connect an agent', href: '/agents' }],
       },
     ])
+  })
+
+  it('does not count the tickets the board opens for the PRs of the queue', async () => {
+    const pid = newProject()
+    const repo = repoOf(pid)
+    prRow(pid, repo.id)
+    const { openPrTickets } = await import('../prTickets')
+    openPrTickets(pid, () => 'pending')
+    const own = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, pid)).all()
+    expect(own).toHaveLength(1)
+    expect(own[0]!.prId).not.toBeNull()
+    expect(await check('no-agent-calling', pid)).toEqual([])
   })
 
   it('goes by the last call of any agent and the wait', async () => {

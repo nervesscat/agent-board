@@ -217,7 +217,7 @@ const approvedNotMerged: AlertType = {
       if (ticket.status !== 'approved') return []
       const why = [
         ...(queue.merge === 'conflicts' ? ['it conflicts with its base'] : []),
-        ...(queue.ci === 'failing' ? ['its checks are failing'] : []),
+        ...(queue.ci === 'failing' && !queue.localCi ? ['its checks are failing'] : []),
       ]
       if (!why.length) return []
       return [
@@ -245,7 +245,8 @@ const prChecksFailed: AlertType = {
     const projectId = projectOf(ctx)
     return reviewTickets(projectId).flatMap(({ ticket, queue, number }): AlertCandidate[] => {
       if (ticket.status === 'approved') return []
-      const failing = queue.ci === 'failing'
+      // A "CI run locally: green" comment naming the head counts as green, as the board's CI phase does.
+      const failing = queue.ci === 'failing' && !queue.localCi
       const conflicts = queue.merge === 'conflicts'
       const behind = queue.merge === 'behind'
       if (!failing && !conflicts && !behind) return []
@@ -303,7 +304,7 @@ const readyForYou: AlertType = {
 
 /**
  * When the task was tagged blocked: the board writes a line when a task is flagged (and when a task is
- * added already blocked), so the latest such line is when the wait began. A task with no such line (one
+ * added already blocked), so the first such line since the task was last clear is when the wait began. A task with no such line (one
  * written before the log kept it) counts from the ticket's last change.
  */
 function blockedSince(ticketId: number, taskText: string, fallback: string): number {
@@ -319,9 +320,18 @@ function blockedSince(ticketId: number, taskText: string, fallback: string): num
     )
     .orderBy(desc(schema.activity.createdAt), desc(schema.activity.id))
     .all()
-  const flagged = lines.find((l) => l.text.startsWith(`flagged "${taskText}" as blocked`))
+  // The wait began at the first flag of the current stretch: a later flag only rewords the reason.
+  let flagged: string | undefined
+  for (const l of lines) {
+    if (l.text.startsWith(`flagged "${taskText}" as blocked`)) flagged = l.createdAt
+    else if (
+      l.text.startsWith(`cleared the blocked flag on "${taskText}"`) ||
+      l.text.startsWith(`completed "${taskText}"`)
+    )
+      break
+  }
   const added = lines.find((l) => /^added \d+ (tasks?|subtasks?) \(\d+ blocked\)/.test(l.text))
-  return Date.parse((flagged ?? added)?.createdAt ?? fallback)
+  return Date.parse(flagged ?? added?.createdAt ?? fallback)
 }
 
 const taskWaits: AlertType = {
@@ -553,7 +563,9 @@ const noAgent: AlertType = {
     const projectId = projectOf(ctx)
     const stages = listStages(projectId)
     const todo = startStage(stages)
-    const waiting = projectTickets(projectId).filter((t) => t.parentId === null && t.status === todo.key)
+    const waiting = projectTickets(projectId).filter(
+      (t) => t.parentId === null && t.prId === null && t.status === todo.key,
+    )
     if (!waiting.length) return []
     // Every authenticated call notes its caller (actors.ts), so the latest `lastSeenAt` of an agent is its last call.
     const calls = listActors().flatMap((a) =>
