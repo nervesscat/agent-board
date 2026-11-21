@@ -53,10 +53,14 @@ function TooltipContent({
   sideOffset = 4,
   align = 'center',
   alignOffset = 0,
+  arrow = true,
   children,
   ...props
 }: TooltipPrimitive.Popup.Props &
-  Pick<TooltipPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'>) {
+  Pick<TooltipPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'> & {
+    /** The little pointer toward the anchor: off where the anchor is the mouse pointer itself. */
+    arrow?: boolean
+  }) {
   return (
     <TooltipPrimitive.Portal>
       {/* Fixed, so an open tooltip near an edge never makes the page longer or scroll it. */}
@@ -77,12 +81,23 @@ function TooltipContent({
           {...props}
         >
           {children}
-          <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" />
+          {arrow && (
+            <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" />
+          )}
         </TooltipPrimitive.Popup>
       </TooltipPrimitive.Positioner>
     </TooltipPrimitive.Portal>
   )
 }
+
+/** Where a bubble sits against the pointer: below it and to its right, clear of the text under it. */
+const POINTER_PLACEMENT = {
+  side: 'bottom',
+  align: 'start',
+  sideOffset: 14,
+  alignOffset: 10,
+  arrow: false,
+} as const
 
 /**
  * The app's tooltip on one element, where a `title` would go: it shows `content` on hover and on
@@ -99,6 +114,7 @@ function Tip({
   open,
   onOpenChange,
   keepOnClick = false,
+  followPointer = false,
 }: {
   content: React.ReactNode
   children: React.ReactElement
@@ -107,14 +123,37 @@ function Tip({
   onOpenChange?: (open: boolean, details: { reason: string }) => void
   /** A click (the one a tap sends) leaves the tip open: the caller opened it, so the click does not dismiss it. */
   keepOnClick?: boolean
+  /**
+   * For an element big enough that its edge is far from where the pointer is (a card of text): the
+   * bubble opens at the pointer, a little below and to the right of it, and follows it over the
+   * element, like a native title, instead of sitting on the element's edge. It flips and shifts to
+   * stay in the window. Keyboard focus has no pointer, so it still opens at the element.
+   */
+  followPointer?: boolean
 }) {
+  // Opened from the keyboard there is no pointer to follow: it sits at the element, as every tip does.
+  const [byKeyboard, setByKeyboard] = React.useState(false)
+  const atPointer = followPointer && !byKeyboard
   const off = content === undefined || content === null || content === false || content === ''
   // The trigger takes the element's own id if it has one: base-ui tells its triggers apart by it.
   const { id } = children.props as { id?: string }
   return (
-    <Tooltip disabled={off} disableHoverablePopup open={open} onOpenChange={onOpenChange}>
+    <Tooltip
+      disabled={off}
+      disableHoverablePopup
+      open={open}
+      onOpenChange={(next, details) => {
+        if (next) setByKeyboard(details.reason === 'trigger-focus')
+        onOpenChange?.(next, details)
+      }}
+      trackCursorAxis={atPointer ? 'both' : 'none'}
+    >
       <TooltipTrigger id={id} data-tip={off ? undefined : ''} closeOnClick={!keepOnClick} render={children} />
-      {!off && <TooltipContent className="whitespace-pre-line wrap-anywhere">{content}</TooltipContent>}
+      {!off && (
+        <TooltipContent className="whitespace-pre-line wrap-anywhere" {...(atPointer && POINTER_PLACEMENT)}>
+          {content}
+        </TooltipContent>
+      )}
     </Tooltip>
   )
 }
