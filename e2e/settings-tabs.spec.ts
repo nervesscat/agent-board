@@ -19,6 +19,7 @@ const PROJECT_IDS = [
   'default-phases',
   'tag-suggestions',
   'stalled-tickets',
+  'notifications',
   'stages',
   'runs',
   'layout',
