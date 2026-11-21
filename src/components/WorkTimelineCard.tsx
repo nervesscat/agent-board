@@ -25,12 +25,11 @@ import { onServerClock } from '#/lib/workStatus'
  * The ticket's Timeline card. At the top: what is open now, whether the ticket is stalled and why, and
  * the last heard. Then the chart and the worked, waited and on-you summary. Then the story, folded
  * under "Show more": one sentence per event, oldest first, the consecutive rows of one actor under one
- * actor line, a wait's start and end as one row with its duration, and the heartbeats folded away until
- * they are asked for.
+ * actor line, and a wait's start and end as one row with its duration. Heartbeats are not part of it: they
+ * only keep a ticket's lease, and the work line and the chart already say whether it is being worked.
  */
 export function WorkTimelineCard({ t }: { t: TicketFull }) {
   const stages = useStages(t.projectId)
-  const [beats, setBeats] = useState(false)
   const [more, setMore] = useState(false)
   const { data, error } = useQuery({
     queryKey: ['ticket-events', t.id],
@@ -40,8 +39,7 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
   const now = onServerClock(useNow(1000), useServerOffset(data?.timeline.now))
   const stageName = (key: string) => stages.find((s) => s.key === key)?.name ?? key
   const events = data ? oldestFirst(data.events) : []
-  const heartbeats = events.filter((e) => e.kind === 'heartbeat')
-  const rows = data ? storyRows(events, data.timeline, now, stageName, beats) : []
+  const rows = data ? storyRows(events, data.timeline, now, stageName) : []
   return (
     <section className="rounded-lg border p-4" aria-label="Timeline">
       <h2 className="mb-3 text-sm font-medium">Timeline</h2>
@@ -73,17 +71,6 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
                     aria-hidden
                   />
                 </Button>
-                {heartbeats.length > 0 && (
-                  <Button variant="ghost" size="sm" aria-expanded={beats} onClick={() => setBeats((v) => !v)}>
-                    {beats ? 'Hide heartbeats' : 'Show heartbeats'}
-                  </Button>
-                )}
-                {heartbeats.length > 0 && !beats && (
-                  <span className="text-xs text-muted-foreground">
-                    {heartbeats.length} heartbeat{heartbeats.length === 1 ? '' : 's'}, last{' '}
-                    {clock(heartbeats.at(-1)!.at)}
-                  </span>
-                )}
               </div>
               {more && (
                 <ul id="timeline-story" aria-label="Timeline story" className="space-y-3 text-xs">
@@ -127,21 +114,21 @@ type Row = { id: number; at: string; agent: string; by: string; text: string }
 /** The consecutive rows of one actor, under one actor line. */
 type Run = { agent: string; by: string; rows: Row[] }
 
-/** The events from the start of the ticket to its end. */
+/** The events from the start of the ticket to its end, without the heartbeats (a lease, not a step of the work). */
 const oldestFirst = (events: TicketEvent[]) =>
-  [...events].sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.id - b.id)
+  events
+    .filter((e) => e.kind !== 'heartbeat')
+    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.id - b.id)
 
 /**
  * The rows the story shows, oldest first. A wait's end is not a row of its own: its start carries both
- * ends and the duration (a wait still open runs to now on a live ticket). Heartbeats are rows only when
- * they are asked for.
+ * ends and the duration (a wait still open runs to now on a live ticket).
  */
 function storyRows(
   events: TicketEvent[],
   timeline: WorkTimeline,
   now: number,
   stageName: (key: string) => string,
-  beats: boolean,
 ): Row[] {
   const startIds = new Set(events.filter((e) => e.kind === 'wait_start').map((e) => e.id))
   const endOf = new Map<number, TicketEvent>()
@@ -150,7 +137,6 @@ function storyRows(
   const ticketEnd = timeline.live ? now : Date.parse(timeline.end ?? lastAt ?? new Date(now).toISOString())
   const rows: Row[] = []
   for (const e of events) {
-    if (e.kind === 'heartbeat' && !beats) continue
     if (e.kind === 'wait_end' && e.refId !== null && startIds.has(e.refId)) continue
     const text = e.kind === 'wait_start' ? waitRowText(e, endOf.get(e.id), ticketEnd) : sentence(e, stageName)
     rows.push({ id: e.id, at: e.at, agent: e.agent, by: e.by, text })
@@ -202,8 +188,6 @@ function sentence(e: TicketEvent, stageName: (key: string) => string): string {
       return `waiting for ${waitTarget(e.reason, e.note)}`
     case 'wait_end':
       return `stopped waiting for ${waitTarget(e.reason, e.note)}${note}`
-    case 'heartbeat':
-      return `heartbeat${note}`
     case 'stage':
       return e.fromStage ? `moved to ${stageName(e.toStage)}` : `created in ${stageName(e.toStage)}`
     case 'push':
