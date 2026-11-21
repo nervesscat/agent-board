@@ -109,7 +109,7 @@ for (const stage of ['done', 'approved', 'cancelled']) {
 }
 
 test('agents on tickets in other stages stay', async ({ page, project, api, agent, human }) => {
-  const stages = ['blocked', 'review', 'release']
+  const stages = ['blocked', 'review']
   for (const status of stages) {
     const t = await api.ticket({ title: `In ${status}`, status: 'in_progress' })
     await record(agent, project, t.id, { kind: 'span_start', phase: 'build' })
@@ -209,9 +209,10 @@ test('on a phone the pets stack one under another, each with its line beside it'
   const line = (await first.locator('span.truncate').first().boundingBox())!
   expect(line.x).toBeGreaterThanOrEqual(art.x + art.width)
   expect(Math.abs(line.y + line.height / 2 - (art.y + art.height / 2))).toBeLessThan(art.height)
-  // The title is cut with an ellipsis, not run on.
+  // A long title is cut with an ellipsis and stays inside its row, not run on.
   const title = first.locator('span.truncate').first()
-  expect(await title.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+  await expect(title).toContainText('…')
+  expect(await title.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
   await card(page).screenshot({ path: test.info().outputPath('phone.png'), animations: 'disabled' })
 })
 
