@@ -183,7 +183,12 @@ test('a branch that holds work of another the board cannot tell is its own gets 
       human.post(`/api/projects/${project.id}/tickets`, { data: { status: 'in_progress', ...data } }),
     )
   const root = git('rev-parse', 'main').trim()
-  const base = { 'base.txt': 'base\n' }
+  // What main holds, so a commit on top of it changes only what the test adds, and two commits that add
+  // the same thing carry the same change over parents of their own.
+  const listed = git('ls-tree', '-r', '--name-only', root).trim()
+  const base = Object.fromEntries(
+    (listed ? listed.split('\n') : []).map((file) => [file, git('show', `${root}:${file}`)]),
+  )
   const at = (branch: string, sha: string) => git('update-ref', `refs/heads/${branch}`, sha)
 
   // 1. Stacked, and then the lower branch moved on: whose the shared commit is cannot be told.
@@ -228,7 +233,7 @@ test('a branch that holds work of another the board cannot tell is its own gets 
     const [lower, upper] = pairs[key]
     // The board reads the checkout's refs a few seconds at a time: wait until it has seen these branches.
     await expect
-      .poll(async () => (await ok<TicketGit>(human.get(row(upper.id)))).includes)
+      .poll(async () => (await ok<TicketGit>(human.get(row(upper.id)))).includes, { message: key })
       .toEqual([lower.id])
     expect((await ok<TicketFull>(human.get(`/api/tickets/${upper.id}`))).needs).toEqual([])
   }
