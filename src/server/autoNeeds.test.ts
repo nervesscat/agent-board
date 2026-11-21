@@ -32,6 +32,7 @@ const more = (name: string, msg = `${name} more`) => {
 }
 const sha = (ref: string) => git('rev-parse', ref)
 
+let gitm: typeof import('./git')
 let features: typeof import('./features')
 let needs: typeof import('./needs')
 let push: typeof import('./push')
@@ -46,6 +47,7 @@ beforeAll(async () => {
   git('config', 'user.name', 't')
   git('config', 'commit.gpgsign', 'false')
   commit('base')
+  gitm = await import('./git')
   features = await import('./features')
   needs = await import('./needs')
   push = await import('./push')
@@ -112,6 +114,24 @@ describe('adding needs', () => {
     await p.sweep()
     expect(rows(c.id)).toMatchObject([{ needsId: a.id, auto: true, held: sha('m2/a') }])
     expect(needIds(a.id)).toEqual([])
+  })
+
+  it('follows the newest listing when a call comes in while a sweep runs', async () => {
+    const p = project()
+    branch('q1/a', 'main')
+    branch('q1/b', 'main')
+    const a = p.ticket('a', 'q1/a')
+    const b = p.ticket('b', 'q1/b')
+    await p.sweep()
+    expect(needIds(b.id)).toEqual([])
+    const before = await gitm.listRefs(repo)
+    git('checkout', '-q', 'q1/b')
+    git('merge', '-q', '--no-ff', '-m', 'merge a', 'q1/a')
+    const after = await gitm.listRefs(repo)
+    const first = needs.syncAutoNeeds(p.id, { repoPath: repo, refs: before })
+    const second = needs.syncAutoNeeds(p.id, { repoPath: repo, refs: after })
+    await Promise.all([first, second])
+    expect(needIds(b.id)).toEqual([a.id])
   })
 
   it('follows a rebase: kept and brought up to date onto the newer tip, dropped when rebased away, kept when the other moved', async () => {
@@ -351,6 +371,29 @@ describe('removing and keeping needs', () => {
     await expect(
       needs.changeTicket(y.id, { status: 'done', needs: [] }, 'claude', agent),
     ).rejects.toMatchObject({ status: 409 })
+  })
+
+  it('makes a need the agent declares its own, and a human’s list leaves the board’s row alone', async () => {
+    const p = project()
+    branch('q2/a', 'main')
+    branch('q2/b', 'q2/a')
+    const a = p.ticket('a', 'q2/a')
+    const b = p.ticket('b', 'q2/b')
+    await p.sweep()
+    expect(rows(b.id)).toMatchObject([{ needsId: a.id, auto: true }])
+    // The human's list names it: the row stays the board's.
+    await needs.changeTicket(b.id, { needs: [a.id] }, 'me', human)
+    expect(rows(b.id)).toMatchObject([{ needsId: a.id, auto: true }])
+    // The agent names it: a declaration, one row, no dismissal.
+    needs.setNeeds(b.id, [a.id], 'claude', agent)
+    expect(rows(b.id)).toMatchObject([{ needsId: a.id, auto: false }])
+    expect(dbm.db.select().from(dbm.schema.ticketNeedDismissals).all()).toEqual([])
+    // Rebased away from a: the declared need stays.
+    git('checkout', '-q', 'q2/b')
+    git('rebase', '-q', '--onto', 'main', 'q2/a')
+    await p.sweep()
+    expect(needIds(b.id)).toEqual([a.id])
+    expect(lines(b.id).filter((l) => l.includes('no longer needs'))).toEqual([])
   })
 
   it('drops an automatic need when the other ticket was cancelled or archived without landing, and keeps it once landed', async () => {

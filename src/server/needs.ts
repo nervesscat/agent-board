@@ -143,18 +143,29 @@ export function checkNeeds(subject: Pick<Subject, 'id' | 'projectId'>, ids: numb
 
 /**
  * Replace what a ticket needs (checked as `checkNeeds` does); `[]` clears it. The needs the board added
- * (`auto`) are its own: a list that keeps one leaves its row as it is, an agent's list never removes
- * one, and the human removing any need is remembered (`ticket_need_dismissals`), so the board does not
- * add it again for the same commits. Needs not in the list before are the caller's own (not `auto`).
+ * (`auto`) are its own: a human's list that keeps one leaves its row as it is (the UI sends every id on
+ * each edit), an agent's list never removes one, and the human removing any need is remembered
+ * (`ticket_need_dismissals`), so the board does not add it again for the same commits. An agent that
+ * names a need the board added has declared it: the row stays and is the agent's from then on (not
+ * `auto`), so a rebase never drops it. `ids` is what the caller itself named, not merged with the
+ * automatic needs. Needs not in the list before are the caller's own (not `auto`).
  */
 export function setNeeds(ticketId: number, ids: number[], actor: string, opts: { agent?: boolean } = {}) {
   const t = features.getTicket(ticketId)
   const rows = db.select().from(schema.ticketNeeds).where(eq(schema.ticketNeeds.ticketId, ticketId)).all()
+  const named = checkNeeds(t, ids)
   const kept = opts.agent ? rows.filter((r) => r.auto).map((r) => r.needsId) : []
-  const next = [...new Set([...checkNeeds(t, ids), ...kept])]
+  const declared = opts.agent ? rows.filter((r) => r.auto && named.includes(r.needsId)) : []
+  const next = [...new Set([...named, ...kept])]
   const before = rows.map((r) => r.needsId).sort((a, b) => a - b)
-  if (next.length === before.length && next.every((id) => before.includes(id))) return before
+  const same = next.length === before.length && next.every((id) => before.includes(id))
+  if (same && !declared.length) return before
   db.transaction((tx) => {
+    for (const r of declared)
+      tx.update(schema.ticketNeeds)
+        .set({ auto: false })
+        .where(and(eq(schema.ticketNeeds.ticketId, ticketId), eq(schema.ticketNeeds.needsId, r.needsId)))
+        .run()
     for (const r of rows.filter((r) => !next.includes(r.needsId))) {
       tx.delete(schema.ticketNeeds)
         .where(and(eq(schema.ticketNeeds.ticketId, ticketId), eq(schema.ticketNeeds.needsId, r.needsId)))
@@ -185,6 +196,7 @@ export function setNeeds(ticketId: number, ids: number[], actor: string, opts: {
         .run()
     }
   })
+  if (same) return needIds(ticketId)
   logActivity({
     projectId: t.projectId,
     actor,
@@ -514,12 +526,13 @@ export async function ticketGitView(
 
 const ADDED_BY = 'board'
 const sweptState = new Map<number, string>()
-const sweeping = new Map<number, { again: boolean; done: Promise<void> }>()
+const sweeping = new Map<number, { again: boolean; listed?: Listed; done: Promise<void> }>()
 
 /**
  * Looks at every open ticket of the project with a branch: adds the need for each ticket whose unmerged
  * work its branch certainly holds (`certainWork`), and drops the needs it added that no longer hold.
- * Idempotent and never throws. One runs per project at a time (a call meanwhile has it run once more);
+ * Idempotent and never throws. One runs per project at a time (a call meanwhile has it run once more,
+ * on that call's `listed`, or on the current branches when it has none);
  * a state it already swept (the repos' branches and the tickets' branches, bases and status) costs a
  * fingerprint. A ticket git cannot answer for keeps its needs as they are.
  *
@@ -535,13 +548,20 @@ export function syncAutoNeeds(projectId: number, listed?: Listed): Promise<void>
   const running = sweeping.get(projectId)
   if (running) {
     running.again = true
+    // The newest call decides what the repeat looks at: a listing, or (none) the repos' current branches.
+    running.listed = listed
     return running.done
   }
-  const entry = { again: false, done: Promise.resolve() }
+  const entry: { again: boolean; listed?: Listed; done: Promise<void> } = {
+    again: false,
+    listed,
+    done: Promise.resolve(),
+  }
   entry.done = (async () => {
     do {
       entry.again = false
-      await sweep(projectId, listed).catch((err: unknown) =>
+      const look = entry.listed
+      await sweep(projectId, look).catch((err: unknown) =>
         console.error(`adding the needs of project ${projectId} failed:`, err),
       )
     } while (entry.again)
@@ -825,10 +845,8 @@ export async function changeTicket(
   // From Approved an agent may still not close the work of a project with no software kind.
   if (opts.agent) refuseAgentDone(before.projectId, patch.status, before.status)
   // An agent's list leaves the needs the board added as they are: they count for the move too.
-  const ids =
-    needs !== undefined
-      ? [...new Set([...checkNeeds(before, needs), ...(opts.agent ? autoIds(id) : [])])]
-      : needIds(id)
+  const named = needs !== undefined ? checkNeeds(before, needs) : undefined
+  const ids = named !== undefined ? [...new Set([...named, ...(opts.agent ? autoIds(id) : [])])] : needIds(id)
   // Judged against the primary the write produces: a swap or a reordered list brings that repo's base.
   const { repos, ...fields } = patch
   const primary = features.plannedPrimary(before, repos, fields).patch
@@ -847,7 +865,7 @@ export async function changeTicket(
   // as they were.
   const row = db.transaction(
     () => {
-      if (needs !== undefined) setNeeds(id, ids, actor, { agent: opts.agent })
+      if (needs !== undefined) setNeeds(id, named ?? ids, actor, { agent: opts.agent })
       const changed = Object.keys(patch).length
         ? features.updateTicket(id, patch, actor, opts)
         : features.getTicket(id)
