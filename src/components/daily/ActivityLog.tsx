@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 
 import { Actor } from '#/components/Actor'
 import { Empty } from '#/components/Empty'
+import { DelayedLoading, SkeletonCard } from '#/components/Loading'
 import { ReviewResultButton } from '#/components/ReviewResult'
 import { SettingsChangeDiff } from '#/components/daily/SettingsChangeDiff'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '#/components/ui/accordion'
@@ -11,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover
 import type { DailyPayload } from '#/lib/api'
 import { clock } from '#/lib/format'
 import { remember } from '#/lib/remembered'
+import { cn } from '#/lib/utils'
 
 const KIND_LABEL: Record<string, string> = {
   ticket: 'tickets',
@@ -52,16 +54,28 @@ type Line = DailyPayload['activity'][number]
  */
 export function ActivityLog({
   activity,
+  stale,
+  failed,
   projectId,
   date,
 }: {
   /** The day's activity; undefined while it loads. */
   activity: DailyPayload['activity'] | undefined
+  /** The activity shown is the previous day's, until this day's arrives. */
+  stale?: boolean
+  /** The read failed: nothing is drawn, not a loading status. */
+  failed?: boolean
   projectId?: number
   date: string
 }) {
   const [open, setOpen] = useOpenHours(projectId ?? 'all', date)
-  if (!activity) return null
+  // An empty previous day kept while this one loads is not this day's answer: no empty message yet.
+  if (!activity || (stale && !activity.length))
+    return failed ? null : (
+      <DelayedLoading label="Loading activity…">
+        <SkeletonCard lines={5} />
+      </DelayedLoading>
+    )
   if (!activity.length) return <Empty>Nothing happened on {date}.</Empty>
 
   const hours = new Map<string, Line[]>()
@@ -75,7 +89,11 @@ export function ActivityLog({
   const shown = open.filter((h) => hours.has(h))
 
   return (
-    <section className="space-y-3" aria-label="Activity">
+    <section
+      className={cn('space-y-3', stale && 'opacity-60 transition-opacity')}
+      aria-label="Activity"
+      aria-busy={stale || undefined}
+    >
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span>
           {activity.length} {activity.length === 1 ? 'action' : 'actions'}

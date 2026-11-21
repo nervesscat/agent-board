@@ -10,7 +10,9 @@ import { copyText } from '#/components/AgentPicker'
 import { NewTicket } from '#/components/NewTicket'
 import { Button } from '#/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '#/components/ui/dialog'
+import { DelayedLoading } from '#/components/Loading'
 import { Input } from '#/components/ui/input'
+import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { type Me, errorMessage, get, post, type Project, type RunOutcome, type TicketRow } from '#/lib/api'
 import {
@@ -737,6 +739,12 @@ export function CommandPalette() {
             aria-label="Search results"
             className="max-h-[min(60vh,26rem)] overflow-x-hidden overflow-y-auto overscroll-contain p-1"
           >
+            {q === '' && allTickets.isLoading && recentKeys.some((k) => k.startsWith('ticket:')) && (
+              <DelayedLoading label="Loading recent tickets…" className="space-y-2 px-2 py-2">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-4 w-1/2" />
+              </DelayedLoading>
+            )}
             {flat.map((entry, index) => {
               const Icon = KIND_ICON[entry.kind]
               const group = groupOf(groups, entry)
