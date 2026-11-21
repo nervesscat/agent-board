@@ -34,7 +34,7 @@ const EYES_SHUT = ['..BPPPPPPPPPB..', '..BPKKPPPKKPB..', '..BPPPPPPPPPB..', '..B
 // The laptop seen from behind: the lid (rows 10 to 12 of the canvas), the base and its shadow.
 const LAPTOP = ['.KKKKKKKKKKKKK.', '.KMMMMMMMMMMMK.', '.KMMMMMMMMMMMK.', 'KKKKKKKKKKKKKKK', '.KKKKKKKKKKKKK.']
 const QUESTION = ['KKK', '..K', '.KK', '...', '.K.']
-const ZED = ['KKK', '.K.', 'KKK']
+const ZED = ['KKK', '..K', '.K.', 'K..', 'KKK']
 
 type Grid = string[][]
 const blank = (): Grid => Array.from({ length: PET_HEIGHT }, () => Array<string>(PET_WIDTH).fill('.'))
@@ -70,17 +70,19 @@ const typing = (leftUp: boolean): Grid => {
 const asking = (high: boolean): Grid => {
   const g = bodyOf(EYES_OPEN, high ? ANTENNA : ANTENNA_DIM)
   paw(g, LEFT_PAW, PAW_DOWN)
-  for (let y = high ? 2 : 3; y <= PAW_UP; y++) paw(g, ARM_X, y)
+  // The raised paw: a mitten of two by two on a one-pixel arm.
+  const top = high ? 2 : 3
+  stamp(g, ARM_X, top, ['BB', 'BB'])
+  for (let y = top + 2; y <= PAW_UP; y++) stamp(g, ARM_X, y, ['B'])
   if (high) stamp(g, 0, 0, QUESTION)
   return g
 }
-// Asleep: eyes shut, paws down, a "z" and then two drifting up.
+// Asleep: eyes shut, paws down, a "z" drifting up.
 const sleeping = (second: boolean): Grid => {
   const g = bodyOf(EYES_SHUT, ANTENNA_DIM)
   paw(g, LEFT_PAW, PAW_DOWN)
   paw(g, RIGHT_PAW, PAW_DOWN)
-  stamp(g, 17, 5, ZED)
-  if (second) stamp(g, 17, 1, ZED)
+  stamp(g, 17, second ? 2 : 4, ZED)
   return g
 }
 
