@@ -378,6 +378,46 @@ describe('resume: failure', () => {
     expect(resume.ticketResume(ticket.id).current).toMatchObject({ state: 'failed' })
   })
 
+  it('the words say the ticket is back in blocked only when it moved, and a ticket that stayed is not claimed blocked', async () => {
+    const run = async (stay: boolean) => {
+      resume.setResumeRunner({
+        spawn: () => {
+          if (stay)
+            dbm.db
+              .update(dbm.schema.tickets)
+              .set({ status: 'review' })
+              .where(eq(dbm.schema.tickets.id, ticketId))
+              .run()
+          return { pid: undefined, exited: Promise.resolve(null) }
+        },
+        killTree: async () => {},
+        alive: () => false,
+        identity: () => null,
+      })
+      setCommand('anything')
+      const { ticket, post } = asked()
+      var ticketId = ticket.id
+      const before = notices().length
+      features.decide(post.id, 0, '', HUMAN)
+      expect(rowsOf(ticket.id)[0]!.state).toBe('failed')
+      return {
+        ticket,
+        reply: repliesOf(post.id).at(-1)!.body,
+        notice: notices().slice(0, notices().length - before)[0]!.body,
+      }
+    }
+    const moved = await run(false)
+    expect(statusOf(moved.ticket.id)).toBe('blocked')
+    expect(moved.reply).toContain('The ticket is back in blocked; Retry on the ticket starts it again.')
+    expect(moved.notice).toContain('The ticket is back in blocked.')
+    const stayed = await run(true)
+    expect(statusOf(stayed.ticket.id)).toBe('review')
+    expect(stayed.reply).not.toContain('blocked')
+    expect(stayed.reply).toContain('Retry on the ticket starts it again.')
+    expect(stayed.notice).not.toContain('blocked')
+    expect(stayed.notice).toContain('press Retry')
+  })
+
   it('a command the shell cannot find fails the same way', async () => {
     const { ticket, row } = await failed('definitely-not-an-installed-command-xyz')
     expect(row.state).toBe('failed')
@@ -636,6 +676,23 @@ describe('resume: Retry and the cards that are not questions', () => {
     features.decide(card.id, 1, '', HUMAN)
     const rows = rowsOf(ticket.id)
     expect(rows.every((r) => r.state === 'skipped' && r.pid === null)).toBe(true)
+    expect(repliesOf(card.id).some((c) => c.body.includes('did not resume'))).toBe(false)
+  })
+
+  it('an archive request answered Archive starts no resume and leaves no reply, though the ticket is archived', () => {
+    setCommand(commandFor(outFile()))
+    const { ticket } = asked()
+    dbm.db
+      .update(dbm.schema.tickets)
+      .set({ status: 'done' })
+      .where(eq(dbm.schema.tickets.id, ticket.id))
+      .run()
+    const card = features.requestArchive([ticket.id], {}, AGENT)
+    features.decide(card.id, 0, '', HUMAN)
+    expect(
+      dbm.db.select().from(dbm.schema.tickets).where(eq(dbm.schema.tickets.id, ticket.id)).get()!.archivedAt,
+    ).toBeTruthy()
+    expect(rowsOf(ticket.id).every((r) => r.state === 'skipped' && r.pid === null)).toBe(true)
     expect(repliesOf(card.id).some((c) => c.body.includes('did not resume'))).toBe(false)
   })
 

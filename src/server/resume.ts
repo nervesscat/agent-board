@@ -448,7 +448,6 @@ export function startResume(s: Start): schema.TicketResume {
   const project = projectOf(ticket.projectId)
   const command = project.resumeCommand.trim()
   if (!command) return skipped(s, SKIP_OFF, true)
-  if (ticket.archivedAt) return skipped(s, 'the ticket is archived')
   if (s.trigger === 'answer') {
     // Only a question an agent waits on is continued: a request to the board (archive, a repo) is answered
     // for the board, and a finished ticket has nothing to continue (Resume on it stays the human's choice).
@@ -461,6 +460,7 @@ export function startResume(s: Start): schema.TicketResume {
     if (kind === 'done' || kind === 'cancelled')
       return skipped(s, 'the ticket is finished: press Resume on it to run the work again', true)
   }
+  if (ticket.archivedAt) return skipped(s, 'the ticket is archived')
   if (!ticket.assignee) return skipped(s, 'no agent holds the ticket: there is nobody to continue it')
   const running = db
     .select()
@@ -639,17 +639,19 @@ function fail(rowId: number, reason: string, code: number | null): schema.Ticket
   if (!row) return db.select().from(schema.ticketResumes).where(eq(schema.ticketResumes.id, rowId)).get()!
   const ticket = ticketOf(row.ticketId)
   const tail = resumeLogTail(row, 3)
-  reply(
-    row.postId,
-    `The board could not resume the work: ${reason}.${tail.length ? `\n\n\`\`\`\n${tail.join('\n')}\n\`\`\`` : ''}\n\nThe ticket is back in blocked; Retry on the ticket starts it again.`,
-  )
   const stages = listStages(ticket.projectId)
   const blocked = firstOfKind(stages, 'blocked')
-  if (blocked && kindOf(stages, ticket.status) === 'active') moveTo(ticket, blocked.key)
+  // Only a ticket in an active stage is moved; one in review, done or open stays, and the words say so.
+  const toBlocked = !!blocked && kindOf(stages, ticket.status) === 'active'
+  reply(
+    row.postId,
+    `The board could not resume the work: ${reason}.${tail.length ? `\n\n\`\`\`\n${tail.join('\n')}\n\`\`\`` : ''}\n\n${toBlocked ? 'The ticket is back in blocked; Retry' : 'Retry'} on the ticket starts it again.`,
+  )
+  if (toBlocked) moveTo(ticket, blocked.key)
   try {
     postNotice({ name: BOARD, agent: true }, ticket.projectId, {
       title: `The board could not resume #${ticket.id} ${ticket.title}`,
-      body: `${reason}. The ticket is back in blocked. Open it to read the log and press Retry.`,
+      body: `${reason}. ${toBlocked ? 'The ticket is back in blocked. ' : ''}Open it to read the log and press Retry.`,
       reason: 'the human answered or moved the ticket and nothing is working on it',
       href: `/projects/${ticket.projectId}/features/${ticket.id}`,
     })
