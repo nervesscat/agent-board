@@ -10,6 +10,7 @@ import {
   Scale,
 } from 'lucide-react'
 import { type DragEvent, type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 
 import { Actor } from '#/components/Actor'
 import { ComplexityChip } from '#/components/Complexity'
@@ -72,6 +73,7 @@ export function TicketBoard({
   /** The scroller of the columns: the page's StageScroll steps it. */
   scroller: RefObject<HTMLDivElement | null>
 }) {
+  const { t: tr } = useTranslation()
   const { data: project } = useProject(projectId)
   const stages = project?.stages ?? []
   const [dragging, setDragging] = useState<number | null>(null)
@@ -110,7 +112,7 @@ export function TicketBoard({
       {stages.length > 0 && activeStage && (
         <div className="mb-2 md:hidden">
           <Select value={activeStage} onValueChange={(v) => v && pickStage(v)} items={stageItems}>
-            <SelectTrigger className="w-full" aria-label="Stage">
+            <SelectTrigger className="w-full" aria-label={tr('ticketBoard.stage')}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -281,21 +283,21 @@ function DropLine({ at }: { at: string }) {
 
 /** In a review column, a card placed above tickets it needs merged first: merge it after them. */
 function MergeAfterBadge({ ids }: { ids: number[] }) {
+  const { t } = useTranslation()
   const list = ids.map((n) => `#${n}`).join(', ')
   return (
     <span className="inline-flex w-fit items-center gap-1 rounded bg-rose-500/10 px-1.5 py-0.5 text-[11px] font-medium text-rose-700 dark:text-rose-400">
-      <ArrowDownUp className="size-3" /> merge after {list}
+      <ArrowDownUp className="size-3" /> {t('ticketBoard.mergeAfter', { list })}
     </span>
   )
 }
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
-
 /** The column's "Archive all", asking first. */
 function ArchiveAll({ stage, n, onConfirm }: { stage: string; n: number; onConfirm: () => void }) {
+  const { t } = useTranslation()
   return (
     <AlertDialog>
-      <Tip content={`Archive the ${plural(n, 'ticket')} in ${stage}`}>
+      <Tip content={t('ticketBoard.archiveTip', { count: n, stage })}>
         <AlertDialogTrigger
           render={
             <Button
@@ -305,20 +307,17 @@ function ArchiveAll({ stage, n, onConfirm }: { stage: string; n: number; onConfi
             />
           }
         >
-          <Archive /> Archive all
+          <Archive /> {t('ticketBoard.archiveAll')}
         </AlertDialogTrigger>
       </Tip>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Archive {plural(n, 'ticket')}?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Every ticket in {stage} comes off the board, with its lanes. They stay under Archived, where each
-            can be restored, and their pages still open.
-          </AlertDialogDescription>
+          <AlertDialogTitle>{t('ticketBoard.archiveTitle', { count: n })}</AlertDialogTitle>
+          <AlertDialogDescription>{t('ticketBoard.archiveDescription', { stage })}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>Archive</AlertDialogAction>
+          <AlertDialogCancel>{t('ticketBoard.cancel')}</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>{t('ticketBoard.archive')}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -327,22 +326,24 @@ function ArchiveAll({ stage, n, onConfirm }: { stage: string; n: number; onConfi
 
 /** Decisions an agent asked the human to make that are still open. */
 export function DecisionBadge({ n, className = '' }: { n: number; className?: string }) {
+  const { t } = useTranslation()
   return (
     <span
       className={`inline-flex w-fit items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400 ${className}`}
     >
-      <Scale className="size-3" /> {n === 1 ? 'decision needed' : `${n} decisions needed`}
+      <Scale className="size-3" /> {t('ticketBoard.decisions', { count: n })}
     </span>
   )
 }
 
 /** Tasks and subtasks (its lanes' with them) tagged blocked: each waits on the human. */
 export function BlockedTasksBadge({ n, className = '' }: { n: number; className?: string }) {
+  const { t } = useTranslation()
   return (
     <span
       className={`inline-flex w-fit items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400 ${className}`}
     >
-      <Hand className="size-3" /> {n === 1 ? '1 task blocked' : `${n} tasks blocked`}
+      <Hand className="size-3" /> {t('ticketBoard.tasksBlocked', { count: n })}
     </span>
   )
 }
@@ -523,6 +524,7 @@ function useRememberedPageScroll(key: string) {
  * column left or right.
  */
 export function StageScroll({ scroller }: { scroller: RefObject<HTMLDivElement | null> }) {
+  const { t } = useTranslation()
   const edges = useScrollEdges(scroller)
   // One column (w-72) plus the gap (gap-3), landing on a column's left edge.
   const step = (dir: -1 | 1) => {
@@ -539,7 +541,7 @@ export function StageScroll({ scroller }: { scroller: RefObject<HTMLDivElement |
         size="icon"
         disabled={!edges.left}
         onClick={() => step(-1)}
-        aria-label="Previous stage"
+        aria-label={t('ticketBoard.previousStage')}
       >
         <ChevronLeft />
       </Button>
@@ -548,7 +550,7 @@ export function StageScroll({ scroller }: { scroller: RefObject<HTMLDivElement |
         size="icon"
         disabled={!edges.right}
         onClick={() => step(1)}
-        aria-label="Next stage"
+        aria-label={t('ticketBoard.nextStage')}
       >
         <ChevronRight />
       </Button>
@@ -578,15 +580,16 @@ function useScrollEdges(ref: React.RefObject<HTMLDivElement | null>) {
 
 /** "3 lanes · 1 in progress · 1 in review": lanes per stage, leaving out the ones still waiting. */
 function LaneCount({ lanes, stages }: { lanes: TicketRow['lanes']; stages: StageLike[] }) {
+  const { t } = useTranslation()
   const parts = stages
     .filter((s) => s.kind !== 'open' && lanes.byStage[s.key])
-    .map((s) => `${lanes.byStage[s.key]} ${s.name.toLowerCase()}`)
-  if (lanes.approved) parts.push(`${lanes.approved} approved`)
+    .map((s) => t('ticketBoard.laneStage', { count: lanes.byStage[s.key], stage: s.name.toLowerCase() }))
+  if (lanes.approved) parts.push(t('ticketBoard.laneApproved', { count: lanes.approved }))
   return (
     <div className="mt-1.5 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
       <Layers className="size-3 shrink-0" />
       <span className="truncate">
-        {[`${lanes.total} lane${lanes.total === 1 ? '' : 's'}`, ...parts].join(' · ')}
+        {[t('ticketBoard.lanes', { count: lanes.total }), ...parts].join(' · ')}
       </span>
     </div>
   )
@@ -607,8 +610,15 @@ export function Progress({ rollup, className = '' }: { rollup: TicketRow['rollup
 
 /** Where a search found a ticket in its content, and the words around it. */
 function SearchHit({ ticket }: { ticket: TicketRow }) {
+  const { t } = useTranslation()
   if (!ticket.snippet || !ticket.match) return null
-  const where = { id: '', title: '', body: 'Instructions', post: 'Post', reply: 'Reply' }[ticket.match]
+  const where = {
+    id: '',
+    title: '',
+    body: t('ticketBoard.hitInstructions'),
+    post: t('ticketBoard.hitPost'),
+    reply: t('ticketBoard.hitReply'),
+  }[ticket.match]
   return (
     <div className="mt-1 line-clamp-2 text-xs break-words text-muted-foreground" data-testid="search-hit">
       <span className="font-medium">{where}:</span> {ticket.snippet}
@@ -622,6 +632,7 @@ function SearchHit({ ticket }: { ticket: TicketRow }) {
  * first.
  */
 export function TicketList({ projectId, items }: { projectId: string; items: TicketRow[] }) {
+  const { t: tr } = useTranslation()
   useRememberedPageScroll(`features.list.${projectId}`)
   const { data: project } = useProject(projectId)
   const stages = project?.stages ?? []
@@ -632,7 +643,7 @@ export function TicketList({ projectId, items }: { projectId: string; items: Tic
   const rows = [...items].sort(
     (a, b) => nameFirst(a) - nameFirst(b) || stageIndex(a.status) - stageIndex(b.status) || columnOrder(a, b),
   )
-  if (!rows.length) return <p className="text-sm text-muted-foreground">No tickets.</p>
+  if (!rows.length) return <p className="text-sm text-muted-foreground">{tr('ticketBoard.noTickets')}</p>
   return (
     <ul className="divide-y rounded-md border">
       {rows.map((t) => {
@@ -679,7 +690,7 @@ export function TicketList({ projectId, items }: { projectId: string; items: Tic
                     className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
                   >
                     <span className="inline-flex items-center gap-1">
-                      <Layers className="size-3" /> {t.lanes.total} lane{t.lanes.total === 1 ? '' : 's'}
+                      <Layers className="size-3" /> {tr('ticketBoard.lanes', { count: t.lanes.total })}
                     </span>
                   </div>
                 )}
@@ -717,12 +728,14 @@ export function ArchivedList({
   /** The ticket being restored right now, if any. */
   restoring?: number
 }) {
+  const { t: tr } = useTranslation()
   const { data: project } = useProject(projectId)
   const stages = project?.stages ?? []
   const rows = [...items].sort(
     (a, b) => nameFirst(a) - nameFirst(b) || (b.archivedAt ?? '').localeCompare(a.archivedAt ?? ''),
   )
-  if (!rows.length) return <p className="text-sm text-muted-foreground">Nothing archived.</p>
+  if (!rows.length)
+    return <p className="text-sm text-muted-foreground">{tr('ticketBoard.nothingArchived')}</p>
   return (
     <ul className="divide-y rounded-md border">
       {rows.map((t) => {
@@ -746,24 +759,26 @@ export function ArchivedList({
               </Link>
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 <span>
-                  archived {ago(t.archivedAt)}
-                  {t.archivedBy && (
-                    <>
-                      {' '}
-                      by <Actor name={t.archivedBy} />
-                    </>
+                  {t.archivedBy ? (
+                    <Trans
+                      i18nKey="ticketBoard.archivedBy"
+                      values={{ when: ago(t.archivedAt) }}
+                      components={{ actor: <Actor name={t.archivedBy} /> }}
+                    />
+                  ) : (
+                    tr('ticketBoard.archived', { when: ago(t.archivedAt) })
                   )}
                 </span>
                 {t.lanes.total > 0 && (
                   <span className="inline-flex items-center gap-1">
-                    <Layers className="size-3" /> {plural(t.lanes.total, 'lane')}
+                    <Layers className="size-3" /> {tr('ticketBoard.lanes', { count: t.lanes.total })}
                   </span>
                 )}
               </div>
               <SearchHit ticket={t} />
             </div>
             <Button variant="outline" size="sm" disabled={restoring === t.id} onClick={() => onRestore(t.id)}>
-              <ArchiveRestore /> Restore
+              <ArchiveRestore /> {tr('ticketBoard.restore')}
             </Button>
           </li>
         )

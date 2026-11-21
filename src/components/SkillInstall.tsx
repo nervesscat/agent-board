@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Download, RefreshCw, TriangleAlert } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Button } from '#/components/ui/button'
@@ -73,11 +74,12 @@ export function SkillInstallButton({
   /** Whether the copy is there already, as the page reads it: Update skill rather than Install skill. */
   installed?: boolean
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [result, setResult] = useState<InstallResult | null>(null)
   const [failure, setFailure] = useState<{ message: string; status: number } | null>(null)
   const [pressed, setPressed] = useState(false)
-  const what = kind === 'skill' ? 'the board skill' : 'the review skills'
+  const board = kind === 'skill'
   const install = useMutation({
     mutationFn: () => post<InstallResult>('/api/agent-setup/skill/install', { client, kind }),
     onMutate: () => setFailure(null),
@@ -98,12 +100,13 @@ export function SkillInstallButton({
   return (
     <div className="space-y-2">
       <Button variant="outline" size="sm" disabled={install.isPending} onClick={() => install.mutate()}>
-        <Download data-icon="inline-start" /> {installed || pressed ? 'Update skill' : 'Install skill'}
+        <Download data-icon="inline-start" />{' '}
+        {installed || pressed ? t('skills.update') : t('skills.install')}
       </Button>
       {result && (
         <div
           role="status"
-          aria-label={`Installed ${what}`}
+          aria-label={t(board ? 'skills.installedBoardAria' : 'skills.installedReviewAria')}
           className="flex items-start gap-2 rounded-md border border-emerald-300/60 bg-emerald-50 p-3 text-emerald-950 dark:border-emerald-400/20 dark:bg-emerald-950/40 dark:text-emerald-100"
         >
           <CheckCircle2
@@ -112,15 +115,19 @@ export function SkillInstallButton({
           />
           <div className="min-w-0 flex-1 space-y-1">
             <p className="text-sm font-medium">
-              Installed {what} at <time dateTime={result.at}>{stamp(result.at)}</time>
+              <Trans
+                i18nKey={board ? 'skills.installedBoard' : 'skills.installedReview'}
+                values={{ at: stamp(result.at) }}
+                components={{ time: <time dateTime={result.at} /> }}
+              />
             </p>
             <ul
               className="space-y-0.5 font-mono text-xs [overflow-wrap:anywhere]"
-              aria-label="Installed files"
+              aria-label={t('skills.installedFiles')}
             >
               {result.files.map((f) => (
                 <li key={f.path}>
-                  {f.path} <span className="not-italic opacity-80">· {f.action}</span>
+                  {f.path} <span className="not-italic opacity-80">· {t(`skills.action.${f.action}`)}</span>
                 </li>
               ))}
             </ul>
@@ -130,20 +137,19 @@ export function SkillInstallButton({
       {failure && (
         <div
           role="alert"
-          aria-label={`Could not install ${what}`}
+          aria-label={t(board ? 'skills.failedBoardAria' : 'skills.failedReviewAria')}
           className="flex items-start gap-2 rounded-md border border-rose-300/60 bg-rose-50 p-3 text-rose-950 dark:border-rose-400/20 dark:bg-rose-950/40 dark:text-rose-100"
         >
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-rose-600 dark:text-rose-400" aria-hidden />
           <div className="min-w-0 flex-1 space-y-2">
             <p className="text-sm font-medium">
-              Could not install {what} (HTTP {failure.status})
+              {t(board ? 'skills.failedBoard' : 'skills.failedReview', { status: failure.status })}
             </p>
             <p className="text-xs [overflow-wrap:anywhere]">{failure.message}</p>
-            <p className="text-xs">
-              Check that the folder belongs to the user the board runs as, and that it can be written to.
-            </p>
+            <p className="text-xs">{t('skills.failedHint')}</p>
             <Button variant="outline" size="sm" disabled={install.isPending} onClick={() => install.mutate()}>
-              <RefreshCw data-icon="inline-start" className={install.isPending ? 'animate-spin' : ''} /> Retry
+              <RefreshCw data-icon="inline-start" className={install.isPending ? 'animate-spin' : ''} />{' '}
+              {t('skills.retry')}
             </Button>
           </div>
         </div>

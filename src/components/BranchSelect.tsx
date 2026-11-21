@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 
 import { Input } from '#/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
@@ -20,6 +21,7 @@ interface Props {
 
 /** The local branches of a checkout as a dropdown; a plain text box until the branches are known. */
 export function BranchSelect({ value, onChange, repoId, repoPath, id, optional, className = '' }: Props) {
+  const { t } = useTranslation()
   const source = repoId
     ? `/api/repos/${repoId}/branches`
     : repoPath
@@ -39,14 +41,14 @@ export function BranchSelect({ value, onChange, repoId, repoPath, id, optional, 
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={`font-mono ${className}`}
-        placeholder={source ? 'loading branches…' : 'main'}
+        placeholder={source ? t('pickers.loadingBranches') : 'main'} // i18n-ignore: a branch name
       />
     )
   }
   // A branch the checkout does not have yet (an agent's plan) still shows, so the value is never silently dropped.
   const options = value && !branches.includes(value) ? [value, ...branches] : branches
   const items = Object.fromEntries([
-    ...(optional ? [[NONE, '— none yet —']] : []),
+    ...(optional ? [[NONE, t('pickers.noBranchYet')]] : []),
     ...options.map((b) => [b, b]),
   ])
   return (
@@ -59,7 +61,7 @@ export function BranchSelect({ value, onChange, repoId, repoPath, id, optional, 
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {optional && <SelectItem value={NONE}>— none yet —</SelectItem>}
+        {optional && <SelectItem value={NONE}>{t('pickers.noBranchYet')}</SelectItem>}
         {options.map((b) => (
           <SelectItem key={b} value={b} className="font-mono">
             {b}

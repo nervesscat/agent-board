@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { ArrowUp, Folder, FolderGit2, Home } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 
 import { Button } from '#/components/ui/button'
 import {
@@ -30,6 +31,7 @@ export function FolderPicker({
   start?: string
   onPick: (path: string) => void
 }) {
+  const { t } = useTranslation()
   const [dir, setDir] = useState('')
   const [typed, setTyped] = useState('')
   useEffect(() => {
@@ -54,10 +56,12 @@ export function FolderPicker({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Choose the checkout</DialogTitle>
+          <DialogTitle>{t('folderPicker.title')}</DialogTitle>
           <DialogDescription>
-            Folders on the machine the board runs on. <FolderGit2 className="inline size-3.5" /> marks a git
-            checkout.
+            <Trans
+              i18nKey="folderPicker.description"
+              components={{ repo: <FolderGit2 className="inline size-3.5" /> }}
+            />
           </DialogDescription>
         </DialogHeader>
         <form
@@ -68,13 +72,13 @@ export function FolderPicker({
           }}
         >
           {/* On a wrapper: at the top folder the button is disabled, and a disabled button gets no hover. */}
-          <Tip content="Up one folder">
+          <Tip content={t('folderPicker.up')}>
             <span className="inline-flex">
               <Button
                 type="button"
                 variant="outline"
                 size="icon-sm"
-                aria-label="Up one folder"
+                aria-label={t('folderPicker.up')}
                 disabled={!data?.parent}
                 onClick={() => data?.parent && setDir(data.parent)}
               >
@@ -82,12 +86,12 @@ export function FolderPicker({
               </Button>
             </span>
           </Tip>
-          <Tip content="Home">
+          <Tip content={t('folderPicker.home')}>
             <Button
               type="button"
               variant="outline"
               size="icon-sm"
-              aria-label="Home"
+              aria-label={t('folderPicker.home')}
               onClick={() => setDir('')}
             >
               <Home />
@@ -97,16 +101,16 @@ export function FolderPicker({
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
             className="h-7 flex-1 font-mono text-xs"
-            aria-label="Folder path"
+            aria-label={t('folderPicker.path')}
           />
         </form>
         {error && <p className="text-sm text-destructive">{errorMessage(error)}</p>}
         <ul
           className={`h-72 overflow-y-auto rounded-md border p-1 ${isFetching ? 'opacity-60' : ''}`}
-          aria-label="Folders"
+          aria-label={t('folderPicker.folders')}
         >
           {data?.entries.length === 0 && (
-            <li className="p-2 text-sm text-muted-foreground">No folders here.</li>
+            <li className="p-2 text-sm text-muted-foreground">{t('folderPicker.none')}</li>
           )}
           {data?.entries.map((e) => (
             <li key={e.path}>
@@ -122,17 +126,19 @@ export function FolderPicker({
                   <Folder className="size-4 shrink-0 text-muted-foreground" />
                 )}
                 <span className="truncate">{e.name}</span>
-                {e.isRepo && <span className="ml-auto text-xs text-muted-foreground">git</span>}
+                {e.isRepo && (
+                  <span className="ml-auto text-xs text-muted-foreground">{t('folderPicker.git')}</span>
+                )}
               </button>
             </li>
           ))}
         </ul>
         <DialogFooter className="items-center">
           <span className="mr-auto text-xs text-muted-foreground">
-            {data && (data.isRepo ? 'This folder is a git checkout.' : 'Not a git checkout.')}
+            {data && (data.isRepo ? t('folderPicker.isRepo') : t('folderPicker.notRepo'))}
           </span>
           <Button type="button" disabled={!data?.isRepo} onClick={() => data && pick(data.path)}>
-            Use this folder
+            {t('folderPicker.use')}
           </Button>
         </DialogFooter>
       </DialogContent>

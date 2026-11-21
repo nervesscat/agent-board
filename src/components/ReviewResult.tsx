@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Actor } from '#/components/Actor'
 import { Markdown } from '#/components/Markdown'
@@ -20,6 +21,7 @@ export function verdictTone(v: string): 'default' | 'destructive' | 'secondary' 
 
 /** One review result in full: verdict, PR and SHA, who and when, checks, counts, summary and its thread. */
 export function ReviewResultView({ r }: { r: ReviewResult }) {
+  const { t } = useTranslation()
   const { data: project } = useProject(r.projectId)
   const repo = repoLabel(project, r.repoId)
   const counts = r.counts as Record<string, number>
@@ -29,14 +31,18 @@ export function ReviewResultView({ r }: { r: ReviewResult }) {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <Badge variant={verdictTone(r.verdict)}>{r.verdict}</Badge>
         <span className="font-medium">
-          {repo && <span className="text-muted-foreground">{repo} </span>}PR #{r.prNumber}
+          {repo && <span className="text-muted-foreground">{repo} </span>}
+          {t('reviewResult.pr', { number: r.prNumber })}
         </span>
         <Tip content={r.sha}>
           <span className="font-mono text-xs text-muted-foreground">{shortSha(r.sha)}</span>
         </Tip>
         <span className="text-xs text-muted-foreground">
-          {counts.confirmed ?? 0} confirmed · {counts.plausible ?? 0} plausible · {counts.unverified ?? 0}{' '}
-          unverified
+          {t('reviewResult.counts', {
+            confirmed: counts.confirmed ?? 0,
+            plausible: counts.plausible ?? 0,
+            unverified: counts.unverified ?? 0,
+          })}
         </span>
         <Tip content={stamp(r.createdAt)}>
           <span className="ml-auto text-xs text-muted-foreground">
@@ -66,6 +72,7 @@ export function ReviewResultView({ r }: { r: ReviewResult }) {
 
 /** A dialog with one review result, loaded by id; `resultId` null keeps it closed. */
 export function ReviewResultDialog({ resultId, onClose }: { resultId: number | null; onClose: () => void }) {
+  const { t } = useTranslation()
   // Keeps showing the last result while the dialog animates closed.
   const [last, setLast] = useState(resultId)
   if (resultId !== null && resultId !== last) setLast(resultId)
@@ -79,14 +86,14 @@ export function ReviewResultDialog({ resultId, onClose }: { resultId: number | n
     <Dialog open={resultId !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Review result</DialogTitle>
+          <DialogTitle>{t('reviewResult.title')}</DialogTitle>
         </DialogHeader>
         {error ? (
           <p className="text-sm text-destructive">{errorMessage(error)}</p>
         ) : data ? (
           <ReviewResultView r={data} />
         ) : (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">{t('reviewResult.loading')}</p>
         )}
       </DialogContent>
     </Dialog>

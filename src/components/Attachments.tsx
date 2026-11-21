@@ -1,4 +1,5 @@
 import { PlayIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import { COPY_IMAGE_OVERLAY, CopyImageButton } from '#/components/CopyImage'
 import { galleryItem } from '#/components/Gallery'
@@ -13,6 +14,7 @@ import type { Attachment } from '#/lib/api'
  * picture numbers them.
  */
 export function Attachments({ items }: { items: (Attachment & { url: string })[] }) {
+  const { t } = useTranslation()
   if (!items.length) return null
   return (
     <div className="mt-3 flex flex-wrap items-start gap-3">
@@ -34,7 +36,7 @@ export function Attachments({ items }: { items: (Attachment & { url: string })[]
             <CopyImageButton src={a.url} mime={a.mime} name={a.name} className={COPY_IMAGE_OVERLAY} />
             {notes.length > 0 && (
               <ol
-                aria-label={`Notes on ${a.name}`}
+                aria-label={t('files.attachments.notesOn', { name: a.name })}
                 className="mt-1 space-y-0.5 text-xs text-muted-foreground"
               >
                 {notes.map((note, i) => (
@@ -74,7 +76,10 @@ export function Attachments({ items }: { items: (Attachment & { url: string })[]
             className="text-sm underline underline-offset-4"
             {...gallery}
           >
-            {a.name} <span className="text-muted-foreground">({Math.round(a.size / 1024)} KB)</span>
+            {a.name}{' '}
+            <span className="text-muted-foreground">
+              ({t('files.attachments.sizeKb', { kb: Math.round(a.size / 1024) })})
+            </span>
           </a>
         )
       })}

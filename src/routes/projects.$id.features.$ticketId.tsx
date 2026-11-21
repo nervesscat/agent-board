@@ -42,7 +42,11 @@ import {
   useRef,
   useState,
 } from 'react'
+import type { TFunction } from 'i18next'
 import { toast } from 'sonner'
+import { Trans, useTranslation } from 'react-i18next'
+
+import { currentLocale } from '#/i18n'
 
 import { Actor, useActorKinds } from '#/components/Actor'
 import { AnnotateImage, useAnnotations } from '#/components/AnnotateImage'
@@ -92,7 +96,7 @@ import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
-import { autoPhaseOf, autoPhaseTip } from '#/lib/autoPhases'
+import { autoPhaseOf } from '#/lib/autoPhases'
 import { WorkTimelineCard } from '#/components/WorkTimelineCard'
 import {
   del,
@@ -108,7 +112,7 @@ import {
   type TicketRow,
   type UpdateRow,
 } from '#/lib/api'
-import { STATUS_LABEL, ago, agoLong, clock, shortSha, stamp } from '#/lib/format'
+import { ago, agoLong, clock, shortSha, stamp } from '#/lib/format'
 import {
   laneStageOrder,
   type LaneFilter,
@@ -128,7 +132,7 @@ import {
   verdictOk,
   validateLaneSearch,
 } from '#/lib/lanes'
-import { type AreaId, type Layout, defaultLayout, layoutElement, shownIn } from '#/lib/layout'
+import { type AreaId, type Layout, defaultLayout, layoutLabel, shownIn } from '#/lib/layout'
 import { useProject, useStages } from '#/lib/project'
 import { type Anchor, anchorId, cameBack, useAnchor, useReveal } from '#/lib/reveal'
 import { addTags, overTagLimits } from '#/lib/tags'
@@ -152,6 +156,7 @@ function TicketPage() {
   const filter = laneFilter(search)
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const { t: tr } = useTranslation()
   const stages = useStages(id)
   // Which sections show, in which column and order: the project's layout, taken once per ticket shown.
   // Until it loads no section is drawn, rather than drawn in its default place and moved (a #link would
@@ -224,7 +229,7 @@ function TicketPage() {
     mutationFn: (to: 'archive' | 'restore') => post(`/api/tickets/${ticketId}/${to}`),
     onSuccess: (_d, to) => {
       invalidate()
-      toast.success(to === 'archive' ? 'Archived: off the board, under Archived' : 'Restored to the board')
+      toast.success(to === 'archive' ? tr('ticketPage.archivedToast') : tr('ticketPage.restoredToast'))
     },
     onError,
   })
@@ -343,13 +348,13 @@ function TicketPage() {
               params: { id, ticketId: String(go.id) },
               search: laneSearch(filter),
             })
-          toast(`#${lane.id} disapproved and cancelled`, {
-            description: `Undo takes back the disapproval and returns it to ${stageOf(stages, before.status).name}${
-              go ? `. Moved on to #${go.id}.` : '.'
-            }`,
+          toast(tr('ticketPage.disapprovedToast', { id: lane.id }), {
+            description: go
+              ? tr('ticketPage.undoMoved', { stage: stageOf(stages, before.status).name, next: go.id })
+              : tr('ticketPage.undo', { stage: stageOf(stages, before.status).name }),
             duration: 10_000,
             action: {
-              label: 'Undo',
+              label: tr('ticketPage.undoAction'),
               onClick: () =>
                 judge.mutate({ ticketId: lane.id, verdict: before.verdict, reopenTo: before.status }),
             },
@@ -401,15 +406,15 @@ function TicketPage() {
   // the summary rides on top of the main column when the ticket has one, and Instructions has no tab
   // (it is the ticket's own text, at the top, not something to jump to).
   const tabs: { key: string; label: string }[] = [
-    ...(t.summary ? [{ key: 'summary', label: 'Summary' }] : []),
-    ...main.filter(hasTab).map(tabOf),
+    ...(t.summary ? [{ key: 'summary', label: tr('ticketPage.summary') }] : []),
+    ...main.filter(hasTab).map((a) => tabOf(a, tr)),
   ]
 
   return (
     <div className="flex flex-col gap-6">
       <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
         <Link to="/projects/$id/features" params={{ id }} className="hover:text-foreground">
-          Ongoing features
+          {tr('layoutEditor.element.nav.features')}
         </Link>
         {t.ancestors.map((a) => (
           <span key={a.id} className="inline-flex min-w-0 items-center gap-1">
@@ -441,19 +446,28 @@ function TicketPage() {
           <InlineTitle key={t.id} t={t} onSave={(title) => update.mutate({ title })} />
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span>
-              opened by <Actor name={t.createdBy} short /> {ago(t.createdAt)}
+              <Trans
+                i18nKey="ticketPage.openedBy"
+                values={{ when: ago(t.createdAt) }}
+                components={{ actor: <Actor name={t.createdBy} short /> }}
+              />
             </span>
-            <span>updated {ago(t.updatedAt)}</span>
+            <span>
+              {tr('ticketPage.updatedLabel')} {ago(t.updatedAt)}
+            </span>
             <InlineTags key={t.id} t={t} projectId={id} onSave={(tags) => update.mutate({ tags })} />
           </div>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {t.archivedAt && (
             <Tip
-              content={`Archived by ${t.archivedBy || 'someone'} ${ago(t.archivedAt)}${t.parentId ? ', with the ticket it is a lane of' : ''}`}
+              content={tr(t.parentId ? 'ticketPage.archivedByLane' : 'ticketPage.archivedBy', {
+                name: t.archivedBy || tr('ticketPage.someone'),
+                when: ago(t.archivedAt),
+              })}
             >
               <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
-                <Archive className="size-3.5" /> Archived
+                <Archive className="size-3.5" /> {tr('ticketPage.archivedBadge')}
               </span>
             </Tip>
           )}
@@ -464,20 +478,20 @@ function TicketPage() {
               disabled={archive.isPending}
               onClick={() => archive.mutate('restore')}
             >
-              <ArchiveRestore /> Restore
+              <ArchiveRestore /> {tr('ticketBoard.restore')}
             </Button>
           )}
           {lanesWarning && (
-            <Tip content="This ticket is marked further along than its lanes">
+            <Tip content={tr('ticketPage.lanesWarningTip')}>
               <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
-                <TriangleAlert className="size-3.5" /> {openLanes} lane{openLanes === 1 ? '' : 's'} not done
+                <TriangleAlert className="size-3.5" /> {tr('ticketPage.lanesNotDone', { count: openLanes })}
               </span>
             </Tip>
           )}
           <NeedsStatus t={t} />
           {t.updates.some((u) => u.decision && !u.decidedAt) && (
             <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
-              <Scale className="size-3.5" /> decision needed
+              <Scale className="size-3.5" /> {tr('ticketPage.decisionNeeded')}
             </span>
           )}
           {/* Without a git side the human's approval is the hand-off: shown on every ticket, not only lanes. */}
@@ -494,7 +508,7 @@ function TicketPage() {
           />
           <div className="flex items-center gap-1.5">
             <Label htmlFor="complexity" className="text-xs font-normal text-muted-foreground">
-              Complexity
+              {tr('newTicket.complexity')}
             </Label>
             <ComplexitySelect
               id="complexity"
@@ -503,14 +517,14 @@ function TicketPage() {
             />
           </div>
           {!t.archivedAt && !t.parentId && isClosed(kind) && (
-            <Tip content="Take it off the board, with its lanes; Archived on the features page brings it back">
+            <Tip content={tr('ticketPage.archiveTip')}>
               <Button
                 variant="outline"
                 size="sm"
                 disabled={archive.isPending}
                 onClick={() => archive.mutate('archive')}
               >
-                <Archive /> Archive
+                <Archive /> {tr('ticketBoard.archive')}
               </Button>
             </Tip>
           )}
@@ -524,22 +538,21 @@ function TicketPage() {
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Delete this ticket?</AlertDialogTitle>
+                  <AlertDialogTitle>{tr('ticketPage.deleteTitle')}</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Tasks, updates, attachments and the thread go with it.
-                    {t.lanes.length > 0 &&
-                      ` It has ${t.lanes.length} lane${t.lanes.length === 1 ? '' : 's'}: delete them too, or keep them and move them up a level.`}
+                    {tr('ticketPage.deleteBody')}
+                    {t.lanes.length > 0 && ` ${tr('ticketPage.deleteLanes', { count: t.lanes.length })}`}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogCancel>{tr('ticketBoard.cancel')}</AlertDialogCancel>
                   {t.lanes.length > 0 && (
                     <AlertDialogAction variant="outline" onClick={() => remove.mutate(true)}>
-                      Delete, keep lanes
+                      {tr('ticketPage.deleteKeepLanes')}
                     </AlertDialogAction>
                   )}
                   <AlertDialogAction onClick={() => remove.mutate(false)}>
-                    {t.lanes.length > 0 ? 'Delete with lanes' : 'Delete'}
+                    {t.lanes.length > 0 ? tr('ticketPage.deleteWithLanes') : tr('postTools.delete')}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -635,6 +648,7 @@ function measureHeader(header: HTMLElement | null) {
 
 /** The title, renamed where it is: click it, Enter or leaving the field saves, Esc cancels. */
 function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => void }) {
+  const { t: tr } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(t.title)
   const titleRef = useRef<HTMLSpanElement>(null)
@@ -660,7 +674,7 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
   if (editing)
     return (
       <Input
-        aria-label="Title"
+        aria-label={tr('ticketPage.title')}
         autoFocus
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -681,7 +695,7 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
       {/* A span with the button's role, not a button: browsers draw a button as an inline-block, which drops a
             title too wide for the line under the #id, while a span wraps its text in the heading's own flow.
             Like a button, Space opens the field on its keyup, so a held Space does not type into it. */}
-      <Tip content="Click to rename">
+      <Tip content={tr('ticketPage.clickToRename')}>
         <span
           ref={titleRef}
           role="button"
@@ -729,6 +743,7 @@ function InlineTags({
   projectId: string
   onSave: (tags: string[]) => void
 }) {
+  const { t: tr } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState<string[]>([])
   const [text, setText] = useState('')
@@ -762,12 +777,12 @@ function InlineTags({
         }}
       >
         <TagsInput
-          aria-label="Tags, comma separated"
+          aria-label={tr('ticketPage.tagsAria')}
           value={value}
           onChange={setValue}
           text={text}
           onTextChange={setText}
-          placeholder="High, Forms"
+          placeholder={tr('ticketPage.tagsPlaceholder')}
           choices={choices}
           className="min-h-6 text-xs md:text-xs"
         />
@@ -779,7 +794,7 @@ function InlineTags({
     setEditing(true)
   }
   return t.tags.length > 0 ? (
-    <Tip content="Click to edit the tags">
+    <Tip content={tr('ticketPage.editTagsTip')}>
       <button type="button" onClick={open} className="inline-flex flex-wrap gap-1">
         {[...t.tags].sort(compareTags).map((tag) => (
           <Tag key={tag} tag={tag} />
@@ -788,7 +803,7 @@ function InlineTags({
     </Tip>
   ) : (
     <button type="button" onClick={open} className="hover:text-foreground">
-      + tags
+      {tr('ticketPage.addTags')}
     </button>
   )
 }
@@ -807,6 +822,7 @@ function Instructions({
   onSave: (body: string) => void
   onChange: () => void
 }) {
+  const { t: tr } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [body, setBody] = useState(t.body)
@@ -855,10 +871,10 @@ function Instructions({
     <section
       {...drop.props}
       className={cn('group rounded-lg border p-4', drop.className)}
-      aria-label="Instructions"
+      aria-label={tr('ticketPage.instructions')}
     >
       <div className="mb-2 flex items-center gap-3">
-        <h2 className="text-sm font-medium">Instructions</h2>
+        <h2 className="text-sm font-medium">{tr('ticketPage.instructions')}</h2>
         {/* The attach and edit buttons show while the card is hovered, or when one of them has keyboard focus;
             their labels are for screen readers only. */}
         <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
@@ -877,11 +893,13 @@ function Instructions({
             <>
               <Button type="button" variant="ghost" size="xs" onClick={() => fileInput.current?.click()}>
                 <Paperclip />
-                <span className="sr-only">{attaching > 0 ? 'attaching…' : 'attach'}</span>
+                <span className="sr-only">
+                  {attaching > 0 ? tr('ticketPage.attaching') : tr('ticketPage.attach')}
+                </span>
               </Button>
               <Button type="button" variant="ghost" size="xs" onClick={open}>
                 <Pencil />
-                <span className="sr-only">edit</span>
+                <span className="sr-only">{tr('ticketPage.edit')}</span>
               </Button>
             </>
           )}
@@ -899,22 +917,22 @@ function Instructions({
             onCancel={() => setEditing(false)}
             autoFocus
             minHeight="min-h-40"
-            label="Instructions"
-            placeholder="What to do, how to know it is done, what never to do. Paste or drop files to attach them."
+            label={tr('ticketPage.instructions')}
+            placeholder={tr('ticketPage.instructionsPlaceholder')}
           />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
-              Cancel
+              {tr('instructions.cancel')}
             </Button>
             <Button type="button" size="sm" onClick={save}>
-              Save
+              {tr('instructions.save')}
             </Button>
           </div>
         </div>
       ) : t.body ? (
         <>
           {/* Clicking the text edits it; a link inside still opens. */}
-          <Tip content="Click to edit">
+          <Tip content={tr('instructions.clickToEdit')}>
             <div
               role="button"
               tabIndex={0}
@@ -939,13 +957,13 @@ function Instructions({
               className="mt-2 md:hidden"
               onClick={() => setExpanded((v) => !v)}
             >
-              {expanded ? 'Show less' : 'Show full instructions'}
+              {expanded ? tr('ticketPage.showLess') : tr('ticketPage.showFull')}
             </Button>
           )}
         </>
       ) : (
         <button type="button" onClick={open} className="text-sm text-muted-foreground hover:text-foreground">
-          No instructions yet. Click to write them.
+          {tr('instructions.empty')}
         </button>
       )}
       {t.attachments.length > 0 && (
@@ -955,10 +973,10 @@ function Instructions({
             {t.attachments.map((a) => (
               <li key={a.id} className="inline-flex items-center gap-1">
                 <span className="max-w-48 truncate">{a.name}</span>
-                <Tip content={`Remove ${a.name}`}>
+                <Tip content={tr('ticketPage.removeNamed', { name: a.name })}>
                   <button
                     type="button"
-                    aria-label={`Remove ${a.name}`}
+                    aria-label={tr('ticketPage.removeNamed', { name: a.name })}
                     className="hover:text-destructive"
                     onClick={() => detach.mutate(a.id)}
                   >
@@ -1002,6 +1020,7 @@ function OtherRepos({
   repos: { id: number; name: string }[]
   onSave: (p: Record<string, unknown>) => void
 }) {
+  const { t: tr } = useTranslation()
   const others = t.repos.filter((r) => !r.primary)
   const addable = repos.filter((r) => !t.repos.some((x) => x.repoId === r.id))
   const save = (next: TicketFull['repos']) => onSave({ repos: next.map(repoInput) })
@@ -1018,20 +1037,25 @@ function OtherRepos({
   }
   return (
     <div className="space-y-2">
-      <Tip content="The ticket's work in other repos of the project, each on its own branch: they show in Branch and Runs">
-        <Label className="text-xs text-muted-foreground">Other repositories</Label>
+      <Tip content={tr('ticketPage.otherReposTip')}>
+        <Label className="text-xs text-muted-foreground">{tr('ticketPage.otherRepos')}</Label>
       </Tip>
       {others.map((r) => (
-        <div key={r.repoId} className="space-y-1" role="group" aria-label={`Repository ${r.name}`}>
+        <div
+          key={r.repoId}
+          className="space-y-1"
+          role="group"
+          aria-label={tr('ticketPage.repositoryNamed', { name: r.name })}
+        >
           <div className="flex items-center gap-2">
             <Label htmlFor={`branch-${r.repoId}`} className="font-mono text-xs">
               {r.name}
             </Label>
-            <Tip content={`Take ${r.name} off the ticket (its runs for the ticket stop)`}>
+            <Tip content={tr('ticketPage.takeOffTip', { name: r.name })}>
               <button
                 type="button"
                 className="ml-auto text-muted-foreground hover:text-foreground"
-                aria-label={`Remove ${r.name}`}
+                aria-label={tr('ticketPage.removeNamed', { name: r.name })}
                 onClick={() => save(t.repos.filter((x) => x.repoId !== r.repoId))}
               >
                 <X className="size-3.5" />
@@ -1059,8 +1083,8 @@ function OtherRepos({
           }}
           items={Object.fromEntries(addable.map((r) => [String(r.id), r.name]))}
         >
-          <SelectTrigger className="w-full" aria-label="Add a repository">
-            <SelectValue placeholder="Add a repository…" />
+          <SelectTrigger className="w-full" aria-label={tr('ticketPage.addRepo')}>
+            <SelectValue placeholder={tr('ticketPage.addRepoPlaceholder')} />
           </SelectTrigger>
           <SelectContent>
             {addable.map((r) => (
@@ -1088,6 +1112,7 @@ function Details({
   includes?: number[]
   onSave: (p: Record<string, unknown>) => void
 }) {
+  const { t: tr } = useTranslation()
   const { data: project } = useProject(t.projectId)
   const repos = project?.repos ?? []
   const repoId = String(t.repoId ?? repos[0]?.id ?? '')
@@ -1103,14 +1128,14 @@ function Details({
   useEffect(() => setBranch(t.branch), [t.branch])
   useEffect(() => setBaseBranch(t.baseBranch), [t.baseBranch])
   return (
-    <section className="space-y-3 rounded-lg border p-3" aria-label="Details">
+    <section className="space-y-3 rounded-lg border p-3" aria-label={tr('ticketPage.details')}>
       <div className="space-y-1">
         <Label htmlFor="assignee" className="text-xs text-muted-foreground">
-          Assignee
+          {tr('ticketPage.assignee')}
           {t.reserved && (
-            <Tip content="Reserved for this project agent: other agents cannot take it, only you can reassign it">
+            <Tip content={tr('ticketPage.reservedTip')}>
               <span className="ml-auto inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-normal">
-                <Lock className="size-3" /> reserved
+                <Lock className="size-3" /> {tr('ticketPage.reserved')}
               </span>
             </Tip>
           )}
@@ -1120,7 +1145,7 @@ function Details({
       {git && repos.length > 1 && (
         <div className="space-y-1">
           <Label htmlFor="repo" className="text-xs text-muted-foreground">
-            Repository
+            {tr('ticketPage.repository')}
           </Label>
           <Select
             value={repoId}
@@ -1152,7 +1177,7 @@ function Details({
       {git && (
         <div className="space-y-1">
           <Label htmlFor="branch" className="text-xs text-muted-foreground">
-            Branch
+            {tr('ticketPage.branch')}
           </Label>
           <BranchSelect
             id="branch"
@@ -1169,7 +1194,7 @@ function Details({
       {git && (
         <div className="space-y-1">
           <Label htmlFor="base" className="text-xs text-muted-foreground">
-            Base branch
+            {tr('ticketPage.baseBranch')}
           </Label>
           <BranchSelect
             id="base"
@@ -1185,12 +1210,12 @@ function Details({
       {git && repos.length > 1 && !t.prId && <OtherRepos t={t} repos={repos} onSave={onSave} />}
       {git && (
         <div className="space-y-1">
-          <Tip content="Tickets whose branches must be merged into this one's base before it can be done">
+          <Tip content={tr('ticketPage.needsTip')}>
             <Label htmlFor="needs" className="text-xs text-muted-foreground">
-              Needs
+              {tr('ticketPage.needs')}
               {t.neededBy.length > 0 && (
                 <span className="ml-auto font-normal">
-                  needed by{' '}
+                  {tr('ticketPage.neededBy')}{' '}
                   {t.neededBy.map((n, i) => (
                     <span key={n.id}>
                       {i > 0 && ', '}
@@ -1224,6 +1249,7 @@ function Details({
  * be tagged blocked on the human, with what they must do; a task shows how many of its subtasks are.
  */
 function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
+  const { t: tr } = useTranslation()
   const [text, setText] = useState('')
   // The task whose "add a subtask" field is open, and what is typed in it.
   const [subtaskOf, setSubtaskOf] = useState<number | null>(null)
@@ -1282,21 +1308,21 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
           />
           <span className={task.done ? 'text-muted-foreground line-through' : ''}>{task.text}</span>
           {auto && (
-            <Tip content={autoPhaseTip(auto)}>
+            <Tip content={tr(`ticketPage.autoTip.${auto}`)}>
               <span
                 role="img"
                 tabIndex={0}
-                aria-label="Ticked automatically"
+                aria-label={tr('ticketPage.tickedAuto')}
                 className="shrink-0 text-muted-foreground"
               >
                 <RefreshCw className="size-3.5" />
               </span>
             </Tip>
           )}
-          {task.blocked && <span className={BLOCKED_CHIP}>blocked</span>}
+          {task.blocked && <span className={BLOCKED_CHIP}>{tr('ticketPage.blocked')}</span>}
           {blockedSubtasks > 0 && (
             <span className={BLOCKED_CHIP}>
-              {blockedSubtasks === 1 ? '1 subtask blocked' : `${blockedSubtasks} subtasks blocked`}
+              {tr('ticketPage.subtasksBlocked', { count: blockedSubtasks })}
             </span>
           )}
           <span className="ml-auto flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100">
@@ -1313,7 +1339,11 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
                     setReason('')
                   }
                 }}
-                aria-label={task.blocked ? `Unblock ${task.text}` : `Mark ${task.text} blocked`}
+                aria-label={
+                  task.blocked
+                    ? tr('ticketPage.unblock', { name: task.text })
+                    : tr('ticketPage.markBlockedNamed', { name: task.text })
+                }
               >
                 <Hand
                   className={cn(
@@ -1324,7 +1354,7 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
               </Button>
             )}
             {!subtask && (
-              <Tip content="Add a subtask">
+              <Tip content={tr('ticketPage.addSubtask')}>
                 <Button
                   type="button"
                   variant="ghost"
@@ -1333,7 +1363,7 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
                     setSubtaskOf(task.id)
                     setSubtext('')
                   }}
-                  aria-label={`Add a subtask to ${task.text}`}
+                  aria-label={tr('ticketPage.addSubtaskTo', { name: task.text })}
                 >
                   <ListPlus className="size-3.5 text-muted-foreground" />
                 </Button>
@@ -1342,8 +1372,8 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
             <Tip
               content={
                 subtask || !t.tasks.some((s) => s.parentId === task.id)
-                  ? 'remove'
-                  : 'remove, with its subtasks'
+                  ? tr('ticketPage.removeTask')
+                  : tr('ticketPage.removeTaskSubtasks')
               }
             >
               <Button
@@ -1351,7 +1381,7 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
                 variant="ghost"
                 size="icon"
                 onClick={() => remove.mutate(task.id)}
-                aria-label={`Remove ${task.text}`}
+                aria-label={tr('ticketPage.removeNamed', { name: task.text })}
               >
                 <X className="size-3.5 text-muted-foreground" />
               </Button>
@@ -1377,19 +1407,19 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
                 if (e.key === 'Escape') setBlocking(null)
               }}
               maxLength={500}
-              placeholder="What the human must do (optional)"
-              aria-label={`Why ${task.text} is blocked`}
+              placeholder={tr('ticketPage.blockedPlaceholder')}
+              aria-label={tr('ticketPage.whyBlocked', { name: task.text })}
               className="h-7"
             />
             <Button type="submit" size="sm" variant="outline" disabled={tag.isPending}>
-              <Hand data-icon="inline-start" /> Mark blocked
+              <Hand data-icon="inline-start" /> {tr('ticketPage.markBlocked')}
             </Button>
             <Button
               type="button"
               size="sm"
               variant="ghost"
               onClick={() => setBlocking(null)}
-              aria-label="Close"
+              aria-label={tr('common.close')}
             >
               <X />
             </Button>
@@ -1403,10 +1433,10 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
     <section
       id="tasks"
       className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border p-4"
-      aria-label="Tasks"
+      aria-label={tr('ticketPage.tasks')}
     >
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-medium">Tasks</h2>
+        <h2 className="text-sm font-medium">{tr('ticketPage.tasks')}</h2>
         <span className="text-xs tabular-nums text-muted-foreground">
           {t.progress.done}/{t.progress.total} · {pct}%
         </span>
@@ -1414,13 +1444,7 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
       <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-muted">
         <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
       </div>
-      {t.tasks.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          No tasks yet. Add the phases a new ticket starts with: Implementation, then the hand-off&apos;s
-          (Pushed, PR, CI, Preview, Summary, Merged). The concrete steps go under Implementation as subtasks.
-          The board ticks Pushed, PR, CI, Preview, Summary and Merged itself.
-        </p>
-      )}
+      {t.tasks.length === 0 && <p className="text-sm text-muted-foreground">{tr('ticketPage.noTasks')}</p>}
       <ul className="space-y-1.5">
         {t.tasks
           .filter((task) => !task.parentId)
@@ -1430,7 +1454,10 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
               <li key={task.id} className="text-sm">
                 {row(task, false)}
                 {subtasks.length > 0 && (
-                  <ul className="mt-1.5 ml-6 space-y-1.5" aria-label={`Subtasks of ${task.text}`}>
+                  <ul
+                    className="mt-1.5 ml-6 space-y-1.5"
+                    aria-label={tr('ticketPage.subtasksOf', { name: task.text })}
+                  >
                     {subtasks.map((s) => (
                       <li key={s.id}>{row(s, true)}</li>
                     ))}
@@ -1451,19 +1478,19 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
                       onKeyDown={(e) => {
                         if (e.key === 'Escape') setSubtaskOf(null)
                       }}
-                      placeholder="Add a subtask"
-                      aria-label={`New subtask of ${task.text}`}
+                      placeholder={tr('ticketPage.addSubtask')}
+                      aria-label={tr('ticketPage.newSubtaskOf', { name: task.text })}
                       className="h-7"
                     />
                     <Button type="submit" size="sm" variant="outline" disabled={!subtext.trim()}>
-                      <Plus data-icon="inline-start" /> Add
+                      <Plus data-icon="inline-start" /> {tr('ticketPage.add')}
                     </Button>
                     <Button
                       type="button"
                       size="sm"
                       variant="ghost"
                       onClick={() => setSubtaskOf(null)}
-                      aria-label="Close"
+                      aria-label={tr('common.close')}
                     >
                       <X />
                     </Button>
@@ -1483,11 +1510,11 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
         <Input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Add a phase: Implementation, Pushed, PR…"
+          placeholder={tr('ticketPage.addPhase')}
           className="h-8"
         />
         <Button type="submit" size="sm" variant="outline" disabled={!text.trim()}>
-          <Plus data-icon="inline-start" /> Add
+          <Plus data-icon="inline-start" /> {tr('ticketPage.add')}
         </Button>
       </form>
     </section>
@@ -1497,11 +1524,6 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
 const BLOCKED_CHIP =
   'shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] leading-none font-medium text-amber-700 dark:text-amber-400'
 
-const VERDICT_LABEL: Record<LaneVerdict, string> = {
-  approved: 'Approved',
-  disapproved: 'Disapproved',
-  none: 'No call',
-}
 const VERDICT_TAG: Record<LaneVerdict, string> = {
   approved: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
   disapproved: 'bg-red-500/15 text-red-700 dark:text-red-400',
@@ -1522,9 +1544,10 @@ function FilterRow<K extends string>({
   onToggle: (key: K) => void
   onClear: () => void
 }) {
+  const { t: tr } = useTranslation()
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-xs">
-      <span className="w-12 shrink-0 text-muted-foreground">{label}</span>
+      <span className="w-16 shrink-0 text-muted-foreground">{label}</span>
       <button
         type="button"
         onClick={onClear}
@@ -1532,7 +1555,7 @@ function FilterRow<K extends string>({
           active.length ? 'text-muted-foreground hover:text-foreground' : 'border-foreground/40 bg-muted'
         }`}
       >
-        All
+        {tr('ticketPage.all')}
       </button>
       {chips.map((c) => {
         const on = active.includes(c.key)
@@ -1567,12 +1590,19 @@ function LaneNav({
   id: number
   filter: LaneFilter
 }) {
+  const { t: tr } = useTranslation()
   const stages = useStages(projectId)
   const { prev, next, index, count, filtered } = laneNeighbours(lanes, stages, id, filter)
   return (
-    <StepNav projectId={projectId} prev={prev} next={next} search={laneSearch(filter)} noun="lane">
-      {index >= 0 ? `lane ${index + 1} of ${count}` : `${count} lane${count === 1 ? '' : 's'}`}
-      {filtered && ' (filtered)'}
+    <StepNav
+      projectId={projectId}
+      prev={prev}
+      next={next}
+      search={laneSearch(filter)}
+      noun={tr('ticketPage.nounLane')}
+    >
+      {index >= 0 ? tr('ticketPage.laneOf', { n: index + 1, count }) : tr('ticketBoard.lanes', { count })}
+      {filtered && ` ${tr('ticketPage.filtered')}`}
     </StepNav>
   )
 }
@@ -1604,6 +1634,7 @@ function StageNav({
   t: TicketFull
   pageIsNewer: boolean
 }) {
+  const { t: tr } = useTranslation()
   const stages = useStages(projectId)
   const stepped = useLocation({ select: (l) => l.state.stepList })
   // The list as this page last had it (the page is keyed by ticket), so moving this ticket keeps it.
@@ -1625,9 +1656,9 @@ function StageNav({
       prev={around.prev}
       next={around.next}
       state={{ stepList: list }}
-      noun={`ticket in ${stage.name}`}
+      noun={tr('ticketPage.nounTicketIn', { stage: stage.name })}
     >
-      {around.index + 1} of {around.count} in {stage.name}
+      {tr('ticketPage.stageOf', { n: around.index + 1, count: around.count, stage: stage.name })}
     </StepNav>
   )
 }
@@ -1667,6 +1698,7 @@ function StepNav({
   children: ReactNode
 }) {
   const navigate = useNavigate()
+  const { t: tr } = useTranslation()
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.repeat || e.ctrlKey || e.metaKey || e.altKey || keepsKeys(e.target)) return
@@ -1693,7 +1725,7 @@ function StepNav({
           search={search}
           state={state}
           className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border hover:bg-muted hover:text-foreground"
-          aria-label={`${dir === 'prev' ? 'Previous' : 'Next'} ${noun}`}
+          aria-label={tr(dir === 'prev' ? 'ticketPage.previousNoun' : 'ticketPage.nextNoun', { noun })}
           aria-keyshortcuts={dir === 'prev' ? '[' : ']'}
         >
           {icon}
@@ -1708,7 +1740,7 @@ function StepNav({
   return (
     <span className="ml-auto inline-flex min-w-0 items-center gap-2 text-xs">
       {step(prev, 'prev')}
-      <Tip content="[ and ] step back and forward">
+      <Tip content={tr('ticketPage.stepKeysTip')}>
         <span className="min-w-0 tabular-nums wrap-anywhere">{children}</span>
       </Tip>
       {step(next, 'next')}
@@ -1729,6 +1761,7 @@ function Lanes({
   onVerdict: (lane: TicketFull['lanes'][number], verdict: Verdict) => void
   judging: boolean
 }) {
+  const { t: tr } = useTranslation()
   const stages = useStages(t.projectId)
   const kindOf = (l: { status: string }) => stageOf(stages, l.status).kind
   const done = t.lanes.filter((l) => kindOf(l) === 'done').length
@@ -1763,7 +1796,7 @@ function Lanes({
     key: v,
     label: (
       <span className={`rounded-full px-1.5 py-px text-[11px] font-medium ${VERDICT_TAG[v]}`}>
-        {VERDICT_LABEL[v]}
+        {v === 'none' ? tr('ticketPage.noCall') : tr(`verdict.${v}`)}
       </span>
     ),
     count: t.lanes.filter((l) => laneVerdict(l) === v && stageOk(l, filter) && tagOk(l, filter)).length,
@@ -1777,14 +1810,15 @@ function Lanes({
     <section className="rounded-lg border p-4">
       <div className="mb-3 flex items-center gap-3">
         <h2 className="inline-flex items-center gap-1.5 text-sm font-medium">
-          <Layers className="size-4 text-muted-foreground" /> Lanes
+          <Layers className="size-4 text-muted-foreground" /> {tr('layoutEditor.element.ticket.lanes')}
         </h2>
         {t.lanes.length > 0 && (
           <span className="text-xs tabular-nums text-muted-foreground">
-            {done}/{t.lanes.length - cancelled} done · {approved} approved
-            {disapproved > 0 && ` · ${disapproved} disapproved`}
-            {cancelled > 0 && ` · ${cancelled} cancelled`}
-            {t.rollup.total > t.progress.total && ` · all tasks ${t.rollup.done}/${t.rollup.total}`}
+            {tr('ticketPage.lanesDone', { done, total: t.lanes.length - cancelled, approved })}
+            {disapproved > 0 && ` · ${tr('ticketPage.lanesDisapproved', { count: disapproved })}`}
+            {cancelled > 0 && ` · ${tr('ticketPage.lanesCancelled', { count: cancelled })}`}
+            {t.rollup.total > t.progress.total &&
+              ` · ${tr('ticketPage.allTasks', { done: t.rollup.done, total: t.rollup.total })}`}
           </span>
         )}
         <div className="ml-auto">
@@ -1792,15 +1826,12 @@ function Lanes({
         </div>
       </div>
       {t.lanes.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No lanes. Split this ticket into lanes when parts of it run in parallel: each lane gets its own
-          branch, assignee, tasks and updates.
-        </p>
+        <p className="text-sm text-muted-foreground">{tr('ticketPage.noLanes')}</p>
       ) : (
         <>
           <div className="mb-3 space-y-1.5">
             <FilterRow
-              label="Stage"
+              label={tr('ticketPage.filterStage')}
               chips={stageChips}
               active={filter.stages}
               onToggle={(s) => onFilter({ ...filter, stages: toggled(filter.stages, s) })}
@@ -1808,7 +1839,7 @@ function Lanes({
             />
             {verdictChips.length > 1 && (
               <FilterRow
-                label="Verdict"
+                label={tr('ticketPage.filterVerdict')}
                 chips={verdictChips}
                 active={filter.verdicts}
                 onToggle={(v) => onFilter({ ...filter, verdicts: toggled(filter.verdicts, v) })}
@@ -1817,7 +1848,7 @@ function Lanes({
             )}
             {tags.length > 0 && (
               <FilterRow
-                label="Tags"
+                label={tr('ticketPage.filterTags')}
                 chips={tags.map(({ tag, count }) => ({
                   key: tag.toLowerCase(),
                   label: <Tag tag={tag} className="rounded-full" />,
@@ -1830,13 +1861,13 @@ function Lanes({
             )}
             {filtering && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                showing {lanes.length} of {t.lanes.length}
+                {tr('ticketPage.showing', { shown: lanes.length, total: t.lanes.length })}
                 <button
                   type="button"
                   className="underline underline-offset-2 hover:text-foreground"
                   onClick={() => onFilter(NO_FILTER)}
                 >
-                  clear filters
+                  {tr('ticketPage.clearFilters')}
                 </button>
               </div>
             )}
@@ -1892,7 +1923,7 @@ function Lanes({
                       )}
                       {l.lanes.total > 0 && (
                         <span className="inline-flex items-center gap-1">
-                          <Layers className="size-3" /> {l.lanes.total} lane{l.lanes.total === 1 ? '' : 's'}
+                          <Layers className="size-3" /> {tr('ticketBoard.lanes', { count: l.lanes.total })}
                         </span>
                       )}
                       {l.lastUpdate && (
@@ -1978,6 +2009,7 @@ function Activity({
   laneFeed: boolean
   onLaneFeed: (v: boolean) => void
 }) {
+  const { t: tr } = useTranslation()
   const [body, setBody] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [tab, setTab] = useState<FeedTab>('main')
@@ -2031,20 +2063,20 @@ function Activity({
   return (
     <section>
       <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h2 className="text-sm font-medium">Activity</h2>
+        <h2 className="text-sm font-medium">{tr('ticketPage.activity')}</h2>
         <Tabs value={tab} onValueChange={(v) => setTab(v as FeedTab)}>
-          <TabsList aria-label="Feed">
-            <Tip content="For you: your posts with the replies under them, decisions and questions">
+          <TabsList aria-label={tr('ticketPage.feed')}>
+            <Tip content={tr('ticketPage.mainTip')}>
               <TabsTrigger value="main" className="after:hidden">
-                Main
+                {tr('ticketPage.main')}
               </TabsTrigger>
             </Tip>
-            <Tip content="The agents' working record: progress, review phases, builder notes">
+            <Tip content={tr('ticketPage.agentsTip')}>
               <TabsTrigger value="agents" className="after:hidden">
-                Agents
+                {tr('ticketPage.agents')}
                 {fresh > 0 && (
                   <span
-                    aria-label={`${fresh} new`}
+                    aria-label={tr('ticketPage.newCount', { count: fresh })}
                     className="ml-1 rounded-full bg-primary px-1.5 text-xs text-primary-foreground tabular-nums"
                   >
                     {fresh}
@@ -2056,7 +2088,8 @@ function Activity({
         </Tabs>
         {t.lanes.length > 0 && (
           <label className="ml-auto inline-flex items-center gap-2 text-xs text-muted-foreground">
-            <Switch size="sm" checked={laneFeed} onCheckedChange={onLaneFeed} /> include lane posts
+            <Switch size="sm" checked={laneFeed} onCheckedChange={onLaneFeed} />{' '}
+            {tr('ticketPage.includeLanePosts')}
           </label>
         )}
       </div>
@@ -2076,12 +2109,8 @@ function Activity({
           onFiles={annotate.add}
           onAttach={() => fileInput.current?.click()}
           onSubmit={submit}
-          label="New post"
-          placeholder={
-            tab === 'main'
-              ? 'Write a post: a question, an answer, progress. Paste or drop screenshots and recordings.'
-              : "Write in the agents' record: a note for whoever works it. Paste or drop files."
-          }
+          label={tr('ticketPage.newPost')}
+          placeholder={tab === 'main' ? tr('ticketPage.postPlaceholder') : tr('ticketPage.agentsPlaceholder')}
         />
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -2098,7 +2127,11 @@ function Activity({
           />
           <PendingFiles files={files} onChange={setFiles} />
           <Button type="submit" size="sm" className="ml-auto" disabled={!body.trim() || send.isPending}>
-            {send.isPending ? 'Posting…' : tab === 'main' ? 'Post' : 'Post in Agents'}
+            {send.isPending
+              ? tr('ticketPage.posting')
+              : tab === 'main'
+                ? tr('ticketPage.post')
+                : tr('ticketPage.postInAgents')}
           </Button>
         </div>
       </form>
@@ -2112,10 +2145,10 @@ function Activity({
       {feed.length === 0 ? (
         <Empty>
           {t.updates.length === 0
-            ? 'No posts yet.'
+            ? tr('ticketPage.noPosts')
             : tab === 'main'
-              ? 'No posts here yet.'
-              : 'No agent posts yet.'}
+              ? tr('ticketPage.noPostsHere')
+              : tr('ticketPage.noAgentPosts')}
         </Empty>
       ) : (
         <Timeline>
@@ -2135,7 +2168,10 @@ function Activity({
 const TAB_AREAS = ['ticket.tasks', 'ticket.timeline', 'ticket.lanes', 'ticket.activity'] as const
 type TabArea = (typeof TAB_AREAS)[number]
 const hasTab = (id: AreaId<'ticket.main'>): id is TabArea => (TAB_AREAS as readonly string[]).includes(id)
-const tabOf = (area: TabArea) => ({ key: area.slice('ticket.'.length), label: layoutElement(area).label })
+const tabOf = (area: TabArea, tr: TFunction) => ({
+  key: area.slice('ticket.'.length),
+  label: layoutLabel(area, tr),
+})
 
 /**
  * How far below the stuck header's bottom a section's top counts as the one being read: a tab's jump
@@ -2159,6 +2195,7 @@ const SPY_SETTLE_MS = 1200
  * where the page is, not only where it was last tapped.
  */
 function TicketSectionNav({ items }: { items: readonly { key: string; label: string }[] }) {
+  const { t: tr } = useTranslation()
   const [active, setActive] = useState(items[0]?.key ?? '')
   const root = useRef<HTMLDivElement | null>(null)
   // The tab a click asked for, while the scroll it started runs: no section passing the header on the
@@ -2255,7 +2292,7 @@ function TicketSectionNav({ items }: { items: readonly { key: string; label: str
   return (
     <div ref={root} className="-my-1 flex min-w-0 grow basis-40 overflow-x-auto py-1">
       <Tabs value={current} onValueChange={(v) => go(String(v))}>
-        <TabsList aria-label="Ticket sections" className="w-max">
+        <TabsList aria-label={tr('ticketPage.sections')} className="w-max">
           {items.map((s) => (
             <TabsTrigger
               key={s.key}
@@ -2281,6 +2318,7 @@ function TicketSectionNav({ items }: { items: readonly { key: string; label: str
  * progress post stands in for it.
  */
 function SummaryCard({ t }: { t: TicketFull }) {
+  const { t: tr } = useTranslation()
   const s = t.summary!
   const [history, setHistory] = useState(false)
   // Every version's replies, from the feed (the versions are its posts).
@@ -2299,37 +2337,44 @@ function SummaryCard({ t }: { t: TicketFull }) {
     enabled: history,
   })
   const earlier = data?.versions.filter((v) => v.postId !== s.postId) ?? []
-  const when = s.fallback ? 'posted' : s.versions > 1 ? 'updated' : 'written'
+  const when = tr(
+    s.fallback
+      ? 'ticketPage.summaryPosted'
+      : s.versions > 1
+        ? 'ticketPage.summaryUpdated'
+        : 'ticketPage.summaryWritten',
+    { when: ago(s.at) },
+  )
   return (
     // A link to the summary's post (#post-<id>) lands here, below the stuck header. Not the stand-in's:
     // that post is in the feed too (in Agents, with its replies), and a link to it opens that tab, which
     // would take this card away from under the mark, so the id stays with the post.
     <article
       id={s.fallback ? undefined : `post-${s.postId}`}
-      aria-label="Summary"
+      aria-label={tr('ticketPage.summary')}
       className="relative mb-4 scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border border-primary/30 bg-primary/5 p-3"
     >
       {/* pr-9 keeps the header's line clear of the history button, floating in the card's top-right. */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pr-9 text-xs text-muted-foreground">
         <h3 className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground">
-          <ScrollText className="size-4" /> Summary
+          <ScrollText className="size-4" /> {tr('ticketPage.summary')}
         </h3>
         <Actor name={s.by} via={s.via} className="text-foreground" />
         <Tip content={stamp(s.at)}>
           <span className="min-w-0 break-words">
-            {when} {ago(s.at)}
+            {when}
             {s.change && `: ${s.change}`}
           </span>
         </Tip>
         {s.versions > 1 && (
-          <Tip content={`History (${s.versions - 1})`}>
+          <Tip content={tr('ticketPage.history', { count: s.versions - 1 })}>
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
               className="absolute top-2 right-2 text-muted-foreground"
               aria-expanded={history}
-              aria-label={`History (${s.versions - 1})`}
+              aria-label={tr('ticketPage.history', { count: s.versions - 1 })}
               onClick={() => setHistory((v) => !v)}
             >
               <History />
@@ -2337,11 +2382,7 @@ function SummaryCard({ t }: { t: TicketFull }) {
           </Tip>
         )}
       </div>
-      {s.fallback && (
-        <p className="mt-1 text-xs text-muted-foreground">
-          No summary yet: the latest progress post stands in for it until an agent writes one.
-        </p>
-      )}
+      {s.fallback && <p className="mt-1 text-xs text-muted-foreground">{tr('ticketPage.noSummary')}</p>}
       <Markdown className="mt-2">{s.body}</Markdown>
       <Attachments items={s.attachments} />
       {/* The stand-in's replies are under the post itself, in Agents. */}
@@ -2349,8 +2390,8 @@ function SummaryCard({ t }: { t: TicketFull }) {
           old one must not go to the new one. */}
       {!s.fallback && <SummaryReplies key={s.postId} postId={s.postId} count={replies(s.postId)} />}
       {history && (
-        <ol aria-label="Earlier versions" className="mt-3 space-y-3 border-t pt-3">
-          {!data && <li className="text-xs text-muted-foreground">Loading…</li>}
+        <ol aria-label={tr('ticketPage.earlierVersions')} className="mt-3 space-y-3 border-t pt-3">
+          {!data && <li className="text-xs text-muted-foreground">{tr('files.viewer.loading')}</li>}
           {earlier.map((v) => (
             <li
               key={v.postId}
@@ -2361,7 +2402,7 @@ function SummaryCard({ t }: { t: TicketFull }) {
                 <Actor name={v.by} via={v.via} className="text-foreground" />
                 <Tip content={stamp(v.at)}>
                   <span className="min-w-0 break-words">
-                    {ago(v.at)}: {v.change || 'the first version'}
+                    {ago(v.at)}: {v.change || tr('ticketPage.firstVersion')}
                   </span>
                 </Tip>
               </div>
@@ -2382,19 +2423,30 @@ function SummaryCard({ t }: { t: TicketFull }) {
  * of them (#post-<id>-reply-<id>) opens the thread, once per link.
  */
 function SummaryReplies({ postId, count }: { postId: number; count: number }) {
+  const { t: tr } = useTranslation()
   const [open, setOpen] = useState(false)
   const anchor = useContext(ShownAnchor)
   const opensFor = anchor?.holder === `post-${postId}` ? anchor.hash : null
   useEffect(() => {
     if (opensFor) setOpen(true)
   }, [opensFor])
-  const label = `${count} ${count === 1 ? 'reply' : 'replies'}`
+  const label = tr('ticketPage.replies', { count })
   return (
     <>
-      <div role="group" aria-label="Summary actions" className="mt-2 flex items-center gap-0.5">
+      <div
+        role="group"
+        aria-label={tr('ticketPage.summaryActions')}
+        className="mt-2 flex items-center gap-0.5"
+      >
         <ActionButton
-          label={open ? 'hide replies' : count ? label : 'reply'}
-          tip={open ? 'Hide replies' : count ? `Show ${label}` : 'Reply to the summary'}
+          label={open ? tr('ticketPage.hideRepliesLabel') : count ? label : tr('ticketPage.replyLabel')}
+          tip={
+            open
+              ? tr('ticketPage.hideReplies')
+              : count
+                ? tr('ticketPage.showReplies', { replies: label })
+                : tr('ticketPage.replySummary')
+          }
           size={count && !open ? 'xs' : 'icon-xs'}
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
@@ -2462,7 +2514,7 @@ function TimelineRow({
           <span className="block text-[11px] opacity-70" suppressHydrationWarning>
             {today
               ? clock(at)
-              : new Date(at).toLocaleString([], {
+              : new Date(at).toLocaleString(currentLocale(), {
                   month: 'short',
                   day: 'numeric',
                   hour: '2-digit',
@@ -2490,6 +2542,7 @@ function TimelineRow({
  * the first of them, opening right under the row.
  */
 function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string; onChange: () => void }) {
+  const { t: tr } = useTranslation()
   const [thread, setThread] = useState(false)
   const [editing, setEditing] = useState(false)
   const onError = (err: unknown) => toast.error(errorMessage(err))
@@ -2509,7 +2562,7 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
     if (opensFor) setThread(true)
   }, [opensFor])
   const replies = u.thread.count
-  const count = `${replies} ${replies === 1 ? 'reply' : 'replies'}`
+  const count = tr('ticketPage.replies', { count: replies })
   return (
     // A link lands on it as #post-<id>, below the stuck header.
     <article
@@ -2525,14 +2578,16 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <Actor name={u.author} via={u.via} className="text-foreground" />
           {u.summary ? (
-            <Tip content="The lane's summary: where its work stands, as its agents keep it">
+            <Tip content={tr('ticketPage.laneSummaryTip')}>
               <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">
-                <ScrollText className="size-3" /> summary
+                <ScrollText className="size-3" /> {tr('ticketPage.summaryChip')}
               </span>
             </Tip>
           ) : (
             u.progress && (
-              <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">progress</span>
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">
+                {tr('ticketPage.progress')}
+              </span>
             )
           )}
           {u.lane && (
@@ -2558,10 +2613,20 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
         )}
         {u.decision && <DecisionCard u={u} onChange={onChange} />}
         <Attachments items={u.attachments} />
-        <div role="group" aria-label="Post actions" className="mt-2 flex items-center gap-0.5">
+        <div
+          role="group"
+          aria-label={tr('ticketPage.postActions')}
+          className="mt-2 flex items-center gap-0.5"
+        >
           <ActionButton
-            label={thread ? 'hide replies' : replies ? count : 'reply'}
-            tip={thread ? 'Hide replies' : replies ? `Show ${count}` : 'Reply'}
+            label={thread ? tr('ticketPage.hideRepliesLabel') : replies ? count : tr('ticketPage.replyLabel')}
+            tip={
+              thread
+                ? tr('ticketPage.hideReplies')
+                : replies
+                  ? tr('ticketPage.showReplies', { replies: count })
+                  : tr('thread.reply')
+            }
             size={replies && !thread ? 'xs' : 'icon-xs'}
             aria-expanded={thread}
             onClick={() => setThread((v) => !v)}
@@ -2577,8 +2642,8 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
               onDelete={() => remove.mutate()}
             >
               <ActionButton
-                label={u.progress ? 'not progress' : 'mark progress'}
-                tip={u.progress ? 'Not progress: make it a plain post' : 'Mark as progress'}
+                label={u.progress ? tr('ticketPage.notProgressLabel') : tr('ticketPage.markProgressLabel')}
+                tip={u.progress ? tr('ticketPage.notProgressTip') : tr('ticketPage.markProgressTip')}
                 onClick={() => edit.mutate({ progress: !u.progress })}
               >
                 {u.progress ? <FlagOff /> : <Flag />}
@@ -2607,6 +2672,7 @@ type DecideResult = {
 }
 
 function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
+  const { t: tr } = useTranslation()
   const options = u.decision!
   const decided = u.decidedOption !== null && u.decidedAt !== null
   // Relayed: the words are the human's, and no one on the board picked the option (decidedBy is '').
@@ -2626,29 +2692,39 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
       // archived already are as asked: the reply under the card lists them, no toast.
       const ids = (list: number[]) => list.map((id) => `#${id}`).join(', ')
       if (res.archive?.archived.length)
-        toast.success(`Archived ${ids(res.archive.archived)}: off the board, under Archived`)
+        toast.success(tr('ticketPage.decisionArchived', { ids: ids(res.archive.archived) }))
       if (res.archive?.skipped.length)
-        toast.error(`Not archived: ${res.archive.skipped.map((s) => s.why).join('; ')}`)
+        toast.error(tr('ticketPage.notArchived', { why: res.archive.skipped.map((s) => s.why).join('; ') }))
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
   return (
-    <div className="mt-3 space-y-2" role="group" aria-label="Decision">
+    <div className="mt-3 space-y-2" role="group" aria-label={tr('ticketPage.decision')}>
       <div className="flex items-center gap-2 text-xs">
         <Scale className="size-3.5 text-amber-600 dark:text-amber-400" />
         {decided && !changing ? (
           <span className="text-muted-foreground">
             {relayed ? (
               <>
-                Decided in chat by you ·{' '}
-                <Tip content="The orchestrator recorded your answer from the chat. Nothing was clicked on the card.">
-                  <span className="cursor-help underline decoration-dotted underline-offset-2">relayed</span>
+                {tr('ticketPage.decidedInChat')}{' '}
+                <Tip content={tr('ticketPage.relayedTip')}>
+                  <span className="cursor-help underline decoration-dotted underline-offset-2">
+                    {tr('ticketPage.relayed')}
+                  </span>
                 </Tip>{' '}
-                by <Actor name={u.relayedBy} /> {ago(u.decidedAt!)} ·{' '}
+                <Trans
+                  i18nKey="ticketPage.relayedBy"
+                  values={{ when: ago(u.decidedAt!) }}
+                  components={{ actor: <Actor name={u.relayedBy} /> }}
+                />{' '}
               </>
             ) : (
               <>
-                decided by <Actor name={u.decidedBy} /> {ago(u.decidedAt!)} ·{' '}
+                <Trans
+                  i18nKey="ticketPage.decidedBy"
+                  values={{ when: ago(u.decidedAt!) }}
+                  components={{ actor: <Actor name={u.decidedBy} /> }}
+                />{' '}
               </>
             )}
             <button
@@ -2656,11 +2732,13 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
               className="underline hover:text-foreground"
               onClick={() => setChanging(true)}
             >
-              change
+              {tr('ticketPage.change')}
             </button>
           </span>
         ) : (
-          <span className="font-medium text-amber-700 dark:text-amber-400">Your decision is needed</span>
+          <span className="font-medium text-amber-700 dark:text-amber-400">
+            {tr('ticketPage.decisionNeededHere')}
+          </span>
         )}
       </div>
       <ul className="grid gap-2 sm:grid-cols-2">
@@ -2687,7 +2765,7 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
                   {o.label}
                   {o.recommended && (
                     <span className="ml-auto rounded bg-muted px-1.5 py-0.5 text-[11px] font-normal text-muted-foreground">
-                      recommended
+                      {tr('ticketPage.recommended')}
                     </span>
                   )}
                 </span>
@@ -2699,7 +2777,7 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
       </ul>
       {relayed && !changing && (
         <p className="text-sm">
-          <span className="text-xs text-muted-foreground">What you said in chat:</span>{' '}
+          <span className="text-xs text-muted-foreground">{tr('ticketPage.saidInChat')}</span>{' '}
           <span className="whitespace-pre-wrap break-words">“{u.relayedText}”</span>
         </p>
       )}
@@ -2708,13 +2786,13 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
           <Input
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="A note for the agent (optional)"
-            aria-label="Note for the agent"
+            placeholder={tr('ticketPage.agentNotePlaceholder')}
+            aria-label={tr('ticketPage.agentNote')}
             className="h-8 min-w-48 flex-1 text-sm"
           />
           {changing && (
             <Button type="button" variant="ghost" size="sm" onClick={() => setChanging(false)}>
-              Cancel
+              {tr('ticketBoard.cancel')}
             </Button>
           )}
           <Button
@@ -2723,7 +2801,7 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
             disabled={picked === null || decide.isPending}
             onClick={() => decide.mutate()}
           >
-            {decide.isPending ? 'Saving…' : 'Decide'}
+            {decide.isPending ? tr('postTools.saving') : tr('ticketPage.decide')}
           </Button>
         </div>
       )}
@@ -2733,26 +2811,24 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
 
 /** Where a branch's head is: its last commit, how far from the base, how far it has gone. */
 function Info({ info }: { info: TicketGit['info'] }) {
+  const { t: tr } = useTranslation()
   return info.exists ? (
     <div className="text-xs text-muted-foreground">
       <span className="font-mono">{shortSha(info.sha!)}</span> {info.subject}
       <div>
-        {info.ahead != null && (
-          <>
-            +{info.ahead} / −{info.behind} vs base ·{' '}
-          </>
-        )}
+        {info.ahead != null && <>{tr('ticketPage.vsBase', { ahead: info.ahead, behind: info.behind })} </>}
         {ago(info.authoredAt)}
       </div>
       {info.reach && <ReachBadge reach={info.reach} className="mt-1" />}
     </div>
   ) : (
-    <div className="text-xs text-muted-foreground">branch not in the checkout yet</div>
+    <div className="text-xs text-muted-foreground">{tr('ticketPage.branchNotInCheckout')}</div>
   )
 }
 
 /** A PR of the ticket's: its link, where it is in the queue, its latest review. */
 function PrLine({ pr }: { pr: NonNullable<TicketFull['pr']> }) {
+  const { t: tr } = useTranslation()
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
       {pr.url ? (
@@ -2762,17 +2838,18 @@ function PrLine({ pr }: { pr: NonNullable<TicketFull['pr']> }) {
           rel="noreferrer"
           className="inline-flex items-center gap-1 font-medium hover:underline"
         >
-          PR #{pr.number} <ExternalLink className="size-3 text-muted-foreground" />
+          {tr('reviewResult.pr', { number: pr.number })}{' '}
+          <ExternalLink className="size-3 text-muted-foreground" />
         </a>
       ) : (
-        <span className="font-medium">PR #{pr.number}</span>
+        <span className="font-medium">{tr('reviewResult.pr', { number: pr.number })}</span>
       )}
-      {pr.queue && <span className="text-muted-foreground">{STATUS_LABEL[pr.queue.status]}</span>}
+      {pr.queue && <span className="text-muted-foreground">{tr(`prQueue.tabs.${pr.queue.status}`)}</span>}
       {pr.latestReview && (
         <ReviewResultButton
           resultId={pr.latestReview.id}
           className={`rounded bg-muted px-1 hover:underline ${pr.latestReview.fresh === false ? 'opacity-60' : ''}`}
-          tip={pr.latestReview.fresh === false ? 'review is for an older SHA' : 'latest review'}
+          tip={pr.latestReview.fresh === false ? tr('ticketPage.reviewOlder') : tr('ticketPage.latestReview')}
         >
           {pr.latestReview.verdict}
         </ReviewResultButton>
@@ -2783,13 +2860,18 @@ function PrLine({ pr }: { pr: NonNullable<TicketFull['pr']> }) {
 
 /** The ticket's branch: its git state and its PR; one panel per repo when it spans several. */
 function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
+  const { t: tr } = useTranslation()
   if ((git?.repos.length ?? 0) > 1)
     return (
       <>
         {git!.repos.map((r) => (
-          <section key={r.repo.id} className="rounded-lg border p-3" aria-label={`Branch in ${r.repo.name}`}>
+          <section
+            key={r.repo.id}
+            className="rounded-lg border p-3"
+            aria-label={tr('ticketPage.branchIn', { name: r.repo.name })}
+          >
             <h2 className="mb-2 flex items-center gap-1.5 text-sm font-medium">
-              Branch
+              {tr('ticketPage.branch')}
               <span className="ml-auto font-mono text-xs font-normal text-muted-foreground">
                 {r.repo.name}
               </span>
@@ -2799,7 +2881,9 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
                 <div className="inline-flex items-center gap-1 font-mono text-sm">
                   <GitBranch className="size-3.5" /> {r.branch}
                 </div>
-                <div className="text-xs text-muted-foreground">base {r.baseBranch}</div>
+                <div className="text-xs text-muted-foreground">
+                  {tr('ticketPage.base', { name: r.baseBranch })}
+                </div>
                 <div className="flex min-w-0 items-center gap-1">
                   <PushBadge push={r.info.push} />
                   {r.primary && <RefreshPush projectId={t.projectId} className="-my-1" />}
@@ -2807,9 +2891,7 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
                 <Info info={r.info} />
               </>
             ) : (
-              <p className="text-xs text-muted-foreground">
-                No branch yet: pick one above, or the agent sets it.
-              </p>
+              <p className="text-xs text-muted-foreground">{tr('ticketPage.noBranch')}</p>
             )}
             {r.pr && <PrLine pr={r.pr} />}
             {r.pr?.queue?.open && <PrState pr={r.pr.queue} className="mt-1.5" />}
@@ -2820,7 +2902,7 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
   return (
     <section className="rounded-lg border p-3">
       <h2 className="mb-2 flex items-center text-sm font-medium">
-        Branch
+        {tr('ticketPage.branch')}
         {git?.repo && (
           <span className="ml-auto font-mono text-xs font-normal text-muted-foreground">{git.repo.name}</span>
         )}
@@ -2830,7 +2912,7 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
           <div className="inline-flex items-center gap-1 font-mono text-sm">
             <GitBranch className="size-3.5" /> {t.branch}
           </div>
-          <div className="text-xs text-muted-foreground">base {t.baseBranch}</div>
+          <div className="text-xs text-muted-foreground">{tr('ticketPage.base', { name: t.baseBranch })}</div>
           {git?.repo && (
             <div className="flex min-w-0 items-center gap-1">
               <PushBadge push={git.info.push} />
@@ -2840,7 +2922,7 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
           {git && <Info info={git.info} />}
         </>
       ) : (
-        <p className="text-xs text-muted-foreground">No branch yet: pick one above, or the agent sets it.</p>
+        <p className="text-xs text-muted-foreground">{tr('ticketPage.noBranch')}</p>
       )}
       {t.pr && <PrLine pr={t.pr} />}
       {t.pr?.queue?.open && <PrState pr={t.pr.queue} className="mt-1.5" />}
@@ -2850,6 +2932,7 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
 
 /** The worktrees, sub-branches and sandboxes opened for the ticket and its lanes. */
 function WorkspacesPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
+  const { t: tr } = useTranslation()
   const remove = useMutation({
     mutationFn: (id: number) => del(`/api/workspaces/${id}`),
     onSuccess: onChange,
@@ -2857,10 +2940,9 @@ function WorkspacesPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
   })
   return (
     <section className="rounded-lg border p-3">
-      <h2 className="mb-2 text-sm font-medium">Workspaces</h2>
+      <h2 className="mb-2 text-sm font-medium">{tr('ticketPage.workspaces')}</h2>
       <p className="mb-2 text-xs text-muted-foreground">
-        Worktrees, sub-branches and subagent sandboxes the agents opened for this ticket
-        {t.lanes.length > 0 && ' and its lanes'}.
+        {tr(t.lanes.length > 0 ? 'ticketPage.workspacesDescLanes' : 'ticketPage.workspacesDesc')}
       </p>
       <ul className="space-y-2">
         {(git?.workspaces ?? t.workspaces.map((w) => ({ ...w, info: null, worktree: null, lane: null }))).map(
@@ -2872,12 +2954,12 @@ function WorkspacesPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
                 {(git?.repos.length ?? 0) > 1 && 'repo' in w && w.repo && (
                   <span className="font-mono text-[11px] text-muted-foreground">{w.repo.name}</span>
                 )}
-                <Tip content="remove">
+                <Tip content={tr('ticketPage.removeTask')}>
                   <button
                     type="button"
                     className="ml-auto opacity-0 group-hover:opacity-100"
                     onClick={() => remove.mutate(w.id)}
-                    aria-label="remove"
+                    aria-label={tr('ticketPage.removeTask')}
                   >
                     <X className="size-3.5 text-muted-foreground" />
                   </button>
@@ -2911,7 +2993,7 @@ function WorkspacesPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
         )}
       </ul>
       {t.workspaces.length === 0 && !git?.workspaces.length && (
-        <p className="text-xs text-muted-foreground">None yet.</p>
+        <p className="text-xs text-muted-foreground">{tr('ticketPage.noneYet')}</p>
       )}
     </section>
   )

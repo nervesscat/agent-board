@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
+import type { TFunction } from 'i18next'
 import { Copy, FolderGit2, GitBranch, Layers, Paperclip, RefreshCw, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Empty } from '#/components/Empty'
@@ -35,6 +37,7 @@ import {
   type DeleteResult,
   type JobState,
 } from '#/lib/api'
+import { shared } from '#/i18n'
 import { countsOf, deleteResults, keptItems } from '#/lib/cleanupResults'
 import { fileSize, shortSha } from '#/lib/format'
 import { useStages } from '#/lib/project'
@@ -50,31 +53,11 @@ type Target = { ticket: Leftover; branch: Branch }
 type Pending = { kind: DeleteKind; targets: Target[] }
 
 const GROUPS = [
-  {
-    key: 'safe',
-    title: 'Safe to delete',
-    hint: 'Every commit, or the same patches, are in the base.',
-  },
-  {
-    key: 'edited',
-    title: 'Edited but present',
-    hint: 'The commits changed on the way in, but merging the branch would add nothing.',
-  },
-  {
-    key: 'unique',
-    title: 'Still has unique work',
-    hint: 'The branch has changes its bases lack. Keep it, or check where the work went.',
-  },
-  {
-    key: 'kept',
-    title: 'Kept',
-    hint: "In use by a ticket in work or an open PR, a base, the repo's base branch, the main checkout's branch or origin's default branch: never deleted from here.",
-  },
-  {
-    key: 'other',
-    title: 'Nothing to compare',
-    hint: 'Workspaces still registered without a branch, or a branch with no base to check against.',
-  },
+  { key: 'safe' },
+  { key: 'edited' },
+  { key: 'unique' },
+  { key: 'kept' },
+  { key: 'other' },
 ] as const
 
 const groupOf = (r: Row): (typeof GROUPS)[number]['key'] => {
@@ -85,35 +68,45 @@ const groupOf = (r: Row): (typeof GROUPS)[number]['key'] => {
   return 'other'
 }
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
-
 /** Each action's words: on a row, for every eligible row at once, and in the dialog. */
-const ACTIONS: Record<
+const actionsOf = (
+  tr: TFunction,
+): Record<
   DeleteKind,
   { row: string; all: string; title: (n: number) => string; confirm: (n: number) => string; what: string }
-> = {
+> => ({
   local: {
-    row: 'Delete branch',
-    all: 'Delete every eligible local branch',
-    title: (n) => `Delete ${plural(n, 'local branch', 'local branches')}?`,
-    confirm: (n) => `Delete ${plural(n, 'local branch', 'local branches')}`,
-    what: 'Each branch goes from the checkout. Origin keeps its copy.',
+    row: tr('cleanup.actions.local.row'),
+    all: tr('cleanup.actions.local.all'),
+    title: (count) => tr('cleanup.actions.local.title', { count }),
+    confirm: (count) => tr('cleanup.actions.local.confirm', { count }),
+    what: tr('cleanup.actions.local.what'),
   },
   remote: {
-    row: 'Delete on origin',
-    all: 'Delete every eligible branch on origin',
-    title: (n) => `Delete ${plural(n, 'branch', 'branches')} on origin?`,
-    confirm: (n) => `Delete ${plural(n, 'branch', 'branches')} on origin`,
-    what: 'Each branch goes from origin, for everyone who works with it. Local branches stay.',
+    row: tr('cleanup.actions.remote.row'),
+    all: tr('cleanup.actions.remote.all'),
+    title: (count) => tr('cleanup.actions.remote.title', { count }),
+    confirm: (count) => tr('cleanup.actions.remote.confirm', { count }),
+    what: tr('cleanup.actions.remote.what'),
   },
   worktrees: {
-    row: 'Remove worktree + branch',
-    all: 'Remove every eligible worktree with its branch',
-    title: (n) => `Remove the worktrees of ${plural(n, 'branch', 'branches')}, and the branches?`,
-    confirm: (n) => `Remove worktrees and delete ${plural(n, 'branch', 'branches')}`,
-    what: 'Each worktree folder goes (ignored files such as node_modules with it), then the local branch. A link in it goes as a link: a folder it leads to out of the worktree stays. Origin keeps its copy.',
+    row: tr('cleanup.actions.worktrees.row'),
+    all: tr('cleanup.actions.worktrees.all'),
+    title: (count) => tr('cleanup.actions.worktrees.title', { count }),
+    confirm: (count) => tr('cleanup.actions.worktrees.confirm', { count }),
+    what: tr('cleanup.actions.worktrees.what'),
   },
-}
+})
+
+/** An active preview's state as a phrase: "running on :47101", "building". */
+const previewState = (p: { status: string; port: number | null }, tr: TFunction): string =>
+  p.status === 'running'
+    ? tr('cleanup.previewState.running', { port: p.port })
+    : p.status === 'building'
+      ? tr('cleanup.previewState.building')
+      : p.status === 'starting'
+        ? tr('cleanup.previewState.starting')
+        : p.status
 
 const itemOf = (kind: DeleteKind, { ticket, branch }: Target): DeleteItem => ({
   ticketId: ticket.id,
@@ -125,11 +118,13 @@ const itemOf = (kind: DeleteKind, { ticket, branch }: Target): DeleteItem => ({
 
 const copy = (text: string) =>
   navigator.clipboard.writeText(text).then(
-    () => toast.success('Copied'),
+    () => toast.success(shared.t('cleanup.copied')),
     (err) => toast.error(errorMessage(err)),
   )
 
 function Cleanup() {
+  const { t: tr } = useTranslation()
+  const ACTIONS = actionsOf(tr)
   const { id } = Route.useParams()
   const stages = useStages(id)
   const { data, isLoading, isFetching, refetch, error } = useQuery({
@@ -149,11 +144,8 @@ function Cleanup() {
   const sweep = useMutation({
     mutationFn: () => del<{ deleted: number; bytes: number; failed: number }>('/api/uploads/unattached'),
     onSuccess: (r) => {
-      if (r.failed)
-        toast.error(
-          `Deleted ${r.deleted} file${r.deleted === 1 ? '' : 's'}; ${r.failed} could not be deleted and stay for the next run`,
-        )
-      else toast.success(`Deleted ${r.deleted} file${r.deleted === 1 ? '' : 's'} (${fileSize(r.bytes)})`)
+      if (r.failed) toast.error(tr('cleanup.sweep.partial', { count: r.deleted, failed: r.failed }))
+      else toast.success(tr('cleanup.sweep.done', { count: r.deleted, size: fileSize(r.bytes) }))
       void refetch()
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -207,11 +199,17 @@ function Cleanup() {
       const done = deleteResults(job.result)
       if (done) setResults(done)
       const counts = countsOf(done ?? [])
-      if (counts.kept) toast.error(`${counts.text}: see why below`)
+      if (counts.kept) toast.error(tr('cleanup.toast.keptSee', { counts: counts.text }))
       else toast.success(counts.text)
-    } else toast.error(`${job.title} failed: ${job.reason ?? 'no reason given'}`)
+    } else
+      toast.error(
+        tr('cleanup.toast.jobFailed', {
+          title: job.title,
+          reason: job.reason ?? tr('cleanup.noReasonGiven'),
+        }),
+      )
     void refetch()
-  }, [job, refetch])
+  }, [job, refetch, tr])
   useEffect(() => {
     if (!run || !jobs.data || polled || !seenJob.current) return
     // Dismissed from the top bar while it ran: nothing left to follow, and the report is read again.
@@ -231,10 +229,8 @@ function Cleanup() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Cleanup</h1>
-          <p className="text-sm text-muted-foreground">
-            Finished work to clean up, checked against its base.
-          </p>
+          <h1 className="text-xl font-semibold tracking-tight">{tr('cleanup.title')}</h1>
+          <p className="text-sm text-muted-foreground">{tr('cleanup.intro')}</p>
         </div>
         <Button
           className="w-full sm:w-auto"
@@ -243,41 +239,45 @@ function Cleanup() {
           onClick={() => refetch()}
           disabled={isFetching}
         >
-          <RefreshCw data-icon="inline-start" className={isFetching ? 'animate-spin' : ''} /> Refresh
+          <RefreshCw data-icon="inline-start" className={isFetching ? 'animate-spin' : ''} />{' '}
+          {tr('cleanup.refresh')}
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        Agents may delete local branches that landed ( <span className="font-mono">cleanup_delete</span> );
-        removing worktrees and deleting branches on origin stay yours, from this page.
+        <Trans i18nKey="cleanup.agentsNote" components={{ tool: <span className="font-mono" /> }} />
       </p>
       {error && <p className="text-sm text-destructive">{errorMessage(error)}</p>}
       {actionsOff && (
-        <p className="rounded-lg border bg-muted/40 p-3 text-sm">Deleting is off: {actionsOff}.</p>
+        <p className="rounded-lg border bg-muted/40 p-3 text-sm">
+          {tr('cleanup.deleteOff', { reason: actionsOff })}
+        </p>
       )}
       {data?.repos
         .filter((r) => r.error)
         .map((r) => (
           <p key={r.id} className="text-sm text-destructive">
-            {r.name}: {r.error}. Its branches and worktrees are unknown, so nothing in it can be deleted.
+            {tr('cleanup.repoError', { name: r.name, error: r.error })}
           </p>
         ))}
       {job && (
-        <section aria-label="Delete progress" className="space-y-1.5 rounded-lg border p-3">
+        <section aria-label={tr('cleanup.progress.label')} className="space-y-1.5 rounded-lg border p-3">
           {job.state === 'running' ? (
             <>
               <Progress
                 value={job.done}
                 max={Math.max(1, job.total)}
-                getAriaValueText={(formatted) => `${formatted} of ${job.total}`}
+                getAriaValueText={(formatted) =>
+                  tr('cleanup.progress.of', { done: formatted, total: job.total })
+                }
                 className="gap-1.5"
               >
                 <span className="text-xs font-medium">{job.title}</span>
                 <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-                  {job.done} of {job.total}
+                  {tr('cleanup.progress.of', { done: job.done, total: job.total })}
                 </span>
               </Progress>
               <p className="text-xs text-muted-foreground" aria-live="polite">
-                {job.step ?? 'Starting…'}
+                {job.step ?? tr('cleanup.progress.starting')}
               </p>
             </>
           ) : (
@@ -289,10 +289,12 @@ function Cleanup() {
                   : 'text-xs text-emerald-700 dark:text-emerald-400'
               }
             >
-              {job.done} of {job.total} ·{' '}
+              {tr('cleanup.progress.of', { done: job.done, total: job.total })} ·{' '}
               {job.state === 'failed'
-                ? `Failed · ${job.reason ?? 'no reason given'}`
-                : `Succeeded · ${countsOf(deleteResults(job.result) ?? []).text}`}
+                ? tr('cleanup.progress.failed', { reason: job.reason ?? tr('cleanup.noReasonGiven') })
+                : tr('cleanup.progress.succeeded', {
+                    counts: countsOf(deleteResults(job.result) ?? []).text,
+                  })}
             </p>
           )}
         </section>
@@ -310,7 +312,7 @@ function Cleanup() {
       {isLoading ? (
         <Skeleton className="h-64" />
       ) : !rows.length && !data?.untracked.length ? (
-        <Empty>Nothing left behind. Every closed ticket is cleaned up.</Empty>
+        <Empty>{tr('cleanup.empty')}</Empty>
       ) : (
         <>
           {!actionsOff && (eligible('local').length > 0 || eligible('worktrees').length > 0) && (
@@ -332,14 +334,15 @@ function Cleanup() {
             </div>
           )}
           {GROUPS.map((g) => {
+            const title = tr(`cleanup.group.${g.key}.title`)
             const items = rows.filter((r) => groupOf(r) === g.key)
             if (!items.length) return null
             return (
               <section key={g.key} className="space-y-1.5">
                 <h2 className="text-sm font-medium">
-                  {g.title} <span className="text-muted-foreground">· {items.length}</span>
+                  {title} <span className="text-muted-foreground">· {items.length}</span>
                 </h2>
-                <p className="text-xs text-muted-foreground">{g.hint}</p>
+                <p className="text-xs text-muted-foreground">{tr(`cleanup.group.${g.key}.hint`)}</p>
                 <div className="space-y-2 md:hidden">
                   {items.map(({ ticket: t, branch: b }) => (
                     <Card key={`${t.id}:${b?.name ?? ''}`} size="sm">
@@ -357,14 +360,13 @@ function Cleanup() {
                         <CardDescription>
                           #{t.id} · {stages.length ? stageOf(stages, t.status).name : t.status}
                           {t.workspaces.length > 0 &&
-                            ` · ${t.workspaces.length} workspace${t.workspaces.length > 1 ? 's' : ''} registered`}
+                            ` · ${tr('cleanup.workspacesRegistered', { count: t.workspaces.length })}`}
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-2 text-xs">
                         {t.previews.map((p) => (
                           <div key={p.workspaceId} className="text-amber-700 dark:text-amber-400">
-                            preview {p.status === 'running' ? `running on :${p.port}` : p.status}: stop it on
-                            the ticket
+                            {tr('cleanup.previewStop', { state: previewState(p, tr) })}
                           </div>
                         ))}
                         <div className="flex flex-wrap items-center gap-2">
@@ -374,7 +376,7 @@ function Cleanup() {
                                 <GitBranch className="size-3" /> {b.name}
                               </span>
                               <span className="font-mono text-muted-foreground">
-                                {b.local ? shortSha(b.local) : 'not local'}
+                                {b.local ? shortSha(b.local) : tr('cleanup.notLocal')}
                               </span>
                               {b.reach && <ReachBadge reach={b.reach} />}
                             </>
@@ -387,26 +389,30 @@ function Cleanup() {
                         {b?.worktrees.map((w) => (
                           <Tip
                             key={w.path}
-                            content={w.protected ? `${w.path}: kept, ${w.protected}` : w.path}
+                            content={
+                              w.protected
+                                ? tr('cleanup.worktreeKept', { path: w.path, reason: w.protected })
+                                : w.path
+                            }
                           >
                             <div className="flex items-center gap-1 truncate font-mono text-[11px]">
                               <FolderGit2 className="size-3 shrink-0 text-muted-foreground" />
-                              <span className="truncate">{w.main ? 'main checkout' : w.path}</span>
+                              <span className="truncate">{w.main ? tr('cleanup.mainCheckout') : w.path}</span>
                             </div>
                           </Tip>
                         ))}
                         <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-2">
                           <span className="font-mono text-muted-foreground">
-                            {b?.remote ? `origin ${shortSha(b.remote)}` : ''}
+                            {b?.remote ? tr('cleanup.originSha', { sha: shortSha(b.remote) }) : ''}
                           </span>
                           <div className="flex flex-wrap items-center gap-1">
                             {b?.restore && (
-                              <Tip content={`Copy the restore command: ${b.restore}`}>
+                              <Tip content={tr('cleanup.copyRestore', { command: b.restore })}>
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="icon-sm"
-                                  aria-label={`Copy the restore command: ${b.restore}`}
+                                  aria-label={tr('cleanup.copyRestore', { command: b.restore })}
                                   onClick={() => copy(b.restore!)}
                                 >
                                   <Copy />
@@ -430,11 +436,11 @@ function Cleanup() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Ticket</TableHead>
-                        <TableHead>Branch</TableHead>
-                        <TableHead>Reach</TableHead>
-                        <TableHead>Worktree</TableHead>
-                        <TableHead>Origin</TableHead>
+                        <TableHead>{tr('cleanup.col.ticket')}</TableHead>
+                        <TableHead>{tr('cleanup.col.branch')}</TableHead>
+                        <TableHead>{tr('cleanup.col.reach')}</TableHead>
+                        <TableHead>{tr('cleanup.col.worktree')}</TableHead>
+                        <TableHead>{tr('cleanup.col.origin')}</TableHead>
                         <TableHead className="w-8" />
                         <TableHead />
                       </TableRow>
@@ -454,12 +460,11 @@ function Cleanup() {
                             <div className="text-xs text-muted-foreground">
                               #{t.id} · {stages.length ? stageOf(stages, t.status).name : t.status}
                               {t.workspaces.length > 0 &&
-                                ` · ${t.workspaces.length} workspace${t.workspaces.length > 1 ? 's' : ''} registered`}
+                                ` · ${tr('cleanup.workspacesRegistered', { count: t.workspaces.length })}`}
                             </div>
                             {t.previews.map((p) => (
                               <div key={p.workspaceId} className="text-xs text-amber-700 dark:text-amber-400">
-                                preview {p.status === 'running' ? `running on :${p.port}` : p.status}: stop it
-                                on the ticket
+                                {tr('cleanup.previewStop', { state: previewState(p, tr) })}
                               </div>
                             ))}
                           </TableCell>
@@ -470,7 +475,7 @@ function Cleanup() {
                                   <GitBranch className="size-3" /> {b.name}
                                 </div>
                                 <div className="font-mono text-[11px] text-muted-foreground">
-                                  {b.local ? shortSha(b.local) : 'not local'}
+                                  {b.local ? shortSha(b.local) : tr('cleanup.notLocal')}
                                 </div>
                               </>
                             ) : (
@@ -490,11 +495,17 @@ function Cleanup() {
                             {b?.worktrees.map((w) => (
                               <Tip
                                 key={w.path}
-                                content={w.protected ? `${w.path}: kept, ${w.protected}` : w.path}
+                                content={
+                                  w.protected
+                                    ? tr('cleanup.worktreeKept', { path: w.path, reason: w.protected })
+                                    : w.path
+                                }
                               >
                                 <div className="flex items-center gap-1 truncate font-mono text-[11px]">
                                   <FolderGit2 className="size-3 shrink-0 text-muted-foreground" />
-                                  <span className="truncate">{w.main ? 'main checkout' : w.path}</span>
+                                  <span className="truncate">
+                                    {w.main ? tr('cleanup.mainCheckout') : w.path}
+                                  </span>
                                 </div>
                               </Tip>
                             ))}
@@ -504,10 +515,10 @@ function Cleanup() {
                           </TableCell>
                           <TableCell>
                             {b?.restore && (
-                              <Tip content={`Copy the restore command: ${b.restore}`}>
+                              <Tip content={tr('cleanup.copyRestore', { command: b.restore })}>
                                 <button
                                   type="button"
-                                  aria-label={`Copy the restore command: ${b.restore}`}
+                                  aria-label={tr('cleanup.copyRestore', { command: b.restore })}
                                   onClick={() => copy(b.restore!)}
                                   className="text-muted-foreground hover:text-foreground"
                                 >
@@ -537,7 +548,8 @@ function Cleanup() {
             <section className="space-y-1.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-sm font-medium">
-                  Branches left on origin <span className="text-muted-foreground">· {remote.length}</span>
+                  {tr('cleanup.remote.title')}{' '}
+                  <span className="text-muted-foreground">· {remote.length}</span>
                 </h2>
                 {!actionsOff && eligible('remote').length > 0 && (
                   <Button
@@ -550,11 +562,7 @@ function Cleanup() {
                   </Button>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                As of the last fetch; the board fetches origin again before it deletes one. Each is judged by
-                its own commits against origin's copies of the bases, or by a merged PR whose head is that
-                very commit.
-              </p>
+              <p className="text-xs text-muted-foreground">{tr('cleanup.remote.intro')}</p>
               <div className="space-y-2 md:hidden">
                 {remote.map(({ ticket: t, branch: b }) => (
                   <Card key={`${t.id}:${b.name}`} size="sm">
@@ -569,7 +577,7 @@ function Cleanup() {
                     <CardContent className="space-y-2 text-xs">
                       <div>
                         {b.mergedPr ? (
-                          <span>PR #{b.mergedPr.number} merged at this commit</span>
+                          <span>{tr('cleanup.prMerged', { number: b.mergedPr.number })}</span>
                         ) : b.remoteReach ? (
                           <ReachBadge reach={b.remoteReach} />
                         ) : (
@@ -578,12 +586,12 @@ function Cleanup() {
                       </div>
                       <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-2">
                         {b.restoreRemote ? (
-                          <Tip content={`Copy the restore command: ${b.restoreRemote}`}>
+                          <Tip content={tr('cleanup.copyRestore', { command: b.restoreRemote })}>
                             <Button
                               type="button"
                               variant="ghost"
                               size="icon-sm"
-                              aria-label={`Copy the restore command: ${b.restoreRemote}`}
+                              aria-label={tr('cleanup.copyRestore', { command: b.restoreRemote })}
                               onClick={() => copy(b.restoreRemote!)}
                             >
                               <Copy />
@@ -614,9 +622,9 @@ function Cleanup() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Ticket</TableHead>
-                      <TableHead>Branch on origin</TableHead>
-                      <TableHead>Reach</TableHead>
+                      <TableHead>{tr('cleanup.col.ticket')}</TableHead>
+                      <TableHead>{tr('cleanup.col.branchOnOrigin')}</TableHead>
+                      <TableHead>{tr('cleanup.col.reach')}</TableHead>
                       <TableHead className="w-8" />
                       <TableHead />
                     </TableRow>
@@ -635,7 +643,9 @@ function Cleanup() {
                         </TableCell>
                         <TableCell>
                           {b.mergedPr ? (
-                            <span className="text-xs">PR #{b.mergedPr.number} merged at this commit</span>
+                            <span className="text-xs">
+                              {tr('cleanup.prMerged', { number: b.mergedPr.number })}
+                            </span>
                           ) : b.remoteReach ? (
                             <ReachBadge reach={b.remoteReach} />
                           ) : (
@@ -644,10 +654,10 @@ function Cleanup() {
                         </TableCell>
                         <TableCell>
                           {b.restoreRemote && (
-                            <Tip content={`Copy the restore command: ${b.restoreRemote}`}>
+                            <Tip content={tr('cleanup.copyRestore', { command: b.restoreRemote })}>
                               <button
                                 type="button"
-                                aria-label={`Copy the restore command: ${b.restoreRemote}`}
+                                aria-label={tr('cleanup.copyRestore', { command: b.restoreRemote })}
                                 onClick={() => copy(b.restoreRemote!)}
                                 className="text-muted-foreground hover:text-foreground"
                               >
@@ -681,11 +691,10 @@ function Cleanup() {
           {!!data?.untracked.length && (
             <section className="space-y-1.5">
               <h2 className="text-sm font-medium">
-                Untracked worktrees <span className="text-muted-foreground">· {data.untracked.length}</span>
+                {tr('cleanup.untracked.title')}{' '}
+                <span className="text-muted-foreground">· {data.untracked.length}</span>
               </h2>
-              <p className="text-xs text-muted-foreground">
-                Worktrees no ticket or workspace accounts for. Register them on their ticket, or remove them.
-              </p>
+              <p className="text-xs text-muted-foreground">{tr('cleanup.untracked.intro')}</p>
               <ul className="space-y-1 rounded-lg border p-3">
                 {data.untracked.map((w) => (
                   <li key={w.path} className="flex flex-wrap items-center gap-2 font-mono text-xs">
@@ -694,7 +703,7 @@ function Cleanup() {
                       <span className="truncate">{w.path}</span>
                     </Tip>
                     <span className="text-muted-foreground">
-                      {w.branch ?? (w.head ? `detached ${shortSha(w.head)}` : '')}
+                      {w.branch ?? (w.head ? tr('cleanup.detached', { sha: shortSha(w.head) }) : '')}
                     </span>
                   </li>
                 ))}
@@ -714,43 +723,44 @@ function Cleanup() {
       {!!uploads?.count && (
         <section className="space-y-1.5">
           <h2 className="text-sm font-medium">
-            Unattached uploads{' '}
+            {tr('cleanup.uploads.title')}{' '}
             <span className="text-muted-foreground">
               · {uploads.count} · {fileSize(uploads.bytes)}
             </span>
           </h2>
           <p className="text-xs text-muted-foreground">
-            Files uploaded more than a day ago that nothing on the board uses: a New ticket window closed
-            without creating, a file removed from a post before sending. The board deletes them every hour;
-            files younger than a day are left alone{uploads.recent ? ` (${uploads.recent} now)` : ''}.
+            {uploads.recent
+              ? tr('cleanup.uploads.introRecent', { recent: uploads.recent })
+              : tr('cleanup.uploads.intro')}
           </p>
           <div className="flex items-center gap-2 rounded-lg border p-3 text-sm">
             <Paperclip className="size-4 shrink-0 text-muted-foreground" />
             <span className="flex-1">
-              {uploads.count} file{uploads.count === 1 ? '' : 's'}, {fileSize(uploads.bytes)}
+              {tr('cleanup.uploads.summary', { count: uploads.count, size: fileSize(uploads.bytes) })}
             </span>
             <AlertDialog open={confirmSweep} onOpenChange={setConfirmSweep}>
               <AlertDialogTrigger render={<Button variant="outline" size="sm" disabled={sweep.isPending} />}>
-                Delete now
+                {tr('cleanup.uploads.deleteNow')}
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Delete the unattached uploads?</AlertDialogTitle>
+                  <AlertDialogTitle>{tr('cleanup.uploads.confirmTitle')}</AlertDialogTitle>
                   <AlertDialogDescription>
-                    {uploads.count} file{uploads.count === 1 ? '' : 's'} ({fileSize(uploads.bytes)}) that no
-                    post, reply, ticket or agent picture uses, uploaded more than a day ago. This cannot be
-                    undone.
+                    {tr('cleanup.uploads.confirmText', {
+                      count: uploads.count,
+                      size: fileSize(uploads.bytes),
+                    })}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Keep</AlertDialogCancel>
+                  <AlertDialogCancel>{tr('cleanup.keep')}</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() => {
                       setConfirmSweep(false)
                       sweep.mutate()
                     }}
                   >
-                    Delete
+                    {tr('cleanup.delete')}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -764,7 +774,8 @@ function Cleanup() {
 
 /** Why something stays: no control, only the reason. */
 function Kept({ reason }: { reason: string | null }) {
-  return <div className="text-[11px] text-muted-foreground">Kept: {reason}</div>
+  const { t: tr } = useTranslation()
+  return <div className="text-[11px] text-muted-foreground">{tr('cleanup.keptReason', { reason })}</div>
 }
 
 /**
@@ -780,6 +791,8 @@ function RowActions({
   busy: (kind: DeleteKind) => boolean
   onAsk: (kind: DeleteKind) => void
 }) {
+  const { t: tr } = useTranslation()
+  const ACTIONS = actionsOf(tr)
   const hasTrees = b.worktrees.some((w) => !w.main)
   const kinds = (['worktrees', 'local'] as const).filter((k) => b.can[k].ok)
   if (!kinds.length) {
@@ -807,6 +820,8 @@ function ConfirmDelete({
   onClose: () => void
   onConfirm: (p: Pending) => void
 }) {
+  const { t: tr } = useTranslation()
+  const ACTIONS = actionsOf(tr)
   const kind = pending?.kind ?? 'local'
   const all = pending?.targets ?? []
   // A branch edited on the way in differs from its base: listed apart, with the commits that differ.
@@ -828,11 +843,15 @@ function ConfirmDelete({
           )}
         </div>
         <div className="font-mono">
-          {b.name} @ {sha ? shortSha(sha) : 'no local branch'}{' '}
-          <span className="text-muted-foreground">{kind === 'remote' ? 'on origin' : 'local'}</span>
+          {b.name} @ {sha ? shortSha(sha) : tr('cleanup.noLocalBranch')}{' '}
+          <span className="text-muted-foreground">
+            {kind === 'remote' ? tr('cleanup.kind.remote') : tr('cleanup.kind.local')}
+          </span>
         </div>
         {kind === 'remote' && b.mergedPr && (
-          <div className="text-muted-foreground">PR #{b.mergedPr.number} was merged at this commit</div>
+          <div className="text-muted-foreground">
+            {tr('cleanup.prWasMerged', { number: b.mergedPr.number })}
+          </div>
         )}
         {reach?.state === 'edited' && (
           <ul className="text-muted-foreground">
@@ -846,17 +865,18 @@ function ConfirmDelete({
         {kind === 'worktrees' &&
           trees.map((w) => (
             <div key={w.path} className="flex items-center gap-1 font-mono">
-              <FolderGit2 className="size-3 shrink-0 text-muted-foreground" /> worktree {w.path}
+              <FolderGit2 className="size-3 shrink-0 text-muted-foreground" />{' '}
+              {tr('cleanup.worktreePath', { path: w.path })}
               {w.previews.map((p) => (
                 <span key={p.workspaceId} className="font-sans text-amber-700 dark:text-amber-400">
                   {' '}
-                  · stops its preview ({p.status === 'running' ? `running on :${p.port}` : p.status})
+                  · {tr('cleanup.stopsPreview', { state: previewState(p, tr) })}
                 </span>
               ))}
               {w.linkedPreviews.map((l) => (
                 <span key={`link-${l.workspaceId}`} className="font-sans text-amber-700 dark:text-amber-400">
                   {' '}
-                  · stops the server on :{l.port} if it runs from this worktree
+                  · {tr('cleanup.stopsServer', { port: l.port })}
                 </span>
               ))}
             </div>
@@ -870,29 +890,26 @@ function ConfirmDelete({
         <AlertDialogHeader>
           <AlertDialogTitle>{ACTIONS[kind].title(all.length)}</AlertDialogTitle>
           <AlertDialogDescription>
-            {ACTIONS[kind].what} Each is checked again just before it goes, and kept if anything changed;
-            nothing is forced. The restore commands are shown afterwards.
+            {ACTIONS[kind].what} {tr('cleanup.confirmChecked')}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="max-h-[50vh] space-y-3 overflow-y-auto text-xs">
           {plain.length > 0 && (
-            <ul aria-label="To delete" className="space-y-1.5">
+            <ul aria-label={tr('cleanup.toDelete')} className="space-y-1.5">
               {plain.map(item)}
             </ul>
           )}
           {edited.length > 0 && (
             <div className="space-y-1.5">
-              <p className="font-medium">
-                Edited on the way in: these commits differ from the base, but merging would add nothing
-              </p>
-              <ul aria-label="To delete, edited" className="space-y-1.5">
+              <p className="font-medium">{tr('cleanup.editedOnTheWay')}</p>
+              <ul aria-label={tr('cleanup.toDeleteEdited')} className="space-y-1.5">
                 {edited.map(item)}
               </ul>
             </div>
           )}
         </div>
         <AlertDialogFooter>
-          <AlertDialogCancel>Keep</AlertDialogCancel>
+          <AlertDialogCancel>{tr('cleanup.keep')}</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={() => pending && onConfirm(pending)}>
             {ACTIONS[kind].confirm(all.length)}
           </AlertDialogAction>
@@ -902,34 +919,35 @@ function ConfirmDelete({
   )
 }
 
-const OUTCOME: Record<DeleteResult['outcome'], { label: string; className: string; dot: string }> = {
+const OUTCOME: Record<DeleteResult['outcome'], { className: string; dot: string }> = {
   deleted: {
-    label: 'Deleted',
     className: 'text-emerald-700 dark:text-emerald-400',
     dot: 'bg-emerald-600 dark:bg-emerald-400',
   },
   refused: {
-    label: 'Kept',
     className: 'text-amber-700 dark:text-amber-400',
     dot: 'bg-amber-600 dark:bg-amber-400',
   },
-  failed: { label: 'Failed', className: 'text-destructive', dot: 'bg-destructive' },
-  gone: { label: 'Already gone', className: 'text-muted-foreground', dot: 'bg-muted-foreground/60' },
+  failed: { className: 'text-destructive', dot: 'bg-destructive' },
+  gone: { className: 'text-muted-foreground', dot: 'bg-muted-foreground/60' },
 }
 
 /** What went first, then what stayed and why, then what could not be done, then what was gone already. */
 const OUTCOME_ORDER: DeleteResult['outcome'][] = ['deleted', 'refused', 'failed', 'gone']
 
-const kindLabel = (kind: DeleteKind) =>
-  kind === 'remote' ? 'on origin' : kind === 'worktrees' ? 'with its worktrees' : 'local'
+const kindLabel = (kind: DeleteKind, tr: TFunction) =>
+  kind === 'remote'
+    ? tr('cleanup.kind.remote')
+    : kind === 'worktrees'
+      ? tr('cleanup.kind.worktrees')
+      : tr('cleanup.kind.local')
 
 /** The next step for the reasons this page can name; null when the reason already says it. */
-function advice(reason: string): string | null {
-  if (/has changes or untracked files: /.test(reason))
-    return 'Commit or stash them in the worktree, then refresh.'
-  if (reason.endsWith(' is gone: git worktree prune drops it')) return 'Run git worktree prune, then refresh.'
-  if (/ moved since: now at /.test(reason)) return 'Refresh, then confirm again on the new commit.'
-  if (reason.startsWith('checked out in ')) return 'Check out another branch there first.'
+function advice(reason: string, tr: TFunction): string | null {
+  if (/has changes or untracked files: /.test(reason)) return tr('cleanup.advice.changes')
+  if (reason.endsWith(' is gone: git worktree prune drops it')) return tr('cleanup.advice.prune')
+  if (/ moved since: now at /.test(reason)) return tr('cleanup.advice.moved')
+  if (reason.startsWith('checked out in ')) return tr('cleanup.advice.checkedOut')
   return null
 }
 
@@ -962,7 +980,7 @@ function bucketsOf(items: DeleteResult[]): Bucket[] {
 }
 
 /** The items that stayed for the very same reason, so it reads once for all of them. */
-function groupsOf(items: DeleteResult[]) {
+function groupsOf(items: DeleteResult[], tr: TFunction) {
   const groups = new Map<string, DeleteResult[]>()
   for (const r of items) {
     const key = r.reason ?? ''
@@ -984,7 +1002,7 @@ function groupsOf(items: DeleteResult[]) {
       key,
       reason: prefix ? key.slice(prefix.length) : key,
       // The patterns read the message whole: the branch and its space are part of what they look for.
-      advice: advice(key),
+      advice: advice(key, tr),
       buckets,
     }
   })
@@ -992,6 +1010,7 @@ function groupsOf(items: DeleteResult[]) {
 
 /** What an item took with it, each fact once: the paths removed, the links, and how to put them back. */
 function Facts({ items }: { items: DeleteResult[] }) {
+  const { t: tr } = useTranslation()
   const removed = [...new Set(items.flatMap((r) => r.removed))]
   const unlinked = [
     ...new Map(items.flatMap((r) => r.unlinked).map((l) => [`${l.path}\u0000${l.target}`, l])).values(),
@@ -1002,21 +1021,21 @@ function Facts({ items }: { items: DeleteResult[] }) {
     <div className="space-y-1">
       {removed.map((p) => (
         <p key={p} className="break-all font-mono text-[11px] text-muted-foreground">
-          removed {p}
+          {tr('cleanup.removed', { path: p })}
         </p>
       ))}
       {unlinked.map((l) => (
         <p key={`${l.path}:${l.target}`} className="break-all font-mono text-[11px] text-muted-foreground">
-          removed the link {l.path} to {l.target}, which stays
+          {tr('cleanup.removedLink', { path: l.path, target: l.target })}
         </p>
       ))}
       {restore.map((cmd) => (
         <div key={cmd} className="flex items-center gap-2 rounded bg-muted/40 px-2 py-1">
           <code className="flex-1 overflow-x-auto font-mono">{cmd}</code>
-          <Tip content={`Copy: ${cmd}`}>
+          <Tip content={tr('cleanup.copyCommand', { command: cmd })}>
             <button
               type="button"
-              aria-label={`Copy: ${cmd}`}
+              aria-label={tr('cleanup.copyCommand', { command: cmd })}
               onClick={() => copy(cmd)}
               className="shrink-0 text-muted-foreground hover:text-foreground"
             >
@@ -1031,12 +1050,13 @@ function Facts({ items }: { items: DeleteResult[] }) {
 
 /** The items that stayed, each reason once, and under it the branches, tickets and what it took with it. */
 function Groups({ outcome, items }: { outcome: DeleteResult['outcome']; items: DeleteResult[] }) {
+  const { t: tr } = useTranslation()
   return (
     <ul className="space-y-2">
-      {groupsOf(items).map((g) => (
+      {groupsOf(items, tr).map((g) => (
         <li key={g.key} className="space-y-1">
           <div className="space-y-0.5">
-            <p className="break-words text-muted-foreground">{g.reason || 'No reason given'}</p>
+            <p className="break-words text-muted-foreground">{g.reason || tr('cleanup.noReasonGiven')}</p>
             {g.advice && <p className="break-words text-muted-foreground/80">→ {g.advice}</p>}
           </div>
           <ul className="space-y-1 pl-2">
@@ -1044,7 +1064,7 @@ function Groups({ outcome, items }: { outcome: DeleteResult['outcome']; items: D
               <li key={`${b.branch}:${b.kind}`} data-outcome={outcome} className="space-y-1">
                 <div className="flex flex-wrap items-baseline gap-x-2">
                   <span className="font-mono">{b.branch}</span>
-                  <span className="text-muted-foreground">{kindLabel(b.kind)}</span>
+                  <span className="text-muted-foreground">{kindLabel(b.kind, tr)}</span>
                   <span className="text-muted-foreground">{idsText(b.items.map((r) => r.ticketId))}</span>
                 </div>
                 <Facts items={b.items} />
@@ -1059,6 +1079,7 @@ function Groups({ outcome, items }: { outcome: DeleteResult['outcome']; items: D
 
 /** The items that went, each with what it took and the commands that put it back. */
 function Deleted({ items }: { items: DeleteResult[] }) {
+  const { t: tr } = useTranslation()
   return (
     <ul className="space-y-1.5">
       {items.map((r, i) => (
@@ -1066,7 +1087,7 @@ function Deleted({ items }: { items: DeleteResult[] }) {
           <div className="flex flex-wrap items-baseline gap-x-2">
             <span className="font-mono">{r.branch}</span>
             <span className="text-muted-foreground">
-              {kindLabel(r.kind)} · #{r.ticketId}
+              {kindLabel(r.kind, tr)} · #{r.ticketId}
             </span>
           </div>
           <Facts items={[r]} />
@@ -1090,24 +1111,30 @@ function Results({
   onClose: () => void
   onRetry: (() => void) | null
 }) {
+  const { t: tr } = useTranslation()
   const sections = OUTCOME_ORDER.map((outcome) => ({
     outcome,
     items: results.filter((r) => r.outcome === outcome),
   })).filter((s) => s.items.length)
   return (
-    <section className="space-y-1.5" aria-label="Deletion results">
+    <section className="space-y-1.5" aria-label={tr('cleanup.results.label')}>
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-medium">
-          Last deletion <span className="text-muted-foreground">· {results.length}</span>
+          {tr('cleanup.results.title')} <span className="text-muted-foreground">· {results.length}</span>
         </h2>
         <div className="flex items-center gap-1">
           {onRetry && (
             <Button variant="outline" size="sm" onClick={onRetry}>
-              <RefreshCw data-icon="inline-start" /> Retry kept items
+              <RefreshCw data-icon="inline-start" /> {tr('cleanup.results.retry')}
             </Button>
           )}
-          <Tip content="Dismiss">
-            <Button variant="ghost" size="icon-sm" aria-label="Dismiss" onClick={onClose}>
+          <Tip content={tr('cleanup.results.dismiss')}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={tr('cleanup.results.dismiss')}
+              onClick={onClose}
+            >
               <X />
             </Button>
           </Tip>
@@ -1115,10 +1142,10 @@ function Results({
       </div>
       <div className="divide-y rounded-lg border px-3 text-xs">
         {sections.map(({ outcome, items }) => (
-          <section key={outcome} aria-label={OUTCOME[outcome].label} className="space-y-1.5 py-3">
+          <section key={outcome} aria-label={tr(`cleanup.outcome.${outcome}`)} className="space-y-1.5 py-3">
             <h3 className={`flex items-center gap-1.5 font-medium ${OUTCOME[outcome].className}`}>
               <span className={`size-1.5 shrink-0 rounded-full ${OUTCOME[outcome].dot}`} aria-hidden />
-              {OUTCOME[outcome].label}{' '}
+              {tr(`cleanup.outcome.${outcome}`)}{' '}
               <span className="font-normal text-muted-foreground">· {items.length}</span>
             </h3>
             {outcome === 'deleted' ? <Deleted items={items} /> : <Groups outcome={outcome} items={items} />}

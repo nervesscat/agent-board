@@ -1,3 +1,4 @@
+import { shared } from '#/i18n'
 import type { ActorKind, ActorRole } from '#/server/actors'
 
 /** A role as a badge shows it: an actor's, or the board's own for what the board records itself. */
@@ -52,10 +53,19 @@ export function whoOf(name: string, actors: ReadonlyMap<string, Who>): Who {
 
 /** What each role's badge says: a worker is just an agent. */
 export const ROLE_LABEL: Record<WhoRole, string> = {
-  human: 'Human',
-  orchestrator: 'Orchestrator',
-  worker: 'Agent',
-  board: 'Board',
+  // Read while rendering, in the language shown then.
+  get human() {
+    return shared.t('roleLabels.human')
+  },
+  get orchestrator() {
+    return shared.t('roleLabels.orchestrator')
+  },
+  get worker() {
+    return shared.t('roleLabels.worker')
+  },
+  get board() {
+    return shared.t('roleLabels.board')
+  },
 }
 
 /** A name and every name above it, nearest first: `orch/worker-2 (Agent) ← orch (Orchestrator)`. */

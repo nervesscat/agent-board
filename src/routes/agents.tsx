@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { CheckCircle2, Copy, RefreshCw, TriangleAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
@@ -29,6 +30,7 @@ export const Route = createFileRoute('/agents')({
 type Setup = { boardUrl: string; settings: Settings; opencode: OpencodeConfig }
 
 function ConnectAgents() {
+  const { t } = useTranslation()
   const { data: setup } = useQuery({
     queryKey: ['agent-setup'],
     queryFn: () => get<Setup>('/api/agent-setup'),
@@ -64,14 +66,15 @@ function ConnectAgents() {
   return (
     <div className="max-w-3xl space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Connect an agent</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{t('connect.title')}</h1>
         <p className="text-sm text-muted-foreground">
-          Connect a CLI: <strong>Generate commands</strong> makes its MCP token, and the skill installs on
-          this machine with a button (or with the line, on another machine). The default CLI is set in{' '}
-          <Link to="/settings" className="underline hover:text-foreground">
-            Settings
-          </Link>
-          .
+          <Trans
+            i18nKey="connect.intro"
+            components={{
+              strong: <strong />,
+              goto: <Link to="/settings" className="underline hover:text-foreground" />,
+            }}
+          />
         </p>
       </div>
 
@@ -90,15 +93,16 @@ function ConnectAgents() {
       <GenerateCommands key={client} defaultName={client} token={made} onToken={setMade} />
 
       <section className="space-y-2">
-        <h2 className="text-sm font-medium">1. Connect the MCP server</h2>
+        <h2 className="text-sm font-medium">{t('connect.step1.title')}</h2>
         <p className="text-xs text-muted-foreground">
           {mcp.kind === 'command' ? (
-            <>Run once in a terminal; it registers the server for every repo.</>
+            t('connect.step1.command')
           ) : (
-            <>
-              Add to <code className="rounded bg-muted px-1">{agent.mcpFile}</code>
-              {client === 'opencode' && ' (merge the board entry into "mcp" if the file already has one)'}.
-            </>
+            <Trans
+              i18nKey={client === 'opencode' ? 'connect.step1.configOpencode' : 'connect.step1.config'}
+              values={{ file: agent.mcpFile }}
+              components={{ code: <code className="rounded bg-muted px-1" /> }}
+            />
           )}
         </p>
         <CopyBlock text={mcp.text} />
@@ -106,33 +110,43 @@ function ConnectAgents() {
 
       <section className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium">2. Install the skill</h2>
+          <h2 className="text-sm font-medium">{t('connect.step2.title')}</h2>
           <Tabs value={shell} onValueChange={(v) => pickShell(v as Shell)}>
             <TabsList>
+              {/* i18n-ignore: shell names */}
               <TabsTrigger value="bash">bash / zsh</TabsTrigger>
+              {/* i18n-ignore: shell name */}
               <TabsTrigger value="powershell">PowerShell</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
         <p className="text-xs text-muted-foreground">
-          Downloads the board&apos;s current skill to{' '}
-          <code className="rounded bg-muted px-1">
-            {shell === 'bash' ? agent.skillDir.unix : agent.skillDir.windows}/SKILL.md
-          </code>
-          , where {agent.label} finds it in every repo.
-          {client === 'codex' && ' OpenCode reads this folder too.'}
-          {client === 'opencode' &&
-            ' OpenCode also reads ~/.claude/skills: skip this if Claude Code has it already.'}
+          <Trans
+            i18nKey={
+              client === 'codex'
+                ? 'connect.step2.textCodex'
+                : client === 'opencode'
+                  ? 'connect.step2.textOpencode'
+                  : 'connect.step2.text'
+            }
+            values={{
+              path: `${shell === 'bash' ? agent.skillDir.unix : agent.skillDir.windows}/SKILL.md`,
+              agent: agent.label,
+            }}
+            components={{ code: <code className="rounded bg-muted px-1" /> }}
+          />
         </p>
         <CopyBlock
           text={skillInstall(client, shell, setup.boardUrl, skillTokenValue)}
-          onCopy={() => copyLine((t) => skillInstall(client, shell, setup.boardUrl, t))}
+          onCopy={() => copyLine((tok) => skillInstall(client, shell, setup.boardUrl, tok))}
         />
         {skillToken && (
           <p role="status" className="text-xs text-muted-foreground">
-            The install lines carry a download token that expires{' '}
-            <time dateTime={skillToken.expiresAt}>{stamp(skillToken.expiresAt)}</time>: about ten minutes.
-            Copy a line again after that for a new one.
+            <Trans
+              i18nKey="connect.step2.tokenNote"
+              values={{ at: stamp(skillToken.expiresAt) }}
+              components={{ time: <time dateTime={skillToken.expiresAt} /> }}
+            />
           </p>
         )}
         <div className="flex flex-wrap items-center gap-2">
@@ -141,16 +155,16 @@ function ConnectAgents() {
             variant="outline"
             size="sm"
             disabled={!skill.data}
-            onClick={() => skill.data && copyText(skill.data, 'SKILL.md copied')}
+            onClick={() => skill.data && copyText(skill.data, t('connect.step2.skillCopied'))}
           >
-            <Copy data-icon="inline-start" /> Copy SKILL.md
+            <Copy data-icon="inline-start" /> {t('connect.step2.copySkill')}
           </Button>
           {skill.error && <span className="text-xs text-destructive">{errorMessage(skill.error)}</span>}
         </div>
         {skill.data && (
           <details className="rounded-md border">
             <summary className="cursor-pointer px-3 py-2 text-xs text-muted-foreground">
-              Preview SKILL.md
+              {t('connect.step2.previewSkill')}
             </summary>
             <pre className="max-h-96 overflow-auto border-t p-3 font-mono text-xs whitespace-pre-wrap">
               {skill.data}
@@ -158,19 +172,20 @@ function ConnectAgents() {
           </details>
         )}
         <p className="text-xs text-muted-foreground">
-          Also installs <code className="rounded bg-muted px-1">/session</code>, the skill that opens a
-          session with the board: it gives you a short brief, delegates every ticket you name, and keeps one
-          message shape with what needs you.
+          <Trans
+            i18nKey="connect.step2.session"
+            components={{ code: <code className="rounded bg-muted px-1" /> }}
+          />
         </p>
         <CopyBlock
           text={sessionSkillInstall(client, shell, setup.boardUrl, skillTokenValue)}
-          onCopy={() => copyLine((t) => sessionSkillInstall(client, shell, setup.boardUrl, t))}
+          onCopy={() => copyLine((tok) => sessionSkillInstall(client, shell, setup.boardUrl, tok))}
         />
       </section>
 
       <section id="review-skills" className="scroll-mt-16 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-medium">3. Install the review skills (Claude Code)</h2>
+          <h2 className="text-sm font-medium">{t('connect.step3.title')}</h2>
           <SkillInstallButton kind="review-skills" installed={reviewInstalled} />
         </div>
         <ReviewSkills
@@ -194,6 +209,7 @@ function ConnectAgents() {
  * the board never writes it.
  */
 function OpencodeDelegation({ config }: { config: OpencodeConfig }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const check = useMutation({
     mutationFn: () => post<OpencodeConfig>('/api/agent-setup/opencode-check'),
@@ -206,27 +222,26 @@ function OpencodeDelegation({ config }: { config: OpencodeConfig }) {
       type="button"
       variant="outline"
       size="sm"
-      aria-label="Check the OpenCode config again"
+      aria-label={t('connect.opencode.checkAria')}
       disabled={check.isPending}
       onClick={() => check.mutate()}
     >
-      <RefreshCw data-icon="inline-start" className={check.isPending ? 'animate-spin' : ''} /> Check again
+      <RefreshCw data-icon="inline-start" className={check.isPending ? 'animate-spin' : ''} />{' '}
+      {t('connect.checkAgain')}
     </Button>
   )
 
   if (config.error && !config.set)
     return (
       <section
-        aria-label="OpenCode multilevel delegation"
+        aria-label={t('connect.opencode.section')}
         className="flex items-start gap-2 rounded-md border border-rose-300/60 bg-rose-50 p-3 text-rose-950 dark:border-rose-400/20 dark:bg-rose-950/40 dark:text-rose-100"
       >
         <TriangleAlert className="mt-0.5 size-4 shrink-0 text-rose-600 dark:text-rose-400" aria-hidden />
         <div className="min-w-0 flex-1 space-y-2">
-          <p className="text-sm font-medium">Could not read the OpenCode config</p>
+          <p className="text-sm font-medium">{t('connect.opencode.readFailed')}</p>
           <p className="text-xs [overflow-wrap:anywhere]">{config.error}</p>
-          <p className="text-xs">
-            Fix that file, then check again. Multilevel delegation stays off until the config can be read.
-          </p>
+          <p className="text-xs">{t('connect.opencode.readFailedText')}</p>
           {config.ignoredDeprecated && <IgnoredDeprecated source={config.ignoredDeprecated} />}
           {again}
         </div>
@@ -236,17 +251,20 @@ function OpencodeDelegation({ config }: { config: OpencodeConfig }) {
   if (config.set)
     return (
       <section
-        aria-label="OpenCode multilevel delegation"
+        aria-label={t('connect.opencode.section')}
         className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"
       >
         <div className="min-w-0 space-y-1">
           <p className="flex items-center gap-1.5 text-sm">
             <CheckCircle2 className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
-            <span>Multilevel delegation on (depth {config.depth})</span>
+            <span>{t('connect.opencode.on', { depth: config.depth })}</span>
           </p>
           <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-            Read from <code className="rounded bg-muted px-1">{config.source}</code>. The system-wide config
-            outranks global and project files.
+            <Trans
+              i18nKey="connect.opencode.readFrom"
+              values={{ source: config.source }}
+              components={{ code: <code className="rounded bg-muted px-1" /> }}
+            />
           </p>
           {config.error && (
             <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{config.error}</p>
@@ -261,25 +279,25 @@ function OpencodeDelegation({ config }: { config: OpencodeConfig }) {
 
   return (
     <section
-      aria-label="OpenCode multilevel delegation"
+      aria-label={t('connect.opencode.section')}
       className="rounded-md border border-amber-300/60 bg-amber-50 p-3 text-amber-950 dark:border-amber-400/20 dark:bg-amber-950/40 dark:text-amber-100"
     >
       <div className="flex items-start gap-2">
         <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
         <div className="min-w-0 flex-1 space-y-2">
-          <p className="text-sm font-medium">
-            Multilevel delegation is off: subagents cannot launch subagents
-          </p>
+          <p className="text-sm font-medium">{t('connect.opencode.off')}</p>
           <p className="text-xs [overflow-wrap:anywhere]">
-            Add this to <code className="rounded bg-black/10 px-1 dark:bg-white/10">{config.source}</code>{' '}
-            (inside its <code className="rounded bg-black/10 px-1 dark:bg-white/10">experimental</code> block
-            if it has one), then restart OpenCode. The last config file that defines an{' '}
-            <code className="rounded bg-black/10 px-1 dark:bg-white/10">experimental</code> block decides; the
-            system-wide config outranks global and project files, so a later one can override an earlier
-            depth. The board only reads files.
+            <Trans
+              i18nKey="connect.opencode.offText"
+              values={{ source: config.source }}
+              components={{ code: <code className="rounded bg-black/10 px-1 dark:bg-white/10" /> }}
+            />
           </p>
           {config.ignoredDeprecated && <IgnoredDeprecated source={config.ignoredDeprecated} />}
-          <CopyBlock text={'"experimental": { "subagent_depth": 2 }'} label="Copy snippet" />
+          <CopyBlock
+            text={'"experimental": { "subagent_depth": 2 }'}
+            label={t('connect.opencode.copySnippet')}
+          />
           {again}
         </div>
       </div>
@@ -295,12 +313,11 @@ function OpencodeDelegation({ config }: { config: OpencodeConfig }) {
 function IgnoredDeprecated({ source, className = '' }: { source: string; className?: string }) {
   return (
     <p className={`text-xs [overflow-wrap:anywhere] ${className}`}>
-      The top-level{' '}
-      <code className="rounded bg-black/10 px-1 font-mono dark:bg-white/10">subagent_depth</code> in{' '}
-      <code className="rounded bg-black/10 px-1 font-mono dark:bg-white/10">{source}</code> is no longer read
-      by OpenCode; only{' '}
-      <code className="rounded bg-black/10 px-1 font-mono dark:bg-white/10">experimental.subagent_depth</code>{' '}
-      counts.
+      <Trans
+        i18nKey="connect.opencode.deprecated"
+        values={{ source }}
+        components={{ code: <code className="rounded bg-black/10 px-1 font-mono dark:bg-white/10" /> }}
+      />
     </p>
   )
 }

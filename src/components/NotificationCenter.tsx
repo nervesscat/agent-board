@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
 import { Bell, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Button } from '#/components/ui/button'
@@ -17,6 +18,8 @@ import {
   type JobState,
   type NoticeCard,
 } from '#/lib/api'
+import { shared } from '#/i18n'
+import { formatNumber } from '#/lib/format'
 import { CLEANUP_DELETE_JOB, countsOf, deleteResults, keptItems } from '#/lib/cleanupResults'
 import { currentProjectId, useProjects } from '#/lib/project'
 
@@ -36,6 +39,7 @@ import { currentProjectId, useProjects } from '#/lib/project'
  * cleared) once it has been read.
  */
 export function NotificationCenter() {
+  const { t } = useTranslation()
   const projectId = useWatchedProject()
 
   const jobsKey = ['jobs', projectId ?? null] as const
@@ -98,11 +102,18 @@ export function NotificationCenter() {
       // first poll to see it at all.
       const was = before.get(job.id) ?? 'running'
       if (was !== 'running' || job.state === 'running') continue
-      if (job.state === 'failed') toast.error(`${job.title} failed`, { description: job.reason ?? undefined })
+      if (job.state === 'failed')
+        toast.error(shared.t('notifications.failed', { title: job.title }), {
+          description: job.reason ?? undefined,
+        })
       else {
         // The card's own line: a cleanup delete says what it did in counts, not the raw result.
         const summary = summaryOf(job)
-        toast.success(`${job.title} finished${summary ? ` · ${summary}` : ''}`)
+        toast.success(
+          summary
+            ? shared.t('notifications.finishedWith', { title: job.title, summary })
+            : shared.t('notifications.finished', { title: job.title }),
+        )
       }
     }
   }, [jobData])
@@ -134,8 +145,13 @@ export function NotificationCenter() {
       const was = before.states.get(card.id) ?? 'running'
       if (was !== 'running' || card.state === 'running') continue
       if (card.state === 'failed')
-        toast.error(`${card.title} failed`, { description: card.reason ?? undefined })
-      else toast.success(`${card.title} finished`, { description: card.result ?? undefined })
+        toast.error(shared.t('notifications.failed', { title: card.title }), {
+          description: card.reason ?? undefined,
+        })
+      else
+        toast.success(shared.t('notifications.finished', { title: card.title }), {
+          description: card.result ?? undefined,
+        })
     }
   }, [cardData])
 
@@ -176,7 +192,7 @@ export function NotificationCenter() {
     <Popover open={open} onOpenChange={changeOpen}>
       <PopoverTrigger
         render={<Button variant="ghost" size="icon" className="relative shrink-0" />}
-        aria-label="Notifications"
+        aria-label={t('notifications.title')}
       >
         <Bell />
         {badge > 0 && (
@@ -187,7 +203,7 @@ export function NotificationCenter() {
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 max-w-[calc(100vw-2rem)] gap-0 p-0">
         <div className="flex items-center gap-2 border-b px-3 py-2">
-          <PopoverTitle className="text-sm font-medium">Notifications</PopoverTitle>
+          <PopoverTitle className="text-sm font-medium">{t('notifications.title')}</PopoverTitle>
           {(finishedJobs.length > 0 || finishedCards.length > 0) && (
             <Button
               variant="ghost"
@@ -196,12 +212,12 @@ export function NotificationCenter() {
               disabled={clear.isPending}
               onClick={() => clear.mutate()}
             >
-              Clear finished
+              {t('notifications.clearFinished')}
             </Button>
           )}
         </div>
         {entries.length === 0 ? (
-          <p className="px-3 py-6 text-center text-sm text-muted-foreground">Nothing running</p>
+          <p className="px-3 py-6 text-center text-sm text-muted-foreground">{t('notifications.empty')}</p>
         ) : (
           <ul className="max-h-[min(70vh,32rem)] divide-y overflow-y-auto">
             {entries.map((entry) => {
@@ -268,12 +284,13 @@ function CardTitle({ card }: { card: AgentCard }) {
 }
 
 function Dismiss({ label, onDismiss }: { label: string; onDismiss: () => void }) {
+  const { t } = useTranslation()
   return (
     <Button
       variant="ghost"
       size="icon"
       className="-my-1 size-6 shrink-0"
-      aria-label={`Dismiss ${label}`}
+      aria-label={t('notifications.dismiss', { label })}
       onClick={onDismiss}
     >
       <X className="size-3.5" />
@@ -292,6 +309,7 @@ function JobCard({
   onRetry: (items: DeleteItem[]) => void
   retrying: boolean
 }) {
+  const { t } = useTranslation()
   // A cleanup delete that kept something offers the same retry as the page: only those items again.
   const kept =
     job.kind === CLEANUP_DELETE_JOB && job.state === 'succeeded'
@@ -315,16 +333,16 @@ function JobCard({
       <Progress
         value={job.done}
         max={Math.max(1, job.total)}
-        getAriaValueText={(formatted) => `${formatted} of ${job.total}`}
+        getAriaValueText={(formatted) => t('notifications.of', { done: formatted, total: job.total })}
         className="gap-1.5"
       >
         <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-          {job.done} of {job.total}
+          {t('notifications.of', { done: job.done, total: job.total })}
         </span>
       </Progress>
       {job.state === 'running' ? (
         <p className="text-xs text-muted-foreground" aria-live="polite">
-          {job.step ?? 'Starting…'}
+          {job.step ?? t('notifications.starting')}
         </p>
       ) : (
         <p
@@ -336,8 +354,12 @@ function JobCard({
           }
         >
           {job.state === 'failed'
-            ? `Failed · ${elapsed(job)} · ${job.reason ?? 'no reason given'}`
-            : `Succeeded · ${elapsed(job)}${summaryOf(job) ? ` · ${summaryOf(job)}` : ''}`}
+            ? t('notifications.failedLine', {
+                elapsed: elapsed(job),
+                reason: job.reason ?? t('notifications.noReason'),
+              })
+            : t('notifications.succeededLine', { elapsed: elapsed(job) }) +
+              (summaryOf(job) ? ` · ${summaryOf(job)}` : '')}
         </p>
       )}
       {kept.length > 0 && (
@@ -348,7 +370,7 @@ function JobCard({
           disabled={retrying}
           onClick={() => onRetry(kept)}
         >
-          Retry kept items
+          {t('notifications.retryKept')}
         </Button>
       )}
     </li>
@@ -363,6 +385,7 @@ function TrackedCardView({
   card: Extract<AgentCard, { kind: 'tracked' }>
   onDismiss: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <li className="flex flex-col gap-1.5 p-3">
       <div className="flex items-start gap-1">
@@ -370,28 +393,28 @@ function TrackedCardView({
         <Dismiss label={card.title} onDismiss={onDismiss} />
       </div>
       <p className="text-xs text-muted-foreground">
-        {card.actor} · You asked: {card.request}
+        {t('notifications.youAsked', { actor: card.actor, request: card.request })}
       </p>
       {card.total > 0 && (
         <Progress
           value={card.done}
           max={card.total}
-          getAriaValueText={(formatted) => `${formatted} of ${card.total}`}
+          getAriaValueText={(formatted) => t('notifications.of', { done: formatted, total: card.total })}
           className="gap-1.5"
         >
           <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-            {card.done} of {card.total}
+            {t('notifications.of', { done: card.done, total: card.total })}
           </span>
         </Progress>
       )}
       {card.state === 'running' ? (
         <>
           <p className="text-xs text-muted-foreground" aria-live="polite">
-            {card.step ?? 'Starting…'}
+            {card.step ?? t('notifications.starting')}
           </p>
           {card.stale && (
             <p className="text-xs text-amber-700 dark:text-amber-400">
-              No update for {since(card.updatedAt)} · it may have stopped
+              {t('notifications.stale', { since: since(card.updatedAt) })}
             </p>
           )}
         </>
@@ -405,8 +428,8 @@ function TrackedCardView({
           }
         >
           {card.state === 'failed'
-            ? `Failed · ${card.reason ?? 'no reason given'}`
-            : `Succeeded${card.result ? ` · ${card.result}` : ''}`}
+            ? t('notifications.trackedFailed', { reason: card.reason ?? t('notifications.noReason') })
+            : t('notifications.succeeded') + (card.result ? ` · ${card.result}` : '')}
         </p>
       )}
     </li>
@@ -415,11 +438,12 @@ function TrackedCardView({
 
 /** An important notice: its own kind, its body and why it could not wait, and no progress at all. */
 function NoticeCardView({ card, onDismiss }: { card: NoticeCard; onDismiss: () => void }) {
+  const { t } = useTranslation()
   return (
     <li className="flex flex-col gap-1.5 p-3">
       <div className="flex items-start gap-1">
         <span className="mt-0.5 shrink-0 rounded-full bg-amber-100 px-1.5 text-[10px] leading-4 font-medium tracking-wide text-amber-900 uppercase dark:bg-amber-950 dark:text-amber-200">
-          Notice
+          {t('notifications.notice')}
         </span>
         <CardTitle card={card} />
         <Dismiss label={card.title} onDismiss={onDismiss} />
@@ -427,7 +451,9 @@ function NoticeCardView({ card, onDismiss }: { card: NoticeCard; onDismiss: () =
       <p className="text-xs text-muted-foreground">
         {card.actor} · {card.body}
       </p>
-      <p className="text-xs text-muted-foreground">Cannot wait: {card.reason}</p>
+      <p className="text-xs text-muted-foreground">
+        {t('notifications.cannotWait', { reason: card.reason })}
+      </p>
     </li>
   )
 }
@@ -466,13 +492,14 @@ function since(at: string): string {
 
 function duration(ms: number): string {
   const seconds = Math.max(0, ms) / 1000
-  if (seconds < 10) return `${seconds.toFixed(1)} s`
-  if (seconds < 60) return `${Math.round(seconds)} s`
+  const one = { minimumFractionDigits: 1, maximumFractionDigits: 1 }
+  if (seconds < 10) return shared.t('notifications.unit.s', { value: formatNumber(seconds, one) })
+  if (seconds < 60) return shared.t('notifications.unit.s', { value: Math.round(seconds) })
   const minutes = seconds / 60
-  if (minutes < 10) return `${minutes.toFixed(1)} min`
-  if (minutes < 60) return `${Math.round(minutes)} min`
+  if (minutes < 10) return shared.t('notifications.unit.min', { value: formatNumber(minutes, one) })
+  if (minutes < 60) return shared.t('notifications.unit.min', { value: Math.round(minutes) })
   const hours = minutes / 60
-  if (hours < 10) return `${hours.toFixed(1)} h`
-  if (hours < 24) return `${Math.round(hours)} h`
-  return `${Math.round(hours / 24)} d`
+  if (hours < 10) return shared.t('notifications.unit.h', { value: formatNumber(hours, one) })
+  if (hours < 24) return shared.t('notifications.unit.h', { value: Math.round(hours) })
+  return shared.t('notifications.unit.d', { value: Math.round(hours / 24) })
 }

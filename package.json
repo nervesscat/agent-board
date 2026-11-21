@@ -47,6 +47,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "check:migrations": "node scripts/check-migrations.mjs",
+    "check:i18n": "node scripts/i18n-check.mjs",
     "bench": "node scripts/bench/bench.mjs",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio"
@@ -79,6 +80,7 @@
     "cn": "^0.3.2",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.1",
+    "i18next": "^27.2.2",
     "lucide-react": "^0.577.0",
     "marked": "17.0.6",
     "nitro": "3.0.260610-beta",
@@ -86,6 +88,7 @@
     "react": "^19.2.0",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.0",
+    "react-i18next": "^18.0.3",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "shadcn": "^4.22.1",

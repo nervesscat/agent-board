@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { useMutation, useQueries, useQuery } from '@tanstack/react-query'
 import { AppWindow, ExternalLink, GitBranch, Layers, Loader2, Play, RotateCw, Square } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { openPreview } from '#/components/PreviewWindow'
@@ -27,6 +28,7 @@ import { clock } from '#/lib/format'
 import { previewOpenLinks } from '#/lib/previewLinks'
 import { previewBrowserUrl, previewTab } from '#/lib/previewWindow'
 import { cn } from '#/lib/utils'
+import type { TFunction } from 'i18next'
 
 /**
  * The ticket's Runs card: every run the human configured for each repo the ticket spans (previews,
@@ -40,25 +42,31 @@ import { cn } from '#/lib/utils'
 const ACTIVE = new Set(['building', 'starting', 'running'])
 export const runActive = (s: RunState | null | undefined) => !!s && ACTIVE.has(s.status)
 
-const STEP: Record<NonNullable<RunState['step']>, string> = {
-  install: 'installing dependencies',
-  build: 'building',
-  copy: 'copying the live data',
-  server: 'starting',
-}
+const STEP = {
+  install: 'runsCard.step.install',
+  build: 'runsCard.step.build',
+  copy: 'runsCard.step.copy',
+  server: 'runsCard.step.server',
+} as const satisfies Record<NonNullable<RunState['step']>, string>
 
 /** A run's state in a few words: stopped, building with its step, running, failed. */
-function statusOf(s: RunState | null): { label: string; className: string } {
-  if (!s) return { label: 'Stopped', className: 'bg-muted text-muted-foreground' }
+function statusOf(s: RunState | null, t: TFunction): { label: string; className: string } {
+  if (!s) return { label: t('runsCard.status.stopped'), className: 'bg-muted text-muted-foreground' }
   if (s.status === 'building' || s.status === 'starting')
     return {
-      label: `Building${s.step ? ` · ${STEP[s.step]}` : ''}`,
+      label: s.step
+        ? t('runsCard.status.buildingStep', { step: t(STEP[s.step]) })
+        : t('runsCard.status.building'),
       className: 'bg-sky-500/15 text-sky-700 dark:text-sky-400',
     }
   if (s.status === 'running')
-    return { label: 'Running', className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' }
-  if (s.status === 'failed') return { label: 'Failed', className: 'bg-destructive/10 text-destructive' }
-  return { label: 'Stopped', className: 'bg-muted text-muted-foreground' }
+    return {
+      label: t('runsCard.status.running'),
+      className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+    }
+  if (s.status === 'failed')
+    return { label: t('runsCard.status.failed'), className: 'bg-destructive/10 text-destructive' }
+  return { label: t('runsCard.status.stopped'), className: 'bg-muted text-muted-foreground' }
 }
 
 /**
@@ -100,6 +108,7 @@ export function useTicketRuns(t: TicketFull | undefined, git?: TicketGit) {
 }
 
 export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
+  const { t: tr } = useTranslation()
   const { data, refetch, links, anyRuns } = useTicketRuns(t, git)
   const changed = () => {
     void refetch()
@@ -120,9 +129,12 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
       const refused = results.filter((r) => !r.ok)
       if (refused.length)
         toast.warning(
-          `${refused.length} not started: ${refused.map((r) => `${r.name} (${r.reason})`).join('; ')}`,
+          tr('runsCard.notStarted', {
+            count: refused.length,
+            list: refused.map((r) => `${r.name} (${r.reason})`).join('; '),
+          }),
         )
-      else if (what === 'stop' && !results.length) toast.info('Nothing was running')
+      else if (what === 'stop' && !results.length) toast.info(tr('runsCard.nothingRunning'))
       changed()
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -135,29 +147,29 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
   const canStartAll = runsList.some((x) => !runActive(x.state) && x.cannotStart === null)
   const canStopAll = runsList.some((x) => runActive(x.state)) || orphaned.length > 0 || alsoRunning.length > 0
   return (
-    <section className="rounded-lg border p-3" aria-label="Runs">
+    <section className="rounded-lg border p-3" aria-label={tr('runsSettings.title')}>
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-medium">Runs</h2>
+        <h2 className="text-sm font-medium">{tr('runsSettings.title')}</h2>
         {anyRuns && (
           <div className="ml-auto flex gap-1.5">
-            <Tip content="Start every run of the ticket's repos that does not run yet">
+            <Tip content={tr('runsCard.startAllTip')}>
               <Button
                 variant="outline"
                 size="sm"
                 disabled={all.isPending || !canStartAll}
                 onClick={() => all.mutate('start')}
               >
-                <Play /> Start all
+                <Play /> {tr('runsCard.startAll')}
               </Button>
             </Tip>
-            <Tip content="Stop every run of the ticket that builds or runs">
+            <Tip content={tr('runsCard.stopAllTip')}>
               <Button
                 variant="outline"
                 size="sm"
                 disabled={all.isPending || !canStopAll}
                 onClick={() => all.mutate('stop')}
               >
-                <Square /> Stop all
+                <Square /> {tr('runsCard.stopAll')}
               </Button>
             </Tip>
           </div>
@@ -165,7 +177,7 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
       </div>
       {data && anyRuns && (
         <p className="mb-2 text-[11px] text-muted-foreground">
-          {data.inUse} of {data.limit} runs going on the board
+          {tr('runsCard.inUse', { inUse: data.inUse, limit: data.limit })}
         </p>
       )}
       <div className="space-y-4">
@@ -175,11 +187,16 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
               <h3 className="flex min-w-0 items-center gap-1.5 text-xs font-medium">
                 <span className="truncate">{repo.name}</span>
                 {repos.length > 1 && repo.primary && (
-                  <span className="font-normal text-muted-foreground">primary</span>
+                  <span className="font-normal text-muted-foreground">{tr('runsCard.primary')}</span>
                 )}
               </h3>
               {repo.workspace ? (
-                <Tip content={`workspace ${repo.workspace.name} in ${repo.workspace.path}`}>
+                <Tip
+                  content={tr('runsCard.workspaceTip', {
+                    name: repo.workspace.name,
+                    path: repo.workspace.path,
+                  })}
+                >
                   <span className="inline-flex min-w-0 items-center gap-1 font-mono text-xs text-muted-foreground">
                     <GitBranch className="size-3 shrink-0" />
                     <span className="truncate">{repo.workspace.branch || repo.workspace.name}</span>
@@ -199,21 +216,19 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
                   ))}
                 </ul>
               ) : (
-                <p className="text-xs text-muted-foreground">
-                  No runs: the human adds them in the project's settings.
-                </p>
+                <p className="text-xs text-muted-foreground">{tr('runsCard.noRuns')}</p>
               )}
             </div>
           ))}
         {orphaned.length > 0 && (
-          <div className="space-y-2" role="group" aria-label="No longer on this ticket">
-            <h3 className="text-xs font-medium">No longer on this ticket</h3>
+          <div className="space-y-2" role="group" aria-label={tr('runsCard.orphaned')}>
+            <h3 className="text-xs font-medium">{tr('runsCard.orphaned')}</h3>
             <ul className="space-y-3">
               {orphaned.map((o) => (
                 <OrphanedRow
                   key={`${o.workspace.id}-${o.runId}`}
                   run={o}
-                  hint="it can be stopped, not started again from here"
+                  hint={tr('runsCard.orphanedHint')}
                   onChange={changed}
                 />
               ))}
@@ -221,14 +236,14 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
           </div>
         )}
         {alsoRunning.length > 0 && (
-          <div className="space-y-2" role="group" aria-label="Also running">
-            <h3 className="text-xs font-medium">Also running</h3>
+          <div className="space-y-2" role="group" aria-label={tr('runsCard.alsoRunning')}>
+            <h3 className="text-xs font-medium">{tr('runsCard.alsoRunning')}</h3>
             <ul className="space-y-3">
               {alsoRunning.map((o) => (
                 <OrphanedRow
                   key={`${o.workspace.id}-${o.runId}`}
                   run={o}
-                  hint="it can be stopped here; its row starts the one it shows"
+                  hint={tr('runsCard.alsoRunningHint')}
                   onChange={changed}
                 />
               ))}
@@ -236,8 +251,8 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
           </div>
         )}
         {links.length > 0 && (
-          <div className="space-y-2" role="group" aria-label="Links">
-            {anyRuns && <h3 className="text-xs font-medium">Links</h3>}
+          <div className="space-y-2" role="group" aria-label={tr('runsCard.links')}>
+            {anyRuns && <h3 className="text-xs font-medium">{tr('runsCard.links')}</h3>}
             <ul className="space-y-3">
               {links.map((w, i) => (
                 <LinkRow
@@ -269,6 +284,7 @@ function RunRow({
   ticketTitle: string
   onChange: () => void
 }) {
+  const { t } = useTranslation()
   const s = run.state
   const active = runActive(s)
   const action = useMutation({
@@ -277,7 +293,7 @@ function RunRow({
     onSuccess: onChange,
     onError: (err) => toast.error(errorMessage(err)),
   })
-  const status = statusOf(s)
+  const status = statusOf(s, t)
   const log = (name: 'build' | 'server', label: string) => (
     <a
       href={`/api/workspaces/${run.workspaceId}/runs/${run.id}/log?name=${name}`}
@@ -293,7 +309,7 @@ function RunRow({
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">{run.name}</span>
         <Badge variant="outline" className="h-4 px-1.5 text-[10px] font-normal">
-          {run.type === 'preview' ? 'Preview' : 'Job'}
+          {run.type === 'preview' ? t('runsSettings.typePreview') : t('runsSettings.typeJob')}
         </Badge>
         <span
           className={cn(
@@ -321,9 +337,9 @@ function RunRow({
                 run: s,
               })
               return tab ? (
-                <Tip content="Show the preview inside CrossBoard, over the page: the board stays as it was">
+                <Tip content={t('runsCard.openTip')}>
                   <Button size="sm" data-testid="run-open" onClick={() => openPreview(tab)}>
-                    <AppWindow /> Open
+                    <AppWindow /> {t('runsCard.open')}
                   </Button>
                 </Tip>
               ) : null
@@ -336,7 +352,7 @@ function RunRow({
                 className={buttonVariants({ size: 'sm', variant: 'outline' })}
                 data-testid="run-open-browser"
               >
-                Open in browser <ExternalLink />
+                {t('runsCard.openBrowser')} <ExternalLink />
               </a>
             )}
             {previewOpenLinks(s).through && (
@@ -347,7 +363,7 @@ function RunRow({
                 className="text-xs text-muted-foreground underline-offset-2 hover:underline"
                 data-testid="run-through-board"
               >
-                Through the board
+                {t('runsCard.throughBoard')}
               </a>
             )}
           </>
@@ -356,9 +372,7 @@ function RunRow({
           <Tip
             content={
               run.cannotStart ??
-              (run.type === 'preview'
-                ? 'Build it and run it on a free port, from the ticket’s worktree'
-                : 'Build it and start it in the background, from the ticket’s worktree')
+              (run.type === 'preview' ? t('runsCard.startTipPreview') : t('runsCard.startTipJob'))
             }
           >
             {/* A span keeps the tooltip on a disabled button. */}
@@ -369,7 +383,7 @@ function RunRow({
                 disabled={action.isPending || run.cannotStart !== null || run.workspaceId === null}
                 onClick={() => action.mutate('start')}
               >
-                <Play /> Start
+                <Play /> {t('runsCard.start')}
               </Button>
             </span>
           </Tip>
@@ -382,16 +396,16 @@ function RunRow({
               disabled={action.isPending}
               onClick={() => action.mutate('stop')}
             >
-              <Square /> Stop
+              <Square /> {t('runsCard.stop')}
             </Button>
-            <Tip content="Stop it, build it again and start it">
+            <Tip content={t('runsCard.restartTip')}>
               <Button
                 variant="outline"
                 size="sm"
                 disabled={action.isPending}
                 onClick={() => action.mutate('restart')}
               >
-                <RotateCw /> Restart
+                <RotateCw /> {t('runsCard.restart')}
               </Button>
             </Tip>
           </>
@@ -399,13 +413,13 @@ function RunRow({
       </div>
       {!active && run.cannotStart && run.workspaceId !== null && (
         <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-          Cannot start: {run.cannotStart}
+          {t('runsCard.cannotStart', { reason: run.cannotStart })}
         </p>
       )}
       {s && (
         <div className="text-xs text-muted-foreground">
           {s.status === 'running' &&
-            `${s.port ? `On :${s.port}` : 'Running'}${s.runningAt ? `, since ${clock(s.runningAt)}` : ''} · `}
+            `${t(s.port ? 'runsCard.onPort' : 'runsCard.runningPlain', { port: s.port })}${s.runningAt ? t('runsCard.since', { time: clock(s.runningAt) }) : ''} · `}
           {s.status === 'failed' && <span className="text-destructive">{s.reason} · </span>}
           {s.status === 'stopped' && s.reason && (
             <>
@@ -413,13 +427,13 @@ function RunRow({
               {s.stoppedAt && ` (${clock(s.stoppedAt)})`} ·{' '}
             </>
           )}
-          {log('build', 'build log')} · {log('server', 'run log')}
+          {log('build', t('runsCard.buildLog'))} · {log('server', t('runsCard.runLog'))}
         </div>
       )}
       {s && s.tail.length > 0 && (
         <pre
           className="max-h-40 overflow-auto rounded bg-muted p-2 font-mono text-[11px] whitespace-pre-wrap"
-          aria-label={`${run.name} log`}
+          aria-label={t('runsCard.logAria', { name: run.name })}
         >
           {s.tail.join('\n')}
         </pre>
@@ -446,13 +460,14 @@ function OrphanedRow({
     onSuccess: onChange,
     onError: (err) => toast.error(errorMessage(err)),
   })
-  const status = statusOf(run.state)
+  const { t } = useTranslation()
+  const status = statusOf(run.state, t)
   return (
     <li className="space-y-1.5 text-sm" aria-label={run.name}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">{run.name}</span>
         <Badge variant="outline" className="h-4 px-1.5 text-[10px] font-normal">
-          {run.type === 'preview' ? 'Preview' : 'Job'}
+          {run.type === 'preview' ? t('runsSettings.typePreview') : t('runsSettings.typeJob')}
         </Badge>
         <span className="truncate text-xs text-muted-foreground">{run.repoName}</span>
         <span
@@ -466,7 +481,7 @@ function OrphanedRow({
         </span>
       </div>
       <Button variant="outline" size="sm" disabled={stop.isPending} onClick={() => stop.mutate()}>
-        <Square /> Stop
+        <Square /> {t('runsCard.stop')}
       </Button>
       <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
         {run.reason}: {hint}.
@@ -490,6 +505,7 @@ function LinkRow({
   ticketTitle: string
   onChange: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <li className="space-y-1.5 text-sm">
       <div className="flex flex-wrap items-center gap-2">
@@ -509,7 +525,13 @@ function LinkRow({
         <div className="truncate font-mono text-xs text-muted-foreground">{w.previewUrl}</div>
       </Tip>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-        <Tip content={`workspace ${w.name}${w.path ? ` in ${w.path}` : ''}`}>
+        <Tip
+          content={
+            w.path
+              ? t('runsCard.workspaceTip', { name: w.name, path: w.path })
+              : t('runsCard.workspaceTipNoPath', { name: w.name })
+          }
+        >
           <span className="inline-flex min-w-0 items-center gap-1 font-mono">
             <GitBranch className="size-3 shrink-0" /> <span className="truncate">{w.branch || w.name}</span>
           </span>

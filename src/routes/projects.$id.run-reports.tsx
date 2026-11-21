@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { ClipboardList, X } from 'lucide-react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
 
 import { Empty } from '#/components/Empty'
@@ -28,6 +29,7 @@ export const Route = createFileRoute('/projects/$id/run-reports')({
 const agents = RUN_REPORT_AGENTS.map((a) => ({ value: a, label: a }))
 
 function RunReportsPage() {
+  const { t } = useTranslation()
   const { id } = Route.useParams()
   const { agent, ticket } = Route.useSearch()
   const navigate = Route.useNavigate()
@@ -46,23 +48,20 @@ function RunReportsPage() {
   return (
     <div className="max-w-3xl space-y-4">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Run reports</h1>
-        <p className="text-sm text-muted-foreground">
-          How each subagent run went, in its own words. One report per run; a review round has one of each of
-          its agents.
-        </p>
+        <h1 className="text-xl font-semibold tracking-tight">{t('runReport.pageTitle')}</h1>
+        <p className="text-sm text-muted-foreground">{t('runReport.pageText')}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Select
           value={agent ?? 'all'}
           onValueChange={(v) => filter({ agent: v === 'all' ? undefined : (v ?? undefined) })}
-          items={[{ value: 'all', label: 'All agents' }, ...agents]}
+          items={[{ value: 'all', label: t('runReport.allAgents') }, ...agents]}
         >
-          <SelectTrigger className="w-40" aria-label="Agent">
+          <SelectTrigger className="w-40" aria-label={t('runReport.agent')}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All agents</SelectItem>
+            <SelectItem value="all">{t('runReport.allAgents')}</SelectItem>
             {agents.map((a) => (
               <SelectItem key={a.value} value={a.value}>
                 {a.label}
@@ -81,13 +80,13 @@ function RunReportsPage() {
           <Input
             value={ticketText}
             onChange={(e) => setTicketText(e.target.value)}
-            placeholder="Ticket #"
-            aria-label="Ticket number"
+            placeholder={t('runReport.ticketPlaceholder')}
+            aria-label={t('runReport.ticketNumber')}
             className="w-28"
             inputMode="numeric"
           />
           <Button type="submit" variant="outline" size="sm">
-            Filter
+            {t('runReport.filter')}
           </Button>
         </form>
         {(agent || ticket) && (
@@ -99,7 +98,7 @@ function RunReportsPage() {
               navigate({ search: {}, replace: true })
             }}
           >
-            <X data-icon="inline-start" /> Clear
+            <X data-icon="inline-start" /> {t('runReport.clear')}
           </Button>
         )}
       </div>
@@ -111,9 +110,9 @@ function RunReportsPage() {
           <Skeleton className="h-12 w-full" />
         </div>
       ) : !data?.length ? (
-        <Empty>No run reports{agent || ticket ? ' for that filter' : ' yet'}.</Empty>
+        <Empty>{agent || ticket ? t('runReport.emptyFiltered') : t('runReport.empty')}</Empty>
       ) : (
-        <ul className="space-y-2" aria-label="Run reports">
+        <ul className="space-y-2" aria-label={t('runReport.panelTitle')}>
           {data.map((r) => (
             <li key={r.id} className="rounded-lg border">
               <div className="flex items-center gap-2 px-3 py-2">
@@ -124,16 +123,22 @@ function RunReportsPage() {
                 >
                   <ClipboardList className="size-3.5 shrink-0 text-muted-foreground" />
                   <span className="font-medium">{r.agent}</span>
-                  {r.round !== null && <Badge variant="outline">round {r.round}</Badge>}
+                  {r.round !== null && (
+                    <Badge variant="outline">{t('runReport.round', { round: r.round })}</Badge>
+                  )}
                   <span className="min-w-0 truncate text-xs text-muted-foreground">
                     #{r.ticketId} {r.ticketTitle}
                   </span>
-                  <span className="text-xs text-muted-foreground">{runReportDuration(r)}</span>
+                  <span className="text-xs text-muted-foreground">{runReportDuration(r, t)}</span>
                   {r.difficulty !== null && (
-                    <span className="text-xs text-muted-foreground">difficulty {r.difficulty}/5</span>
+                    <span className="text-xs text-muted-foreground">
+                      {t('runReport.difficultyShort', { n: r.difficulty })}
+                    </span>
                   )}
                   {r.confidence !== null && (
-                    <span className="text-xs text-muted-foreground">confidence {r.confidence}/5</span>
+                    <span className="text-xs text-muted-foreground">
+                      {t('runReport.confidenceShort', { n: r.confidence })}
+                    </span>
                   )}
                   <span className="ml-auto text-xs text-muted-foreground">{ago(r.createdAt)}</span>
                 </button>
@@ -142,7 +147,7 @@ function RunReportsPage() {
                   params={{ id, ticketId: String(r.ticketId) }}
                   className="shrink-0 text-xs text-muted-foreground hover:text-foreground hover:underline"
                 >
-                  Open ticket
+                  {t('runReport.openTicket')}
                 </Link>
               </div>
             </li>

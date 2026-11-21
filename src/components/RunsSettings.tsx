@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, FolderGit2, Pencil, Plus, X } from 'lucide-react'
 import { useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { TrashIcon } from '#/components/TrashIcon'
@@ -34,22 +35,18 @@ import { RUN_PORTS, type RunConfigInput, type RunType, runConfigProblem } from '
  * the project's settings.
  */
 export function RunsSettings({ projectId }: { projectId: string }) {
+  const { t } = useTranslation()
   const { data: p } = useProject(projectId)
   if (!p) return null
   return (
-    <section id="runs" aria-label="Runs" className="max-w-3xl scroll-mt-16 space-y-3">
+    <section id="runs" aria-label={t('runsSettings.title')} className="max-w-3xl scroll-mt-16 space-y-3">
       <div>
-        <h2 className="text-xl font-semibold tracking-tight">Runs</h2>
+        <h2 className="text-xl font-semibold tracking-tight">{t('runsSettings.title')}</h2>
         <p className="text-sm text-muted-foreground">
-          What the board starts from a ticket's worktree of each repo, from the ticket's Runs card or when an
-          agent asks: a <strong>preview</strong> answers on a port and gets a link to open, a{' '}
-          <strong>job</strong> is a background worker with no link. Each runs its install (only when the
-          lockfile changed), its build, then its start command, in the worktree. Agents start and stop them,
-          and can add, change and delete them too: each change shows in the project's activity under the
-          agent's name.
+          <Trans i18nKey="runsSettings.description" components={{ strong: <strong /> }} />
         </p>
       </div>
-      {p.repos.length === 0 && <p className="text-sm text-muted-foreground">The project has no repos yet.</p>}
+      {p.repos.length === 0 && <p className="text-sm text-muted-foreground">{t('runsSettings.noRepos')}</p>}
       {p.repos.map((r) => (
         <RepoRuns key={r.id} repo={r} />
       ))}
@@ -58,6 +55,7 @@ export function RunsSettings({ projectId }: { projectId: string }) {
 }
 
 function RepoRuns({ repo }: { repo: Repo }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const key = ['runs', repo.id]
   const { data: runs } = useQuery({
@@ -73,7 +71,7 @@ function RepoRuns({ repo }: { repo: Repo }) {
     mutationFn: (id: number) => del(`/api/runs/${id}`),
     onSuccess: () => {
       refresh()
-      toast.success('Removed')
+      toast.success(t('runsSettings.removed'))
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
@@ -89,7 +87,11 @@ function RepoRuns({ repo }: { repo: Repo }) {
     reorder.mutate(ids)
   }
   return (
-    <div className="space-y-2 rounded-lg border p-3" role="group" aria-label={`Runs of ${repo.name}`}>
+    <div
+      className="space-y-2 rounded-lg border p-3"
+      role="group"
+      aria-label={t('runsSettings.groupLabel', { name: repo.name })}
+    >
       <h3 className="flex items-center gap-1.5 text-sm font-medium">
         <FolderGit2 className="size-3.5 text-muted-foreground" />
         {repo.name}
@@ -100,11 +102,11 @@ function RepoRuns({ repo }: { repo: Repo }) {
           disabled={editing !== null}
           onClick={() => setEditing('new')}
         >
-          <Plus /> Add run
+          <Plus /> {t('runsSettings.add')}
         </Button>
       </h3>
       {runs?.length === 0 && editing !== 'new' && (
-        <p className="text-xs text-muted-foreground">No runs: tickets of this repo have nothing to start.</p>
+        <p className="text-xs text-muted-foreground">{t('runsSettings.none')}</p>
       )}
       <ul className="space-y-2">
         {runs?.map((r, i) =>
@@ -126,11 +128,14 @@ function RepoRuns({ repo }: { repo: Repo }) {
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{r.name}</span>
                   <Badge variant="outline" className="h-4 px-1.5 text-[10px] font-normal">
-                    {r.type === 'preview' ? 'Preview' : 'Job'}
+                    {r.type === 'preview' ? t('runsSettings.typePreview') : t('runsSettings.typeJob')}
                   </Badge>
                   {r.type === 'preview' && (
                     <span className="text-xs text-muted-foreground">
-                      port {r.port ?? 'auto'} · health {r.healthPath}
+                      {t('runsSettings.portHealth', {
+                        port: r.port ?? t('runsSettings.portAuto'),
+                        path: r.healthPath,
+                      })}
                     </span>
                   )}
                 </div>
@@ -138,33 +143,33 @@ function RepoRuns({ repo }: { repo: Repo }) {
                   {[r.install, r.build, r.start].filter(Boolean).join(' && ')}
                 </div>
               </div>
-              <Tip content="Move up">
+              <Tip content={t('runsSettings.moveUp')}>
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="Move up"
+                  aria-label={t('runsSettings.moveUp')}
                   disabled={i === 0}
                   onClick={() => move(i, -1)}
                 >
                   <ArrowUp />
                 </Button>
               </Tip>
-              <Tip content="Move down">
+              <Tip content={t('runsSettings.moveDown')}>
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="Move down"
+                  aria-label={t('runsSettings.moveDown')}
                   disabled={i === runs.length - 1}
                   onClick={() => move(i, 1)}
                 >
                   <ArrowDown />
                 </Button>
               </Tip>
-              <Tip content="Edit">
+              <Tip content={t('runsSettings.edit')}>
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label={`Edit ${r.name}`}
+                  aria-label={t('runsSettings.editRun', { name: r.name })}
                   disabled={editing !== null}
                   onClick={() => setEditing(r.id)}
                 >
@@ -172,23 +177,31 @@ function RepoRuns({ repo }: { repo: Repo }) {
                 </Button>
               </Tip>
               <AlertDialog>
-                <Tip content="Delete">
+                <Tip content={t('runsSettings.delete')}>
                   <AlertDialogTrigger
-                    render={<Button variant="ghost" size="icon-sm" aria-label={`Delete ${r.name}`} />}
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={t('runsSettings.deleteRun', { name: r.name })}
+                      />
+                    }
                   >
                     <TrashIcon />
                   </AlertDialogTrigger>
                 </Tip>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Delete the run {r.name}?</AlertDialogTitle>
+                    <AlertDialogTitle>{t('runsSettings.deleteTitle', { name: r.name })}</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Wherever it runs now it is stopped, and tickets of {repo.name} no longer offer it.
+                      {t('runsSettings.deleteDescription', { repo: repo.name })}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => remove.mutate(r.id)}>Delete</AlertDialogAction>
+                    <AlertDialogCancel>{t('runsSettings.cancel')}</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => remove.mutate(r.id)}>
+                      {t('runsSettings.delete')}
+                    </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -224,6 +237,7 @@ function RunForm({
   others: RunConfig[]
   onDone: () => void
 }) {
+  const { t } = useTranslation()
   const [name, setName] = useState(run?.name ?? '')
   const [type, setType] = useState<RunType>(run?.type ?? 'preview')
   const [install, setInstall] = useState(run?.install ?? '')
@@ -254,20 +268,21 @@ function RunForm({
         ? patch<RunConfig>(`/api/runs/${run.id}`, body)
         : post<RunConfig>(`/api/repos/${repoId}/runs`, body),
     onSuccess: () => {
-      toast.success('Saved')
+      toast.success(t('common.saved'))
       onDone()
     },
     // The board's own refusal, said where the form is.
     onError: (err) => setProblem(errorMessage(err)),
   })
   const id = (field: string) => `run-${run?.id ?? 'new'}-${repoId}-${field}`
-  const field = (label: string, value: string, set: (v: string) => void, placeholder = '') => (
+  // `slug` names the field's input (its id); `label` is what is shown.
+  const field = (slug: string, label: string, value: string, set: (v: string) => void, placeholder = '') => (
     <div className="space-y-1">
-      <Label htmlFor={id(label)} className="text-xs text-muted-foreground">
+      <Label htmlFor={id(slug)} className="text-xs text-muted-foreground">
         {label}
       </Label>
       <Input
-        id={id(label)}
+        id={id(slug)}
         value={value}
         onChange={(e) => set(e.target.value)}
         placeholder={placeholder}
@@ -279,75 +294,81 @@ function RunForm({
     <form
       noValidate
       className="space-y-3 rounded-md border bg-muted/30 p-3"
-      aria-label={run ? `Edit ${run.name}` : 'New run'}
+      aria-label={run ? t('runsSettings.editRun', { name: run.name }) : t('runsSettings.newRun')}
       onSubmit={(e) => {
         e.preventDefault()
         const body = input()
         // Port "auto" or a number; anything else is the port problem the board would answer.
         const bad = preview && body.port !== null && !Number.isInteger(body.port)
         const found = bad
-          ? `port: auto, or a port from ${RUN_PORTS.from} to ${RUN_PORTS.to}`
+          ? t('runsSettings.portProblem', { from: RUN_PORTS.from, to: RUN_PORTS.to })
           : runConfigProblem(body, others)
         setProblem(found)
         if (!found) save.mutate(body)
       }}
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        {field('Name', name, setName, 'Web')}
+        {field('Name', t('runsSettings.name'), name, setName, 'Web')}
         <div className="space-y-1">
           <Label htmlFor={id('Type')} className="text-xs text-muted-foreground">
-            Type
+            {t('runsSettings.type')}
           </Label>
           <Select
             value={type}
             onValueChange={(v) => v && setType(v as RunType)}
-            items={{ preview: 'Preview (a port and a link)', job: 'Job (a background worker)' }}
+            items={{ preview: t('runsSettings.typePreviewLong'), job: t('runsSettings.typeJobLong') }}
           >
             <SelectTrigger id={id('Type')} className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="preview">Preview (a port and a link)</SelectItem>
-              <SelectItem value="job">Job (a background worker)</SelectItem>
+              <SelectItem value="preview">{t('runsSettings.typePreviewLong')}</SelectItem>
+              <SelectItem value="job">{t('runsSettings.typeJobLong')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
-      {field('Install', install, setInstall, 'pnpm install --frozen-lockfile (empty: none)')}
-      {field('Build', build, setBuild, 'pnpm build (empty: none)')}
-      {field('Start', start, setStart, preview ? 'node server.js (reads PORT)' : 'node worker.js')}
+      {field('Install', t('runsSettings.install'), install, setInstall, t('runsSettings.installPlaceholder'))}
+      {field('Build', t('runsSettings.build'), build, setBuild, t('runsSettings.buildPlaceholder'))}
+      {field(
+        'Start',
+        t('runsSettings.start'),
+        start,
+        setStart,
+        preview ? t('runsSettings.startPreviewPlaceholder') : 'node worker.js',
+      )}
       {preview && (
         <div className="grid gap-3 sm:grid-cols-2">
-          {field('Port', port, setPort, 'auto')}
-          {field('Health path', healthPath, setHealthPath, '/')}
+          {field('Port', t('runsSettings.port'), port, setPort, t('runsSettings.portAuto'))}
+          {field('Health path', t('runsSettings.healthPath'), healthPath, setHealthPath, '/')}
         </div>
       )}
       <div className="space-y-1.5">
         <div className="text-xs text-muted-foreground">
-          Environment, for the start command
-          {preview ? ': {port} in a value is its port; PORT and HOST are set' : ''}
+          {preview ? t('runsSettings.envPreview') : t('runsSettings.env')}
         </div>
         {env.map((e, i) => (
           <div key={i} className="flex items-center gap-1.5">
             <Input
-              aria-label={`Variable ${i + 1} name`}
+              aria-label={t('runsSettings.varName', { n: i + 1 })}
               value={e.key}
               onChange={(ev) => setEnv(env.map((x, j) => (j === i ? { ...x, key: ev.target.value } : x)))}
+              // i18n-ignore: an environment variable name
               placeholder="NAME"
               className="w-40 font-mono text-xs"
             />
             <Input
-              aria-label={`Variable ${i + 1} value`}
+              aria-label={t('runsSettings.varValue', { n: i + 1 })}
               value={e.value}
               onChange={(ev) => setEnv(env.map((x, j) => (j === i ? { ...x, value: ev.target.value } : x)))}
-              placeholder="value"
+              placeholder={t('runsSettings.valuePlaceholder')}
               className="flex-1 font-mono text-xs"
             />
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
-              aria-label={`Remove variable ${i + 1}`}
+              aria-label={t('runsSettings.removeVar', { n: i + 1 })}
               onClick={() => setEnv(env.filter((_, j) => j !== i))}
             >
               <X />
@@ -360,13 +381,13 @@ function RunForm({
           size="sm"
           onClick={() => setEnv([...env, { key: '', value: '' }])}
         >
-          <Plus /> Add variable
+          <Plus /> {t('runsSettings.addVar')}
         </Button>
       </div>
       <div className="flex items-center gap-2">
         <Switch id={id('copy')} checked={copyData} onCheckedChange={(v) => setCopyData(v)} />
         <Label htmlFor={id('copy')} className="text-xs">
-          Copy the live board's data into data/preview first (as DATA_DIR)
+          {t('runsSettings.copyData')}
         </Label>
       </div>
       {problem && (
@@ -376,10 +397,10 @@ function RunForm({
       )}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" onClick={onDone}>
-          Cancel
+          {t('runsSettings.cancel')}
         </Button>
         <Button type="submit" size="sm" disabled={save.isPending}>
-          {save.isPending ? 'Saving…' : 'Save'}
+          {save.isPending ? t('runsSettings.saving') : t('runsSettings.save')}
         </Button>
       </div>
     </form>

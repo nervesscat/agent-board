@@ -1,5 +1,6 @@
 import { Pencil } from 'lucide-react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { TrashIcon } from '#/components/TrashIcon'
 import {
@@ -31,6 +32,7 @@ export function EditBox({
   onCancel: () => void
   pending: boolean
 }) {
+  const { t } = useTranslation()
   const [body, setBody] = useState(value)
   const save = () => body.trim() && !pending && onSave(body)
   return (
@@ -41,14 +43,14 @@ export function EditBox({
         onSubmit={save}
         onCancel={onCancel}
         autoFocus
-        label="Edit text"
+        label={t('postTools.editText')}
       />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-          Cancel
+          {t('postTools.cancel')}
         </Button>
         <Button type="button" size="sm" onClick={save} disabled={!body.trim() || pending}>
-          {pending ? 'Saving…' : 'Save'}
+          {pending ? t('postTools.saving') : t('postTools.save')}
         </Button>
       </div>
     </div>
@@ -57,10 +59,11 @@ export function EditBox({
 
 /** "edited", with when on hover. */
 export function Edited({ at }: { at: string | null }) {
+  const { t } = useTranslation()
   if (!at) return null
   return (
-    <Tip content={`edited ${stamp(at)}`}>
-      <span className="italic">edited</span>
+    <Tip content={t('postTools.editedAt', { when: stamp(at) })}>
+      <span className="italic">{t('postTools.edited')}</span>
     </Tip>
   )
 }
@@ -101,14 +104,15 @@ export function PostActions({
   onDelete,
   children,
 }: {
-  /** What is deleted, for the confirmation: "this post", "this reply". */
-  what: string
+  /** What is deleted, for the confirmation. */
+  what: 'this post' | 'this reply'
   group: 'post' | 'comment'
   onEdit: () => void
   onDelete: () => void
   /** More actions, before edit. */
   children?: React.ReactNode
 }) {
+  const { t } = useTranslation()
   return (
     <span
       className={cn(
@@ -117,23 +121,25 @@ export function PostActions({
       )}
     >
       {children}
-      <ActionButton label="edit" tip="Edit" onClick={onEdit}>
+      <ActionButton label={t('postTools.editLabel')} tip={t('postTools.edit')} onClick={onEdit}>
         <Pencil />
       </ActionButton>
       <AlertDialog>
-        <AlertDialogTrigger render={<ActionButton label="delete" tip="Delete" />}>
+        <AlertDialogTrigger
+          render={<ActionButton label={t('postTools.deleteLabel')} tip={t('postTools.delete')} />}
+        >
           <TrashIcon />
         </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {what}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Its replies and files go with it. This cannot be undone.
-            </AlertDialogDescription>
+            <AlertDialogTitle>
+              {what === 'this post' ? t('postTools.deletePostTitle') : t('postTools.deleteReplyTitle')}
+            </AlertDialogTitle>
+            <AlertDialogDescription>{t('postTools.deleteText')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep</AlertDialogCancel>
-            <AlertDialogAction onClick={onDelete}>Delete</AlertDialogAction>
+            <AlertDialogCancel>{t('postTools.keep')}</AlertDialogCancel>
+            <AlertDialogAction onClick={onDelete}>{t('postTools.delete')}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

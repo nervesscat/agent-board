@@ -14,7 +14,7 @@ export interface SettingsSearch {
 
 /** The ids of each tab's sections, in page order: the one list that says which tab a link's #hash is on. */
 export const SETTINGS_SECTIONS: Record<SettingsTab, readonly string[]> = {
-  board: ['default-agent', 'theme', 'previews', 'updates', 'agent-roles', 'tailnet', 'devices'],
+  board: ['default-agent', 'theme', 'language', 'previews', 'updates', 'agent-roles', 'tailnet', 'devices'],
   project: [
     'kinds',
     'default-phases',
