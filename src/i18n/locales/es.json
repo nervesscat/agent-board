@@ -2136,5 +2136,221 @@
     "holdText": "Una nota para ti y los agentes. No se toca GitHub.",
     "holdPlaceholder": "Por qué espera…",
     "holdConfirm": "Pausar"
+  },
+  "workStatus": {
+    "state": {
+      "waiting": "Esperándote",
+      "yourTurn": "Tu turno",
+      "lost": "Contacto perdido",
+      "noWord": "Sin noticias",
+      "quiet": "En silencio",
+      "working": "Trabajando ahora",
+      "nothing": "Nada abierto"
+    },
+    "line": {
+      "yourTurn": "Tu turno · esperando {{duration}}",
+      "lost": "Contacto perdido · {{duration}}",
+      "noWord": "Sin noticias {{duration}}",
+      "quiet": "En silencio {{duration}}",
+      "working": "Trabajando ahora · última noticia {{duration}}"
+    },
+    "unit": {
+      "m": "{{count}}m",
+      "h": "{{count}}h",
+      "d": "{{count}}d"
+    },
+    "since": "desde las {{time}}",
+    "minutes": "{{count}} min",
+    "lastWord": "última noticia hace {{count}} min",
+    "noWordYet": "aún sin noticias",
+    "why": {
+      "inStage": "en {{stage}}, sin noticias de ningún agente desde las {{time}}",
+      "waitingOn": "esperando a {{on}}, sin noticias de nadie desde las {{time}}",
+      "nothingOpen": "nada abierto desde las {{time}}",
+      "work": "trabajo",
+      "ended": "nada abierto desde que terminó «{{phase}}» a las {{time}}",
+      "endedQuote": "nada abierto desde que terminó «{{phase}}» a las {{time}} ('{{quote}}')",
+      "noProgress": "ninguna novedad de progreso desde las {{time}}"
+    },
+    "verb": {
+      "spec": "Especificando",
+      "build": "Construyendo",
+      "review": "Revisando",
+      "verify": "Verificando",
+      "pr": "Abriendo PR",
+      "preview": "Previsualizando",
+      "merge": "Fusionando",
+      "work": "Trabajando"
+    },
+    "nobodyHeard": "Aún sin noticias de nadie",
+    "lastHeard": "Última noticia a las {{time}}",
+    "worked": "Trabajo",
+    "waited": "Espera",
+    "onYou": "Contigo",
+    "defs": {
+      "worked": "Trabajo: tiempo con trabajo abierto de un agente, sin esperar a una persona.",
+      "waited": "Espera: tiempo en que nada avanzó en el ticket y no se esperaba a nadie.",
+      "onYou": "Contigo: tiempo esperando a una persona (una espera humana o una etapa bloqueada)."
+    }
+  },
+  "workTimeline": {
+    "noWork": "Aún no hay trabajo registrado.",
+    "now": "ahora",
+    "board": "Tablero",
+    "blocked": "bloqueada",
+    "unnamed": "sin nombre",
+    "work": "trabajo",
+    "theHuman": "la persona",
+    "running": "en curso",
+    "neverClosed": "nunca se cerró",
+    "phaseRound": "{{phase}}, ronda {{round}}",
+    "phaseRoundShort": "{{phase}} r{{round}}",
+    "delegatedTo": "delegada a {{on}}",
+    "subAgentOf": "{{name}}, subagente de {{parent}}",
+    "created": "creado {{count}} min antes del trabajo",
+    "duration": {
+      "seconds": "{{count}}s",
+      "minutes": "{{count}}m",
+      "hours": "{{count}}h",
+      "hoursMinutes": "{{h}}h {{m}}m"
+    },
+    "spoken": {
+      "underMinute": "menos de un minuto",
+      "minutes": "{{count}} min",
+      "hours": "{{count}} h",
+      "hoursMinutes": "{{h}} h {{m}} min"
+    },
+    "mark": {
+      "push": "push",
+      "pr": "PR",
+      "preview": "preview",
+      "merge": "merge",
+      "other": "evento del tablero"
+    },
+    "label": {
+      "via": " (vía {{by}})",
+      "open": ", abierto",
+      "span": "{{phase}} por {{agent}}{{via}}, de {{from}} a {{to}}, {{duration}}{{open}}",
+      "wait": "espera: {{reason}} ({{agent}}), de {{from}} a {{to}}, {{duration}}{{open}}{{note}}",
+      "delegation": "delegada a {{on}} por {{agent}}, de {{from}} a {{to}}, {{duration}}{{open}}{{note}}",
+      "handoff": "{{from}} pasó el trabajo a {{to}}, {{time}}{{note}}",
+      "mark": "{{name}}{{note}}, {{time}}",
+      "blockedStage": "etapa bloqueada, de {{from}} a {{to}}, {{duration}}"
+    },
+    "fact": {
+      "delegatedTo": "Delegada a",
+      "by": "Por",
+      "started": "Inicio",
+      "ended": "Fin",
+      "note": "Nota",
+      "waiting": "Esperando",
+      "on": "A",
+      "duration": "Duración",
+      "who": "Quién",
+      "work": "Trabajo",
+      "from": "De",
+      "to": "A",
+      "at": "El",
+      "stage": "Etapa",
+      "event": "Evento"
+    },
+    "summary": {
+      "noAgentWork": "No hay trabajo de agentes registrado.",
+      "worked": "trabajó {{duration}}",
+      "waited": "esperó {{duration}} a {{target}}",
+      "delegated": "{{on}}, delegada",
+      "clause": "{{agent}} {{parts}}",
+      "workBy_one": "Trabajo de {{count}} agente durante {{over}}: {{clauses}}.{{live}}",
+      "workBy_other": "Trabajo de {{count}} agentes durante {{over}}: {{clauses}}.{{live}}",
+      "activityBy_one": "Actividad de {{count}} agente durante {{over}}: {{clauses}}.{{live}}",
+      "activityBy_other": "Actividad de {{count}} agentes durante {{over}}: {{clauses}}.{{live}}",
+      "stillGoing": " Sigue en curso."
+    },
+    "card": {
+      "title": "Cronología",
+      "loading": "Cargando…",
+      "showMore": "Mostrar más",
+      "showLess": "Mostrar menos",
+      "showHeartbeats": "Mostrar latidos",
+      "hideHeartbeats": "Ocultar latidos",
+      "heartbeats_one": "{{count}} latido, el último a las {{time}}",
+      "heartbeats_other": "{{count}} latidos, el último a las {{time}}",
+      "story": "Historia de la cronología"
+    },
+    "story": {
+      "waitingFor": "esperando por {{who}} · {{duration}}",
+      "waitedFor": "esperó por {{who}} · {{duration}}{{note}}",
+      "started": "empezó {{phase}}{{note}}",
+      "ended": "terminó {{phase}}{{note}}",
+      "handoff": "pasó el trabajo{{from}} a {{to}}{{note}}",
+      "handoffFrom": " de {{name}}",
+      "someone": "alguien",
+      "waiting": "esperando por {{who}}",
+      "stoppedWaiting": "dejó de esperar por {{who}}{{note}}",
+      "heartbeat": "latido{{note}}",
+      "movedTo": "pasó a {{stage}}",
+      "createdIn": "creado en {{stage}}",
+      "pushed": "hizo push",
+      "openedPr": "abrió el PR{{note}}",
+      "merged": "fusionó",
+      "preview": "preview {{note}}",
+      "somethingElse": "otra cosa",
+      "lockNote": "el lock ({{note}})",
+      "lock": "el lock",
+      "you": "ti",
+      "mcp": "el servidor MCP",
+      "seconds": "{{count}} s",
+      "minutes": "{{count}} min",
+      "minutesSeconds": "{{m}} min {{s}} s",
+      "hours": "{{count}} h",
+      "hoursMinutes": "{{h}} h {{m}} min"
+    }
+  },
+  "roadmap": {
+    "title": "Hoja de ruta",
+    "subtitle": "Cada ticket en marcha: hecho, ahora, después.",
+    "filter": {
+      "all": "Todos",
+      "blocked": "Bloqueados",
+      "review": "Necesitan revisión"
+    },
+    "timeAxis": "Eje de tiempo, todas las filas:",
+    "window": {
+      "today": "Hoy",
+      "24h": "24 h",
+      "7d": "7 d",
+      "fit": "Ajustar a todas las filas"
+    },
+    "range": "{{start}} hasta ahora",
+    "stat": {
+      "tickets_one": "ticket",
+      "tickets_other": "tickets",
+      "lanes_one": "lane",
+      "lanes_other": "lanes",
+      "workingNow": "trabajando ahora",
+      "blocked": "bloqueados",
+      "inReview": "en revisión",
+      "noWord": "sin noticias"
+    },
+    "projectWork": "Trabajo del proyecto, todos los tickets y lanes:",
+    "empty": {
+      "all": "Ningún ticket está en curso, bloqueado o en revisión.",
+      "blocked": "No hay nada bloqueado.",
+      "review": "Ningún ticket espera revisión."
+    },
+    "lanes_one": "{{count}} lane",
+    "lanes_other": "{{count}} lanes",
+    "unassigned": "Sin asignar",
+    "progress": "{{done}} de {{total}} hechas",
+    "workTimeline": "Cronología del trabajo",
+    "noTasks": "Aún no hay tareas.",
+    "tasks": "Tareas",
+    "step": {
+      "done": "hecha",
+      "now": "ahora",
+      "next": "siguiente",
+      "later": "después",
+      "blocked": "bloqueada"
+    }
   }
 }

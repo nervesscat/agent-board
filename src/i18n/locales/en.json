@@ -2136,5 +2136,221 @@
     "holdText": "A note for you and the agents. GitHub is not touched.",
     "holdPlaceholder": "Why it waits…",
     "holdConfirm": "Hold"
+  },
+  "workStatus": {
+    "state": {
+      "waiting": "Waiting on you",
+      "yourTurn": "Your turn",
+      "lost": "Lost contact",
+      "noWord": "No word",
+      "quiet": "Quiet",
+      "working": "Working now",
+      "nothing": "Nothing open"
+    },
+    "line": {
+      "yourTurn": "Your turn · waiting {{duration}}",
+      "lost": "Lost contact · {{duration}}",
+      "noWord": "No word {{duration}}",
+      "quiet": "Quiet {{duration}}",
+      "working": "Working now · last word {{duration}}"
+    },
+    "unit": {
+      "m": "{{count}}m",
+      "h": "{{count}}h",
+      "d": "{{count}}d"
+    },
+    "since": "since {{time}}",
+    "minutes": "{{count}} min",
+    "lastWord": "last word {{count}} min ago",
+    "noWordYet": "no word yet",
+    "why": {
+      "inStage": "in {{stage}}, no agent heard from since {{time}}",
+      "waitingOn": "waiting on {{on}}, nobody heard from since {{time}}",
+      "nothingOpen": "nothing open since {{time}}",
+      "work": "work",
+      "ended": "nothing open since the {{phase}} ended at {{time}}",
+      "endedQuote": "nothing open since the {{phase}} ended at {{time}} ('{{quote}}')",
+      "noProgress": "no progress post since {{time}}"
+    },
+    "verb": {
+      "spec": "Specifying",
+      "build": "Building",
+      "review": "Reviewing",
+      "verify": "Verifying",
+      "pr": "Opening PR",
+      "preview": "Previewing",
+      "merge": "Merging",
+      "work": "Working"
+    },
+    "nobodyHeard": "Nobody heard from yet",
+    "lastHeard": "Last heard {{time}}",
+    "worked": "Worked",
+    "waited": "Waited",
+    "onYou": "On you",
+    "defs": {
+      "worked": "Worked: time an agent had work open, not waiting on a person.",
+      "waited": "Waited: time nothing moved on the ticket and no person was waited on.",
+      "onYou": "On you: time waiting on a person (a human wait, or a blocked stage)."
+    }
+  },
+  "workTimeline": {
+    "noWork": "No work recorded yet.",
+    "now": "now",
+    "board": "Board",
+    "blocked": "blocked",
+    "unnamed": "unnamed",
+    "work": "work",
+    "theHuman": "the human",
+    "running": "running",
+    "neverClosed": "never closed",
+    "phaseRound": "{{phase}} round {{round}}",
+    "phaseRoundShort": "{{phase}} r{{round}}",
+    "delegatedTo": "delegated to {{on}}",
+    "subAgentOf": "{{name}}, sub-agent of {{parent}}",
+    "created": "created {{count}} min before work",
+    "duration": {
+      "seconds": "{{count}}s",
+      "minutes": "{{count}}m",
+      "hours": "{{count}}h",
+      "hoursMinutes": "{{h}}h {{m}}m"
+    },
+    "spoken": {
+      "underMinute": "under a minute",
+      "minutes": "{{count}} min",
+      "hours": "{{count}} h",
+      "hoursMinutes": "{{h}} h {{m}} min"
+    },
+    "mark": {
+      "push": "push",
+      "pr": "pull request",
+      "preview": "preview",
+      "merge": "merge",
+      "other": "board event"
+    },
+    "label": {
+      "via": " (via {{by}})",
+      "open": ", open",
+      "span": "{{phase}} by {{agent}}{{via}}, {{from}} to {{to}}, {{duration}}{{open}}",
+      "wait": "wait: {{reason}} ({{agent}}), {{from}} to {{to}}, {{duration}}{{open}}{{note}}",
+      "delegation": "delegated to {{on}} by {{agent}}, {{from}} to {{to}}, {{duration}}{{open}}{{note}}",
+      "handoff": "{{from}} passed the work to {{to}}, {{time}}{{note}}",
+      "mark": "{{name}}{{note}}, {{time}}",
+      "blockedStage": "blocked stage, {{from}} to {{to}}, {{duration}}"
+    },
+    "fact": {
+      "delegatedTo": "Delegated to",
+      "by": "By",
+      "started": "Started",
+      "ended": "Ended",
+      "note": "Note",
+      "waiting": "Waiting",
+      "on": "On",
+      "duration": "Duration",
+      "who": "Who",
+      "work": "Work",
+      "from": "From",
+      "to": "To",
+      "at": "At",
+      "stage": "Stage",
+      "event": "Event"
+    },
+    "summary": {
+      "noAgentWork": "No agent work recorded.",
+      "worked": "worked {{duration}}",
+      "waited": "waited {{duration}} on {{target}}",
+      "delegated": "{{on}}, delegated",
+      "clause": "{{agent}} {{parts}}",
+      "workBy_one": "Work by {{count}} agent over {{over}}: {{clauses}}.{{live}}",
+      "workBy_other": "Work by {{count}} agents over {{over}}: {{clauses}}.{{live}}",
+      "activityBy_one": "Activity by {{count}} agent over {{over}}: {{clauses}}.{{live}}",
+      "activityBy_other": "Activity by {{count}} agents over {{over}}: {{clauses}}.{{live}}",
+      "stillGoing": " Still going."
+    },
+    "card": {
+      "title": "Timeline",
+      "loading": "Loading…",
+      "showMore": "Show more",
+      "showLess": "Show less",
+      "showHeartbeats": "Show heartbeats",
+      "hideHeartbeats": "Hide heartbeats",
+      "heartbeats_one": "{{count}} heartbeat, last {{time}}",
+      "heartbeats_other": "{{count}} heartbeats, last {{time}}",
+      "story": "Timeline story"
+    },
+    "story": {
+      "waitingFor": "waiting for {{who}} · {{duration}}",
+      "waitedFor": "waited for {{who}} · {{duration}}{{note}}",
+      "started": "started {{phase}}{{note}}",
+      "ended": "ended {{phase}}{{note}}",
+      "handoff": "handed the work{{from}} to {{to}}{{note}}",
+      "handoffFrom": " from {{name}}",
+      "someone": "someone",
+      "waiting": "waiting for {{who}}",
+      "stoppedWaiting": "stopped waiting for {{who}}{{note}}",
+      "heartbeat": "heartbeat{{note}}",
+      "movedTo": "moved to {{stage}}",
+      "createdIn": "created in {{stage}}",
+      "pushed": "pushed",
+      "openedPr": "opened the PR{{note}}",
+      "merged": "merged",
+      "preview": "preview {{note}}",
+      "somethingElse": "something else",
+      "lockNote": "the lock ({{note}})",
+      "lock": "the lock",
+      "you": "you",
+      "mcp": "the MCP server",
+      "seconds": "{{count}} s",
+      "minutes": "{{count}} min",
+      "minutesSeconds": "{{m}} min {{s}} s",
+      "hours": "{{count}} h",
+      "hoursMinutes": "{{h}} h {{m}} min"
+    }
+  },
+  "roadmap": {
+    "title": "Roadmap",
+    "subtitle": "Every ticket in flight: done, now, next.",
+    "filter": {
+      "all": "All",
+      "blocked": "Blocked",
+      "review": "Needs review"
+    },
+    "timeAxis": "Time axis, every row:",
+    "window": {
+      "today": "Today",
+      "24h": "24 h",
+      "7d": "7 d",
+      "fit": "Fit all rows"
+    },
+    "range": "{{start}} to now",
+    "stat": {
+      "tickets_one": "ticket",
+      "tickets_other": "tickets",
+      "lanes_one": "lane",
+      "lanes_other": "lanes",
+      "workingNow": "working now",
+      "blocked": "blocked",
+      "inReview": "in review",
+      "noWord": "no word"
+    },
+    "projectWork": "Project work, every ticket and lane:",
+    "empty": {
+      "all": "No ticket is in progress, blocked or in review.",
+      "blocked": "Nothing is blocked.",
+      "review": "No ticket is waiting for review."
+    },
+    "lanes_one": "{{count}} lane",
+    "lanes_other": "{{count}} lanes",
+    "unassigned": "Unassigned",
+    "progress": "{{done}} of {{total}} done",
+    "workTimeline": "Work timeline",
+    "noTasks": "No tasks yet.",
+    "tasks": "Tasks",
+    "step": {
+      "done": "done",
+      "now": "now",
+      "next": "next",
+      "later": "later",
+      "blocked": "blocked"
+    }
   }
 }

@@ -2,8 +2,4 @@
 # A file comes off this list when it is extracted; the list never grows.
 src/components/NotificationCenter.tsx
 src/components/Summary.tsx
-src/components/WorkStatus.tsx
-src/components/WorkTimeline.tsx
-src/components/WorkTimelineCard.tsx
 src/routes/projects.$id.features.$ticketId.tsx
-src/routes/projects.$id.roadmap.tsx

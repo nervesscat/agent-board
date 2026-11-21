@@ -1,3 +1,6 @@
+import type { TFunction } from 'i18next'
+
+import { currentLocale, shared } from '#/i18n'
 import { shortName } from '#/lib/actorName'
 import { clock } from '#/lib/format'
 import {
@@ -79,13 +82,13 @@ export type Chart = {
 }
 
 /** A duration in words for names and tooltips: `38 min`, `2 h 5 min`, `under a minute`. */
-export function spokenDuration(ms: number): string {
+export function spokenDuration(ms: number, tr: TFunction = shared.t): string {
   const minutes = Math.round(ms / MIN)
-  if (minutes < 1) return 'under a minute'
+  if (minutes < 1) return tr('workTimeline.spoken.underMinute')
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
-  if (!h) return `${m} min`
-  return m ? `${h} h ${m} min` : `${h} h`
+  if (!h) return tr('workTimeline.spoken.minutes', { count: m })
+  return m ? tr('workTimeline.spoken.hoursMinutes', { h, m }) : tr('workTimeline.spoken.hours', { count: h })
 }
 
 /** A row's label: the name's leaf, shortened at a word boundary when long (`builder-832` for `opencode/builder-832`). */
@@ -111,7 +114,7 @@ export function ticksFor(start: number, end: number): Tick[] {
       at,
       label:
         step >= DAY
-          ? day.toLocaleDateString([], { month: 'short', day: 'numeric' })
+          ? day.toLocaleDateString(currentLocale(), { month: 'short', day: 'numeric' })
           : clock(day.toISOString()),
     })
   }
@@ -228,36 +231,45 @@ export function agentTree(t: WorkTimeline): { agent: string; parent: string | nu
 }
 
 /** The chart's one-sentence summary for screen readers. */
-export function summarize(t: WorkTimeline, rows: AgentRow[], axis: Axis): string {
-  if (!t.start) return 'No work recorded yet.'
+export function summarize(t: WorkTimeline, rows: AgentRow[], axis: Axis, tr: TFunction = shared.t): string {
+  if (!t.start) return tr('workTimeline.noWork')
   const working = rows.filter((r) => r.items.length > 0)
-  if (!working.length) return 'No agent work recorded.'
+  if (!working.length) return tr('workTimeline.summary.noAgentWork')
   const clauses = working.map((r) => {
     const parts: string[] = []
     const spans = r.items.flatMap((i) => (i.kind === 'span' ? [[i.ms.start, i.ms.end] as Interval] : []))
-    if (spans.length) parts.push(`worked ${spokenDuration(unionMs(spans))}`)
+    if (spans.length)
+      parts.push(tr('workTimeline.summary.worked', { duration: spokenDuration(unionMs(spans), tr) }))
     const byTarget = new Map<string, Interval[]>()
     for (const i of r.items) {
       if (i.kind !== 'wait') continue
       const target = i.delegated
-        ? `${i.wait.on}, delegated`
+        ? tr('workTimeline.summary.delegated', { on: i.wait.on })
         : i.wait.reason === 'human'
-          ? 'the human'
+          ? tr('workTimeline.theHuman')
           : i.wait.reason
       byTarget.set(target, [...(byTarget.get(target) ?? []), [i.ms.start, i.ms.end]])
     }
-    for (const [target, ms] of byTarget) parts.push(`waited ${spokenDuration(unionMs(ms))} on ${target}`)
-    return `${r.agent || 'unnamed'} ${parts.join(', ')}`
+    for (const [target, ms] of byTarget)
+      parts.push(tr('workTimeline.summary.waited', { duration: spokenDuration(unionMs(ms), tr), target }))
+    return tr('workTimeline.summary.clause', {
+      agent: r.agent || tr('workTimeline.unnamed'),
+      parts: parts.join(', '),
+    })
   })
   const doers = working.filter((r) => r.items.some((i) => i.kind === 'span')).length
   const n = doers || working.length
-  const over = spokenDuration(axis.end - axis.start)
-  const who = doers ? 'Work by' : 'Activity by'
-  return `${who} ${n} agent${n === 1 ? '' : 's'} over ${over}: ${clauses.join('; ')}.${t.live ? ' Still going.' : ''}`
+  const over = spokenDuration(axis.end - axis.start, tr)
+  return tr(doers ? 'workTimeline.summary.workBy' : 'workTimeline.summary.activityBy', {
+    count: n,
+    over,
+    clauses: clauses.join('; '),
+    live: t.live ? tr('workTimeline.summary.stillGoing') : '',
+  })
 }
 
 /** The whole chart as the view draws it: rows, marks, blocked bands, the creation mark and the summary. */
-export function buildChart(t: WorkTimeline, now: number, win?: Window): Chart {
+export function buildChart(t: WorkTimeline, now: number, win?: Window, tr: TFunction = shared.t): Chart {
   const axis = axisFor(t, now, win)
   const live = t.live
   const endOf = (end: string, open: boolean) =>
@@ -354,6 +366,6 @@ export function buildChart(t: WorkTimeline, now: number, win?: Window): Chart {
       createdAt !== null && lead >= 1 && createdShare <= 1
         ? { minutes: lead, left: Math.max(0, createdShare) }
         : null,
-    summary: summarize(t, rows, axis),
+    summary: summarize(t, rows, axis, tr),
   }
 }

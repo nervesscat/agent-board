@@ -1,4 +1,6 @@
+import type { TFunction } from 'i18next'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown } from 'lucide-react'
 
@@ -15,6 +17,7 @@ import {
   type TicketFull,
   type WorkTimeline,
 } from '#/lib/api'
+import { shared } from '#/i18n'
 import { clock, stamp } from '#/lib/format'
 import { stallStage } from '#/lib/activityTimeline'
 import { useStages } from '#/lib/project'
@@ -29,6 +32,7 @@ import { onServerClock } from '#/lib/workStatus'
  * they are asked for.
  */
 export function WorkTimelineCard({ t }: { t: TicketFull }) {
+  const { t: tr } = useTranslation()
   const stages = useStages(t.projectId)
   const [beats, setBeats] = useState(false)
   const [more, setMore] = useState(false)
@@ -41,14 +45,14 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
   const stageName = (key: string) => stages.find((s) => s.key === key)?.name ?? key
   const events = data ? oldestFirst(data.events) : []
   const heartbeats = events.filter((e) => e.kind === 'heartbeat')
-  const rows = data ? storyRows(events, data.timeline, now, stageName, beats) : []
+  const rows = data ? storyRows(events, data.timeline, now, stageName, beats, tr) : []
   return (
-    <section className="rounded-lg border p-4" aria-label="Timeline">
-      <h2 className="mb-3 text-sm font-medium">Timeline</h2>
+    <section className="rounded-lg border p-4" aria-label={tr('workTimeline.card.title')}>
+      <h2 className="mb-3 text-sm font-medium">{tr('workTimeline.card.title')}</h2>
       {error ? (
         <p className="text-sm text-destructive">{errorMessage(error)}</p>
       ) : !data ? (
-        <p className="text-xs text-muted-foreground">Loading…</p>
+        <p className="text-xs text-muted-foreground">{tr('workTimeline.card.loading')}</p>
       ) : (
         <div className="space-y-3">
           <div className="space-y-1 text-sm">
@@ -67,7 +71,7 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
                   aria-controls="timeline-story"
                   onClick={() => setMore((v) => !v)}
                 >
-                  {more ? 'Show less' : 'Show more'}
+                  {more ? tr('workTimeline.card.showLess') : tr('workTimeline.card.showMore')}
                   <ChevronDown
                     className={`size-3.5 transition-transform ${more ? 'rotate-180' : ''}`}
                     aria-hidden
@@ -75,18 +79,24 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
                 </Button>
                 {heartbeats.length > 0 && (
                   <Button variant="ghost" size="sm" aria-expanded={beats} onClick={() => setBeats((v) => !v)}>
-                    {beats ? 'Hide heartbeats' : 'Show heartbeats'}
+                    {beats ? tr('workTimeline.card.hideHeartbeats') : tr('workTimeline.card.showHeartbeats')}
                   </Button>
                 )}
                 {heartbeats.length > 0 && !beats && (
                   <span className="text-xs text-muted-foreground">
-                    {heartbeats.length} heartbeat{heartbeats.length === 1 ? '' : 's'}, last{' '}
-                    {clock(heartbeats.at(-1)!.at)}
+                    {tr('workTimeline.card.heartbeats', {
+                      count: heartbeats.length,
+                      time: clock(heartbeats.at(-1)!.at),
+                    })}
                   </span>
                 )}
               </div>
               {more && (
-                <ul id="timeline-story" aria-label="Timeline story" className="space-y-3 text-xs">
+                <ul
+                  id="timeline-story"
+                  aria-label={tr('workTimeline.card.story')}
+                  className="space-y-3 text-xs"
+                >
                   {groupRuns(rows).map((run) => (
                     <li key={run.rows[0]!.id}>
                       <div className="mb-1 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -142,6 +152,7 @@ function storyRows(
   now: number,
   stageName: (key: string) => string,
   beats: boolean,
+  tr: TFunction,
 ): Row[] {
   const startIds = new Set(events.filter((e) => e.kind === 'wait_start').map((e) => e.id))
   const endOf = new Map<number, TicketEvent>()
@@ -152,7 +163,8 @@ function storyRows(
   for (const e of events) {
     if (e.kind === 'heartbeat' && !beats) continue
     if (e.kind === 'wait_end' && e.refId !== null && startIds.has(e.refId)) continue
-    const text = e.kind === 'wait_start' ? waitRowText(e, endOf.get(e.id), ticketEnd) : sentence(e, stageName)
+    const text =
+      e.kind === 'wait_start' ? waitRowText(e, endOf.get(e.id), ticketEnd, tr) : sentence(e, stageName, tr)
     rows.push({ id: e.id, at: e.at, agent: e.agent, by: e.by, text })
   }
   return rows
@@ -166,11 +178,20 @@ export function waitRowText(
   start: Pick<TicketEvent, 'at' | 'reason' | 'note'>,
   end: Pick<TicketEvent, 'at' | 'note'> | undefined,
   ticketEnd: number,
+  tr: TFunction = shared.t,
 ): string {
-  const who = waitTarget(start.reason, start.note)
-  if (!end) return `waiting for ${who} · ${waitFor(ticketEnd - Date.parse(start.at))}`
+  const who = waitTarget(start.reason, start.note, tr)
+  if (!end)
+    return tr('workTimeline.story.waitingFor', {
+      who,
+      duration: waitFor(ticketEnd - Date.parse(start.at), tr),
+    })
   const note = end.note ? `: ${end.note}` : ''
-  return `waited for ${who} · ${waitFor(Date.parse(end.at) - Date.parse(start.at))}${note}`
+  return tr('workTimeline.story.waitedFor', {
+    who,
+    duration: waitFor(Date.parse(end.at) - Date.parse(start.at), tr),
+    note,
+  })
 }
 
 /** The consecutive rows of one actor (name and recorder) as one run. */
@@ -185,65 +206,80 @@ function groupRuns(rows: Row[]): Run[] {
 }
 
 /** One event as a plain sentence, without its actor (the actor line above its run says who). */
-function sentence(e: TicketEvent, stageName: (key: string) => string): string {
-  const phase = `${e.phase || 'work'}${e.round !== null ? ` round ${e.round}` : ''}`
+function sentence(e: TicketEvent, stageName: (key: string) => string, tr: TFunction): string {
+  const name = e.phase || tr('workTimeline.work')
+  const phase = e.round !== null ? tr('workTimeline.phaseRound', { phase: name, round: e.round }) : name
   const note = e.note ? `: ${e.note}` : ''
   switch (e.kind) {
     case 'span_start':
-      return `started ${phase}${note}`
+      return tr('workTimeline.story.started', { phase, note })
     case 'span_end':
-      return `ended ${phase}${note}`
+      return tr('workTimeline.story.ended', { phase, note })
     case 'handoff': {
       // The giver is named when it is not the recorder (the actor line names the recorder).
-      const from = e.fromAgent && e.fromAgent !== e.agent ? ` from ${e.fromAgent}` : ''
-      return `handed the work${from} to ${e.toAgent || 'someone'}${note}`
+      const from =
+        e.fromAgent && e.fromAgent !== e.agent
+          ? tr('workTimeline.story.handoffFrom', { name: e.fromAgent })
+          : ''
+      return tr('workTimeline.story.handoff', {
+        from,
+        to: e.toAgent || tr('workTimeline.story.someone'),
+        note,
+      })
     }
     case 'wait_start':
-      return `waiting for ${waitTarget(e.reason, e.note)}`
+      return tr('workTimeline.story.waiting', { who: waitTarget(e.reason, e.note, tr) })
     case 'wait_end':
-      return `stopped waiting for ${waitTarget(e.reason, e.note)}${note}`
+      return tr('workTimeline.story.stoppedWaiting', { who: waitTarget(e.reason, e.note, tr), note })
     case 'heartbeat':
-      return `heartbeat${note}`
+      return tr('workTimeline.story.heartbeat', { note })
     case 'stage':
-      return e.fromStage ? `moved to ${stageName(e.toStage)}` : `created in ${stageName(e.toStage)}`
+      return e.fromStage
+        ? tr('workTimeline.story.movedTo', { stage: stageName(e.toStage) })
+        : tr('workTimeline.story.createdIn', { stage: stageName(e.toStage) })
     case 'push':
       // The event's note already says what was pushed; the verb is only the fallback.
-      return e.note || 'pushed'
+      return e.note || tr('workTimeline.story.pushed')
     case 'pr':
-      return `opened the PR${note}`
+      return tr('workTimeline.story.openedPr', { note })
     case 'merge':
-      return e.note || 'merged'
+      return e.note || tr('workTimeline.story.merged')
     case 'preview':
-      return `preview ${e.note}`
+      return tr('workTimeline.story.preview', { note: e.note })
     default:
       return e.note || e.kind
   }
 }
 
 /** What a wait is for: its reason, or for `other` the note that says what (`spec`). */
-function waitTarget(reason: string, note: string): string {
+function waitTarget(reason: string, note: string, tr: TFunction): string {
   switch (reason) {
     case 'other':
-      return note || 'something else'
+      return note || tr('workTimeline.story.somethingElse')
     case 'lock':
-      return note ? `the lock (${note})` : 'the lock'
+      return note ? tr('workTimeline.story.lockNote', { note }) : tr('workTimeline.story.lock')
     case 'human':
-      return 'you'
+      return tr('workTimeline.story.you')
     case 'mcp':
-      return 'the MCP server'
+      return tr('workTimeline.story.mcp')
     default:
-      return reason || 'something else'
+      return reason || tr('workTimeline.story.somethingElse')
   }
 }
 
 /** A duration for the story: `0 s`, `85 s`, `1 min 25 s`, `43 min`, `2 h 5 min`. */
-function waitFor(ms: number): string {
+function waitFor(ms: number, tr: TFunction): string {
   const s = Math.max(0, Math.round(ms / 1000))
-  if (s < 60) return `${s} s`
+  if (s < 60) return tr('workTimeline.story.seconds', { count: s })
   const m = Math.floor(s / 60)
   const r = s % 60
-  if (m < 60) return r ? `${m} min ${r} s` : `${m} min`
+  if (m < 60)
+    return r
+      ? tr('workTimeline.story.minutesSeconds', { m, s: r })
+      : tr('workTimeline.story.minutes', { count: m })
   const h = Math.floor(m / 60)
   const rest = m % 60
-  return rest ? `${h} h ${rest} min` : `${h} h`
+  return rest
+    ? tr('workTimeline.story.hoursMinutes', { h, m: rest })
+    : tr('workTimeline.story.hours', { count: h })
 }
