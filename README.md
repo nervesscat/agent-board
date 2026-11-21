@@ -1097,6 +1097,26 @@ description for the mute list, scope (per project or board-wide), a `check` that
 that hold right now, the handlers of its action buttons, its snooze options, and whether it can be
 dismissed. A test adds a type with `registerForTest`.
 
+The alerts the board raises today, by group (a type that only fits some boards says when; each can be
+muted per project):
+
+- **Setup and versions**: skills were updated (the Update button lists the files that differ), a repo's
+  own review skills were updated, a newer board release is available (desktop app), release due (tickets
+  waiting in the Release stage for 3 days or 5 tickets), an agent token about to expire or expired, a
+  downloaded update that needs a manual step (desktop app), a repo without the board skills, and git,
+  node or pnpm missing, not runnable or too old (Check again).
+- **Work**: a decision waiting too long, a ticket stalled or an agent that lost contact, an approved PR that
+  cannot merge, PR checks failed or the branch out of date, a blocked task waiting on you, a review ready
+  for your verdict, an archive request (Archive or Keep it), the Needs-you digest, a PR waiting on you in
+  the PR queue (Release the hold), no agent calling in while tickets wait in To do, and work that exists
+  only on this machine (Ask the agent to push).
+- **This machine**: the agent CLI missing, too old or refused login, GitHub access, leftover processes
+  (Stop), disk, load and memory, a preview stopped by a restart (Restart), a migration applied at startup,
+  only one passkey, a sign-in from a new device and a tailnet entrance that does not answer (only when the
+  board is reachable beyond this machine), the preview limit reached (Stop the oldest and start this one)
+  and file storage that does not answer (S3 only).
+- **Housekeeping**: cleanup ready, report due, and report generation failed (Try again).
+
 ## Reviews
 
 An agent that reviews a PR records it with `post_review_result` (REST:
