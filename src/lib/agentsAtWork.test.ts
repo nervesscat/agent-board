@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { MAX_DONE, MAX_PETS, TITLE_LIMIT, elapsed, petsOf, phaseLabel } from './agentsAtWork'
+import { MAX_PETS, TITLE_LIMIT, elapsed, petsOf, phaseLabel } from './agentsAtWork'
 
 const NOW = Date.parse('2026-01-01T12:00:00Z')
 const minutesAgo = (m: number) => new Date(NOW - m * 60_000).toISOString()
@@ -32,23 +32,12 @@ const quiet = (over: Record<string, unknown> = {}) =>
     state: '',
     ...over,
   }) as never
-const done = (over: Record<string, unknown> = {}) =>
-  ({
-    id: 9,
-    title: 'Shipped',
-    status: 'done',
-    parent: null,
-    assignee: 'builder',
-    doneAt: minutesAgo(125),
-    ...over,
-  }) as never
-
 const names = (r: ReturnType<typeof petsOf>) => r.pets.map((p) => `${p.ticketId}:${p.agent}:${p.state}`)
 
 describe('phase text that is a property of Object', () => {
   it.each(['constructor', 'toString', '__proto__'])('shows %s as plain text', (phase) => {
     expect(phaseLabel(phase, 2)).toBe(`${phase} round 2`)
-    const { pets } = petsOf({ liveNow: [live({ phase, round: 3 })], recentlyActive: [] }, [], NOW)
+    const { pets } = petsOf({ liveNow: [live({ phase, round: 3 })], recentlyActive: [] }, NOW)
     expect(pets[0].phase).toBe(`${phase} round 3`)
     expect(pets[0].label).toContain(`${phase} round 3`)
   })
@@ -56,11 +45,7 @@ describe('phase text that is a property of Object', () => {
 
 describe('petsOf', () => {
   it('makes one character per agent, with its ticket, phase and time since it was heard', () => {
-    const { pets } = petsOf(
-      { liveNow: [live({ agents: ['a', 'b'], round: null })], recentlyActive: [] },
-      [],
-      NOW,
-    )
+    const { pets } = petsOf({ liveNow: [live({ agents: ['a', 'b'], round: null })], recentlyActive: [] }, NOW)
     expect(pets.map((p) => p.agent)).toEqual(['a', 'b'])
     expect(pets[0]).toMatchObject({
       ticketId: 1,
@@ -80,22 +65,22 @@ describe('petsOf', () => {
     expect(phaseLabel('preview', null)).toBe('Previewing')
     expect(phaseLabel('odd', null)).toBe('odd')
     expect(phaseLabel(null, null)).toBe('')
-    const { pets } = petsOf({ liveNow: [live({ phase: null, round: null })], recentlyActive: [] }, [], NOW)
+    const { pets } = petsOf({ liveNow: [live({ phase: null, round: null })], recentlyActive: [] }, NOW)
     expect(pets[0]!.phase).toBe('Working')
   })
 
   it('keeps one character for a ticket with no agent name, and none for an empty list of tickets', () => {
-    const r = petsOf({ liveNow: [live({ agents: [] })], recentlyActive: [] }, [], NOW)
+    const r = petsOf({ liveNow: [live({ agents: [] })], recentlyActive: [] }, NOW)
     expect(r.pets).toHaveLength(1)
     expect(r.pets[0]!.agent).toBeNull()
     expect(r.pets[0]!.label).not.toContain('agent')
-    expect(petsOf({ liveNow: [], recentlyActive: [] }, [], NOW)).toEqual({ pets: [], more: 0, live: 0 })
-    expect(petsOf(undefined, [], NOW).pets).toEqual([])
+    expect(petsOf({ liveNow: [], recentlyActive: [] }, NOW)).toEqual({ pets: [], more: 0, live: 0 })
+    expect(petsOf(undefined, NOW).pets).toEqual([])
   })
 
   it('cuts a long title but never the number', () => {
     const title = 'x'.repeat(80)
-    const { pets } = petsOf({ liveNow: [live({ ticketId: 123, title })], recentlyActive: [] }, [], NOW)
+    const { pets } = petsOf({ liveNow: [live({ ticketId: 123, title })], recentlyActive: [] }, NOW)
     expect(pets[0]!.short.startsWith('#123 ')).toBe(true)
     expect(pets[0]!.short.length).toBe('#123 '.length + TITLE_LIMIT)
     expect(pets[0]!.short.endsWith('…')).toBe(true)
@@ -122,7 +107,6 @@ describe('petsOf', () => {
           quiet({ ticketId: 8, stalled: false, phase: 'build' }),
         ],
       },
-      [],
       NOW,
     )
     expect(Object.fromEntries(r.pets.map((p) => [p.ticketId, p.state]))).toEqual({
@@ -142,7 +126,7 @@ describe('petsOf', () => {
     expect(r.live).toBe(7)
   })
 
-  it('orders waiting, working, asleep, done, ties by ticket then name, the same each time', () => {
+  it('orders waiting, working, asleep, ties by ticket then name, the same each time', () => {
     const wait = { reason: 'human', note: '', agent: 'a', on: null, since: minutesAgo(5) }
     const input = {
       liveNow: [
@@ -152,18 +136,15 @@ describe('petsOf', () => {
       ],
       recentlyActive: [quiet({ ticketId: 2 })],
     }
-    const first = names(petsOf(input, [done({ id: 20 })], NOW))
+    const first = names(petsOf(input, NOW))
     expect(first).toEqual([
       '9:builder:waiting',
       '4:builder:working',
       '8:a:working',
       '8:z:working',
       '2:builder:asleep',
-      '20:builder:done',
     ])
-    expect(
-      names(petsOf({ ...input, liveNow: [...input.liveNow].reverse() }, [done({ id: 20 })], NOW)),
-    ).toEqual(first)
+    expect(names(petsOf({ ...input, liveNow: [...input.liveNow].reverse() }, NOW))).toEqual(first)
   })
 
   it('puts a subagent small, after its parent on the same ticket', () => {
@@ -175,7 +156,6 @@ describe('petsOf', () => {
         ],
         recentlyActive: [],
       },
-      [],
       NOW,
     )
     expect(r.pets.map((p) => `${p.ticketId}:${p.agent}:${p.size}`)).toEqual([
@@ -190,7 +170,6 @@ describe('petsOf', () => {
   it('draws an orchestrator named with a slash and a plain helper both normal', () => {
     const r = petsOf(
       { liveNow: [live({ agents: ['builder', 'opencode/ticket-941'] })], recentlyActive: [] },
-      [],
       NOW,
     )
     expect(r.pets.map((p) => `${p.agent}:${p.size}`)).toEqual([
@@ -205,7 +184,6 @@ describe('petsOf', () => {
         liveNow: [live({ agents: ['opencode/ticket-941/builder', 'opencode/ticket-941'] })],
         recentlyActive: [],
       },
-      [],
       NOW,
     )
     expect(r.pets.map((p) => `${p.agent}:${p.size}`)).toEqual([
@@ -215,43 +193,58 @@ describe('petsOf', () => {
   })
 
   it('draws a lone "a/b" normal', () => {
-    const r = petsOf({ liveNow: [live({ agents: ['claude/helper'] })], recentlyActive: [] }, [], NOW)
+    const r = petsOf({ liveNow: [live({ agents: ['claude/helper'] })], recentlyActive: [] }, NOW)
     expect(r.pets.map((p) => p.size)).toEqual(['normal'])
   })
 
   it('uses the nearest present ancestor for a grandchild', () => {
     const run = (agents: string[]) =>
-      petsOf({ liveNow: [live({ agents })], recentlyActive: [] }, [], NOW).pets.map(
-        (p) => `${p.agent}:${p.size}`,
-      )
+      petsOf({ liveNow: [live({ agents })], recentlyActive: [] }, NOW).pets.map((p) => `${p.agent}:${p.size}`)
     expect(run(['a/b/c', 'a', 'a/b'])).toEqual(['a:normal', 'a/b:small', 'a/b/c:small'])
     expect(run(['a/b/c', 'a'])).toEqual(['a:normal', 'a/b/c:small'])
     expect(run(['a/b/c', 'a/b'])).toEqual(['a/b:normal', 'a/b/c:small'])
   })
 
   it('does not repeat a name on a ticket', () => {
-    const r = petsOf({ liveNow: [live({ agents: ['a', 'a'] })], recentlyActive: [] }, [], NOW)
+    const r = petsOf({ liveNow: [live({ agents: ['a', 'a'] })], recentlyActive: [] }, NOW)
     expect(r.pets).toHaveLength(1)
   })
 
   it('stops at the cap and counts the rest', () => {
     const liveNow = Array.from({ length: 15 }, (_, i) => live({ ticketId: i + 1 }))
-    const r = petsOf({ liveNow, recentlyActive: [] }, [], NOW)
+    const r = petsOf({ liveNow, recentlyActive: [] }, NOW)
     expect(r.pets).toHaveLength(MAX_PETS)
     expect(r.more).toBe(3)
     expect(r.live).toBe(15)
     expect(r.pets[0]!.ticketId).toBe(1)
   })
 
-  it('shows up to three finished tickets, by the assignee, after the live ones', () => {
-    const tickets = [1, 2, 3, 4].map((id) => done({ id: 100 + id, assignee: id === 2 ? '' : 'builder' }))
-    const r = petsOf({ liveNow: [live()], recentlyActive: [] }, tickets, NOW)
-    const finished = r.pets.filter((p) => p.state === 'done')
-    expect(finished).toHaveLength(MAX_DONE)
-    expect(finished[1]!.agent).toBeNull()
-    expect(finished[0]!.label).toBe('#101 Shipped — agent builder, done today, finished 2 h ago')
-    expect(r.pets[0]!.state).toBe('working')
-    expect(r.live).toBe(1)
+  it.each([
+    ['done', { key: 'done', name: 'Done', kind: 'done' }],
+    ['cancelled', { key: 'cancelled', name: 'Cancelled', kind: 'cancelled' }],
+    ['approved', { key: 'approved', name: 'Approved', kind: 'review' }],
+    ['a renamed done stage', { key: 'shipped', name: 'Shipped', kind: 'done' }],
+  ])('shows no agent on a ticket in %s, live or quiet', (_, hidden) => {
+    const r = petsOf(
+      {
+        liveNow: [live({ ticketId: 1, stage: hidden }), live({ ticketId: 2 })],
+        recentlyActive: [quiet({ ticketId: 3, stage: hidden }), quiet({ ticketId: 4 })],
+      },
+      NOW,
+    )
+    expect(r.pets.map((p) => p.ticketId)).toEqual([2, 4])
+    expect(r.live).toBe(2)
+    expect(r.more).toBe(0)
+  })
+
+  it.each([
+    ['in progress', { key: 'in_progress', name: 'In progress', kind: 'active' }],
+    ['blocked', { key: 'blocked', name: 'Blocked', kind: 'blocked' }],
+    ['in review', { key: 'review', name: 'In review', kind: 'review' }],
+    ['release', { key: 'release', name: 'Release', kind: 'review' }],
+  ])('keeps the agents on a ticket in %s', (_, shown) => {
+    const r = petsOf({ liveNow: [live({ stage: shown })], recentlyActive: [] }, NOW)
+    expect(r.pets).toHaveLength(1)
   })
 
   it('reads the time only from the clock it is given', () => {
@@ -261,7 +254,7 @@ describe('petsOf', () => {
     expect(elapsed(minutesAgo(3000), NOW)).toBe('2 d')
     // A server time a little ahead of this clock is not negative.
     expect(elapsed(minutesAgo(-2), NOW)).toBe('just now')
-    const r = petsOf({ liveNow: [live({ lastHeardAt: minutesAgo(0) })], recentlyActive: [] }, [], NOW)
+    const r = petsOf({ liveNow: [live({ lastHeardAt: minutesAgo(0) })], recentlyActive: [] }, NOW)
     expect(r.pets[0]!.since).toBe('last heard just now')
   })
 })

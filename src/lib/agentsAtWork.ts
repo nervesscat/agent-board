@@ -1,13 +1,14 @@
-import type { LiveWorkPayload, ProjectSummary } from '#/lib/api'
+import type { LiveWorkPayload } from '#/lib/api'
 import { GERUND } from '#/lib/workStatus'
 
 /**
  * The Overview's Agents at work strip, as data: one character per agent on a ticket, from the live
- * work read (who is on which ticket, in what phase, since when it was heard) and the tickets finished
- * today. Pure: the clock is passed in, and nothing here reads the board.
+ * work read (who is on which ticket, in what phase, since when it was heard). A ticket in Done,
+ * Approved or Cancelled has no one at work, so none of its agents is drawn. Pure: the clock is passed
+ * in, and nothing here reads the board.
  */
 
-export type PetState = 'working' | 'waiting' | 'asleep' | 'done'
+export type PetState = 'working' | 'waiting' | 'asleep'
 
 export interface Pet {
   /** One per ticket and agent name. */
@@ -16,16 +17,16 @@ export interface Pet {
   title: string
   /** "#12 Short title", cut at `TITLE_LIMIT` characters (the number is never cut). */
   short: string
-  /** The agent's name; null when the board knows none (a finished ticket nobody held). */
+  /** The agent's name; null when the board knows none. */
   agent: string | null
   /** A subagent ("parent/child" whose parent is another character on the same ticket) is drawn smaller, after its parent. */
   size: 'normal' | 'small'
   state: PetState
-  /** What it is doing: "Building", "Reviewing round 2", "Waiting: human", "Quiet", "Done today". */
+  /** What it is doing: "Building", "Reviewing round 2", "Waiting: human", "Building, quiet". */
   phase: string
-  /** When it was last heard (done: when the ticket was finished); null when never. */
-  at: string | null
-  /** "last heard 3 min ago", "finished 2 h ago". */
+  /** When it was last heard. */
+  at: string
+  /** "last heard 3 min ago". */
   since: string
   /** The whole line, for a screen reader and the tooltip. */
   label: string
@@ -35,18 +36,16 @@ export interface Pets {
   pets: Pet[]
   /** Characters beyond `MAX_PETS`, not drawn. */
   more: number
-  /** Agents at work or waiting or asleep (not the finished): what the heading counts. */
+  /** Every agent at work, waiting or asleep: what the heading counts. */
   live: number
 }
 
 export const TITLE_LIMIT = 28
 export const MAX_PETS = 12
-export const MAX_DONE = 3
 
-const RANK: Record<PetState, number> = { waiting: 0, working: 1, asleep: 2, done: 3 }
+const RANK: Record<PetState, number> = { waiting: 0, working: 1, asleep: 2 }
 
 type Live = LiveWorkPayload['liveNow'][number] | LiveWorkPayload['recentlyActive'][number]
-type Done = ProjectSummary['doneToday']['tickets'][number]
 
 const cut = (title: string) =>
   title.length > TITLE_LIMIT ? `${title.slice(0, TITLE_LIMIT - 1).trimEnd()}…` : title
@@ -71,9 +70,12 @@ export function phaseLabel(phase: string | null, round: number | null): string {
   return round ? `${base} round ${round}` : base
 }
 
+/** The stages whose tickets show no agent: Done, Cancelled and Approved (the human's go-ahead to merge). */
+export const hiddenStage = (stage: Live['stage']): boolean =>
+  stage.kind === 'done' || stage.kind === 'cancelled' || stage.key === 'approved'
+
 export function petsOf(
   work: Pick<LiveWorkPayload, 'liveNow' | 'recentlyActive'> | undefined,
-  doneToday: readonly Done[],
   now: number,
 ): Pets {
   const all: Pet[] = []
@@ -84,6 +86,7 @@ export function petsOf(
     all.push(pet)
   }
   const fromLive = (e: Live, state: PetState) => {
+    if (hiddenStage(e.stage)) return
     const phase =
       state === 'waiting' && 'waitingFor' in e && e.waitingFor
         ? `Waiting: ${e.waitingFor.note || e.waitingFor.reason}`
@@ -116,24 +119,6 @@ export function petsOf(
   // Quiet but not live: stalled, or lost contact (an open span whose lease ran out: stalled is false but the
   // phase is that of the open span). One with no open span is not an agent at work and draws nothing.
   for (const e of work?.recentlyActive ?? []) if (e.stalled || e.phase !== null) fromLive(e, 'asleep')
-  for (const t of doneToday.slice(0, MAX_DONE)) {
-    if (all.some((p) => p.ticketId === t.id)) continue
-    const agent = t.assignee || null
-    const since = `finished ${text(t.doneAt, now)}`
-    add({
-      key: `${t.id}:${agent ?? ''}`,
-      ticketId: t.id,
-      title: t.title,
-      short: `#${t.id} ${cut(t.title)}`,
-      agent,
-      size: 'normal',
-      state: 'done',
-      phase: 'Done today',
-      at: t.doneAt,
-      since,
-      label: `#${t.id} ${t.title} — ${agent ? `agent ${agent}, ` : ''}done today, ${since}`,
-    })
-  }
 
   // A pet is small only when its nearest ancestor ("a/b/c" -> "a/b", then "a") is another pet on the same
   // ticket; a "a/b" whose "a" is not there is drawn as any other.
@@ -164,6 +149,6 @@ export function petsOf(
   return {
     pets: ordered.slice(0, MAX_PETS),
     more: Math.max(0, ordered.length - MAX_PETS),
-    live: ordered.filter((p) => p.state !== 'done').length,
+    live: ordered.length,
   }
 }

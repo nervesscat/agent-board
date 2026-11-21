@@ -403,97 +403,48 @@ button:focus-visible .trash-icon .trash-icon-lid {
 }
 
 /*
- * The pets of the Overview's Agents at work (components/AgentPet.tsx): paws that type in turn, a
- * raised paw that bobs, a waving one, a "?" and "z z" that drift. Transform and opacity only, from
- * CSS alone, each shifted by its own --pet-delay so a row of them does not move in step. Without
- * motion they hold their pose (the "z"s and the "?" just stay where they are).
+ * The pets of the Overview's Agents at work (components/AgentPet.tsx): pixel art, each pose two frames
+ * flipped in turn in whole steps (never tweened), each pet shifted by its own --pet-delay so a row of
+ * them does not move in step. Only the visibility of a frame changes, from CSS alone. Without motion
+ * (reduced motion) a pet holds its first frame.
  */
-.pet * {
-  transform-box: view-box;
+.pet-frame-b {
+  visibility: hidden;
 }
-.pet-paw-l,
-.pet-paw-r {
-  animation: pet-type 0.5s ease-in-out infinite;
-  animation-delay: var(--pet-delay, 0s);
+.pet {
+  --pet-period: 0.6s;
 }
-.pet-paw-r {
-  animation-delay: calc(var(--pet-delay, 0s) - 0.25s);
+.pet[data-pet='waiting'] {
+  --pet-period: 1s;
 }
-.pet-bulb {
-  animation: pet-bulb 1.8s ease-in-out infinite;
-  animation-delay: var(--pet-delay, 0s);
+.pet[data-pet='asleep'] {
+  --pet-period: 1.8s;
 }
-.pet-raise {
-  transform-origin: 21px 22px;
-  animation: pet-raise 1.4s ease-in-out infinite;
-  animation-delay: var(--pet-delay, 0s);
+@media (prefers-reduced-motion: no-preference) {
+  .pet-frame-a,
+  .pet-frame-b {
+    animation-duration: var(--pet-period);
+    animation-delay: var(--pet-delay, 0s);
+    animation-timing-function: steps(1, end);
+    animation-iteration-count: infinite;
+  }
+  .pet-frame-a {
+    animation-name: pet-frame-a;
+  }
+  .pet-frame-b {
+    animation-name: pet-frame-b;
+  }
 }
-.pet-wave {
-  transform-origin: 21px 22px;
-  animation: pet-wave 0.7s ease-in-out infinite alternate;
-  animation-delay: var(--pet-delay, 0s);
-}
-.pet-ask {
-  animation: pet-ask 1.4s ease-in-out infinite;
-  animation-delay: var(--pet-delay, 0s);
-}
-.pet-z {
-  animation: pet-z 2.6s ease-in-out infinite;
-  animation-delay: var(--pet-delay, 0s);
-}
-.pet-z-late {
-  animation-delay: calc(var(--pet-delay, 0s) - 1.3s);
-}
-@keyframes pet-type {
+@keyframes pet-frame-a {
   50% {
-    transform: translateY(-1.8px);
+    visibility: hidden;
   }
 }
-@keyframes pet-bulb {
-  50% {
-    opacity: 0.3;
-  }
-}
-@keyframes pet-raise {
-  50% {
-    transform: translateY(-1.2px) rotate(-4deg);
-  }
-}
-@keyframes pet-wave {
-  from {
-    transform: rotate(-12deg);
-  }
-  to {
-    transform: rotate(14deg);
-  }
-}
-@keyframes pet-ask {
-  50% {
-    transform: translateY(-1px);
-  }
-}
-@keyframes pet-z {
+@keyframes pet-frame-b {
   0% {
-    transform: translate(0, 2px);
-    opacity: 0;
+    visibility: hidden;
   }
-  30% {
-    opacity: 1;
-  }
-  100% {
-    transform: translate(1.5px, -3px);
-    opacity: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .pet *,
-  .pet-paw-l,
-  .pet-paw-r,
-  .pet-bulb,
-  .pet-raise,
-  .pet-wave,
-  .pet-ask,
-  .pet-z {
-    animation: none;
+  50% {
+    visibility: visible;
   }
 }

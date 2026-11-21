@@ -13,11 +13,12 @@ import { useServerOffset } from '#/lib/useNow'
 import { onServerClock } from '#/lib/workStatus'
 
 /**
- * The Overview's Agents at work: a strip of tiny pets, one per agent on a ticket right now, from the
- * project's live work (no agent reports anything for it) and, after them, the tickets finished today.
- * Each is a link to its ticket and says in words what its pose says: a typing pet works, one with a
- * raised paw and a "?" waits, a sleeping one has gone quiet, a waving one is done. Refreshed every 30
- * seconds, like the cards around it, and light enough for many: the motion is CSS alone.
+ * The Overview's Agents at work: tiny pixel-art pets, one per agent on a ticket right now, from the
+ * project's live work (no agent reports anything for it); a ticket in Done, Approved or Cancelled has
+ * none. Each is a link to its ticket and says in words what its pose says: a typing pet works, one with
+ * a raised paw and a "?" waits, a sleeping one has gone quiet. A strip on a wide screen; on a phone one
+ * under another, each with its ticket line beside it. Refreshed every 30 seconds, like the cards around
+ * it, and light enough for many: the motion is CSS alone.
  */
 export function AgentsAtWork({ p, className }: { p: ProjectSummary; className?: string }) {
   const projectId = p.project.id
@@ -28,7 +29,7 @@ export function AgentsAtWork({ p, className }: { p: ProjectSummary; className?: 
   })
   // "Last heard" is counted on the server's clock from when this read was taken, as on the other cards.
   const now = onServerClock(Date.now(), useServerOffset(data?.now))
-  const { pets, more, live } = petsOf(data, p.doneToday.tickets, now)
+  const { pets, more, live } = petsOf(data, now)
   return (
     <Card size="sm" className={className}>
       <CardHeader>
@@ -43,7 +44,7 @@ export function AgentsAtWork({ p, className }: { p: ProjectSummary; className?: 
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <Skeleton className="h-11 w-full max-w-sm" />
+          <Skeleton className="h-12 w-full max-w-sm" />
         ) : error ? (
           <p className="text-sm text-muted-foreground">Could not read who is working.</p>
         ) : !pets.length ? (
@@ -52,14 +53,14 @@ export function AgentsAtWork({ p, className }: { p: ProjectSummary; className?: 
             <span className="text-sm text-muted-foreground">No agents working</span>
           </div>
         ) : (
-          <ul className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          <ul className="flex flex-col gap-1 sm:-mx-1 sm:flex-row sm:gap-2 sm:overflow-x-auto sm:px-1 sm:pb-1">
             {pets.map((pet, i) => (
-              <li key={pet.key} className="shrink-0">
+              <li key={pet.key} className={cn('sm:shrink-0', pet.size === 'small' && 'max-sm:ml-6')}>
                 <PetLink projectId={projectId} pet={pet} index={i} />
               </li>
             ))}
             {more > 0 && (
-              <li className="flex shrink-0 items-center px-2 text-xs text-muted-foreground tabular-nums">
+              <li className="flex items-center px-2 text-xs text-muted-foreground tabular-nums sm:shrink-0">
                 +{more} more
               </li>
             )}
@@ -81,8 +82,8 @@ function PetLink({ projectId, pet, index }: { projectId: number; pet: Pet; index
         data-state={pet.state}
         aria-label={pet.label}
         className={cn(
-          'flex min-h-11 items-center gap-2 rounded-lg px-2 py-1 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',
-          small ? 'w-48' : 'w-56',
+          'flex min-h-11 w-full items-center gap-2 rounded-lg px-2 py-1 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',
+          small ? 'sm:w-48' : 'sm:w-56',
           pet.state === 'asleep' && 'text-muted-foreground',
         )}
       >
