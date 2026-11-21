@@ -81,6 +81,7 @@ export const TOOL_ROUTES: Record<string, string> = {
   cleanup_delete: 'POST /api/projects/:id/cleanup/delete `{items[]}`',
   list_my_threads: 'GET /api/projects/:id/threads?since=',
   check_inbox: 'GET /api/projects/:id/inbox?since=',
+  latest_actions: 'GET /api/projects/:id/latest-actions',
   list_comments: 'GET /api/comments?parentType=&parentId=',
   comment: 'POST /api/comments `{parentType, parentId, body, replyTo?, tab?, as?}`',
   get_attachment: 'GET /api/uploads/:id/info (the bytes: GET /api/uploads/:id)',

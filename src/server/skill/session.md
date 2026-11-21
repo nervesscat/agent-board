@@ -34,6 +34,10 @@ What you do with it:
 - **Do not take or duplicate a ticket a live entry names.** Another session's agent is on it: wait,
   ask in its thread, or work something else, and never claim it behind its back.
 - **Pick up what nobody holds**: the first ticket with no live entry, no open span and no wait.
+- **Then call `latest_actions`** with the same `projectId`: the human's comments no agent has
+  answered yet, oldest first, on every ticket of the project, also the ones whose agent has ended.
+  Answer each under it (a reply with the plan, then one with the result) or hand it to the agent that
+  works that ticket; read it again between steps. A comment drops off it once an agent has replied.
 - **Say in your first message** what you found there and how you continue with it.
 
 A quiet ticket is not proof that nobody is working: the read says when each one was last heard from

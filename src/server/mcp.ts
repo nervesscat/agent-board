@@ -40,6 +40,7 @@ import * as repos from './repos'
 import * as reviews from './reviews'
 import * as runReports from './runReports'
 import { getSummary } from './summary'
+import * as unanswered from './unanswered'
 import * as uploads from './uploads'
 import * as work from './workTimeline'
 import { effectiveWorkflow } from './workflow'
@@ -1161,6 +1162,12 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
     "The cheap poll for new comments while you work: what list_my_threads with since finds, without bodies. Returns { count, cursor, threads: [{ ticketId, title, parentType, parentId, as, lastAuthor, lastAt }], reportDue }. Keep cursor and pass it as since next time; read each thread with list_comments, answer it with comment (as: <it> when as is set). reportDue is the project's report while the board is reminding about it ({ projectId, project, cadence, period, label, dueAt, alertAt, state due or missing, minutesLeft, negative once overdue }; null otherwise): the human expects it, so offer to write it (post_report).",
     { projectId: z.number().int(), since: SINCE },
     ({ projectId, since }) => features.checkInbox(projectId, actor, since),
+  )
+  tool(
+    'latest_actions',
+    "The human's comments in a project that no agent has addressed yet, project-wide whoever's ticket it is (an orchestrator starting a session, or between steps, reads this to see what still waits for an answer, also on tickets whose agent has ended). Returns { count, comments }, oldest first (the one waiting longest first): each { ticketId, title, stage, assignee, parentType and parentId (for list_comments and comment: a reply is under a post, parentType update; a top-level post on a ticket's feed has parentType ticket, answer it with comment parentType update and parentId = its id), kind (post or reply), id, postId, replyTo, author, text (its first lines; read all of it with list_comments), attachments (local paths), createdAt, waitingMinutes }. Addressed means an agent replied under it, or for a top-level post an agent wrote a later discussion post on that ticket (progress posts and summary versions are reports, not answers); the human's own later words do not address it. Once addressed it is gone: there is no cursor and nothing to mark, so the same call gives the same answer until something changes. Tickets that are archived, or in a cancelled stage, are left out; a done ticket's comment stays. An answered decision card is not a comment. Answer each one under it with comment (a reply with your plan, then one with the result and its proofs).",
+    { projectId: z.number().int() },
+    ({ projectId }) => unanswered.unansweredHumanComments(projectId),
   )
   tool(
     'list_comments',

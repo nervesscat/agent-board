@@ -83,7 +83,10 @@ Then:
 
 - First, `list_my_threads` with your `projectId`: threads where the human (or another agent)
   spoke after you. Answer those before starting anything new, and keep its `cursor` for
-  [Watch for feedback](#watch-for-feedback).
+  [Watch for feedback](#watch-for-feedback). Then `latest_actions` with the same `projectId`: every
+  comment of the human's in the project that no agent has answered yet, oldest first, on any ticket
+  (also one whose agent has ended). Answer each under it (a reply with your plan, then one with the
+  result); it drops off the list once an agent has replied, and read it again between steps.
 - `list_tickets` with `status: ["todo"]` and `assignee: ""` (unassigned), or `assignee: <you>`, for
   candidates; `q` finds the `#id` or title first, then text in the instructions and the thread (posts, replies). If the human named a ticket, use that one.
   The list includes lanes (`parentId` set); `parentId: null` narrows it to top-level tickets,
