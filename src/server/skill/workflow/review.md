@@ -2,7 +2,10 @@ A review that is done is not run again. Read the branch's head SHA (`git -C <wor
 and `git -C REPO fetch origin BASE`. Skip the review, on a `RETRY` or re-queued run too, only when all of
 these hold: the newest review of that SHA, in `~/.claude/feature-review/ledger.jsonl` (its review folder
 has the criteria) and on the board (`list_review_results` with `sha`, or the review's posts on the
-ticket), survived (the rule below); an earlier line of `WORKDIR/depth.md` for that SHA shows it ran at
+ticket), survived (the rule below). When this run is one of a round's reviews passed an `agent=` name
+(a workflow that reviews a round more than once), only the ledger line that names that same
+agent counts (its `path` is that run's own folder, and the board result is the one of that run's own
+review): another run's line, or one with no agent, is never this run's review, so the first review's line never makes the second unnecessary; an earlier line of `WORKDIR/depth.md` for that SHA shows it ran at
 least the depth the gate picked; `origin/BASE` is already in that SHA
 (`git merge-base --is-ancestor origin/BASE <sha>`) or is the base its merge check used; and `RETRY` does
 not name that review, its depth or its findings. Then go on with that review.
@@ -40,7 +43,9 @@ what is still open, `ask_decision` (ship as is, keep going, drop) and stop: `BLO
 start one more round on your own. The complexity sets the budget at every review depth: a `deep` review
 earns no extra round, a `light` one loses none. An intent return (`does not match`, see the intent step)
 is not a gate return and is outside this budget: it gets its own fix pass and one more review, so "never
-start one more round on your own" does not apply to it.
+start one more round on your own" does not apply to it. Where this workflow's review text below says its
+round-end intent check counts as a round (Thorough and Maximum), that text replaces this sentence: there
+a `does not match` is an ordinary round of the budget.
 
 **Every phase this workflow lists for a round runs in every round.** None is skipped because the findings
 look obvious, the change looks small or a finding was already reproduced, and each phase posts its

@@ -474,6 +474,12 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    say what replaced it rather than silently removing the line. It is the ticket's one state card:
    the end of a session updates it rather than leaving a separate note.
 
+**The project's workflow decides which of these run.** When its workflow (`get_workflow`) lists a step as
+skipped because the human turned it off on the Workflow page (CI, or the preview), its items are not run
+and not required: no CI wait (the CI checks green on the head that item 2 still asks for, and item 5's CI comment; the local checks stay), no preview (item
+6), and the summary says that step was turned off on the Workflow page. The push, the pull request and
+the summary are locked: they are always done.
+
 **The intent check comes first, on every ticket of any complexity (low included).** When you
 orchestrate the cycle, the last review round (none for low) passes and then the project's **intent**
 agent compares what the human asked with what was built, before any item above stands (the preview
@@ -698,7 +704,7 @@ Without those skills, or for one ticket, orchestrate by hand:
    ticket, and never answers a decision.
 4. Hand off as in [Hand off](#4-hand-off), with the last review's summary as the PR's tests. Check
    every item of the checklist yourself before moving the ticket to `review` (`get_ticket`: `push`,
-   `pr`, the workspace's `managedPreview` `running`, the `summary` up to date): a subagent saying it is
+   `pr`, the workspace's `managedPreview` `running` unless the workflow turned the preview off, the `summary` up to date): a subagent saying it is
    done is not enough.
 
 Never two builders on one branch; when no agent's notes fit a step, ask in a post rather than

@@ -366,6 +366,12 @@ short message shape with the numbered list of what needs the human. Its line is
       The summary is the ticket's one state card: the end of a session updates it rather than leaving
       a separate note.
 
+   **The project's workflow decides which of these run.** When its workflow (`get_workflow`) lists a
+   step as skipped because the human turned it off on the Workflow page (CI, or the preview), its
+   items are not run and not required: no CI wait (the CI checks green on the head that item 2
+   still asks for, and item 5's CI comment; the local checks stay), no preview (item 6), and the summary says that step was turned off on the Workflow
+   page. The push, the pull request and the summary are locked: they are always done.
+
    **The intent check comes first, on every ticket of any complexity (low included).** When you
    orchestrate the cycle, the last review round (none for low) passes and then the project's **intent**
    agent compares what the human asked with what was built, before any item above stands (the preview

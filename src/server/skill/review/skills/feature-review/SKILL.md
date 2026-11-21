@@ -94,7 +94,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `effort=<low\|medium\|high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`; a board cycle's ticket agent passes the effort its workflow's review step names (`auto` means `low` for a low ticket, `medium` for mid and high, `high` for max) | the session's |
 | `round=<n>` | the review round this run is: every phase span (`start_span` / `end_span` with `agent` = the phase's agent name, e.g. `spec`, `env`, `verify`, `hunt-1`, `hunt-2`, `refute`, `merge`, and `round`) and every phase's run report (`write_run_report` with `round`) carry it, because the board counts a phase only when its span or report carries the round | `1` when a board ticket is given and no round is |
 | `ticket=<id>` | the board ticket this change belongs to: turns on **On the board** below | found from the PR's `ticket` in `list_prs` when the board is connected |
-| `agent=<prefix>` | only when the caller runs this review more than once for the same round (a workflow's two reviews of a round): the name every phase agent's span and report of this run starts with, so the runs stay apart (`<prefix>/<phase agent name>`); the last segment still names the phase | none |
+| `agent=<prefix>` | only when the caller runs this review more than once for the same round (a workflow's two reviews of a round): the name every phase agent's span and report of this run starts with, so the runs stay apart (`<prefix>/<phase agent name>`); the last segment still names the phase. The prefix's last segment (`AGENT_TAG`, e.g. `review-second` for `<name>/review-second`) also goes into this run's `SLUG` (Setup), so each run has its own `WORKDIR`, claim, worktree and ledger line | none |
 
 ## The plan: which phases run
 
@@ -107,6 +107,11 @@ first match:
    step gives (`get_workflow` serves it, e.g. `phases=spec,env,verify,hunt,hunt,refute,merge`).
 2. **On a board ticket without `phases=`**: the ticket's workflow. `get_workflow` with the project and
    the ticket (`ticket=<id>`), the `phases=` its review step gives for this run.
+   When that workflow lists the ticket's review as skipped (a low ticket, no rounds for its level, or
+   the review step turned off) it gives no `phases=`; if a review is asked for anyway (a queue review of
+   its PR, a person's request), run the six standard phases and say so in the report: "workflow lists no
+   review for this ticket: the six standard phases". A workflow whose review is Light gives
+   `phases=reviewer`, and that is the plan.
 3. **No board, no ticket, or a board that does not answer**: the six standard phases,
    `spec,env,verify,hunt,hunt,refute,merge` (spec, env, verify, two independent hunts, refute and the
    merge check), and the report says so: "no workflow: the six standard phases".
@@ -142,12 +147,15 @@ checks each read `not run: single-reviewer plan`.
 ## Setup
 
 1. `MAIN` = the repo path. `SLUG` = `<repo-dir-name>-<target>` (e.g. `myapp-pr-123`,
-   `webapp-diff`). `WORKDIR` = `~/.claude/feature-review/<SLUG>/` (resolve `~` with
+   `webapp-diff`), and `<repo-dir-name>-<target>-<AGENT_TAG>` when `agent=<prefix>` was given
+   (`AGENT_TAG` = the prefix's last segment, e.g. `myapp-feature-x-review-second`): two runs of one
+   target under different prefixes never share a folder, a claim or a worktree, so they may run at once
+   or one after the other and neither removes the other's files. `WORKDIR` = `~/.claude/feature-review/<SLUG>/` (resolve `~` with
    `echo ~`). `WORKTREE` = `WORKDIR/wt`.
    **Claim before you clean.** Another session may be reviewing the same target. A claim
    is live when `WORKDIR/CLAIM.md` exists, is less than 6 hours old, and
-   `~/.claude/feature-review/ledger.jsonl` has no entry for this target written after
-   the claim (a finished review that forgot to remove its claim is not live). When the
+   `~/.claude/feature-review/ledger.jsonl` has no entry for this target (and this `agent`, when
+   `agent=` was given) written after the claim (a finished review that forgot to remove its claim is not live). When the
    claim is not live and `WORKDIR/LEFTOVER.md` exists, an earlier review of this target
    could not remove its worktree for a git lock (Teardown step 2): remove `WORKTREE` now as
    Teardown step 2 does, then delete `LEFTOVER.md`; still locked, stop with the error
@@ -413,7 +421,9 @@ without spawning the agent.
    | Did you make sure this works and is running? | every acceptance criterion is `PASS` by execution, not traced (an `instructions` criterion read where its reader gets it and quoted is execution), and verify's test run (scoped, or full where no CI runs it) passed apart from pre-existing failures | which criteria are unverified or failed, and why |
    | Will this have any issue with the latest version of the base branch? | this one is inverted: **NO** when the merge check result is `NO ISSUE`; **YES** for `CONFLICTS`, `TESTS FAIL AFTER MERGE`, or `UNVERIFIED` | the conflicting files, the new failures, or "not verified: <reason>" |
 4. Append one line to `~/.claude/feature-review/ledger.jsonl`:
-   `{"repo": "<origin url, or MAIN path if none>", "target": "<pr N | branch | diff>", "sha": "<commit>", "verdict": "<verdict>", "confirmed": n, "plausible": n, "refuted": n, "unverified": n, "merge": "<merge result>", "checks": {"reliable": "YES|NO", "works": "YES|NO", "base_issue": "YES|NO"}, "stale": bool, "path": "<WORKDIR>/review.md", "at": "<ISO timestamp>"}`
+   `{"repo": "<origin url, or MAIN path if none>", "target": "<pr N | branch | diff>", "sha": "<commit>", "verdict": "<verdict>", "confirmed": n, "plausible": n, "refuted": n, "unverified": n, "merge": "<merge result>", "checks": {"reliable": "YES|NO", "works": "YES|NO", "base_issue": "YES|NO"}, "stale": bool, "path": "<WORKDIR>/review.md", "at": "<ISO timestamp>"}`, plus `"agent": "<the agent= prefix>"`
+   when `agent=` was given: a line with an `agent` is that run's review only (its `path` is its own
+   folder), never the review of the same target by a run with another prefix or none.
 5. If `post` was given, the target is a PR, and the review is not stale:
    `gh pr comment N --body-file WORKDIR/review.md` from `MAIN`. Otherwise do not post.
    A single-review PDF can be built with

@@ -643,7 +643,9 @@ describe('the review texts the board ships', () => {
       expect(wf).toMatch(/- Review - skipped/)
       expect(wf).toMatch(/Intent check \[locked above low\] - agent `intent`, effort low/)
       expect(flat(ticketAgent)).toContain('DEPTH: <light | standard | deep>')
-      expect(flat(ticketAgent)).toContain('none (low: no review)')
+      expect(flat(ticketAgent)).toContain(
+        'none (no review for this ticket: <low ticket | no rounds | review off>)',
+      )
       expect(flat(ticketAgent)).toContain('a low ticket skips the review, never the intent check')
     })
 
@@ -747,12 +749,17 @@ describe('the review texts the board ships', () => {
     expect(flat(ticketAgent)).toContain("You never change a ticket's complexity")
   })
 
-  it('todo-review reads each ticket level from the board into plan.md, and skips the DEPTH measure for a low ticket', () => {
+  it('todo-review reads each ticket level from the board into plan.md, and skips the DEPTH measure when the workflow lists no review', () => {
     const text = flat(todoReview)
     expect(text).toContain(
       'plan.md`: every ticket with its repo, its complexity (the `complexity` field of its list row)',
     )
-    expect(text).toContain('A low ticket skips this measure')
+    expect(text).toContain(
+      "Skip this measure when the ticket's workflow lists no review round for it (a low ticket, a level with no rounds, or the review turned off)",
+    )
+    expect(text).toContain(
+      'When the workflow lists a review for the ticket, a low ticket included, a review ran and is required, and the measure applies.',
+    )
   })
 
   it('todo-review-ticket takes COMPLEXITY as its input and no ROUNDS input, and the workflow names the budget of each level', async () => {
@@ -844,7 +851,7 @@ describe('the review texts the board ships', () => {
 
   it('Review depth keeps the size rule for max, and nothing claims max forces a deeper review', () => {
     const depth = flat(between(ticketAgent, '## Review depth', '## Escalation'))
-    expect(depth).toContain('This section is for mid, high and max')
+    expect(depth).toContain('When the workflow lists no review for the ticket there is no depth')
     expect(depth).toContain('The depth only moves up')
     expect(depth).toContain("The round budget is the workflow's rounds for the complexity, at every depth.")
     for (const claim of ['forces deep', 'always deep', 'deep on every round', 'max runs at deep']) {
@@ -921,9 +928,9 @@ describe('the review texts the board ships', () => {
       'NOTES',
     ])
     const line = (label: string) => lines.find((l) => l.startsWith(`${label}:`))!
-    expect(line('ROUNDS')).toContain('0 for low')
-    expect(line('VERDICT')).toContain('(low: no review)')
-    expect(line('DEPTH')).toContain('(low: no review)')
+    expect(line('ROUNDS')).toContain('0 when the workflow lists no review for the ticket')
+    expect(line('VERDICT')).toContain('(no review for this ticket: <low ticket | no rounds | review off>)')
+    expect(line('DEPTH')).toContain('(no review for this ticket: <low ticket | no rounds | review off>)')
   })
 
   it("todo-review-ticket's hand-off names the level and what checked it, and records a review only when one ran", async () => {

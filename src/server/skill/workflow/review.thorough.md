@@ -9,8 +9,15 @@
   counts it as a `hunt`: the last round needs three.
 - **The intent check at the end of every round**, not only before the hand-off. After the round's review
   returns, run the intent step's check on the head as it stands (the preview and screenshots of that head,
-  the diff, the human's own words; nothing else). A `does not match` makes the round not survive: its
-  lines go to the builder as the round's findings, and the next round is an ordinary round of the budget
-  (this replaces the intent step's rule that a `does not match` is outside the budget; the intent step's
-  second-`does not match` rule still holds). The round survives only when the review's survival rule holds
-  and the intent check matches.
+  the diff, the human's own words; nothing else). **The preview comes first:** the preview step is later
+  in the order, so in a round where no preview runs for this head yet, you start it now, exactly as the
+  preview step says to start it (the board's own run, or the artifact), wait for it to run and take the
+  screenshots of the changed state. The preview step, when it comes, finds that preview running for the
+  same head and reuses it: a head is never built twice for the preview, and a new commit (a fix round) is
+  the only thing that starts a new one. When the workflow lists the preview step as skipped, there is no
+  preview: brief the check with the review's own screenshots and the diff. A `does not match` makes the
+  round not survive: its lines go to the builder as the round's findings, and the next round is an
+  ordinary round of the budget. **This is the budget rule in this workflow**: it replaces the intent step's
+  rule that a `does not match` is outside the budget (and the review step's sentence about an intent
+  return); the intent step's second-`does not match` rule still holds. The round survives only when the
+  review's survival rule holds and the intent check matches.

@@ -41,12 +41,23 @@ const procedureFiles = import.meta.glob<string>('./skill/workflow/*.md', {
 
 const clean = (text: string) => text.replace(/\r\n/g, '\n').trim()
 
-/** A step's procedure: its file, then the preset's variant of it when there is one (`review.light.md`). */
+/** The variants a preset's procedure builds on, in order: Maximum is Thorough plus its own, so it is served both. */
+const VARIANT_CHAIN: Record<WorkflowPresetId, readonly WorkflowPresetId[]> = {
+  light: ['light'],
+  standard: [],
+  thorough: ['thorough'],
+  maximum: ['thorough', 'maximum'],
+}
+
+/** A step's procedure: its file, then the preset's variants of it when there are (`review.light.md`). */
 export function stepProcedure(stepId: string, preset: WorkflowPresetId): string {
   const base = procedureFiles[`./skill/workflow/${stepId}.md`]
   if (base === undefined) throw new Error(`the workflow has no procedure file for ${stepId}`)
-  const variant = procedureFiles[`./skill/workflow/${stepId}.${preset}.md`]
-  return variant === undefined ? clean(base) : `${clean(base)}\n\n${clean(variant)}`
+  const variants = VARIANT_CHAIN[preset].flatMap((id) => {
+    const variant = procedureFiles[`./skill/workflow/${stepId}.${id}.md`]
+    return variant === undefined ? [] : [clean(variant)]
+  })
+  return [clean(base), ...variants].join('\n\n')
 }
 
 export const WORKFLOW_SOFTWARE_ONLY =

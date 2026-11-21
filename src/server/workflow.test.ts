@@ -11,6 +11,8 @@ process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-workfl
 const HUMAN = 'tester'
 const AGENT = 'claude'
 
+const flat = (text: string) => text.replace(/\s+/g, ' ')
+
 let dbm: typeof import('#/db')
 let features: typeof import('./features')
 let handle: (request: Request) => Promise<Response>
@@ -661,5 +663,116 @@ describe('the tool and its route (D1, D4)', () => {
     const t = ticket(pid, 'high')
     const rest = (await call('GET', `/api/projects/${pid}/workflow/effective?ticketId=${t.id}`)).body
     expect(await tool('get_workflow', { projectId: pid, ticketId: t.id })).toEqual(rest)
+  })
+})
+
+describe('the served step texts of the Thorough and Maximum reviews, and of the switches (fix pass)', () => {
+  const effective = async (pid: number, query: string) =>
+    (await call('GET', `/api/projects/${pid}/workflow/effective?${query}`)).body.text as string
+
+  it('serves Maximum the whole Thorough review text with its own, so it points at nothing it lacks (C6)', async () => {
+    const pid = await newProject()
+    const maximum = flat(await effective(pid, 'preset=maximum&complexity=high'))
+    const thorough = flat(await effective(pid, 'preset=thorough&complexity=high'))
+    const standard = flat(await effective(pid, 'preset=standard&complexity=high'))
+    // Thorough's two additions are in Maximum's text, once, ahead of its own.
+    expect(maximum).toContain("This workflow's review adds two things to every round.")
+    expect(maximum.split('A third hunt with the security checklist').length - 1).toBe(1)
+    expect(maximum.indexOf("This workflow's review adds two things")).toBeLessThan(
+      maximum.indexOf('This workflow reviews every round twice'),
+    )
+    expect(maximum).toContain('authorisation of every route and tool the change touches')
+    // No reference to a text it is not served.
+    expect(maximum).not.toContain('as the Thorough review says')
+    expect(maximum).not.toContain('the Thorough additions')
+    // Maximum's own text is not served to Thorough, and neither is served to Standard.
+    expect(thorough).not.toContain('This workflow reviews every round twice')
+    expect(standard).not.toContain('hunt-security')
+    expect(standard).not.toContain('adds two things to every round')
+  })
+
+  it('states one budget rule for the round-end intent check, and says in the intent step which applies where (C6)', async () => {
+    const pid = await newProject()
+    for (const preset of ['thorough', 'maximum']) {
+      const text = flat(await effective(pid, `preset=${preset}&complexity=mid`))
+      expect(text, preset).toContain(
+        "**This is the budget rule in this workflow**: it replaces the intent step's rule that a `does not match` is outside the budget",
+      )
+      expect(text, preset).toContain('the next round is an ordinary round of the budget')
+      // The intent step and the review's budget paragraph name when the round-end rule replaces theirs.
+      expect(text, preset).toContain(
+        'where it says the round-end intent check counts as a round (Thorough and Maximum say so)',
+      )
+      expect(text, preset).toContain(
+        "Where this workflow's review text below says its round-end intent check counts as a round (Thorough and Maximum), that text replaces this sentence",
+      )
+    }
+    const standard = flat(await effective(pid, 'preset=standard&complexity=mid'))
+    expect(standard).not.toContain('**This is the budget rule in this workflow**')
+    expect(standard).toContain("is outside the complexity's round budget")
+  })
+
+  it('has the head start its preview before the round-end intent check, reuses it at the preview step, and keeps the order (C3)', async () => {
+    const pid = await newProject()
+    for (const preset of ['thorough', 'maximum']) {
+      const text = flat(await effective(pid, `preset=${preset}&complexity=mid`))
+      // The order is unchanged: review, then preview, then intent.
+      const heads = text.match(/## \d+\. [^-]+/g)!.map((h) => h.replace(/^## \d+\. /, '').trim())
+      expect(heads.indexOf('Review'), preset).toBeLessThan(heads.indexOf('Preview'))
+      expect(heads.indexOf('Preview'), preset).toBeLessThan(heads.indexOf('Intent check [locked above low]'))
+      // The review step says the preview of the head comes first, exactly as the preview step starts it.
+      expect(text, preset).toContain('**The preview comes first:**')
+      expect(text, preset).toContain('you start it now, exactly as the preview step says to start it')
+      expect(text, preset).toContain('a head is never built twice for the preview')
+      expect(text, preset).toContain(
+        'When the workflow lists the preview step as skipped, there is no preview',
+      )
+      // The preview step reuses a preview that already runs for the head.
+      expect(text, preset).toContain(
+        "When a review round's end-of-round intent check already started it for this head",
+      )
+      expect(text, preset).toContain('reuse it, take only the screenshots still missing and build nothing')
+      // The intent step names the same.
+      expect(text, preset).toContain(
+        "A workflow that checks intent at the end of each review round starts the head's preview before that check, and the preview step then reuses it.",
+      )
+    }
+  })
+
+  it('has a ticket whose review is skipped carry no phases argument, as feature-review’s plan rule expects (C2)', async () => {
+    const pid = await newProject()
+    const low = await effective(pid, 'preset=standard&complexity=low')
+    expect(low).toContain('- Review - skipped')
+    expect(low).not.toContain('phases=')
+    await call('PUT', `/api/projects/${pid}/workflow/standard`, { rounds: { mid: 0 } })
+    const noRounds = await effective(pid, 'preset=standard&complexity=mid')
+    expect(noRounds).toContain('- Review - skipped')
+    expect(noRounds).not.toContain('phases=')
+    await call('DELETE', `/api/projects/${pid}/workflow/standard`)
+    expect(await effective(pid, 'preset=light&complexity=mid')).toContain('phases=reviewer')
+  })
+
+  it('lets the Preview and CI switches take effect: the steps are skipped, and the hand-off says it may be open (C7)', async () => {
+    const pid = await newProject()
+    await call('PUT', `/api/projects/${pid}/workflow/standard`, {
+      steps: { ci: { enabled: false }, preview: { enabled: false } },
+    })
+    const text = flat(await effective(pid, 'preset=standard&complexity=mid'))
+    expect(text).toContain('- CI - skipped: turned off on the Workflow page')
+    expect(text).toContain('- Preview - skipped: turned off on the Workflow page')
+    expect(text).not.toContain('gh pr checks')
+    expect(text).not.toContain('Start the preview of this head here')
+    expect(text).toContain(
+      'A step this workflow lists as skipped because it was turned off (CI, the preview) is not run and not required: its phase may stay open, and the summary says that step was turned off on the Workflow page.',
+    )
+    expect(text).toContain('The push, the pull request and the summary are never skipped.')
+    // The locked steps cannot be turned off.
+    for (const step of ['push', 'pr', 'summary']) {
+      const res = await call('PUT', `/api/projects/${pid}/workflow/standard`, {
+        steps: { [step]: { enabled: false } },
+      })
+      expect(res.status, step).toBe(400)
+    }
+    await call('DELETE', `/api/projects/${pid}/workflow/standard`)
   })
 })

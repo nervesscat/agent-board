@@ -139,7 +139,11 @@ earned.
 
 **The preview comes before the move to review, never after it**, whatever order the workflow gives:
 it is started before the ticket moves to review whenever the project has a preview setup and the
-change can be previewed; when it cannot, say why in the summary instead.
+change can be previewed; when it cannot, say why in the summary instead. This holds when the workflow
+lists the preview step. A step the workflow lists as skipped because the human turned it off on the
+Workflow page (the preview, or CI) is not run and not required, here or at the hand-off: no preview is
+started, the CI wait does not happen, and the summary says that step was turned off on the Workflow
+page. The push, the pull request and the summary are locked and are always done.
 
 Never merge, approve, force-push, or comment on GitHub. Never touch `REPO`'s working tree: all work
 happens in the ticket's worktree. Never two builders on one branch.
@@ -272,8 +276,10 @@ branches.
 
 ## Review depth
 
-This section is for mid, high and max: a low ticket has no review and no depth. A ticket the workflow
-lists no review for has none either.
+When the workflow lists no review for the ticket there is no depth: the review is what has one, and
+the workflow decides whether the ticket has it (a low ticket, a level with no rounds, or the review step
+turned off). A ticket whose workflow lists a review round for it, a low one included, has one and gets a
+depth.
 
 You pick it, after each build and your gate, before each review (the gate step says when). When `DEPTH` is given,
 the human chose it: use it for every round and skip the rest of this section.
@@ -343,9 +349,9 @@ Return exactly these lines and nothing else:
 ```
 STATUS: handed-off | blocked | needs-browser | error
 TICKET: #<id> <title>
-VERDICT: <the last /feature-review verdict line> | none (low: no review)
-ROUNDS: <rounds used; 0 for low, or when the workflow lists no review for the ticket>
-DEPTH: <light | standard | deep>: <lines> lines in <files> files<, the classes that decided it> | <light | standard | deep>: chosen by the human | none (low: no review)
+VERDICT: <the last /feature-review verdict line> | none (no review for this ticket: <low ticket | no rounds | review off>)
+ROUNDS: <rounds used; 0 when the workflow lists no review for the ticket (a low ticket, no rounds for its level, or the review off)>
+DEPTH: <light | standard | deep>: <lines> lines in <files> files<, the classes that decided it> | <light | standard | deep>: chosen by the human | none (no review for this ticket: <low ticket | no rounds | review off>)
 PR: <url> | none
 PREVIEW: <url> | none: <why>
 BLOCKER: <decision | credential | external | destructive | environment>: <the ask in one line> | none

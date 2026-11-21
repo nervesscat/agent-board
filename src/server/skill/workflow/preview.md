@@ -1,5 +1,7 @@
 Start the preview of this head here: it is the one build of this head for the preview, and it keeps
-running. The review's `shots/` folder has the verify phase's screenshots. For a UI change you also need
+running. When a review round's end-of-round intent check already started it for this head (the review
+step's text says when it does), it runs: reuse it, take only the screenshots still missing and build
+nothing. The review's `shots/` folder has the verify phase's screenshots. For a UI change you also need
 one of the finished thing in that preview at the state the ticket is about. A ticket with no review has no
 review folder, so its screenshots come from the preview. The intent check is given this preview, these
 screenshots and the diff. With `BROWSER=no` and a UI change, do everything else, leave the ticket in

@@ -476,3 +476,101 @@ describe('the README documents the workflow (I1)', () => {
     ).toContain('`workflowPreset` on create and PATCH')
   })
 })
+
+describe('review fix pass: one folder per review, the plan of a skipped review, and the switches', () => {
+  const skill = () => flat(review('skills/feature-review/SKILL.md'))
+
+  it('gives each of a round’s reviews its own folder, claim, worktree and ledger line (C1)', async () => {
+    const text = skill()
+    expect(text).toContain(
+      '`SLUG` = `<repo-dir-name>-<target>` (e.g. `myapp-pr-123`, `webapp-diff`), and `<repo-dir-name>-<target>-<AGENT_TAG>` when `agent=<prefix>` was given',
+    )
+    expect(text).toContain("(`AGENT_TAG` = the prefix's last segment")
+    expect(text).toContain('never share a folder, a claim or a worktree')
+    // A claim is cleared by a ledger line of the same target and the same agent only.
+    expect(text).toContain(
+      'no entry for this target (and this `agent`, when `agent=` was given) written after the claim',
+    )
+    expect(text).toContain('plus `"agent": "<the agent= prefix>"` when `agent=` was given')
+    expect(text).toContain('never the review of the same target by a run with another prefix or none')
+    // The workflow tells the agent the paths and the reconcile reads both folders.
+    const maximum = flat(await workflowText('maximum', 'mid'))
+    expect(maximum).toContain('`~/.claude/feature-review/<repo-dir>-<branch>-review-first/`')
+    expect(maximum).toContain('`.../<repo-dir>-<branch>-review-second/`')
+    expect(maximum).toContain("from each review's own `review.md` in its folder above")
+    expect(maximum).toContain(
+      "only the ledger line that names that same agent counts (its `path` is that run's own folder",
+    )
+    expect(maximum).toContain("so the first review's line never makes the second unnecessary")
+    // The suffixes the workflow passes are the folders' tags.
+    expect(maximum).toContain('agent=<your name>/review-first')
+    expect(maximum).toContain('agent=<your name>/review-second')
+  })
+
+  it('names the plan when the ticket’s workflow lists its review as skipped but one is asked for (C2)', async () => {
+    const text = skill()
+    expect(text).toContain(
+      'When that workflow lists the ticket\'s review as skipped (a low ticket, no rounds for its level, or the review step turned off) it gives no `phases=`; if a review is asked for anyway (a queue review of its PR, a person\'s request), run the six standard phases and say so in the report: "workflow lists no review for this ticket: the six standard phases"',
+    )
+    expect(text).toContain('A workflow whose review is Light gives `phases=reviewer`, and that is the plan.')
+    const queue = flat(review('skills/review-queue/SKILL.md'))
+    expect(queue).toContain('**The plan follows the workflow.**')
+    expect(queue).toContain('a project on the Light workflow is reviewed by one reviewer')
+    expect(queue).toContain("The runner's `NOTES` names the plan it used")
+    expect(flat(review('agents/feature-review-runner.md'))).toContain(
+      'the plan the review ran when it was not the six standard phases',
+    )
+  })
+
+  it('has the hand-off, the board skill, AGENTS.md, the ticket agent and todo-review follow a switched-off step (C7)', async () => {
+    const rule = 'its items are not run and not required'
+    const boardTexts = await boardSkills()
+    for (const [name, text] of Object.entries(boardTexts)) {
+      const t = flat(text)
+      expect(t, name).toContain("**The project's workflow decides which of these run.**")
+      expect(t, name).toContain(rule)
+      expect(t, name).toContain(
+        'The push, the pull request and the summary are locked: they are always done.',
+      )
+      // The always-on phrases stay.
+      expect(t, name).toContain('Preview running, started before the move to review.')
+    }
+    const agentsDoc = flat(read(root, 'AGENTS.md'))
+    expect(agentsDoc).toContain("**The project's workflow decides which of these run.**")
+    expect(agentsDoc).toContain(rule)
+    expect(agentsDoc).toContain(
+      'The push, the pull request and the summary are locked: they are always done.',
+    )
+    const ticketAgent = flat(review('agents/todo-review-ticket.md'))
+    expect(ticketAgent).toContain('The preview comes before the move to review, never after it')
+    expect(ticketAgent).toContain(
+      'A step the workflow lists as skipped because the human turned it off on the Workflow page (the preview, or CI) is not run and not required',
+    )
+    expect(ticketAgent).toContain(
+      'The push, the pull request and the summary are locked and are always done.',
+    )
+    const orchestrator = flat(review('skills/todo-review/SKILL.md'))
+    expect(orchestrator).toContain(
+      "not required when the ticket's workflow lists CI as skipped, turned off on the Workflow page",
+    )
+    expect(orchestrator).toContain(
+      "(unless the ticket's workflow lists the preview step as skipped: then none is required and the summary says it was turned off on the Workflow page)",
+    )
+  })
+
+  it('lets a ticket whose workflow lists no review have no depth, and one that lists a review have one (C8)', () => {
+    const ticketAgent = flat(review('agents/todo-review-ticket.md'))
+    expect(ticketAgent).toContain('When the workflow lists no review for the ticket there is no depth')
+    expect(ticketAgent).toContain(
+      'A ticket whose workflow lists a review round for it, a low one included, has one and gets a depth.',
+    )
+    expect(ticketAgent).toContain('none (no review for this ticket: <low ticket | no rounds | review off>)')
+    expect(ticketAgent).not.toContain('(low: no review)')
+    const orchestrator = flat(review('skills/todo-review/SKILL.md'))
+    expect(orchestrator).toContain(
+      "Skip this measure when the ticket's workflow lists no review round for it (a low ticket, a level with no rounds, or the review turned off)",
+    )
+    expect(orchestrator).toContain('a low ticket included, a review ran and is required')
+    expect(orchestrator).not.toContain('A low ticket skips this measure')
+  })
+})

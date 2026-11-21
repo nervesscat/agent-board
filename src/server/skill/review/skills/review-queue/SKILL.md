@@ -193,6 +193,12 @@ feature-review skill's **On the board** section); after Step 5, check that a res
 is in `list_review_results`, and record it yourself with `post_review_result` from the runner's
 summary if not.
 
+**The plan follows the workflow.** With `ticket=<id>` and no `phases=`, a runner's plan is the one the
+ticket's workflow gives (the feature-review skill's **The plan**): a project on the Light workflow is
+reviewed by one reviewer, and a ticket whose workflow lists no review gets the six standard phases. Do
+not pass `phases=` to change it. The runner's `NOTES` names the plan it used, and the queue summary
+carries it per PR.
+
 **Building** (`build` only). After the reviews and their report, run the `todo-review` skill through
 the Skill tool for the same project, passing `parallel` and `model` through. It works the To do
 tickets through the build cycle of the project's workflow (`get_workflow`, which the board serves; each

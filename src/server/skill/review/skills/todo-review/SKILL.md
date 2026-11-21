@@ -161,7 +161,9 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
 `BLOCKER`, `NOTES`). They are claims. `get_ticket` and check them, in order:
 
 1. **`handed-off`**: the ticket is in a `review` stage, `push.state` is `pushed`, `pr` is set,
-   the PR's CI has finished and passed (`gh pr checks <number>`; still running: wait for it),
+   the PR's CI has finished and passed (`gh pr checks <number>`; still running: wait for it; not
+   required when the ticket's workflow lists CI as skipped, turned off on the Workflow page, and the
+   summary says so),
    `missingRunReports` is empty (it names the runs that still have no report; none listed means every
    run has one: the phase agents write theirs, the orchestrator writes none), `missingReviewPhases` is
    empty (it names each phase of the ticket's workflow that its last review round lacks, none skipped;
@@ -177,9 +179,11 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    plan, the spec, the review's findings or the options an agent put on a card; `does not match` goes back to the builder, then the gate, then one more review round of the
    workflow's phases (outside the round budget; after the second one the ticket agent asks the human), then the intent check
    again; it runs on the preview started before it, and again on any new head), the preview was started
-   before the move to review whenever the project has a preview setup and the change can be previewed,
-   and `open` is empty, or holds only the Preview phase with a summary saying why the change cannot be
-   previewed (no preview setup, or nothing to try). The ticket's summary
+   before the move to review whenever the project has a preview setup and the change can be previewed
+   (unless the ticket's workflow lists the preview step as skipped: then none is required and the
+   summary says it was turned off on the Workflow page), and `open` is empty, or holds only the
+   Preview phase with a summary saying why the change cannot be previewed (no preview setup, or
+   nothing to try, or the step turned off), or the CI phase when the workflow turned CI off. The ticket's summary
    (`summary` on `get_ticket`, `fallback: false`: the hand-off is the summary the agent wrote, not a
    separate post) has screenshots in its attachments when the change has a UI, and a "Tested" part
    that names the level and what checked it (the workflow's preset and, with a review, the review depth and why). Unless `depth=` was given
@@ -188,7 +192,10 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    (`git -C REPO diff --numstat origin/BASE...<branch>`, lockfiles and generated files left out,
    and the Classification of `QUEUE/t<id>/01-spec.md`): `DEPTH` must be at least the depth that
    measure gives (`light`, then `standard`, then `deep`); below it, the change was reviewed too
-   lightly. A low ticket skips this measure: it has no review, so its `DEPTH` is `none`.
+   lightly. Skip this measure when the ticket's workflow lists no review round for it (a low ticket,
+   a level with no rounds, or the review turned off): its `DEPTH` is then `none (no review for this
+   ticket: ...)`. When the workflow lists a review for the ticket, a low ticket included, a review
+   ran and is required, and the measure applies.
    Anything missing or wrong: send it back once (below) with the list.
 2. **`blocked`**: the ticket is in a `blocked` stage with an open decision card or a post that
    says what is needed. Then judge the blocker. It stands only in these categories:
