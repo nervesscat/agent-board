@@ -387,8 +387,8 @@ name>"` (e.g. `orch/builder-1`) on every board tool call, so what it posts is fi
   Put this in every brief. `update_ticket` → `review` answers with `missingRunReports` for each run
   the work timeline records with no report — a span, a hand-off, or a second run of one agent and
   round that only one report covers: flagged, not refused; get them written before the hand-off.
-  It also answers with `missingReviewPhases` (the review phases the last round of a mid, high or max
-  ticket lacks; run them before the hand-off stands, except a round the build skipped because its head
+  It also answers with `missingReviewPhases` (the phases of the ticket's workflow its last review
+  round lacks; run them before the hand-off stands, except a round the build skipped because its head
   SHA's review had already survived: that one is reused and named in the summary). A phase counts only
   when its span or run report carries the round (and the last segment of the agent name names the
   phase agent): a run with no round is not counted. Moving the ticket out of a review stage, to any
@@ -485,13 +485,17 @@ last, the latest comment that sent the ticket back weighing most) and the result
 its screenshots or recordings, the diff at the current head), never the builder's plan, the spec, the review's findings or the options an agent put on a card. It
 returns one line per ask (`done as asked`, `done differently (how)` or `not done`, with its evidence)
 and a verdict, `matches` or `does not match`. `matches` hands off; `does not match` goes back to the
-builder with its lines as the brief, then the gate, then one more full review round (above low; the numbering continues, all six phases run again), then the intent check again. A `does not match` is outside the complexity's round budget; after the second one on a ticket the ticket agent stops and asks the human (`ask_decision`: keep going, ship as is, drop) with the intent check's lines and the human's words on the card. It never asks the human earlier: the human is asked (`ask_decision`, both readings on the card) only
+builder with its lines as the brief, then the gate, then one more review round of the project's workflow (the numbering continues), then the intent check again. A `does not match` is outside the workflow's round budget unless the workflow says it counts as a round; after the second one on a ticket the ticket agent stops and asks the human (`ask_decision`: keep going, ship as is, drop) with the intent check's lines and the human's words on the card. It never asks the human earlier: the human is asked (`ask_decision`, both readings on the card) only
 when two readings of their words are both plausible and give visibly different results.
 
-**Above low, the full cycle is mandatory.** For `mid`, `high` and `max` every review round runs spec,
-env, verify, two independent hunts, refute and the merge check. None is skipped because findings look
-obvious, the change looks small or a finding was already reproduced; each phase posts its result, so a
-skipped phase is visible.
+**The project's workflow sets the cycle.** The order of the work (spec, build, the gate, the review
+rounds and their phases, the intent check, the push, the PR, the hand-off), the review rounds a ticket
+gets for its complexity and each step's effort are the project's workflow, which the board serves:
+`get_workflow` with the ticket's id. The human sets it on the project's Workflow page; a ticket may
+name its own preset (`workflowPreset`); an agent changes neither. Run exactly the steps it lists, in
+its order, each as its text says; a workflow change made while you work is read at your next
+relaunch. None is skipped because findings look obvious, the change looks small or a finding was
+already reproduced; each phase posts its result, so a skipped phase is visible.
 
 `update_ticket` → `review` then answers with `open`: every task and subtask still open, the
 ticket's and its lanes' that are not cancelled, in tree order, each `{taskId, ticketId, text, auto}`.
@@ -502,15 +506,15 @@ green, start the preview, rewrite the summary after your last commit), never by 
 through anyway: fix each one; `open: []` means nothing is left. `get_ticket` returns the same `open`
 while the ticket is in review, and its page shows them on the Tasks card.
 
-`update_ticket` → `review` also answers with `missingReviewPhases` for a mid, high or max ticket
-whose project has a software kind and whose timeline records work: each phase its last review round
-lacks (a phase counts only when its span or run report carries the round and the last segment of the
-agent name names the phase agent, so a run with no round is not counted), as `{round, phase, expected, found}` (the hunt expects two; a span or a run report of that kind
+`update_ticket` → `review` also answers with `missingReviewPhases` for a ticket whose project has a
+software kind, whose workflow lists a review for it and whose timeline records work: the phases of the
+ticket's workflow its last review round lacks (a phase counts only when its span or run report carries the round and the last segment of the
+agent name names the phase agent, so a run with no round is not counted), as `{round, phase, expected, found}` (`expected` is how many runs of that phase the workflow's round needs; a span or a run report of that kind
 and round counts as a run). It is a flag, not a refusal: run each missing phase (with a fix round if it
 needs code) before the hand-off stands, except a round the build skipped because its head SHA's review
 had already survived (reused, named in the summary). Moving the ticket out of a review stage, to any other
 stage, restarts the count (only runs after the move count, from round 1): run a missing phase while the
-ticket stays in review. `get_ticket` shows it in review too; it is `[]` for a low ticket.
+ticket stays in review. `get_ticket` shows it in review too; it is `[]` for a ticket whose workflow lists no review (a low ticket).
 
 After that:
 
@@ -650,21 +654,22 @@ that does not do the work itself but routes each step to the agent whose notes f
 subagent, and keeps the ticket's feed as the record. An agent without delegation notes is never
 delegated to.
 
-The project's Team page adds a default set, the build and review cycle of the
-`/feature-review` and `/review-queue` skills (installed from the same page): **spec** (acceptance
-criteria) → **builder** (the code) → **runner** (a `/feature-review` of the branch, whose phases
-**env**, **verify**, **hunt**, **refute** and **merge** try to break it) → (every round runs all of them, two independent hunts included; a fix pass by the
-**builder** on the confirmed findings, each with the project's checks and a new review, for as many
-review rounds as the ticket's complexity allows: none for low, one for mid, three for high, up to ten
-for max (for work built from scratch: a whole site or app, a new product or standalone service; a
-feature in an existing codebase is at most high, however difficult); round 1 is the first build and
-its review, so a mid ticket stops after its review, and a review that does not survive after the last
-round goes to a human decision; a high ticket gets two fix passes and a max ticket nine; a low ticket
-has no review, and its checks return the build at most twice; after the second return, when the checks
-still fail or a criterion still has no evidence, the human decides (keep going or drop), and the build goes
-to hand-off only with evidence for every criterion) → the **intent** check at `low` effort (every complexity) → hand off. The agents' thinking effort follows the complexity too: `low` for a low ticket, `medium` for mid and
-high, `high` for max; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket
-(the ticket agent, the spec agent, the builder and the review's phase agents; the intent agent always runs at `low`). `/todo-review` is that
+The project's Team page adds a default set of agents, the roles of the `/feature-review` and
+`/review-queue` skills (installed from the same page): **spec** (acceptance criteria), **builder** (the
+code), **runner** (a `/feature-review` of the branch, whose phases **env**, **verify**, **hunt**,
+**refute** and **merge** try to break it) and **intent** (the check against the human's own words).
+**Which of them run, in what order, how many review rounds a ticket gets and at what effort is the
+project's workflow** (`get_workflow` with the ticket's id: its steps in order, each with its agent, its
+effort, what it does and what it hands on), not this text. Run exactly the steps it lists. Rules that
+hold in every workflow: a fix pass by the **builder** takes the review's confirmed findings, each with
+the project's checks and a new review; a review that does not survive after the workflow's last round
+goes to a human decision; the checks return the build at most twice, and after the second return,
+when the checks still fail or a criterion still has no evidence, the human decides (keep going or
+drop); the build goes to hand-off only with evidence for every criterion; the **intent** agent runs at
+`low` effort before the hand-off. Max is for work built from scratch (a whole site or app, a new product or standalone service); a feature in an existing codebase is at most high, however difficult. The agents' thinking effort is each workflow
+step's effort, `auto` unless the human set one: `low` for a low ticket, `medium` for mid and high,
+`high` for max; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket (the ticket agent, the
+spec agent, the builder and the review's phase agents; the intent agent always runs at `low`). `/todo-review` is that
 orchestrator for
 the To do tickets: one agent per ticket runs the cycle, checks the proof itself (criteria seen
 working, no weakened tests, screenshots) and blocks only for what only the human can give.

@@ -3,9 +3,9 @@ a reconciliation, and the Thorough additions hold in each (the third hunt with t
 and the intent check at the end of the round).
 
 - Run `/feature-review` twice for the round: the first review and the second review, as two separate runs
-  with the `phases=` argument this workflow gives, each under its own agent name (the runner of the first
-  review as `<your name>/review-first`, the second as `<your name>/review-second`, so the timeline, the
-  run reports and the phase agents of each stay apart). Neither is shown the other's findings, results or
+  with the `phases=` argument this workflow gives, each under its own agent name (the first review as
+  `agent=<your name>/review-first` and the second as `agent=<your name>/review-second`, passed to
+  `/feature-review`, so the timeline, the run reports and the phase agents of each stay apart). Neither is shown the other's findings, results or
   folder: the second review must not inherit the first one's reading. They may run at once, but each
   takes its own test slots, one heavy run at a time.
 - **The two reviews each carry the round number** (`round=<n>`), so the board counts the phases of both:

@@ -29,8 +29,9 @@ function brief(phase: string) {
 const BUILDER = `# Builder
 
 You write the change a ticket asks for, in the ticket's worktree, on its branch. You are one step of
-a cycle: a spec gave you the acceptance criteria, and after you a review (env, verify, hunt,
-refute, merge) will try to break what you built. Build so it survives that.
+a cycle: a spec (when the project's workflow has one) gave you the acceptance criteria, and after you
+a review (the phases the workflow lists: env, verify, hunt, refute, merge) will try to break what you
+built. Build so it survives that.
 
 ## Input
 
@@ -121,19 +122,19 @@ each with its scenario.
 **Returns:** its commits, what changed per criterion or finding, the tests and checks it ran, and
 anything left open.
 
-**Next:** **runner** on the branch, except for a low ticket: its build goes to hand-off on the project's
-checks and the builder's evidence, with no runner (after the **intent** check, which every build gets). A question it returns → \`ask_decision\`. The review
-rounds its ticket's complexity allows are none for low, one for mid, three for high, up to ten for max,
-round 1 being the first build and its review. Mid has one: a review that does not survive then goes to the
-human (ship as is, keep going, or drop). High has three: two fix passes follow the first build, each with
-the checks and a new review, and a round that does not survive after the third goes to the human the same
-way. Max has up to ten, nine fix passes after the first build, and is for work built from scratch (a
-whole site or app, a new product or service), never for a feature in an existing codebase, however
-difficult: that is at most high. It stops at the first round that survives, and a round that does not
-survive after the tenth goes to the human as high's does. Low has no review: its checks return the build at most twice, and after the
-second return, when the checks still fail or a criterion still has no evidence, the human decides (keep
-going or drop). Every agent the cycle starts for the ticket runs at the effort its complexity sets: low for
-low, medium for mid and high, high for max (the Agent tool's \`effort\`); the intent agent always runs at \`low\`.`,
+**Next:** **runner** on the branch, except for a ticket the workflow gives no review (a low ticket): its
+build goes to hand-off on the project's checks and the builder's evidence, with no runner (after the
+**intent** check, which every build gets). A question it returns → \`ask_decision\`. How many review
+rounds the ticket gets is its workflow's (\`get_workflow\`; the rounds follow its complexity), round 1
+being the first build and its review: a fix pass follows each round that does not survive, each with
+the checks and a new review, and a round that does not survive after the last one goes to the human
+(ship as is, keep going, or drop). It stops at the first round that survives. Max is for work built
+from scratch (a whole site or app, a new product or service), never for a feature in an existing
+codebase, however difficult: that is at most high. With no review, its checks return the build at
+most twice, and after the second return, when the checks still fail or a criterion still has no
+evidence, the human decides (keep going or drop). Every agent the cycle starts for the ticket runs at
+the effort its workflow step names, \`auto\` being low for low, medium for mid and high, high for max
+(the Agent tool's \`effort\`); the intent agent always runs at \`low\`.`,
   },
   {
     name: 'runner',
@@ -187,9 +188,10 @@ browser criteria), and the test suite's result.
   {
     name: 'hunt',
     instructions: brief('hunt'),
-    delegation: `**When:** in a review, once **env** is up, in parallel with **verify**. Two independent hunts always
-run, from the start, in every round and at every depth (\`light\` included): a hunt is never skipped
-because the other found nothing.
+    delegation: `**When:** in a review, once **env** is up, in parallel with **verify**. As many independent hunts run as
+the workflow lists (two in the Standard workflow, a third with the security checklist in Thorough, one
+reviewer alone in Light, with no env or verify), from the start, in every round and at every depth (\`light\` included): a hunt is
+never skipped because another found nothing.
 
 **Give it:** the spec, the environment, the diff and context, the checklists, the browser flag and
 its file prefix. Never the other hunt's notes.
@@ -201,7 +203,7 @@ its file prefix. Never the other hunt's notes.
   {
     name: 'refute',
     instructions: brief('refute'),
-    delegation: `**When:** in a review, after **verify** and the two **hunt**s, every round, also when there is no
+    delegation: `**When:** in a review, after **verify** and every **hunt** the workflow lists, every round, also when there is no
 candidate or FAIL: it then verifies that nothing is left to refute and records that.
 
 **Give it:** the spec, the environment, the diff, the verification and the candidates, renumbered.
@@ -255,9 +257,9 @@ done, each with its evidence) and a verdict: matches, or does not match with the
 to what was built.
 
 **Next:** \`matches\` hands off. \`does not match\` goes back to **builder** with the intent check's
-lines as the brief, then the gate, then one more full review round (above low; numbering continues, all
-six phases run again), then the intent check again. A \`does not match\` is outside the complexity's
-round budget; after the second one on a ticket the ticket agent stops and asks the human
+lines as the brief, then the gate, then one more review round of the workflow (numbering
+continues), then the intent check again. A \`does not match\` is outside the workflow's round budget
+unless the workflow counts it as a round; after the second one on a ticket the ticket agent stops and asks the human
 (\`ask_decision\`: keep going, ship as is, drop) with the intent check's lines and the human's words on
 the card. It never asks the human earlier: the human is asked only when two readings of their words are both plausible and give
 visibly different results, with both readings on the card (\`ask_decision\`). It never answers a

@@ -1,6 +1,6 @@
 ---
 name: todo-review
-description: "Works a board project's To do tickets to hand-off, several at once (same repo included): one unattended todo-review-ticket agent per ticket builds the change and runs the /feature-review cycle (spec, env, verify, two hunts, refute, merge check: all of it, every round) as many rounds as the ticket's complexity sets (low none, mid one, high three, max up to ten for work built from scratch), at a depth scaled to the change, until the change survives it, then checks the result against the human's own words (the intent check, every complexity), pushes, opens the PR, starts a preview and posts screenshots; a ticket is moved to blocked only for what only the human can provide, after the agent has gone as far as it can. The orchestrator schedules, checks each result against the board, and sends weak blockers back."
+description: "Works a board project's To do tickets to hand-off, several at once (same repo included): one unattended todo-review-ticket agent per ticket follows the project's workflow for it (the board serves it: get_workflow), which sets the steps, their order, the review rounds and the efforts, builds the change, reviews it with /feature-review at a depth scaled to the change until it survives, checks the result against the human's own words (the intent check), pushes, opens the PR, starts a preview and posts screenshots; a ticket is moved to blocked only for what only the human can provide, after the agent has gone as far as it can. The orchestrator schedules, checks each result against the board, and sends weak blockers back."
 user-invocable: true
 argument-hint: "[project=<id>] [<ticket id> ...] [parallel=N] [depth=auto|light|standard|deep] [model=<name>] [dry]"
 ---
@@ -43,7 +43,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `project=<id>` | the board project | the project of the repo in the current directory (`find_project` with its origin, folder and path) |
 | a number | work only these ticket ids, in this order | every eligible To do ticket |
 | `parallel=N` | maximum tickets in flight, 1 to N+1 (so 1 to 3 with N = 2; the cap is one more than the repo's test slots, since a ticket waiting for one still does its light work), tickets of the same repo included | 2 |
-| `depth=auto\|light\|standard\|deep` | the review depth: `auto` lets each ticket agent pick it from the size of its change (`todo-review-ticket`, "Review depth"); any other value is used for every ticket and every round. The depth never drops a phase: every round of a mid, high or max ticket runs spec, env, verify, two independent hunts, refute and the merge check, `light` included; the depths differ only in how hard the hunts look and the stability report | `auto` |
+| `depth=auto\|light\|standard\|deep` | the review depth: `auto` lets each ticket agent pick it from the size of its change (`todo-review-ticket`, "Review depth"); any other value is used for every ticket and every round. The depth never drops a phase: every round runs every phase the ticket's workflow lists, `light` included; the depths differ only in how hard the hunts look and the stability report. The depth is not the workflow's preset | `auto` |
 | `model=<name>` | model for the ticket agents, which their own agents inherit | the session model |
 | `dry` | inventory and schedule only: write the plan, start nothing | off |
 
@@ -72,7 +72,9 @@ Create `QUEUE = ~/.claude/feature-review/todo-<YYYYMMDD-HHMM>/` (resolve `~` wit
    and base branch. A repo whose checkout path does not exist on this machine: skip its tickets
    with "repo not on this machine".
 5. Write `QUEUE/plan.md`: every ticket with its repo, its complexity (the `complexity` field of its
-   list row), eligibility and the reason it was skipped.
+   list row) and the preset of the workflow it follows next to it (the `workflowPreset` field of its
+   list row when it names one, else the project's `workflowPreset` from `get_project`), eligibility
+   and the reason it was skipped.
    With `dry`, print it and stop.
 
 ## Step 2: Schedule
@@ -83,7 +85,7 @@ only when they share none.
 | Lane | Held by | Why |
 |---|---|---|
 | `ticket:<id>` | the run of that ticket | never two agents on one ticket: a send-back or re-queue starts only after its previous run returned |
-| `branch:<name>` | the ticket whose `branch` is that name | never two agents on one branch: two tickets that carry the same `branch` never run together. A ticket with no `branch` yet gets a new name that its agent makes its own by creating the branch, and it works only in a worktree registered on its ticket (`todo-review-ticket` steps 1.3 and 1.4) |
+| `branch:<name>` | the ticket whose `branch` is that name | never two agents on one branch: two tickets that carry the same `branch` never run together. A ticket with no `branch` yet gets a new name that its agent makes its own by creating the branch, and it works only in a worktree registered on its ticket (the claim step of its workflow) |
 | `browser` | the one ticket allowed `browser=yes` | the browser automation tool is a single shared instance |
 
 There is no lane per repo: tickets of the same repo run at the same time, each in its own worktree
@@ -125,8 +127,11 @@ Loop until nothing is pending or running:
   `depth=` was given and is not `auto`, `AS=<agent name>` when the ticket is reserved, and
   `QUEUE`. Pass `model` on the Agent call when `model=` was given. Pass `effort` on the Agent call
   as the ticket's complexity sets it: `low` for low, `medium` for mid and high, `high` for max; the ticket agent passes
-  the same effort to every agent it starts (spec, builder, the review's phase agents), except the intent
-  agent, which runs at `low` effort whatever the complexity. Tell it to
+  each step's own effort, as the ticket's workflow names it, to every agent it starts (spec, builder,
+  the review's phase agents), except the intent agent, which runs at `low` effort whatever the
+  complexity (its workflow step sets that, and only the human changes it). The ticket agent reads
+  the project's workflow itself (`get_workflow` with its ticket) and follows it: you pass it none.
+  Tell it to
   `get_ticket` the ticket before anything else and to carry its context — the instructions, the
   human's posts and replies, the decisions and their answers, the attachments — into every agent
   it starts (a phase agent may read the rest itself), except the intent agent: it gets only the human's own
@@ -159,22 +164,25 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    the PR's CI has finished and passed (`gh pr checks <number>`; still running: wait for it),
    `missingRunReports` is empty (it names the runs that still have no report; none listed means every
    run has one: the phase agents write theirs, the orchestrator writes none), `missingReviewPhases` is
-   empty (for a mid, high or max ticket it names each phase its last review round lacks: every round
-   runs spec, env, verify, two hunts, refute and the merge check, and none is skipped; a round the
-   ticket agent skipped because its head SHA's review had already survived is reused, named in the
-   summary, and not rerun), the intent
-   check ran on the head and its verdict is `matches` (it runs on every ticket, low included, after the
-   last review round and before the hand-off, and again after a human comment that sent the ticket back;
+   empty (it names each phase of the ticket's workflow that its last review round lacks, none skipped;
+   a round the ticket agent skipped because its head SHA's review had already survived is reused,
+   named in the summary, and not rerun). What a ticket must have run comes from its own workflow
+   (`get_workflow` with the ticket: the steps it lists, the review's rounds and phases), not from a
+   cycle written here: every step the workflow lists for the ticket ran, in its order, and those it
+   lists as skipped did not need to. The intent
+   check ran on the head and its verdict is `matches` (it is the workflow's intent step, locked above
+   low: after the last review round and before the hand-off, and again after a human comment that sent
+   the ticket back;
    at `low` effort, from only the human's words (their answers on decision cards included) and attachments and the result, never the builder's
-   plan, the spec, the review's findings or the options an agent put on a card; `does not match` goes back to the builder, then the gate, then one more full review round
-   (outside the round budget; after the second one the ticket agent asks the human), then the intent check
+   plan, the spec, the review's findings or the options an agent put on a card; `does not match` goes back to the builder, then the gate, then one more review round of the
+   workflow's phases (outside the round budget; after the second one the ticket agent asks the human), then the intent check
    again; it runs on the preview started before it, and again on any new head), the preview was started
    before the move to review whenever the project has a preview setup and the change can be previewed,
    and `open` is empty, or holds only the Preview phase with a summary saying why the change cannot be
    previewed (no preview setup, or nothing to try). The ticket's summary
    (`summary` on `get_ticket`, `fallback: false`: the hand-off is the summary the agent wrote, not a
    separate post) has screenshots in its attachments when the change has a UI, and a "Tested" part
-   that names the level and what checked it (for mid, high and max, the review depth and why). Unless `depth=` was given
+   that names the level and what checked it (the workflow's preset and, with a review, the review depth and why). Unless `depth=` was given
    (other than `auto`), measure the branch
    yourself the way the ticket agent's "Review depth" says
    (`git -C REPO diff --numstat origin/BASE...<branch>`, lockfiles and generated files left out,
@@ -184,7 +192,7 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    Anything missing or wrong: send it back once (below) with the list.
 2. **`blocked`**: the ticket is in a `blocked` stage with an open decision card or a post that
    says what is needed. Then judge the blocker. It stands only in these categories:
-   - `decision`: two valid behaviours, a product or scope call, the complexity's rounds used up, or
+   - `decision`: two valid behaviours, a product or scope call, the workflow's rounds used up, or
      the gate's two returns used up (the agent asked the human what to do next: ship as is, keep going
      or drop). The human answers that card: an unattended run never answers it (`answer_decision`),
      and it stays blocked for them;
@@ -257,7 +265,8 @@ them.
   just moved: an answer, or a comment that moved it back to In progress, relaunches its agent
   (`RETRY`), briefed with it.
 - The orchestrator never changes a ticket's complexity: it passes the level on, and the ticket agent
-  never changes its own.
+  never changes its own. Neither changes a ticket's workflow preset either: the project's human sets
+  the workflow, and the ticket agent follows it.
 - Where posts go on a ticket: progress posts and anything posted `as` one of the project's agents
   (spec, builder, the review phases) land in its Agents tab, the agents' working record; Main is
   the human's and stays short and to the point: their posts, decision cards, questions to them,

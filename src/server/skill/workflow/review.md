@@ -33,8 +33,9 @@ gate, then the review again, as the next round, while the budget below allows on
 
 **The budget** is the `rounds` this workflow lists for the ticket's complexity. A round is one build or
 fix pass, your gate and one review. Round 1 is the first build with its gate and its review; every later
-round is a fix pass, each followed by the gate and a review, and the rounds are a ceiling, not a quota. A
-surviving round ends the cycle at every level. When a round does not survive and no round is left: post
+round is a fix pass, each followed by the gate and a review, and the rounds are a ceiling, not a quota. Max is
+for work built from scratch (a whole site or app, a new product or a standalone service), and a feature in
+an existing codebase is never max, however difficult. A surviving round ends the cycle at every level. When a round does not survive and no round is left: post
 what is still open, `ask_decision` (ship as is, keep going, drop) and stop: `BLOCKER: decision`. Never
 start one more round on your own. The complexity sets the budget at every review depth: a `deep` review
 earns no extra round, a `light` one loses none. An intent return (`does not match`, see the intent step)

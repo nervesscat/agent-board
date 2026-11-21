@@ -312,6 +312,25 @@ describe('the review texts the board ships', () => {
     expect(to, end).toBeGreaterThan(from)
     return text.slice(from, to)
   }
+  /**
+   * What `get_workflow` serves, as an agent reads it, whitespace folded: the project's `preset` workflow for a
+   * ticket of `complexity` (none: the rounds of every level). The step procedures moved out of the ticket
+   * agent into this text, so what a test pins about a step's procedure is read here, not in the agent file.
+   */
+  let workflowProject = 0
+  async function workflowText(preset = 'standard', complexity: string | null = null) {
+    workflowProject ||= newProject('workflow-text')
+    const query = new URLSearchParams({ preset })
+    if (complexity) query.set('complexity', complexity)
+    const res = await call(
+      'GET',
+      `/api/projects/${workflowProject}/workflow/effective?${query}`,
+      undefined,
+      'agent',
+    )
+    expect(res.status).toBe(200)
+    return flat(res.body.text as string)
+  }
   /** The MCP instructions and tool descriptions, as a client gets them from the server. */
   async function served() {
     const init = await rpc('initialize', {
@@ -373,10 +392,10 @@ describe('the review texts the board ships', () => {
       expect(d).toContain('done as asked, done differently with how, or not done')
       expect(d).toContain('`matches` hands off')
       expect(d).toContain(
-        "`does not match` goes back to **builder** with the intent check's lines as the brief, then the gate, then one more full review round (above low; numbering continues, all six phases run again), then the intent check again",
+        "`does not match` goes back to **builder** with the intent check's lines as the brief, then the gate, then one more review round of the workflow (numbering continues), then the intent check again",
       )
       expect(d).toContain(
-        "A `does not match` is outside the complexity's round budget; after the second one on a ticket the ticket agent stops and asks the human (`ask_decision`: keep going, ship as is, drop) with the intent check's lines and the human's words on the card",
+        "A `does not match` is outside the workflow's round budget unless the workflow counts it as a round; after the second one on a ticket the ticket agent stops and asks the human (`ask_decision`: keep going, ship as is, drop) with the intent check's lines and the human's words on the card",
       )
       expect(d).toContain(
         'the result (the preview link, its screenshots or recordings, the diff at the current head). The preview is started, and its screenshots taken, before this check',
@@ -388,7 +407,7 @@ describe('the review texts the board ships', () => {
       expect(d).toContain('with both readings on the card (`ask_decision`)')
     })
 
-    it('feature-review, todo-review and the ticket agent each place the intent phase, its low effort and its input rule', () => {
+    it('feature-review, todo-review and the ticket agent each place the intent phase, its low effort and its input rule', async () => {
       for (const [name, text] of [
         ['feature-review', featureReview],
         ['ticket agent', ticketAgent],
@@ -403,52 +422,67 @@ describe('the review texts the board ships', () => {
         expect(t, name).toContain('`does not match`')
         expect(t, name).toContain('`matches`')
       }
-      const ticket = flat(between(ticketAgent, '### 6b. The intent check', '### 7. Hand off'))
-      expect(ticket).toContain(
-        'before every hand-off, on every ticket of any complexity, low included: a low ticket skips the review, never the intent check',
+      // The blind brief and the intent agent's effort stay in the ticket agent, as rules of every workflow.
+      const rules = flat(between(ticketAgent, '### Two rules the workflow', '## The contract'))
+      expect(rules).toContain(
+        'a low ticket skips the review, never the intent check, unless the human turned the step off for low tickets',
       )
-      expect(ticket).toContain('again after any human comment that sent the ticket back')
-      expect(ticket).toContain('at `effort: low`, whatever the complexity')
-      expect(ticket).toContain('`done as asked`, `done differently (how)` or `not done`')
-      expect(ticket).toContain(
-        "`does not match`: back to the builder (step 3) with the intent check's lines as the brief, then your gate (step 4), then ONE more full review round (mid, high and max; numbering continues from the last round, all six phases run again with two hunts; a low ticket has no review, only the gate), then the intent check again",
-      )
-      expect(ticket).toContain(
-        "A `does not match` is not a gate return and is outside the complexity's round budget (step 5). After the SECOND `does not match` on one ticket, stop and ask the human with `ask_decision` (keep going, ship as is, drop), with the intent check's lines and the human's words on the card",
-      )
-      expect(ticket).toContain(
-        'the result: the preview link (started in step 6), its screenshots or recordings, and the diff at the current head',
-      )
-      expect(ticket).toContain(
-        'Any commit after a `matches` (a CI fix, a rebase or a merge of the base) changes the head, so the intent check runs again on the new head before the hand-off stands',
-      )
-      expect(flat(between(ticketAgent, '### 6. Evidence', '### 6b.'))).toContain(
-        'Start the preview here, before the intent check: it is the one build of this head for the preview',
-      )
-      expect(ticket).toContain(
+      expect(rules).toContain('it runs at `low` effort whatever the complexity')
+      expect(rules).toContain('`done as asked`, `done differently (how)` or `not done`')
+      expect(rules).toContain(
         "and the human's own answer on each decision card (the option they picked and their words, as the human's own reply)",
       )
-      expect(ticket).toContain(
+      expect(rules).toContain(
         "the spec, the review's findings or the options an agent put on a card: it must not inherit their reading",
       )
-      expect(ticket).toContain(
-        "Before every re-run of the intent check (after a `does not match` fix round or any new commit) go through step 6 again at the head being handed off: the preview for that head runs (build it only when none runs for this head, step 7 item 5) and fresh screenshots of the changed state are taken; brief the check with those, never the old head's",
+      expect(rules).toContain(
+        'Any commit after a `matches` changes the head, so the check runs again on the new head before a hand-off stands',
       )
-      const handoff = flat(between(ticketAgent, '### 7. Hand off', '## Review depth'))
-      expect(handoff).toContain(
-        'the one step 6 already started and kept running, reused here, not built again',
-      )
-      expect(handoff).toContain(
-        'A fix commit changes the head, so the intent check (step 6b) runs again on the new head before the hand-off stands',
-      )
-      expect(flat(between(ticketAgent, '**The budget**', '**The full cycle'))).toContain(
-        'An intent return (`does not match`, step 6b) is not a gate return and is outside this budget',
-      )
-      expect(ticket).toContain('both readings on the card (`ask_decision`), never otherwise')
       expect(flat(ticketAgent)).toContain('it runs at `low` effort whatever the complexity')
-      expect(flat(between(ticketAgent, '### 7. Hand off', '## Review depth'))).toContain(
-        'Only after the intent check (step 6b) returned `matches`',
+      // The intent step's procedure now lives in the workflow the board serves (`get_workflow`): read there.
+      const wf = await workflowText('standard', 'mid')
+      const intent = wf.slice(wf.indexOf('Intent check'))
+      expect(intent).toContain(
+        'After the last review round passes (a ticket with no review: after its gate and evidence) and before every hand-off',
       )
+      expect(intent).toContain('again after any human comment that sent the ticket back')
+      expect(intent).toContain(
+        "started with the Agent tool at this step's effort (`low` unless the human set another)",
+      )
+      expect(intent).toContain('`done as asked`, `done differently (how)` or `not done`')
+      expect(intent).toContain(
+        "`does not match`: back to the builder with the intent check's lines as the brief, then your gate, then ONE more full review round (the review's phases all run again; a ticket with no review has only the gate), then the intent check again",
+      )
+      expect(intent).toContain(
+        "A `does not match` is not a gate return and is outside the complexity's round budget. After the SECOND `does not match` on one ticket, stop and ask the human with `ask_decision` (keep going, ship as is, drop), with the intent check's lines and the human's words on the card",
+      )
+      expect(intent).toContain(
+        'the result: the preview link (from the preview step), its screenshots or recordings, and the diff at the current head',
+      )
+      expect(intent).toContain(
+        'Any commit after a `matches` (a CI fix, a rebase or a merge of the base) changes the head, so the intent check runs again on the new head before the hand-off stands',
+      )
+      expect(wf).toContain(
+        'Start the preview of this head here: it is the one build of this head for the preview',
+      )
+      expect(intent).toContain(
+        "and the human's own answer on each decision card (the option they picked and their words, as the human's own reply)",
+      )
+      expect(intent).toContain(
+        "the spec, the review's findings or the options an agent put on a card: it must not inherit their reading",
+      )
+      expect(intent).toContain(
+        "Before every re-run of the intent check (after a `does not match` fix round or any new commit) go through the preview step again at the head being handed off: the preview for that head runs and fresh screenshots of the changed state are taken; brief the check with those, never the old head's",
+      )
+      expect(wf).toContain('reused wherever it is needed and not built again')
+      expect(wf).toContain(
+        'A fix commit changes the head, so the intent check runs again on the new head before the hand-off stands',
+      )
+      expect(wf).toContain(
+        'An intent return (`does not match`, see the intent step) is not a gate return and is outside this budget',
+      )
+      expect(intent).toContain('both readings on the card (`ask_decision`), never otherwise')
+      expect(wf).toContain('Only after the intent check returned `matches`')
       expect(flat(featureReview)).toContain('again after any human comment that sent the ticket back')
       expect(flat(todoReview)).toContain(
         'the intent agent, which runs at `low` effort whatever the complexity',
@@ -470,13 +504,17 @@ describe('the review texts the board ships', () => {
         )
         expect(t, name).toContain('`matches` hands off; `does not match` goes back to the builder')
         expect(t, name).toContain(
-          "then the gate, then one more full review round (above low; the numbering continues, all six phases run again), then the intent check again. A `does not match` is outside the complexity's round budget; after the second one on a ticket the ticket agent stops and asks the human (`ask_decision`: keep going, ship as is, drop) with the intent check's lines and the human's words on the card",
+          "then the gate, then one more review round of the project's workflow (the numbering continues), then the intent check again. A `does not match` is outside the workflow's round budget unless the workflow says it counts as a round; after the second one on a ticket the ticket agent stops and asks the human (`ask_decision`: keep going, ship as is, drop) with the intent check's lines and the human's words on the card",
         )
         expect(t, name).toContain(
           'the preview is started first, with its screenshots, and the check reads it at the current head; a commit after a `matches`, such as a CI fix, changes the head, so the check runs again on it',
         )
+        // The order of the cycle is the project's workflow now, not an arrow chain in the text.
         expect(t.replaceAll('**intent**', 'intent'), name).toContain(
-          'the intent check at `low` effort (every complexity) → hand off',
+          "the project's workflow** (`get_workflow` with the ticket's id: its steps in order",
+        )
+        expect(t.replaceAll('**intent**', 'intent'), name).toContain(
+          'the **intent** agent runs at `low` effort before the hand-off'.replaceAll('**intent**', 'intent'),
         )
       }
       expect(flat(readme)).toContain('hunt, refute, merge, intent)')
@@ -512,10 +550,11 @@ describe('the review texts the board ships', () => {
       const { instructions } = await served()
       const i = flat(instructions)
       expect(i).toContain('refute, merge, and the intent check)')
-      expect(i).toContain('→ the intent check at low effort (every complexity) → hand off')
+      expect(i).toContain("the project's workflow: get_workflow with the ticket's id serves it")
+      expect(i).toContain('the intent check runs at low effort before the hand-off')
       expect(i).toContain("the builder and the review's phase agents; the intent agent always runs at low)")
       const queue = flat(between(reviewQueue, '**Building**', '## Notes'))
-      expect(queue).toContain('until the change survives → the intent check → hand-off)')
+      expect(queue).toContain("the build cycle of the project's workflow (`get_workflow`")
       expect(queue).toContain('except the intent agent, which runs at `low` effort whatever the complexity')
       const todo = flat(todoReview)
       expect(todo).toContain('except the intent agent, which runs at `low` effort whatever the complexity')
@@ -524,7 +563,9 @@ describe('the review texts the board ships', () => {
       )
     })
 
-    it('above low the full cycle is mandatory, in every text that describes a round', () => {
+    it('every phase the workflow lists runs, in every text that describes a round, and the cycle is no longer copied into the skills', async () => {
+      // The delegation order and the round counts moved out of the skills into the project's workflow
+      // (`get_workflow`): the old copies of the cycle are gone, and what replaces them says no listed phase is skipped.
       const full =
         'every review round runs spec, env, verify, two independent hunts, refute and the merge check'
       for (const [name, text] of [
@@ -532,19 +573,21 @@ describe('the review texts the board ships', () => {
         ['ticket agent', ticketAgent],
         ['board skill', boardSkill],
         ['AGENTS.md', agentsDoc],
-      ] as const) {
-        const t = flat(text)
-        expect(t.toLowerCase(), name).toContain(full)
-      }
+      ] as const)
+        expect(flat(text).toLowerCase(), name).not.toContain(full)
+      const wf = await workflowText('standard', 'mid')
+      expect(wf).toContain(
+        'Every phase this workflow lists for a round runs in every round.** None is skipped because the findings look obvious, the change looks small or a finding was already reproduced, and each phase posts its result, so a skipped phase is visible',
+      )
       const fr = flat(featureReview)
       expect(fr).toContain(
-        'None is skipped because the findings look obvious, the change looks small or a finding was already reproduced, and each phase posts its result, so a skipped phase is visible',
+        'Every phase the plan lists runs in every review round; none is skipped because the findings look obvious, the change looks small or a finding was already reproduced, and each phase posts its result, so a skipped phase is visible',
       )
       expect(flat(ticketAgent)).toContain(
-        'None is skipped because the findings look obvious, the change looks small or a finding was already reproduced, and each phase posts its result, so a skipped phase is visible',
+        'No listed step or phase is skipped on your own judgement**, not because the findings look obvious, the change looks small, a finding was already reproduced',
       )
       expect(flat(todoReview)).toContain(
-        'every round of a mid, high or max ticket runs spec, env, verify, two independent hunts, refute and the merge check, `light` included',
+        "The depth never drops a phase: every round runs every phase the ticket's workflow lists, `light` included",
       )
       expect(flat(boardSkill)).toContain(
         'None is skipped because findings look obvious, the change looks small or a finding was already reproduced',
@@ -552,10 +595,10 @@ describe('the review texts the board ships', () => {
       expect(flat(agentsDoc)).toContain(
         'None is skipped because findings look obvious, the change looks small or a finding was already reproduced',
       )
-      expect(fr).toContain('Refute always runs, also when `03-all-candidates.md` has no candidate at all')
-      expect(fr).toContain('**Two independent hunts always run.**')
+      expect(fr).toContain('refute always runs, also when `03-all-candidates.md` has no candidate at all')
+      expect(fr).toContain('**Every hunt the plan lists runs.**')
       expect(fr).toContain(
-        '`light` | a depth name only: it has no effect on the phases, every round runs all of them',
+        '`light` | a depth name only: it has no effect on the phases, every phase the plan lists runs (every hunt included)',
       )
     })
 
@@ -583,27 +626,35 @@ describe('the review texts the board ships', () => {
       ]
       const texts = [featureReview, ticketAgent, todoReview, report, summary, boardSkill, agentsDoc, notes]
       for (const phrase of gone) for (const text of texts) expect(flat(text), phrase).not.toContain(phrase)
-      expect(flat(report)).toContain('Hunts: two (independent, always)')
-      expect(notes).toContain('Two independent hunts always run')
+      // The report names the hunts the plan ran (two for the standard plan, one for the single reviewer).
+      expect(flat(report)).toContain('Hunts: <how many ran: two for the standard plan> (independent)')
+      expect(notes).toContain('As many independent hunts run as the workflow lists')
+      expect(notes).toContain('a hunt is never skipped because another found nothing')
       expect(notes).toContain('every round, also when there is no candidate or FAIL')
       const depths = flat(between(ticketAgent, '| Depth | When |', 'The depth only moves up'))
-      expect(depths).toContain('with `light`: the same full cycle, no phase dropped')
+      expect(depths).toContain('with `light`: the same phases the workflow lists, none dropped')
       expect(depths).not.toContain('one hunt')
     })
 
-    it('a low ticket keeps its path: no rounds, no depth, and the intent check still runs', () => {
-      const low = flat(between(ticketAgent, '**Low: no review.**', '**Mid, high and max.**'))
-      expect(low).toContain('Run no `/feature-review`')
+    it('a low ticket keeps its path: no rounds, no depth, and the intent check still runs', async () => {
+      // The low path's text (no review, the gate's evidence) is the gate step's now: read from `get_workflow`.
+      const wf = await workflowText('standard', 'low')
+      expect(wf).toContain('Run no `/feature-review` and write no line to `depth.md`')
+      expect(wf).toMatch(/- Review - skipped/)
+      expect(wf).toMatch(/Intent check \[locked above low\] - agent `intent`, effort low/)
       expect(flat(ticketAgent)).toContain('DEPTH: <light | standard | deep>')
       expect(flat(ticketAgent)).toContain('none (low: no review)')
       expect(flat(ticketAgent)).toContain('a low ticket skips the review, never the intent check')
     })
 
-    it('the hand-off reads missingReviewPhases: the ticket agent, the board skill, AGENTS.md and the tool descriptions', async () => {
-      const step7 = flat(between(ticketAgent, '7. `update_ticket` to `review`', '## Review depth'))
-      expect(step7).toContain('read `missingReviewPhases`')
-      expect(step7).toContain('Run each missing phase, with a fix round through the builder if it needs code')
-      expect(step7).toContain('before the hand-off stands')
+    it('the hand-off reads missingReviewPhases: the workflow text, the board skill, AGENTS.md and the tool descriptions', async () => {
+      // The hand-off step's procedure moved into the workflow the board serves (`get_workflow`): read there.
+      const handoff = (await workflowText('standard', 'mid')).split('Hand-off [locked]').pop()!
+      expect(handoff).toContain('read `missingReviewPhases`')
+      expect(handoff).toContain(
+        'Run each missing phase, with a fix round through the builder if it needs code',
+      )
+      expect(handoff).toContain('before the hand-off stands')
       expect(flat(boardSkill)).toContain('`missingReviewPhases`')
       expect(flat(boardSkill)).toContain('It is a flag, not a refusal: run each missing phase')
       expect(flat(agentsDoc)).toContain('`missingReviewPhases`')
@@ -618,7 +669,9 @@ describe('the review texts the board ships', () => {
         'Moving the ticket out of a review stage, to any other stage, restarts the count (only runs after the move count, from round 1): run a missing phase while the ticket stays in review.'
       expect(flat(boardSkill)).toContain(restart)
       expect(flat(agentsDoc)).toContain(restart)
-      expect(flat(ticketAgent)).toContain('while the ticket stays in review: moving it out of a review stage')
+      expect(await workflowText('standard', 'mid')).toContain(
+        'while the ticket stays in review: moving it out of a review stage',
+      )
       const { tools } = await served()
       expect(tools.find((x) => x.name === 'update_ticket')!.description).toContain(restart)
     })
@@ -640,8 +693,10 @@ describe('the review texts the board ships', () => {
     })
 
     it('the ticket agent passes round=<n>, and the runner delegation passes it on', async () => {
-      expect(ticketAgent).toContain('ticket=<TICKET> round=<n> ports=<PORTS>')
-      expect(flat(ticketAgent)).toContain('continuing after an intent return, step 6b')
+      // The review step's procedure (the /feature-review call) is the workflow's now: read from `get_workflow`.
+      const wf = await workflowText('standard', 'mid')
+      expect(wf).toContain('ticket=<TICKET> round=<n> ports=<PORTS>')
+      expect(wf).toContain('continuing after an intent return)')
       const { DEFAULT_AGENTS } = await import('./defaultAgents')
       const runner = flat(DEFAULT_AGENTS.find((a) => a.name === 'runner')!.delegation)
       expect(runner).toContain('the review round (`round=<n>`')
@@ -657,13 +712,13 @@ describe('the review texts the board ships', () => {
       }
     })
 
-    it('a review step 5 skipped because its head SHA survived is not rerun when the flag names it', () => {
-      const step7 = flat(between(ticketAgent, '7. `update_ticket` to `review`', '## Review depth'))
-      expect(step7).toContain(
-        "a round that step 5 skipped because the head SHA's review had already survived",
+    it('a review the review step skipped because its head SHA survived is not rerun when the flag names it', async () => {
+      const handoff = (await workflowText('standard', 'mid')).split('Hand-off [locked]').pop()!
+      expect(handoff).toContain(
+        "a round that the review step skipped because the head SHA's review had already survived",
       )
-      expect(step7).toContain('do not run it again')
-      expect(step7).toContain('any other missing phase is run')
+      expect(handoff).toContain('do not run it again')
+      expect(handoff).toContain('any other missing phase is run')
       expect(flat(todoReview)).toContain(
         'had already survived is reused, named in the summary, and not rerun',
       )
@@ -672,8 +727,8 @@ describe('the review texts the board ships', () => {
 
     it('feature-review item 5 carries the bound of the does-not-match loop', () => {
       const item = flat(between(featureReview, '5. **The intent check**', '## Delegation'))
-      expect(item).toContain('ONE more full review round above low')
-      expect(item).toContain('all six phases, two hunts')
+      expect(item).toContain("ONE more review round of the ticket's workflow")
+      expect(item).toContain('a ticket whose workflow lists no review has only the gate')
       expect(item).toContain("outside the complexity's round budget")
       expect(item).toContain('After the SECOND `does not match` on one ticket')
       expect(item).toContain('`ask_decision` (keep going, ship as is, drop)')
@@ -700,25 +755,38 @@ describe('the review texts the board ships', () => {
     expect(text).toContain('A low ticket skips this measure')
   })
 
-  it('todo-review-ticket takes COMPLEXITY as its input and no ROUNDS input, and names the budget of each level', () => {
+  it('todo-review-ticket takes COMPLEXITY as its input and no ROUNDS input, and the workflow names the budget of each level', async () => {
     const text = flat(ticketAgent)
     expect(text).toContain('`COMPLEXITY` (`low`, `mid`, `high` or `max`')
     expect(ticketAgent).not.toContain('`ROUNDS`')
-    expect(text).toContain('low none, mid one round, high three, max up to ten')
-    expect(text).toContain(
-      'Round 1 is the first build with its gate and its review; rounds 2 and 3 are fix passes',
+    // The counts moved out of the agent file into the project's workflow (`get_workflow`), as the rounds of every level.
+    expect(text).not.toContain('low none, mid one round, high three, max up to ten')
+    const wf = await workflowText('standard')
+    expect(wf).toContain('rounds by complexity: low 0, mid 1, high 3, max 10')
+    expect(await workflowText('standard', 'mid')).toContain('Review: up to 1 round.')
+    expect(await workflowText('standard', 'high')).toContain('Review: up to 3 rounds.')
+    expect(await workflowText('standard', 'max')).toContain('Review: up to 10 rounds.')
+    expect(await workflowText('standard', 'low')).toContain('Review: none for this ticket.')
+    expect(wf).toContain(
+      'Round 1 is the first build with its gate and its review; every later round is a fix pass, each followed by the gate and a review',
     )
   })
 
-  it('todo-review-ticket ends the cycle at a round that survives, and asks the human after the last round that does not', () => {
-    const text = flat(ticketAgent)
-    expect(text).toContain('A surviving round ends the cycle')
-    expect(text).toContain('(ship as is, keep going, drop) and stop: `BLOCKER: decision`')
+  it('todo-review-ticket ends the cycle at a round that survives, and asks the human after the last round that does not', async () => {
+    const wf = await workflowText('standard', 'mid')
+    expect(wf).toContain('A surviving round ends the cycle')
+    expect(wf).toContain('(ship as is, keep going, drop) and stop: `BLOCKER: decision`')
+    // As a rule of every workflow, the ticket agent keeps the ask after the rounds are used up.
+    expect(flat(ticketAgent)).toContain(
+      "a review round that does not survive when the workflow's rounds are used up",
+    )
+    expect(flat(ticketAgent)).toContain('`ask_decision`')
+    expect(flat(ticketAgent)).toContain('`BLOCKER: decision`')
   })
 
   it('mid runs one build-and-review round, with no fix pass after its review: a round that does not survive goes to a decision', async () => {
-    const text = flat(ticketAgent)
-    expect(text).toContain('low none, mid one round, high three, max up to ten.')
+    const text = await workflowText('standard', 'mid')
+    expect(text).toContain('Review: up to 1 round.')
     expect(text).toContain(
       'When a round does not survive and no round is left: post what is still open, `ask_decision` (ship as is, keep going, drop) and stop: `BLOCKER: decision`.',
     )
@@ -734,34 +802,38 @@ describe('the review texts the board ships', () => {
       expect(text, phrase).not.toContain(phrase)
     }
     const { instructions } = await served()
-    expect(flat(instructions)).toContain('a mid ticket stops after its review')
+    expect(flat(instructions)).toContain(
+      "a review that does not survive after the workflow's last round goes to a human decision",
+    )
   })
 
-  it('high runs up to three build-and-review rounds: a surviving round ends the cycle, and there is no fourth round', () => {
-    const text = flat(ticketAgent)
-    expect(text).toContain('low none, mid one round, high three, max up to ten.')
+  it('high runs up to three build-and-review rounds: a surviving round ends the cycle, and there is no fourth round', async () => {
+    const text = await workflowText('standard', 'high')
+    expect(text).toContain('Review: up to 3 rounds.')
+    expect(text).toContain('rounds: 3. Each round runs these phases')
     expect(text).toContain(
-      'Round 1 is the first build with its gate and its review; rounds 2 and 3 are fix passes, each followed by the gate and a review.',
+      'Round 1 is the first build with its gate and its review; every later round is a fix pass, each followed by the gate and a review',
     )
-    expect(text).toContain('A surviving round ends the cycle: go on to step 6.')
+    expect(text).toContain('A surviving round ends the cycle: go on to the next step.')
     expect(text).toContain('Never start one more round on your own.')
     expect(text).toContain('a `deep` review earns no extra round')
     expect(text).not.toContain('fourth')
     expect(text).not.toContain('round 4')
   })
 
-  it('max runs up to ten rounds: round 1 the first build, rounds 2 to 10 fix passes, a decision after the tenth and never an eleventh', () => {
-    const text = flat(ticketAgent)
-    expect(ticketAgent).toMatch(/^description: .*max up to ten/m)
-    expect(text).toContain('low none, mid one round, high three, max up to ten.')
-    expect(text).toContain(
-      "a max ticket's rounds 2 to 10 are fix passes the same way, each followed by the gate and a review, and the ten are a ceiling, not a quota",
-    )
+  it('max runs up to ten rounds: round 1 the first build, later rounds fix passes, a decision after the last and never one more', async () => {
+    const text = await workflowText('standard', 'max')
+    // The counts are the workflow's: the agent file's description no longer lists them.
+    expect(ticketAgent).not.toMatch(/^description: .*max up to ten/m)
+    expect(text).toContain('Review: up to 10 rounds.')
+    expect(text).toContain('rounds: 10. Each round runs these phases')
+    expect(text).toContain('the rounds are a ceiling, not a quota')
     expect(text).toContain('A surviving round ends the cycle at every level.')
-    // Running out: the tenth round is the last, the decision the only human check-in, and no eleventh round.
-    const budget = flat(between(ticketAgent, '**The budget**', '**The effort**'))
-    expect(budget).toContain('after round 10, and there is never an eleventh round')
+    // Running out: the last round is the end, the decision the only human check-in, and no round after it.
+    const budget = text.slice(text.indexOf('**The budget**'), text.indexOf('**The effort**'))
+    expect(budget).toContain('When a round does not survive and no round is left')
     expect(budget).toContain('`ask_decision` (ship as is, keep going, drop) and stop: `BLOCKER: decision`')
+    expect(budget).toContain('Never start one more round on your own')
     expect(budget).not.toContain('before round')
     expect(budget).not.toContain('check in with the human')
     // Max is for work built from scratch, and a feature is never max.
@@ -774,55 +846,57 @@ describe('the review texts the board ships', () => {
     const depth = flat(between(ticketAgent, '## Review depth', '## Escalation'))
     expect(depth).toContain('This section is for mid, high and max')
     expect(depth).toContain('The depth only moves up')
-    expect(depth).toContain("The round budget is the complexity's (step 5) at every depth.")
+    expect(depth).toContain("The round budget is the workflow's rounds for the complexity, at every depth.")
     for (const claim of ['forces deep', 'always deep', 'deep on every round', 'max runs at deep']) {
       expect(depth, claim).not.toContain(claim)
       expect(flat(reviewQueue), claim).not.toContain(claim)
     }
-    // The queue hands max its ten rounds too, at the depth the size rule picks.
-    expect(flat(reviewQueue)).toContain('a max ticket up to ten')
+    // The queue hands each ticket the rounds its workflow gives, at the depth the size rule picks.
+    expect(flat(reviewQueue)).toContain("the rounds a ticket gets are the workflow's for its level")
+    expect(flat(reviewQueue)).not.toContain('a max ticket up to ten')
   })
 
-  it('todo-review-ticket runs a low ticket with no spec agent and no review, and the builder verifies it itself', () => {
-    const text = flat(ticketAgent)
-    expect(text).toContain('A low ticket has no spec and no spec agent')
-    expect(text).toContain('Low: no review.')
-    expect(text).toContain('Low: the builder codes and verifies itself.')
+  it('todo-review-ticket runs a low ticket with no spec agent and no review, and the builder verifies it itself', async () => {
+    // The low path's procedures moved into the workflow's steps: read from the text served for a low ticket.
+    const text = await workflowText('standard', 'low')
+    expect(text).toMatch(/- Spec - skipped/)
+    expect(text).toContain('there is no spec and no spec agent')
+    expect(text).toContain('When the workflow has no review for this ticket')
+    expect(text).toContain('the builder codes and verifies itself')
     expect(text).toContain('Its return gives the evidence per criterion')
+    expect(flat(ticketAgent)).toContain('For a ticket the workflow gives no review (a low ticket)')
   })
 
-  it("low survives on the gate and the builder's evidence, a criterion without evidence is a gate return, and steps 6 and 7 follow as for any ticket", () => {
-    const text = flat(ticketAgent)
+  it("low survives on the gate and the builder's evidence, a criterion without evidence is a gate return, and the preview and hand-off follow as for any ticket", async () => {
+    const text = await workflowText('standard', 'low')
     expect(text).toContain(
-      "The change survives when the gate passed (step 4) and the builder's evidence covers every criterion",
+      "the change survives when the gate passed and the builder's evidence covers every criterion",
     )
+    expect(text).toContain('A criterion without that evidence goes back to the builder as a gate return.')
+    // The no-review path reaches the preview only through a gate that passed with that evidence for every criterion.
     expect(text).toContain(
-      'A criterion without that evidence goes back to the builder (step 3) as a gate return (step 4).',
+      'After the second return, a criterion that still has no evidence is the decision above, never a hand-off.',
     )
-    expect(text).toContain('Then go on to step 6.')
-    // The low path reaches step 6 only through a gate that passed with that evidence for every criterion.
-    const low = flat(between(ticketAgent, '**Low: no review.**', '**Mid, high and max.**'))
-    expect(low).toContain(
-      'After the second return, a criterion that still has no evidence is the decision in step 4, never a hand-off.',
+    expect(text).toContain('Only a gate that passed with that evidence for every criterion may go on.')
+    expect(text).toContain('or, for a ticket with no review, when a criterion still has no evidence (below)')
+    // The preview (evidence) and the hand-off come next, in order; the preview names the no-review case.
+    expect(text).toContain(
+      'A ticket with no review has no review folder, so its screenshots come from the preview.',
     )
-    expect(low).toContain(
-      'Only a gate that passed with that evidence for every criterion may go on. Then go on to step 6.',
-    )
-    expect(flat(between(ticketAgent, '### 4. Your own gate', '### 5. Review'))).toContain(
-      'when the checks still fail, or, for a low ticket, when a criterion still has no evidence (step 5)',
-    )
-    // Step 6 (evidence) and step 7 (hand-off) come next, in order; step 6 names the low case.
-    expect(text).toContain('A low ticket has no review folder, so its screenshots come from the preview.')
-    expect(text.indexOf('### 6. Evidence')).toBeGreaterThan(text.indexOf('Then go on to step 6.'))
-    expect(text.indexOf('### 7. Hand off')).toBeGreaterThan(text.indexOf('### 6. Evidence'))
+    const at = (label: string) => text.search(new RegExp(`## \\d+\\. ${label}`))
+    expect(at('Gate')).toBeGreaterThan(at('Build'))
+    expect(at('Preview')).toBeGreaterThan(at('Gate'))
+    expect(at('Intent check')).toBeGreaterThan(at('Preview'))
+    expect(at('Hand-off')).toBeGreaterThan(at('Intent check'))
     expect(text).toContain("Every item, in order, as the board skill's hand-off checklist says")
   })
 
-  it('todo-review-ticket sends a failed gate back at most twice, then asks the human, and a gate return uses no review round', () => {
-    const text = flat(ticketAgent)
+  it('todo-review-ticket sends a failed gate back at most twice, then asks the human, and a gate return uses no review round', async () => {
+    const text = await workflowText('standard', 'mid')
     expect(text).toContain('A gate return uses up no review round')
     expect(text).toContain('sends the change back at most twice, on every level')
     expect(text).toContain('`ask_decision` (keep going or drop) and stop: `BLOCKER: decision`')
+    expect(flat(ticketAgent)).toContain('After the second gate return on one ticket')
   })
 
   it('todo-review-ticket keeps the review depth rules for mid and high, and its Review depth section names no ROUNDS budget', () => {
@@ -852,21 +926,27 @@ describe('the review texts the board ships', () => {
     expect(line('DEPTH')).toContain('(low: no review)')
   })
 
-  it("todo-review-ticket's hand-off names the level and what checked it, and records a review only when one ran", () => {
-    const text = flat(ticketAgent)
-    expect(text).toContain('"How it was tested" names the level (`low`, `mid`, `high` or `max`)')
-    expect(text).toContain('Only when a review ran (mid, high or max)')
+  it("todo-review-ticket's hand-off names the level and what checked it, and records a review only when one ran", async () => {
+    // The summary and PR steps' procedures are the workflow's now: read from the served text.
+    const wf = await workflowText('standard', 'mid')
+    expect(wf).toContain(
+      '"How it was tested" names the level (`low`, `mid`, `high` or `max`) and the workflow\'s preset',
+    )
+    expect(wf).toContain("When a review ran and the PR's head SHA is the SHA whose review survived")
   })
 
-  it('the default builder note names the review rounds each level gets; the spec note names the low exception', async () => {
+  it('the default builder note sends the review rounds to the workflow; the spec note names the low exception', async () => {
     const { DEFAULT_AGENTS } = await import('./defaultAgents')
     const byName = Object.fromEntries(DEFAULT_AGENTS.map((a) => [a.name, flat(a.delegation)]))
+    // The rounds per level moved into the project's workflow: the note points at it and keeps the rules that hold in every one.
+    expect(byName.builder).not.toContain('none for low, one for mid, three for high, up to ten for max')
     expect(byName.builder).toContain(
-      "The review rounds its ticket's complexity allows are none for low, one for mid, three for high, up to ten for max, round 1 being the first build and its review.",
+      "How many review rounds the ticket gets is its workflow's (`get_workflow`; the rounds follow its complexity), round 1 being the first build and its review",
     )
-    expect(byName.builder).toContain('Mid has one: a review that does not survive then goes to the human')
-    expect(byName.builder).toContain('High has three: two fix passes follow the first build')
-    expect(byName.builder).toContain('Low has no review: its checks return the build at most twice')
+    expect(byName.builder).toContain(
+      'a round that does not survive after the last one goes to the human (ship as is, keep going, or drop)',
+    )
+    expect(byName.builder).toContain('With no review, its checks return the build at most twice')
     expect(byName.builder).toContain(
       'after the second return, when the checks still fail or a criterion still has no evidence, the human decides (keep going or drop).',
     )
@@ -880,7 +960,7 @@ describe('the review texts the board ships', () => {
     const { DEFAULT_AGENTS } = await import('./defaultAgents')
     const byName = Object.fromEntries(DEFAULT_AGENTS.map((a) => [a.name, flat(a.delegation)]))
     expect(byName.builder).toContain(
-      "except for a low ticket: its build goes to hand-off on the project's checks and the builder's evidence, with no runner",
+      "except for a ticket the workflow gives no review (a low ticket): its build goes to hand-off on the project's checks and the builder's evidence, with no runner",
     )
     expect(byName.runner).toContain(
       "except a low ticket's build, which goes to hand-off on the project's checks and the builder's evidence, with no runner",
@@ -892,19 +972,7 @@ describe('the review texts the board ships', () => {
     for (const [name, text] of Object.entries(byName)) expect(text, name).not.toContain('three fix rounds')
   })
 
-  it('board.md, the MCP instructions and AGENTS.md give the rounds as the complexity sets them, never "at most three rounds"', async () => {
-    const { instructions } = await served()
-    for (const [name, text] of Object.entries({
-      'board.md': boardSkill,
-      'MCP instructions': instructions,
-      'AGENTS.md': agentsDoc,
-    })) {
-      expect(flat(text), name).toContain('none for low, one for mid, three for high, up to ten for max')
-      expect(flat(text), name).not.toContain('at most three rounds')
-    }
-  })
-
-  it('board.md, the MCP instructions and AGENTS.md say the counts are review rounds, and a mid ticket stops after its review', async () => {
+  it('board.md, the MCP instructions and AGENTS.md give the rounds as the workflow sets them, never "at most three rounds"', async () => {
     const { instructions } = await served()
     for (const [name, text] of Object.entries({
       'board.md': boardSkill,
@@ -912,9 +980,28 @@ describe('the review texts the board ships', () => {
       'AGENTS.md': agentsDoc,
     })) {
       expect(flat(text), name).toContain(
-        "review rounds as the ticket's complexity allows: none for low, one for mid, three for high, up to ten for max",
+        "how many review rounds a ticket gets and at what effort is the project's workflow",
       )
-      expect(flat(text), name).toContain('a mid ticket stops after its review')
+      expect(flat(text), name).toContain('get_workflow')
+      expect(flat(text), name).not.toContain('none for low, one for mid, three for high, up to ten for max')
+      expect(flat(text), name).not.toContain('at most three rounds')
+    }
+  })
+
+  it('board.md, the MCP instructions and AGENTS.md say a review that does not survive the last round goes to a human, and max is for work built from scratch', async () => {
+    const { instructions } = await served()
+    for (const [name, text] of Object.entries({
+      'board.md': boardSkill,
+      'MCP instructions': instructions,
+      'AGENTS.md': agentsDoc,
+    })) {
+      expect(flat(text), name).toContain(
+        "a review that does not survive after the workflow's last round goes to a human decision",
+      )
+      expect(flat(text), name).not.toContain('a mid ticket stops after its review')
+      expect(flat(text), name).toContain(
+        'a feature in an existing codebase is at most high, however difficult',
+      )
     }
   })
 
@@ -956,21 +1043,29 @@ describe('the review texts the board ships', () => {
       expect(flatText, name).not.toContain('low, mid or high')
       expect(flatText, name).not.toMatch(/none for low, one for mid, three for high(?!, up to ten for max)/)
     }
-    // Each place that gives the budget says what max is and how many rounds it may take.
-    expect(flat(boardSkill)).toContain('none for low, one for mid, three for high, up to ten for max')
-    expect(flat(instructions)).toContain('none for low, one for mid, three for high, up to ten for max')
-    expect(flat(agentsDoc)).toContain('none for low, one for mid, three for high, up to ten for max')
-    expect(flat(todoReview)).toContain('max up to ten for work built from scratch')
-    expect(flat(reviewQueue)).toContain('a max ticket up to ten')
-    expect(flat(readme)).toContain('up to ten for work built from scratch')
+    // The rounds per level live in the project's workflow: the texts point at it instead of giving the counts.
+    for (const [name, text] of Object.entries({
+      'board.md': boardSkill,
+      'AGENTS.md': agentsDoc,
+      'todo-review': todoReview,
+      'review-queue': reviewQueue,
+      'todo-review-ticket': ticketAgent,
+    }))
+      expect(flat(text), name).not.toMatch(/up to ten|max up to/)
+    expect(flat(instructions)).toContain(
+      "how many review rounds a ticket gets and at what effort is the project's workflow",
+    )
+    expect(flat(reviewQueue)).toContain("the rounds a ticket gets are the workflow's for its level")
+    expect(flat(readme)).toContain("the review rounds the ticket's workflow gives for the level")
     // Max is for work built from scratch, and a feature in an existing codebase is at most high.
     for (const [name, text] of Object.entries({
       'board.md': boardSkill,
       'MCP instructions': instructions,
       'AGENTS.md': agentsDoc,
-      'todo-review-ticket': ticketAgent,
+      'review-queue': reviewQueue,
     }))
       expect(flat(text), name).toMatch(/at most high|never max/)
+    expect(await workflowText('standard', 'max')).toContain('a feature in an existing codebase is never max')
   })
 
   it('no shipped text tells an agent to use a rounds setting', async () => {
@@ -991,11 +1086,17 @@ describe('the review texts the board ships', () => {
     expect(Object.keys(texts).filter((name) => banned.test(texts[name]!))).toEqual([])
   })
 
-  it('the skill and agent descriptions, and the review-queue build paragraph, promise no review for every ticket', () => {
-    expect(todoReview).toMatch(/^description: .*low none, mid one, high three/m)
-    expect(ticketAgent).toMatch(/^description: .*low gets no review/m)
+  it("the skill and agent descriptions, and the review-queue build paragraph, follow the project's workflow and promise no review for every ticket", () => {
+    // The descriptions no longer list the order or the counts: they say the project's workflow sets them.
+    expect(todoReview).toMatch(
+      /^description: .*follows the project's workflow for it \(the board serves it: get_workflow\)/m,
+    )
+    expect(todoReview).not.toMatch(/^description: .*low none, mid one/m)
+    expect(ticketAgent).toMatch(/^description: .*by following the project's workflow/m)
+    expect(ticketAgent).not.toMatch(/^description: .*(max up to ten|low gets no review)/m)
+    expect(featureReview).toMatch(/^description: .*the ticket's workflow \(get_workflow\)/m)
     const building = reviewQueue.slice(reviewQueue.indexOf('**Building**'))
-    expect(flat(building)).toContain('a low ticket has no spec agent and no review')
+    expect(flat(building)).toContain('no spec step and no review (a low ticket) has no spec agent')
   })
   it("sets the agents' effort from the complexity: low for low, medium for mid and high", async () => {
     const { COMPLEXITY_EFFORT } = await import('#/lib/constants')
@@ -1015,10 +1116,11 @@ describe('the review texts the board ships', () => {
     expect(flat(todoReview)).toContain(
       "Pass `effort` on the Agent call as the ticket's complexity sets it: `low` for low, `medium` for mid and high, `high` for max",
     )
+    // The effort rule is the workflow's `auto`, read as a step's effort by the ticket agent; the call is the review step's.
     expect(flat(ticketAgent)).toContain(
-      '**The effort** is set by the complexity too: `low` for low, `medium` for mid and high, `high` for max.',
+      "The effort a step names (a level, or `auto`: low for a low ticket, medium for mid and high, high for max) is the Agent tool's `effort` on **every** agent you start for that step",
     )
-    expect(ticketAgent).toContain('browser=<BROWSER> effort=<the effort>`')
+    expect(await workflowText('standard', 'mid')).toContain("browser=<BROWSER> effort=<this step's effort>`")
     expect(featureReview).toContain(
       "high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`",
     )
@@ -1026,11 +1128,11 @@ describe('the review texts the board ships', () => {
     expect(flat(reviewQueue)).toContain(
       "pass `effort` on the Agent call and `effort=` to the runner as the ticket's complexity sets it (`low` for low, `medium` for mid and high, `high` for max)",
     )
-    expect(flat(reviewQueue)).toContain('runs at the effort the complexity sets')
+    expect(flat(reviewQueue)).toContain('runs at the effort its workflow step names')
     const { DEFAULT_AGENTS } = await import('./defaultAgents')
     const builder = DEFAULT_AGENTS.find((a) => a.name === 'builder')!
     expect(flat(builder.delegation)).toContain(
-      'runs at the effort its complexity sets: low for low, medium for mid and high, high for max',
+      'runs at the effort its workflow step names, `auto` being low for low, medium for mid and high, high for max',
     )
   })
 
@@ -1092,8 +1194,9 @@ describe('the review texts the board ships', () => {
     expect(flat(todoReview)).toContain('`QUEUE/locks/tests-<repo id>-full` for a full suite')
   })
 
-  it('writes one build record for the head and reuses it in the review only at that same SHA', () => {
-    const text = flat(ticketAgent)
+  it('writes one build record for the head and reuses it in the review only at that same SHA', async () => {
+    // This step's procedure moved into the workflow the board serves (`get_workflow`): read it there, not in the agent file.
+    const text = await workflowText('standard', 'mid')
     expect(text).toContain('write `WORKDIR/02-build.md` with the head SHA')
     expect(text).toContain('the artifact path (`<worktree>/.output-e2e`) and the ISO time')
     expect(text).toContain('build=<WORKDIR/02-build.md>')
@@ -1112,14 +1215,15 @@ describe('the review texts the board ships', () => {
     expect(verify).toContain('records a reused build (`E2E_SKIP_BUILD=1`), run the end-to-end command')
   })
 
-  it('warms node_modules by hardlink copy, never a symlink or junction, and installs offline only on a lockfile difference', () => {
+  it('warms node_modules by hardlink copy, never a symlink or junction, and installs offline only on a lockfile difference', async () => {
+    // This step's procedure moved into the workflow the board serves (`get_workflow`): read it there, not in the agent file.
     const env = flat(read(path.join(skills, 'agents', 'feature-review-env.md')))
     expect(env).toContain('`cp -al MAIN/node_modules WORKTREE/node_modules`')
     expect(env).toContain('never a symlink or a junction')
     expect(env).toContain("breaks the board's preview install, which cannot purge through one")
     expect(env).toContain('only when a lockfile differs from the prepared copy')
     expect(env).toContain('Copy its `node_modules` with `cp -al` into a real directory')
-    const text = flat(ticketAgent)
+    const text = await workflowText('standard', 'mid')
     expect(text).toContain('`cp -al <prepared>/node_modules <path>/node_modules`')
     expect(text).toContain('never a symlink or a junction')
     // Nothing served still offers the symlink it replaced.
@@ -1131,8 +1235,9 @@ describe('the review texts the board ships', () => {
     }
   })
 
-  it('reruns only what a fix pass touches, and leaves the full suites to CI', () => {
-    const text = flat(ticketAgent)
+  it('reruns only what a fix pass touches, and leaves the full suites to CI', async () => {
+    // This step's procedure moved into the workflow the board serves (`get_workflow`): read it there, not in the agent file.
+    const text = await workflowText('standard', 'mid')
     expect(text).toContain(
       'A fix pass reruns only what its findings touch: the failed end-to-end spec file(s) and the unit files related to the changed files (`vitest related <changed files>`, or the project',
     )
@@ -1198,7 +1303,8 @@ describe('the review texts the board ships', () => {
     expect(review).toContain('and neither do the hunt')
   })
 
-  it('builds on the merged tree for the merge check, and never labels an old artifact with a new head', () => {
+  it('builds on the merged tree for the merge check, and never labels an old artifact with a new head', async () => {
+    // This step's procedure moved into the workflow the board serves (`get_workflow`): read it there, not in the agent file.
     const merge = flat(read(path.join(skills, 'agents', 'feature-review-merge.md')))
     expect(merge).toContain(
       "Do not reuse the caller's build here, even when `00-env.md` records `E2E_SKIP_BUILD=1`",
@@ -1220,7 +1326,7 @@ describe('the review texts the board ships', () => {
     expect(review).toContain('It builds the merged tree once')
     expect(review).toContain('Never with the flag on the merged tree, and never two builds')
     expect(review).toContain('releases its slot and waits for the full suite, as the gate does')
-    const text = flat(ticketAgent)
+    const text = await workflowText('standard', 'mid')
     expect(text).toContain(
       'a fix pass that built nothing deletes the record, and the next review builds once at the new head',
     )
@@ -1229,7 +1335,8 @@ describe('the review texts the board ships', () => {
     )
   })
 
-  it('takes a test slot for a targeted end-to-end run in the hunt and refute phases too', () => {
+  it('takes a test slot for a targeted end-to-end run in the hunt and refute phases too', async () => {
+    // This step's procedure moved into the workflow the board serves (`get_workflow`): read it there, not in the agent file.
     const phase = (file: string) => flat(read(path.join(skills, 'agents', file)))
     for (const file of ['feature-review-hunt.md', 'feature-review-refute.md']) {
       const text = phase(file)
@@ -1243,14 +1350,17 @@ describe('the review texts the board ships', () => {
     expect(phase('feature-review-refute.md')).toContain(
       'write `holder.txt` with `#<TICKET> refute <ISO time>`',
     )
-    const ticket = flat(ticketAgent)
-    expect(ticket).toContain(
+    // The slot rule stays in the ticket agent (shared with the other tickets); the review call's wording is the workflow's.
+    expect(flat(ticketAgent)).toContain(
       'its hunt and refute phases only for a targeted end-to-end run; their unit and probe tests take none',
     )
-    expect(ticket).toContain("the hunt's and refute's targeted unit and probe tests take none")
+    expect(await workflowText('standard', 'mid')).toContain(
+      "the hunt's and refute's targeted unit and probe tests take none",
+    )
   })
 
-  it('passes the slot folder to every phase, and verify and merge also read it from 00-env.md', () => {
+  it('passes the slot folder to every phase, and verify and merge also read it from 00-env.md', async () => {
+    // This step's procedure moved into the workflow the board serves (`get_workflow`): read it there, not in the agent file.
     const review = flat(read(path.join(skills, 'skills', 'feature-review', 'SKILL.md')))
     expect(review).toContain(
       'the `SLOTS` directory when `slots=` was given (its record is the `Test slots:` line in `00-env.md`)',
@@ -1264,7 +1374,7 @@ describe('the review texts the board ships', () => {
       )
     }
     expect(review).toContain('| `repoId=<id>` |')
-    expect(flat(ticketAgent)).toContain('repoId=<REPO_ID>')
+    expect(await workflowText('standard', 'mid')).toContain('repoId=<REPO_ID>')
     expect(flat(read(path.join(skills, 'agents', 'feature-review-env.md')))).toContain(
       '`REPO_ID` (only when the caller gave `repoId=`)',
     )
@@ -1273,8 +1383,9 @@ describe('the review texts the board ships', () => {
     )
   })
 
-  it("serves the gate artifact through the board's preview run only where its base matches, and otherwise builds the preview's own", () => {
-    const text = flat(ticketAgent)
+  it("serves the gate artifact through the board's preview run only where its base matches, and otherwise builds the preview's own", async () => {
+    // This step's procedure moved into the workflow the board serves (`get_workflow`): read it there, not in the agent file.
+    const text = await workflowText('standard', 'mid')
     expect(text).toContain('The preview, from at most one build of this head for the preview')
     expect(text).toContain("Prefer the board's own preview run")
     expect(text).toContain("Its build is the preview's one build for this head")

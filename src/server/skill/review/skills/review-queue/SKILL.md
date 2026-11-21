@@ -195,13 +195,14 @@ summary if not.
 
 **Building** (`build` only). After the reviews and their report, run the `todo-review` skill through
 the Skill tool for the same project, passing `parallel` and `model` through. It works the To do
-tickets through the build cycle (spec → builder → `/feature-review` until the change survives → the
-intent check → hand-off), one `todo-review-ticket` agent per ticket, with its own scheduling and report. The cycle
-follows each ticket's complexity: a low ticket has no spec agent and no review, so it leaves no review
-record; a mid ticket gets one review round, a high ticket up to three, a max ticket up to ten (for work
+tickets through the build cycle of the project's workflow (`get_workflow`, which the board serves; each
+`todo-review-ticket` agent reads it for its ticket and follows it), one agent per ticket, with its own
+scheduling and report. The workflow sets each ticket's steps and review rounds, by the ticket's
+complexity: a ticket the workflow gives no spec step and no review (a low ticket) has no spec agent and
+leaves no review record; the rounds a ticket gets are the workflow's for its level (max is for work
 built from scratch, a whole site or app or a new product; a feature in an existing codebase is at most
-high). Every agent it starts for a ticket runs at the effort the complexity sets (the Agent tool's
-`effort`): `low` for low, `medium` for mid and high, `high` for max, except the intent agent, which runs at `low` effort whatever the complexity. Do not
+high). Every agent it starts for a ticket runs at the effort its workflow step names (the Agent tool's
+`effort`), except the intent agent, which runs at `low` effort whatever the complexity. Do not
 work tickets yourself.
 
 ## Notes
