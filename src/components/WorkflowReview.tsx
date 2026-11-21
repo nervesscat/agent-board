@@ -88,7 +88,12 @@ function RoundsField({
   const commit = (text: string) => {
     clearTimeout(timer.current)
     const next = parseRounds(text)
-    if (!next.ok || next.rounds === (sent.current ?? saved.current)) return
+    if (!next.ok) return
+    if (next.rounds === (sent.current ?? saved.current)) {
+      // The count is what the board holds (or is about to): an older refusal's message no longer fits it.
+      setFailure(null)
+      return
+    }
     const rounds = next.rounds
     const mine = ++issued.current
     sent.current = rounds

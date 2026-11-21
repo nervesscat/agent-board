@@ -40,7 +40,8 @@ export interface WorkflowEdits {
   setInstructions: (id: WorkflowStepId, instructions: string | null) => Promise<string | null>
   /** Answers with the reason the count was not saved, or null once it was; the field goes back to the saved count. */
   setRounds: (level: Complexity, rounds: number) => Promise<string | null>
-  move: (id: WorkflowStepId, direction: 'up' | 'down') => void
+  /** Answers with the reason the move was not saved, or null once it was. */
+  move: (id: WorkflowStepId, direction: 'up' | 'down') => Promise<string | null>
 }
 
 /** What a step's edits are, in words, for its "edited" marker. */
@@ -76,7 +77,7 @@ export function WorkflowTree({
 }) {
   const complexity = workflow.complexity ?? 'mid'
   // After a move the step is somewhere else in the list: the keyboard stays on the button that moved it.
-  const moved = useRef<string | null>(null)
+  const moved = useRef<{ id: string; direction: 'up' | 'down'; preset: WorkflowPresetId } | null>(null)
   const list = useRef<HTMLOListElement>(null)
   const order = workflow.order.join()
   // The same preset and tweaks at the other complexities: a hand-off whose default reads differently there.
@@ -91,13 +92,15 @@ export function WorkflowTree({
     const target = moved.current
     if (!target) return
     moved.current = null
-    const [id, direction] = target.split(':') as [string, 'up' | 'down']
+    // A move saved on another preset's tree does not pull the focus here.
+    if (target.preset !== workflow.preset) return
+    const { id, direction } = target
     const find = (d: string) => list.current?.querySelector<HTMLButtonElement>(`[data-move="${id}:${d}"]`)
     const button = find(direction)
     // At an end the button is inert now: the other arrow takes the focus.
     const inert = button?.getAttribute('aria-disabled') === 'true'
     ;(inert ? find(direction === 'up' ? 'down' : 'up') : button)?.focus()
-  }, [order])
+  }, [order, workflow.preset])
   return (
     <ol
       ref={list}
@@ -121,8 +124,12 @@ export function WorkflowTree({
           collapsed={collapsed}
           onToggle={onToggle}
           onMove={(direction) => {
-            moved.current = `${step.id}:${direction}`
-            edits.move(step.id, direction)
+            const target = { id: step.id, direction, preset: workflow.preset }
+            moved.current = target
+            // A refused move changes nothing: the next change of the order is not a move.
+            void edits.move(step.id, direction).then((reason) => {
+              if (reason !== null && moved.current === target) moved.current = null
+            })
           }}
         />
       ))}
@@ -250,6 +257,8 @@ function StepNode({
           </div>
           {review && open && (
             <ReviewBody
+              // Another preset is another field: nothing typed or still being saved on one carries to the other.
+              key={preset}
               review={review}
               complexity={complexity}
               level={2}

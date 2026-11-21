@@ -972,6 +972,60 @@ describe('the review phases flag follows the ticket’s workflow', () => {
     expect(missingReviewPhases(t.id)).toEqual([])
   })
 
+  it('counts a hunt named after its checklist and Light’s reviewer, and no other near name', async () => {
+    const thorough = newProject()
+    await preset(thorough, 'thorough')
+    const t = ticketOf(thorough)
+    spans(thorough, t.id, 1, [
+      'spec',
+      'env',
+      'verify',
+      'hunt-1',
+      'hunt-2',
+      'hunt-security',
+      'refute',
+      'merge',
+    ])
+    expect(missingReviewPhases(t.id)).toEqual([])
+    // A numbered word, and a sub-identity's last segment, count the same way.
+    const other = ticketOf(thorough)
+    spans(thorough, other.id, 1, [
+      'spec',
+      'env',
+      'verify',
+      'hunt-1',
+      'orch/hunt-security-2',
+      'hunt',
+      'refute',
+      'merge',
+    ])
+    expect(missingReviewPhases(other.id)).toEqual([])
+    // Not a hunt: a name that only starts with the word, or has nothing after the dash.
+    const near = ticketOf(thorough)
+    spans(thorough, near.id, 1, [
+      'spec',
+      'env',
+      'verify',
+      'hunt-1',
+      'hunt-2',
+      'huntress',
+      'hunt-',
+      'refute',
+      'merge',
+    ])
+    expect(missingReviewPhases(near.id)).toEqual([{ round: 1, phase: 'hunt', expected: 3, found: 2 }])
+
+    const light = newProject()
+    await preset(light, 'light')
+    const l = ticketOf(light)
+    spans(light, l.id, 1, ['reviewer'])
+    expect(missingReviewPhases(l.id)).toEqual([])
+    // A reviewer is a hunt only as the board names it: another word is not.
+    const reviewers = ticketOf(light)
+    spans(light, reviewers.id, 1, ['reviewers', 'code-reviewer'])
+    expect(missingReviewPhases(reviewers.id)).toEqual([{ round: 1, phase: 'hunt', expected: 1, found: 0 }])
+  })
+
   it('under Maximum doubles each phase (H3)', async () => {
     const pid = newProject()
     await preset(pid, 'maximum')

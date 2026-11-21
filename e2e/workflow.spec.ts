@@ -770,6 +770,136 @@ test('a count typed back to the saved one while the first is still being saved i
   expect((await presetOf(human, project.id, 'standard')).rounds.mid).toBe(1)
 })
 
+test('a count typed in another preset while the first preset’s save is out is saved, and each field is its own (F12)', async ({
+  page,
+  project,
+  human,
+}) => {
+  await open(page, project.id)
+  const presets = page.getByRole('group', { name: 'Workflow presets' })
+  const group = page.getByRole('group', { name: 'Review rounds per complexity' })
+  const mid = group.getByRole('spinbutton', { name: /^Mid/ })
+  const puts: string[] = []
+  // Standard's save is slow; Thorough's answers at once.
+  await page.route(/\/api\/projects\/\d+\/workflow\/(standard|thorough)$/, async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback()
+    puts.push(route.request().url().split('/').at(-1)!)
+    if (route.request().url().endsWith('/standard')) await new Promise((resolve) => setTimeout(resolve, 1500))
+    await route.continue()
+  })
+  await expect(mid).toHaveValue('1')
+  await mid.fill('3')
+  await expect.poll(() => puts).toEqual(['standard'])
+  await presets.getByRole('button', { name: /^Thorough/ }).click()
+  await expect(page.getByRole('tree')).toHaveAccessibleName(/^Thorough workflow/)
+  // Thorough's own field, with Thorough's own count: typing the count Standard is saving is a change here.
+  await expect(mid).toHaveValue('2')
+  await mid.fill('3')
+  await mid.blur()
+  await expect.poll(() => puts).toEqual(['standard', 'thorough'])
+  await expect.poll(async () => (await presetOf(human, project.id, 'thorough')).rounds.mid).toBe(3)
+  await expect.poll(async () => (await presetOf(human, project.id, 'standard')).rounds.mid).toBe(3)
+  await expect(mid).toHaveValue('3')
+  await expect(group.getByRole('alert')).toHaveCount(0)
+})
+
+test('a refusal of one preset’s save, arriving after the switch to another, is not shown under that preset’s field (F12)', async ({
+  page,
+  project,
+}) => {
+  await open(page, project.id)
+  const presets = page.getByRole('group', { name: 'Workflow presets' })
+  const group = page.getByRole('group', { name: 'Review rounds per complexity' })
+  const mid = group.getByRole('spinbutton', { name: /^Mid/ })
+  let puts = 0
+  await page.route(/\/api\/projects\/\d+\/workflow\/standard$/, async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback()
+    puts += 1
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    await route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'late' }),
+    })
+  })
+  await mid.fill('3')
+  await expect.poll(() => puts).toBe(1)
+  await presets.getByRole('button', { name: /^Thorough/ }).click()
+  await expect(page.getByRole('tree')).toHaveAccessibleName(/^Thorough workflow/)
+  await expect(mid).toHaveValue('2')
+  // The refusal lands (its toast says so); Thorough's untouched field says nothing about it.
+  await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'late' }).first()).toBeVisible()
+  await page.waitForTimeout(300)
+  await expect(group.getByRole('alert')).toHaveCount(0)
+  await expect(mid).toHaveValue('2')
+  // Back on Standard the field is a fresh one on the board's count.
+  await presets.getByRole('button', { name: /^Standard/ }).click()
+  await expect(mid).toHaveValue('1')
+  await expect(group.getByRole('alert')).toHaveCount(0)
+})
+
+test('typing the saved count back while an older save is out and then refused leaves no "Not saved" (F12)', async ({
+  page,
+  project,
+}) => {
+  await open(page, project.id)
+  const group = page.getByRole('group', { name: 'Review rounds per complexity' })
+  const mid = group.getByRole('spinbutton', { name: /^Mid/ })
+  await expect(mid).toHaveValue('1')
+  let puts = 0
+  // The refusal is held until the saved count has been typed back, so it lands inside that count's debounce.
+  let refuse: () => void = () => {}
+  const held = new Promise<void>((resolve) => (refuse = resolve))
+  await page.route(/\/api\/projects\/\d+\/workflow\/standard$/, async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback()
+    puts += 1
+    await held
+    await route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'boom' }),
+    })
+  })
+  await mid.fill('5')
+  await expect.poll(() => puts).toBe(1)
+  // The saved count is typed back, and the refusal lands before that count is saved on its own.
+  await mid.fill('1')
+  refuse()
+  await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'boom' }).first()).toBeVisible()
+  await page.waitForTimeout(900)
+  await expect(group.getByRole('alert')).toHaveCount(0)
+  await expect(mid).toHaveValue('1')
+  expect(puts).toBe(1)
+})
+
+test('a refused move does not pull the focus onto a Move button when the order changes later (F11)', async ({
+  page,
+  project,
+}) => {
+  await open(page, project.id)
+  await page.route(/\/api\/projects\/\d+\/workflow\/standard$/, (route) =>
+    route.request().method() === 'PUT'
+      ? route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'boom' }),
+        })
+      : route.fallback(),
+  )
+  await step(page, 'preview').getByRole('button', { name: 'Move Preview up' }).click()
+  await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'boom' }).first()).toBeVisible()
+  expect(await labels(page)).toEqual(STANDARD)
+  // Another preset has another order: switching to it by keyboard keeps the focus on its card.
+  const thorough = page
+    .getByRole('group', { name: 'Workflow presets' })
+    .getByRole('button', { name: /^Thorough/ })
+  await thorough.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('tree')).toHaveAccessibleName(/^Thorough workflow/)
+  await expect(thorough).toBeFocused()
+  await expect(page.locator('[data-move]:focus')).toHaveCount(0)
+})
+
 test("Reset this workflow clears only the viewed preset's changes, after a confirmation (F13, F14)", async ({
   page,
   project,

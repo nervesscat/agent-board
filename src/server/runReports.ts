@@ -48,14 +48,17 @@ const segment = (name: string) => name.trim().toLowerCase().split('/').at(-1) ??
 /**
  * The kind of run a name stands for: a known agent (`hunt`) or that agent's numbered worker (`hunt-1`).
  * A known name wins before the number is stripped, so a project agent actually named `hunt-1` is not
- * folded into `hunt`.
+ * folded into `hunt`. A hunt may also carry a word (`hunt-security`, `hunt-security-2`), and Light's one
+ * reviewer (`reviewer`) is a hunt; `huntress` or a bare `hunt-` is neither.
  */
 function runKindOf(name: string, known: Set<string>) {
   const seg = segment(name)
   if (!seg) return null
   if (known.has(seg)) return seg
   const base = seg.replace(/-\d+$/, '')
-  return base !== seg && known.has(base) ? base : null
+  if (base !== seg && known.has(base)) return base
+  if (known.has('hunt') && (seg === 'reviewer' || /^hunt-[a-z][a-z0-9_]*(-\d+)?$/.test(seg))) return 'hunt'
+  return null
 }
 
 /** The run kinds a ticket's timeline can name: the default subagents and the project's own agents. */
