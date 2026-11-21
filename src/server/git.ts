@@ -1024,3 +1024,61 @@ export async function holdsWorkOf(
   const mine = Number(await git(repoPath, own))
   return mine > 0 && Number(await git(repoPath, [...own, `^${ref}`])) < mine
 }
+
+/**
+ * Whether `tip` has commits of its own: not in a branch below it, nor in `bases`. A commit is not its
+ * own when a branch other than `own` (the full names of its own refs, such as `refs/heads/x` and
+ * `refs/remotes/origin/x`) holds it and is itself in `tip`'s history: base history, what the branch is
+ * built on and a shared integration branch all are. Local branches and every remote's. `bases` (shas)
+ * are where the work is headed: what they already hold has landed, even where its branch was kept.
+ */
+export async function hasOwnCommits(
+  repoPath: string,
+  tip: string,
+  own: string[],
+  bases: string[],
+): Promise<boolean> {
+  const out = await git(repoPath, [
+    'for-each-ref',
+    `--merged=${tip}`,
+    '--format=%(refname) %(objectname)',
+    'refs/heads',
+    'refs/remotes',
+  ])
+  const below = new Set<string>(bases)
+  for (const line of out ? out.split('\n') : []) {
+    const [name, sha] = line.split(' ')
+    if (!own.includes(name!)) below.add(sha!)
+  }
+  return Number(await git(repoPath, ['rev-list', '--count', tip, '--not', ...below])) > 0
+}
+
+/**
+ * Whether the branch at `ref` holds the work of the branch at `other` for certain: `other`'s tip is a
+ * strict ancestor of `ref`'s (equal tips could be either one's), and `other` has commits of its own
+ * (`hasOwnCommits`). The topology then says who owns them. Two branches that only share a commit below
+ * both tips, or a copy of the commits with other shas (rebased), are not certain. Both are full shas, `bases` those of the
+ * bases of the branch at `ref`.
+ */
+export async function holdsOwnWork(
+  repoPath: string,
+  ref: string,
+  other: string,
+  otherOwn: string[],
+  bases: string[],
+): Promise<boolean> {
+  if (ref === other || !(await isAncestor(repoPath, other, ref))) return false
+  return hasOwnCommits(repoPath, other, otherOwn, bases)
+}
+
+/** The branches (full ref names, as `for-each-ref` gives them) whose tip is in the history of `sha`. */
+export async function refsMergedInto(repoPath: string, sha: string): Promise<Set<string>> {
+  const out = await git(repoPath, [
+    'for-each-ref',
+    `--merged=${sha}`,
+    '--format=%(refname)',
+    'refs/heads',
+    'refs/remotes',
+  ])
+  return new Set(out ? out.split('\n') : [])
+}
