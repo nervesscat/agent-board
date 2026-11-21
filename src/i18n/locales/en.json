@@ -39,7 +39,7 @@
     "board": {
       "defaultAgent": {
         "title": "Default agent CLI",
-        "text": "The one <link>Connect an agent</link> opens on, showing only its commands."
+        "text": "The one <goto>Connect an agent</goto> opens on, showing only its commands."
       },
       "previews": {
         "title": "Previews",
@@ -69,7 +69,7 @@
     "turnOff": "Turn off",
     "checkAgain": "Check again",
     "title": "Connect an agent",
-    "intro": "Connect a CLI: <strong>Generate commands</strong> makes its MCP token, and the skill installs on this machine with a button (or with the line, on another machine). The default CLI is set in <link>Settings</link>.",
+    "intro": "Connect a CLI: <strong>Generate commands</strong> makes its MCP token, and the skill installs on this machine with a button (or with the line, on another machine). The default CLI is set in <goto>Settings</goto>.",
     "step1": {
       "title": "1. Connect the MCP server",
       "command": "Run once in a terminal; it registers the server for every repo.",
@@ -517,7 +517,8 @@
     "ticketPage": "Ticket page",
     "mainColumn": "Main column",
     "sideColumn": "Side column",
-    "hiddenCount": "{{count}} hidden.",
+    "hiddenCount_one": "{{count}} hidden.",
+    "hiddenCount_other": "{{count}} hidden.",
     "reset": "Reset to default",
     "shown": "{{shown}} of {{total}} shown",
     "dropHere": "Drop here",
@@ -643,7 +644,7 @@
     "diffLabel": "What changed in the instructions",
     "pageTitle": "Instructions",
     "pageDescription": "What every agent reads before working here. Every change is kept below.",
-    "reposLine": "Repos: <link>Repositories page</link>. Rename or delete the project: project menu → Manage projects.",
+    "reposLine": "Repos: <goto>Repositories page</goto>. Rename or delete the project: project menu → Manage projects.",
     "sectionLabel": "Project instructions",
     "edit": "edit",
     "placeholder": "How to run the repos, the conventions to follow, what never to do.",

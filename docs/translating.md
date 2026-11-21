@@ -16,8 +16,8 @@ toast.success(t('common.saved'))
 - Interpolation: `t('time.hoursAgo', { count: 2 })` with `"hace {{count}} h"`. Never build a sentence by
   joining pieces: put the whole sentence in the file, so a language can order it its own way.
 - Plurals: `key_one` and `key_other` (add `_many` only where a language needs it), picked by `count`.
-- A sentence with a link or emphasis inside: `<Trans i18nKey="…" components={{ link: <Link … /> }} />` with
-  `"Open <link>Connect</link>."`; the same tags in every language.
+- A sentence with a link or emphasis inside: `<Trans i18nKey="…" components={{ goto: <Link … /> }} />` with
+  `"Open <goto>Connect</goto>."`; the same tags in every language.
 - Outside a component (a helper returning text while it renders): `shared.t(...)` from `#/i18n`, as
   `src/lib/format.ts` does. A constant that held labels holds keys instead, translated where it is drawn.
 - Dates, times, durations and numbers go through `src/lib/format.ts` (`Intl` with the current language), never

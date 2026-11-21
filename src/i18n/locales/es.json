@@ -39,7 +39,7 @@
     "board": {
       "defaultAgent": {
         "title": "CLI de agente por defecto",
-        "text": "El que <link>Conectar un agente</link> abre al entrar, mostrando solo sus comandos."
+        "text": "El que <goto>Conectar un agente</goto> abre al entrar, mostrando solo sus comandos."
       },
       "previews": {
         "title": "Previews",
@@ -69,7 +69,7 @@
     "turnOff": "Desactivar",
     "checkAgain": "Comprobar de nuevo",
     "title": "Conectar un agente",
-    "intro": "Conecta un CLI: <strong>Generar comandos</strong> crea su token MCP, y la skill se instala en esta máquina con un botón (o con la línea, en otra máquina). El CLI por defecto se elige en <link>Ajustes</link>.",
+    "intro": "Conecta un CLI: <strong>Generar comandos</strong> crea su token MCP, y la skill se instala en esta máquina con un botón (o con la línea, en otra máquina). El CLI por defecto se elige en <goto>Ajustes</goto>.",
     "step1": {
       "title": "1. Conecta el servidor MCP",
       "command": "Ejecútalo una vez en una terminal; registra el servidor para todos los repositorios.",
@@ -369,7 +369,7 @@
       "music": "Música",
       "art": "Arte",
       "writing": "Escritura",
-      "video": "Vídeo",
+      "video": "Video",
       "research": "Investigación",
       "lawyer": "Abogacía",
       "accountant": "Contabilidad",
@@ -456,7 +456,7 @@
     "title": "Ejecuciones",
     "description": "Lo que el tablero arranca desde el worktree de un ticket de cada repositorio, desde la tarjeta Ejecuciones del ticket o cuando un agente lo pide: un <strong>preview</strong> responde en un puerto y recibe un enlace para abrirlo, un <strong>job</strong> es un proceso en segundo plano sin enlace. Cada uno ejecuta su instalación (solo cuando cambió el lockfile), su build y luego su comando de arranque, en el worktree. Los agentes los arrancan y los detienen, y también pueden añadirlos, cambiarlos y eliminarlos: cada cambio aparece en la actividad del proyecto con el nombre del agente.",
     "noRepos": "El proyecto aún no tiene repositorios.",
-    "removed": "Quitada",
+    "removed": "Eliminada",
     "groupLabel": "Ejecuciones de {{name}}",
     "add": "Añadir ejecución",
     "none": "Sin ejecuciones: los tickets de este repositorio no tienen nada que arrancar.",
@@ -517,7 +517,8 @@
     "ticketPage": "Página del ticket",
     "mainColumn": "Columna principal",
     "sideColumn": "Columna lateral",
-    "hiddenCount": "{{count}} ocultos.",
+    "hiddenCount_one": "{{count}} oculta.",
+    "hiddenCount_other": "{{count}} ocultas.",
     "reset": "Restablecer",
     "shown": "{{shown}} de {{total}} visibles",
     "dropHere": "Suelta aquí",
@@ -643,7 +644,7 @@
     "diffLabel": "Qué cambió en las instrucciones",
     "pageTitle": "Instrucciones",
     "pageDescription": "Lo que lee cada agente antes de trabajar aquí. Cada cambio se guarda abajo.",
-    "reposLine": "Repositorios: <link>página Repositorios</link>. Renombra o elimina el proyecto: menú del proyecto → Gestionar proyectos.",
+    "reposLine": "Repositorios: <goto>página Repositorios</goto>. Renombra o elimina el proyecto: menú del proyecto → Gestionar proyectos.",
     "sectionLabel": "Instrucciones del proyecto",
     "edit": "editar",
     "placeholder": "Cómo ejecutar los repositorios, las convenciones a seguir, lo que nunca se debe hacer.",

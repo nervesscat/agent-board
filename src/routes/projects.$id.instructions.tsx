@@ -57,7 +57,7 @@ function InstructionsPage() {
           <Trans
             i18nKey="instructions.reposLine"
             components={{
-              link: (
+              goto: (
                 <Link
                   to="/projects/$id/repositories"
                   params={{ id }}
