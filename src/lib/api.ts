@@ -282,7 +282,7 @@ export interface TicketGit {
     worktree: Worktree | null
     lane: { id: number; title: string } | null
   })[]
-  /** Open tickets whose unmerged work the ticket's branch holds. */
+  /** Open tickets whose unmerged work the ticket's branch holds, that the board could not tell for sure and added no need for. */
   includes: number[]
 }
 

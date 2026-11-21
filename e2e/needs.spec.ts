@@ -1,4 +1,4 @@
-import type { Locator, Page } from '@playwright/test'
+import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
 import type { TicketFull, TicketGit } from '#/lib/api'
 import { commitFile, git } from './env'
@@ -84,13 +84,11 @@ test('an agent cannot move a ticket past what it needs, with force or without', 
   await ok(agent.patch(`/api/tickets/${t.id}`, { data: { status: 'done' } }))
 })
 
-test('a branch that holds another ticket’s unmerged work suggests the need; once merged, it is met', async ({
-  page,
-  project,
-  human,
-  agent,
-}) => {
-  // In the run's repo: a base for B, A's branch one commit past main, and B's branch built on A's.
+/**
+ * In the run's repo: a base for B, A's branch one commit past main, and B's branch built on A's. The
+ * tickets of both, in progress.
+ */
+async function stacked(project: { id: number }, human: APIRequestContext) {
   const name = (what: string) => `e2e-${project.id}-${what}`
   git('branch', name('base'), 'main')
   const a = commitFile('main', 'foundation.txt', 'the foundation\n', 'the foundation')
@@ -106,18 +104,32 @@ test('a branch that holds another ticket’s unmerged work suggests the need; on
     )
   const base = await ticket({ title: 'Foundation', branch: name('a') })
   const t = await ticket({ title: 'Built on it', branch: name('b'), baseBranch: name('base') })
-  // The board reads the checkout's refs a few seconds at a time: wait until it sees these branches.
-  await expect
-    .poll(async () => (await ok<TicketGit>(human.get(`/api/tickets/${t.id}/git`))).includes)
-    .toEqual([base.id])
+  return { name, a, ticket, base, t }
+}
 
+test('a branch that holds another ticket’s unmerged work gets the need by itself; once merged, it is met', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const { name, a, base, t } = await stacked(project, human)
+  // The board reads the checkout's refs a few seconds at a time: wait until it has seen these branches
+  // and added the need.
+  await expect
+    .poll(async () => (await ok<TicketFull>(human.get(`/api/tickets/${t.id}`))).needs)
+    .toMatchObject([{ id: base.id, auto: true, merged: false }])
+  expect((await ok<TicketGit>(human.get(`/api/tickets/${t.id}/git`))).includes).toEqual([])
+
+  // On its page: the need with the board's mark, and no suggestion to add it.
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   const details = page.getByRole('region', { name: 'Details' })
-  const suggestion = details.getByText('Includes unmerged work from').locator('..').locator('..')
-  await expect(suggestion.getByRole('link', { name: `#${base.id} Foundation` })).toBeVisible()
-  await suggestion.getByRole('button', { name: 'Add as a need' }).click()
+  const chip = details.getByRole('listitem').filter({ hasText: `#${base.id} Foundation` })
+  await expect(chip).toBeVisible()
+  await expect(chip.getByLabel('Added by the board')).toBeVisible()
   await expect(page.getByRole('link', { name: `Needs #${base.id} · not merged yet` })).toBeVisible()
   await expect(details.getByText('Includes unmerged work from')).toHaveCount(0)
+  await expect(details.getByRole('button', { name: 'Add as a need' })).toHaveCount(0)
   expect((await agent.patch(`/api/tickets/${t.id}`, { data: { status: 'done' } })).status()).toBe(409)
 
   // A's work lands in B's base: the need is met.
@@ -129,4 +141,33 @@ test('a branch that holds another ticket’s unmerged work suggests the need; on
     page.locator('[data-column="in_progress"]').getByRole('link', { name: /Built on it/ }),
   ).not.toContainText('needs #')
   await ok(agent.patch(`/api/tickets/${t.id}`, { data: { status: 'done' } }))
+})
+
+test('removing a need the board added sticks, and is not added again for the same commits', async ({
+  page,
+  project,
+  human,
+}) => {
+  const { name, a, ticket, base, t } = await stacked(project, human)
+  await expect
+    .poll(async () => (await ok<TicketFull>(human.get(`/api/tickets/${t.id}`))).needs)
+    .toMatchObject([{ id: base.id, auto: true }])
+
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const details = page.getByRole('region', { name: 'Details' })
+  const chip = details.getByRole('listitem').filter({ hasText: `#${base.id} Foundation` })
+  await chip.getByRole('button', { name: `Remove the need for #${base.id}` }).click()
+  await expect(chip).toHaveCount(0)
+  await expect.poll(async () => (await ok<TicketFull>(human.get(`/api/tickets/${t.id}`))).needs).toEqual([])
+
+  // The board looks again (a ticket built on the same work gets its need, which says it did), and the
+  // removed one is still gone.
+  git('update-ref', `refs/heads/${name('c')}`, commitFile(a, 'c.txt', 'c\n', 'c'))
+  const c = await ticket({ title: 'Also built on it', branch: name('c'), baseBranch: name('base') })
+  await expect
+    .poll(async () => (await ok<TicketFull>(human.get(`/api/tickets/${c.id}`))).needs)
+    .toMatchObject([{ id: base.id, auto: true }])
+  expect((await ok<TicketFull>(human.get(`/api/tickets/${t.id}`))).needs).toEqual([])
+  await page.reload()
+  await expect(details.getByRole('listitem').filter({ hasText: `#${base.id} Foundation` })).toHaveCount(0)
 })
