@@ -1006,3 +1006,70 @@ describe('approved, to merge: lanes and the review kind', () => {
     expect(take(pid).approvedToMerge.map((x) => x.ticketId)).toEqual([lane.id])
   })
 })
+
+describe('lost contact: the Overview card lists exactly the tickets whose agent is gone', () => {
+  it('lists a ticket and a lane with an open span and an expired lease, longest silent first', () => {
+    const pid = project('lost contact')
+    const { db, schema } = dbm
+    const open = (ticketId: number, phase: string, agent: string, when: Date, spanEnd?: Date) => {
+      const row = (kind: 'span_start' | 'span_end', time: Date, refId: number | null = null) =>
+        db
+          .insert(schema.ticketEvents)
+          .values({ ticketId, projectId: pid, kind, agent, by: agent, phase, refId, at: iso(time) })
+          .returning()
+          .get()
+      const start = row('span_start', when)
+      if (spanEnd) row('span_end', spanEnd, start.id)
+    }
+    const stamp = { status: 'in_progress', startedAt: iso(at(7, 9)), createdAt: iso(at(7, 8)) }
+    const parent = ticket(pid, 'Parent', stamp)
+    const older = ticket(pid, 'Lost an hour ago', stamp)
+    const newer = ticket(pid, 'Lost lately', stamp)
+    const lane = ticket(pid, 'A lane, lost', { ...stamp, parentId: parent.id })
+    const live = ticket(pid, 'Still working', stamp)
+    const ended = ticket(pid, 'Span ended', stamp)
+    const quiet = ticket(pid, 'Nothing open', stamp)
+    open(older.id, 'build', 'claude', at(7, 9, 0))
+    open(newer.id, 'review', 'codex', at(7, 14, 20))
+    open(lane.id, 'verify', 'claude', at(7, 13, 0))
+    // Within its lease: not lost. A span that ended: nothing open, so never lost.
+    open(live.id, 'build', 'claude', at(7, 14, 58))
+    open(ended.id, 'build', 'claude', at(7, 9, 0), at(7, 9, 30))
+    void quiet
+
+    const lost = take(pid).lostContact
+    // NOW is 15:00: the oldest silence (09:00) first, then the lane (13:00), then 14:20.
+    expect(lost.map((l) => l.ticketId)).toEqual([older.id, lane.id, newer.id])
+    expect(lost[1]).toMatchObject({
+      title: 'A lane, lost',
+      status: 'in_progress',
+      parent: { id: parent.id },
+      agent: 'claude',
+      phase: 'verify',
+    })
+    expect(lost[0]).toMatchObject({ agent: 'claude', phase: 'build', silentMinutes: 360 })
+  })
+
+  it('leaves a ticket out once its stage is not active, and lists none when nothing is lost', () => {
+    const pid = project('no lost contact')
+    const { db, schema } = dbm
+    expect(take(pid).lostContact).toEqual([])
+    const t = ticket(pid, 'Finished, span left open', {
+      status: 'done',
+      startedAt: iso(at(7, 9)),
+      createdAt: iso(at(7, 8)),
+    })
+    db.insert(schema.ticketEvents)
+      .values({
+        ticketId: t.id,
+        projectId: pid,
+        kind: 'span_start',
+        agent: 'claude',
+        by: 'claude',
+        phase: 'build',
+        at: iso(at(7, 9)),
+      })
+      .run()
+    expect(take(pid).lostContact).toEqual([])
+  })
+})
