@@ -112,7 +112,7 @@ import {
   type TicketRow,
   type UpdateRow,
 } from '#/lib/api'
-import { STATUS_LABEL, ago, agoLong, clock, shortSha, stamp } from '#/lib/format'
+import { ago, agoLong, clock, shortSha, stamp } from '#/lib/format'
 import {
   laneStageOrder,
   type LaneFilter,
@@ -891,7 +891,9 @@ function Instructions({
             <>
               <Button type="button" variant="ghost" size="xs" onClick={() => fileInput.current?.click()}>
                 <Paperclip />
-                <span className="sr-only">{attaching > 0 ? tr('ticketPage.attaching') : tr('ticketPage.attach')}</span>
+                <span className="sr-only">
+                  {attaching > 0 ? tr('ticketPage.attaching') : tr('ticketPage.attach')}
+                </span>
               </Button>
               <Button type="button" variant="ghost" size="xs" onClick={open}>
                 <Pencil />
@@ -1037,7 +1039,12 @@ function OtherRepos({
         <Label className="text-xs text-muted-foreground">{tr('ticketPage.otherRepos')}</Label>
       </Tip>
       {others.map((r) => (
-        <div key={r.repoId} className="space-y-1" role="group" aria-label={tr('ticketPage.repositoryNamed', { name: r.name })}>
+        <div
+          key={r.repoId}
+          className="space-y-1"
+          role="group"
+          aria-label={tr('ticketPage.repositoryNamed', { name: r.name })}
+        >
           <div className="flex items-center gap-2">
             <Label htmlFor={`branch-${r.repoId}`} className="font-mono text-xs">
               {r.name}
@@ -1435,11 +1442,7 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
       <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-muted">
         <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
       </div>
-      {t.tasks.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          {tr('ticketPage.noTasks')}
-        </p>
-      )}
+      {t.tasks.length === 0 && <p className="text-sm text-muted-foreground">{tr('ticketPage.noTasks')}</p>}
       <ul className="space-y-1.5">
         {t.tasks
           .filter((task) => !task.parentId)
@@ -1449,7 +1452,10 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
               <li key={task.id} className="text-sm">
                 {row(task, false)}
                 {subtasks.length > 0 && (
-                  <ul className="mt-1.5 ml-6 space-y-1.5" aria-label={tr('ticketPage.subtasksOf', { name: task.text })}>
+                  <ul
+                    className="mt-1.5 ml-6 space-y-1.5"
+                    aria-label={tr('ticketPage.subtasksOf', { name: task.text })}
+                  >
                     {subtasks.map((s) => (
                       <li key={s.id}>{row(s, true)}</li>
                     ))}
@@ -1818,9 +1824,7 @@ function Lanes({
         </div>
       </div>
       {t.lanes.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {tr('ticketPage.noLanes')}
-        </p>
+        <p className="text-sm text-muted-foreground">{tr('ticketPage.noLanes')}</p>
       ) : (
         <>
           <div className="mb-3 space-y-1.5">
@@ -2082,7 +2086,8 @@ function Activity({
         </Tabs>
         {t.lanes.length > 0 && (
           <label className="ml-auto inline-flex items-center gap-2 text-xs text-muted-foreground">
-            <Switch size="sm" checked={laneFeed} onCheckedChange={onLaneFeed} /> {tr('ticketPage.includeLanePosts')}
+            <Switch size="sm" checked={laneFeed} onCheckedChange={onLaneFeed} />{' '}
+            {tr('ticketPage.includeLanePosts')}
           </label>
         )}
       </div>
@@ -2331,7 +2336,11 @@ function SummaryCard({ t }: { t: TicketFull }) {
   })
   const earlier = data?.versions.filter((v) => v.postId !== s.postId) ?? []
   const when = tr(
-    s.fallback ? 'ticketPage.summaryPosted' : s.versions > 1 ? 'ticketPage.summaryUpdated' : 'ticketPage.summaryWritten',
+    s.fallback
+      ? 'ticketPage.summaryPosted'
+      : s.versions > 1
+        ? 'ticketPage.summaryUpdated'
+        : 'ticketPage.summaryWritten',
     { when: ago(s.at) },
   )
   return (
@@ -2371,11 +2380,7 @@ function SummaryCard({ t }: { t: TicketFull }) {
           </Tip>
         )}
       </div>
-      {s.fallback && (
-        <p className="mt-1 text-xs text-muted-foreground">
-          {tr('ticketPage.noSummary')}
-        </p>
-      )}
+      {s.fallback && <p className="mt-1 text-xs text-muted-foreground">{tr('ticketPage.noSummary')}</p>}
       <Markdown className="mt-2">{s.body}</Markdown>
       <Attachments items={s.attachments} />
       {/* The stand-in's replies are under the post itself, in Agents. */}
@@ -2426,7 +2431,11 @@ function SummaryReplies({ postId, count }: { postId: number; count: number }) {
   const label = tr('ticketPage.replies', { count })
   return (
     <>
-      <div role="group" aria-label={tr('ticketPage.summaryActions')} className="mt-2 flex items-center gap-0.5">
+      <div
+        role="group"
+        aria-label={tr('ticketPage.summaryActions')}
+        className="mt-2 flex items-center gap-0.5"
+      >
         <ActionButton
           label={open ? tr('ticketPage.hideRepliesLabel') : count ? label : tr('ticketPage.replyLabel')}
           tip={
@@ -2602,7 +2611,11 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
         )}
         {u.decision && <DecisionCard u={u} onChange={onChange} />}
         <Attachments items={u.attachments} />
-        <div role="group" aria-label={tr('ticketPage.postActions')} className="mt-2 flex items-center gap-0.5">
+        <div
+          role="group"
+          aria-label={tr('ticketPage.postActions')}
+          className="mt-2 flex items-center gap-0.5"
+        >
           <ActionButton
             label={thread ? tr('ticketPage.hideRepliesLabel') : replies ? count : tr('ticketPage.replyLabel')}
             tip={
@@ -2657,6 +2670,7 @@ type DecideResult = {
 }
 
 function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
+  const { t: tr } = useTranslation()
   const options = u.decision!
   const decided = u.decidedOption !== null && u.decidedAt !== null
   // Relayed: the words are the human's, and no one on the board picked the option (decidedBy is '').
@@ -2676,29 +2690,39 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
       // archived already are as asked: the reply under the card lists them, no toast.
       const ids = (list: number[]) => list.map((id) => `#${id}`).join(', ')
       if (res.archive?.archived.length)
-        toast.success(`Archived ${ids(res.archive.archived)}: off the board, under Archived`)
+        toast.success(tr('ticketPage.decisionArchived', { ids: ids(res.archive.archived) }))
       if (res.archive?.skipped.length)
-        toast.error(`Not archived: ${res.archive.skipped.map((s) => s.why).join('; ')}`)
+        toast.error(tr('ticketPage.notArchived', { why: res.archive.skipped.map((s) => s.why).join('; ') }))
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
   return (
-    <div className="mt-3 space-y-2" role="group" aria-label="Decision">
+    <div className="mt-3 space-y-2" role="group" aria-label={tr('ticketPage.decision')}>
       <div className="flex items-center gap-2 text-xs">
         <Scale className="size-3.5 text-amber-600 dark:text-amber-400" />
         {decided && !changing ? (
           <span className="text-muted-foreground">
             {relayed ? (
               <>
-                Decided in chat by you ·{' '}
-                <Tip content="The orchestrator recorded your answer from the chat. Nothing was clicked on the card.">
-                  <span className="cursor-help underline decoration-dotted underline-offset-2">relayed</span>
+                {tr('ticketPage.decidedInChat')}{' '}
+                <Tip content={tr('ticketPage.relayedTip')}>
+                  <span className="cursor-help underline decoration-dotted underline-offset-2">
+                    {tr('ticketPage.relayed')}
+                  </span>
                 </Tip>{' '}
-                by <Actor name={u.relayedBy} /> {ago(u.decidedAt!)} ·{' '}
+                <Trans
+                  i18nKey="ticketPage.relayedBy"
+                  values={{ when: ago(u.decidedAt!) }}
+                  components={{ actor: <Actor name={u.relayedBy} /> }}
+                />{' '}
               </>
             ) : (
               <>
-                decided by <Actor name={u.decidedBy} /> {ago(u.decidedAt!)} ·{' '}
+                <Trans
+                  i18nKey="ticketPage.decidedBy"
+                  values={{ when: ago(u.decidedAt!) }}
+                  components={{ actor: <Actor name={u.decidedBy} /> }}
+                />{' '}
               </>
             )}
             <button
@@ -2706,11 +2730,13 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
               className="underline hover:text-foreground"
               onClick={() => setChanging(true)}
             >
-              change
+              {tr('ticketPage.change')}
             </button>
           </span>
         ) : (
-          <span className="font-medium text-amber-700 dark:text-amber-400">Your decision is needed</span>
+          <span className="font-medium text-amber-700 dark:text-amber-400">
+            {tr('ticketPage.decisionNeededHere')}
+          </span>
         )}
       </div>
       <ul className="grid gap-2 sm:grid-cols-2">
@@ -2737,7 +2763,7 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
                   {o.label}
                   {o.recommended && (
                     <span className="ml-auto rounded bg-muted px-1.5 py-0.5 text-[11px] font-normal text-muted-foreground">
-                      recommended
+                      {tr('ticketPage.recommended')}
                     </span>
                   )}
                 </span>
@@ -2749,7 +2775,7 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
       </ul>
       {relayed && !changing && (
         <p className="text-sm">
-          <span className="text-xs text-muted-foreground">What you said in chat:</span>{' '}
+          <span className="text-xs text-muted-foreground">{tr('ticketPage.saidInChat')}</span>{' '}
           <span className="whitespace-pre-wrap break-words">“{u.relayedText}”</span>
         </p>
       )}
@@ -2758,13 +2784,13 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
           <Input
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="A note for the agent (optional)"
-            aria-label="Note for the agent"
+            placeholder={tr('ticketPage.agentNotePlaceholder')}
+            aria-label={tr('ticketPage.agentNote')}
             className="h-8 min-w-48 flex-1 text-sm"
           />
           {changing && (
             <Button type="button" variant="ghost" size="sm" onClick={() => setChanging(false)}>
-              Cancel
+              {tr('ticketBoard.cancel')}
             </Button>
           )}
           <Button
@@ -2773,7 +2799,7 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
             disabled={picked === null || decide.isPending}
             onClick={() => decide.mutate()}
           >
-            {decide.isPending ? 'Saving…' : 'Decide'}
+            {decide.isPending ? tr('postTools.saving') : tr('ticketPage.decide')}
           </Button>
         </div>
       )}
@@ -2783,26 +2809,24 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
 
 /** Where a branch's head is: its last commit, how far from the base, how far it has gone. */
 function Info({ info }: { info: TicketGit['info'] }) {
+  const { t: tr } = useTranslation()
   return info.exists ? (
     <div className="text-xs text-muted-foreground">
       <span className="font-mono">{shortSha(info.sha!)}</span> {info.subject}
       <div>
-        {info.ahead != null && (
-          <>
-            +{info.ahead} / −{info.behind} vs base ·{' '}
-          </>
-        )}
+        {info.ahead != null && <>{tr('ticketPage.vsBase', { ahead: info.ahead, behind: info.behind })} </>}
         {ago(info.authoredAt)}
       </div>
       {info.reach && <ReachBadge reach={info.reach} className="mt-1" />}
     </div>
   ) : (
-    <div className="text-xs text-muted-foreground">branch not in the checkout yet</div>
+    <div className="text-xs text-muted-foreground">{tr('ticketPage.branchNotInCheckout')}</div>
   )
 }
 
 /** A PR of the ticket's: its link, where it is in the queue, its latest review. */
 function PrLine({ pr }: { pr: NonNullable<TicketFull['pr']> }) {
+  const { t: tr } = useTranslation()
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
       {pr.url ? (
@@ -2812,17 +2836,18 @@ function PrLine({ pr }: { pr: NonNullable<TicketFull['pr']> }) {
           rel="noreferrer"
           className="inline-flex items-center gap-1 font-medium hover:underline"
         >
-          PR #{pr.number} <ExternalLink className="size-3 text-muted-foreground" />
+          {tr('reviewResult.pr', { number: pr.number })}{' '}
+          <ExternalLink className="size-3 text-muted-foreground" />
         </a>
       ) : (
-        <span className="font-medium">PR #{pr.number}</span>
+        <span className="font-medium">{tr('reviewResult.pr', { number: pr.number })}</span>
       )}
-      {pr.queue && <span className="text-muted-foreground">{STATUS_LABEL[pr.queue.status]}</span>}
+      {pr.queue && <span className="text-muted-foreground">{tr(`prQueue.tabs.${pr.queue.status}`)}</span>}
       {pr.latestReview && (
         <ReviewResultButton
           resultId={pr.latestReview.id}
           className={`rounded bg-muted px-1 hover:underline ${pr.latestReview.fresh === false ? 'opacity-60' : ''}`}
-          tip={pr.latestReview.fresh === false ? 'review is for an older SHA' : 'latest review'}
+          tip={pr.latestReview.fresh === false ? tr('ticketPage.reviewOlder') : tr('ticketPage.latestReview')}
         >
           {pr.latestReview.verdict}
         </ReviewResultButton>
@@ -2833,13 +2858,18 @@ function PrLine({ pr }: { pr: NonNullable<TicketFull['pr']> }) {
 
 /** The ticket's branch: its git state and its PR; one panel per repo when it spans several. */
 function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
+  const { t: tr } = useTranslation()
   if ((git?.repos.length ?? 0) > 1)
     return (
       <>
         {git!.repos.map((r) => (
-          <section key={r.repo.id} className="rounded-lg border p-3" aria-label={`Branch in ${r.repo.name}`}>
+          <section
+            key={r.repo.id}
+            className="rounded-lg border p-3"
+            aria-label={tr('ticketPage.branchIn', { name: r.repo.name })}
+          >
             <h2 className="mb-2 flex items-center gap-1.5 text-sm font-medium">
-              Branch
+              {tr('ticketPage.branch')}
               <span className="ml-auto font-mono text-xs font-normal text-muted-foreground">
                 {r.repo.name}
               </span>
@@ -2849,7 +2879,9 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
                 <div className="inline-flex items-center gap-1 font-mono text-sm">
                   <GitBranch className="size-3.5" /> {r.branch}
                 </div>
-                <div className="text-xs text-muted-foreground">base {r.baseBranch}</div>
+                <div className="text-xs text-muted-foreground">
+                  {tr('ticketPage.base', { name: r.baseBranch })}
+                </div>
                 <div className="flex min-w-0 items-center gap-1">
                   <PushBadge push={r.info.push} />
                   {r.primary && <RefreshPush projectId={t.projectId} className="-my-1" />}
@@ -2857,9 +2889,7 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
                 <Info info={r.info} />
               </>
             ) : (
-              <p className="text-xs text-muted-foreground">
-                No branch yet: pick one above, or the agent sets it.
-              </p>
+              <p className="text-xs text-muted-foreground">{tr('ticketPage.noBranch')}</p>
             )}
             {r.pr && <PrLine pr={r.pr} />}
             {r.pr?.queue?.open && <PrState pr={r.pr.queue} className="mt-1.5" />}
@@ -2870,7 +2900,7 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
   return (
     <section className="rounded-lg border p-3">
       <h2 className="mb-2 flex items-center text-sm font-medium">
-        Branch
+        {tr('ticketPage.branch')}
         {git?.repo && (
           <span className="ml-auto font-mono text-xs font-normal text-muted-foreground">{git.repo.name}</span>
         )}
@@ -2880,7 +2910,7 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
           <div className="inline-flex items-center gap-1 font-mono text-sm">
             <GitBranch className="size-3.5" /> {t.branch}
           </div>
-          <div className="text-xs text-muted-foreground">base {t.baseBranch}</div>
+          <div className="text-xs text-muted-foreground">{tr('ticketPage.base', { name: t.baseBranch })}</div>
           {git?.repo && (
             <div className="flex min-w-0 items-center gap-1">
               <PushBadge push={git.info.push} />
@@ -2890,7 +2920,7 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
           {git && <Info info={git.info} />}
         </>
       ) : (
-        <p className="text-xs text-muted-foreground">No branch yet: pick one above, or the agent sets it.</p>
+        <p className="text-xs text-muted-foreground">{tr('ticketPage.noBranch')}</p>
       )}
       {t.pr && <PrLine pr={t.pr} />}
       {t.pr?.queue?.open && <PrState pr={t.pr.queue} className="mt-1.5" />}
@@ -2900,6 +2930,7 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
 
 /** The worktrees, sub-branches and sandboxes opened for the ticket and its lanes. */
 function WorkspacesPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
+  const { t: tr } = useTranslation()
   const remove = useMutation({
     mutationFn: (id: number) => del(`/api/workspaces/${id}`),
     onSuccess: onChange,
@@ -2907,10 +2938,9 @@ function WorkspacesPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
   })
   return (
     <section className="rounded-lg border p-3">
-      <h2 className="mb-2 text-sm font-medium">Workspaces</h2>
+      <h2 className="mb-2 text-sm font-medium">{tr('ticketPage.workspaces')}</h2>
       <p className="mb-2 text-xs text-muted-foreground">
-        Worktrees, sub-branches and subagent sandboxes the agents opened for this ticket
-        {t.lanes.length > 0 && ' and its lanes'}.
+        {tr(t.lanes.length > 0 ? 'ticketPage.workspacesDescLanes' : 'ticketPage.workspacesDesc')}
       </p>
       <ul className="space-y-2">
         {(git?.workspaces ?? t.workspaces.map((w) => ({ ...w, info: null, worktree: null, lane: null }))).map(
@@ -2922,12 +2952,12 @@ function WorkspacesPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
                 {(git?.repos.length ?? 0) > 1 && 'repo' in w && w.repo && (
                   <span className="font-mono text-[11px] text-muted-foreground">{w.repo.name}</span>
                 )}
-                <Tip content="remove">
+                <Tip content={tr('ticketPage.removeTask')}>
                   <button
                     type="button"
                     className="ml-auto opacity-0 group-hover:opacity-100"
                     onClick={() => remove.mutate(w.id)}
-                    aria-label="remove"
+                    aria-label={tr('ticketPage.removeTask')}
                   >
                     <X className="size-3.5 text-muted-foreground" />
                   </button>
@@ -2961,7 +2991,7 @@ function WorkspacesPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
         )}
       </ul>
       {t.workspaces.length === 0 && !git?.workspaces.length && (
-        <p className="text-xs text-muted-foreground">None yet.</p>
+        <p className="text-xs text-muted-foreground">{tr('ticketPage.noneYet')}</p>
       )}
     </section>
   )
