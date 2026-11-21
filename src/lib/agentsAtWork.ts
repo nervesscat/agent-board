@@ -18,7 +18,7 @@ export interface Pet {
   short: string
   /** The agent's name; null when the board knows none (a finished ticket nobody held). */
   agent: string | null
-  /** A subagent ("parent/child") is drawn smaller, after its parent when that is on the same ticket. */
+  /** A subagent ("parent/child" whose parent is another character on the same ticket) is drawn smaller, after its parent. */
   size: 'normal' | 'small'
   state: PetState
   /** What it is doing: "Building", "Reviewing round 2", "Waiting: human", "Quiet", "Done today". */
@@ -71,9 +71,6 @@ export function phaseLabel(phase: string | null, round: number | null): string {
   return round ? `${base} round ${round}` : base
 }
 
-const small = (name: string | null) => !!name && name.includes('/')
-const parentName = (name: string) => name.slice(0, name.lastIndexOf('/'))
-
 export function petsOf(
   work: Pick<LiveWorkPayload, 'liveNow' | 'recentlyActive'> | undefined,
   doneToday: readonly Done[],
@@ -104,7 +101,7 @@ export function petsOf(
         title: e.title,
         short: `#${e.ticketId} ${cut(e.title)}`,
         agent,
-        size: small(agent) ? 'small' : 'normal',
+        size: 'normal',
         state,
         phase,
         at: e.lastHeardAt,
@@ -138,22 +135,32 @@ export function petsOf(
     })
   }
 
-  // Waiting, working, asleep, done; ties by ticket then name. A subagent follows its parent's character
-  // on the same ticket; one whose parent is not there is placed as any other.
-  const has = new Set(all.map((p) => p.key))
-  const child = (p: Pet) => p.size === 'small' && has.has(`${p.ticketId}:${parentName(p.agent!)}`)
+  // A pet is small only when its nearest ancestor ("a/b/c" -> "a/b", then "a") is another pet on the same
+  // ticket; a "a/b" whose "a" is not there is drawn as any other.
+  const names = new Set(all.map((p) => p.key))
+  const parents = new Map<Pet, string>()
+  for (const p of all) {
+    for (let n = p.agent; n && n.includes('/'); ) {
+      n = n.slice(0, n.lastIndexOf('/'))
+      if (names.has(`${p.ticketId}:${n}`)) {
+        parents.set(p, n)
+        p.size = 'small'
+        break
+      }
+    }
+  }
+
+  // Waiting, working, asleep, done; ties by ticket then name. A subagent follows its parent's character.
   const order = (a: Pet, b: Pet) =>
     RANK[a.state] - RANK[b.state] || a.ticketId - b.ticketId || (a.agent ?? '').localeCompare(b.agent ?? '')
-  const kids = all.filter(child)
+  const kids = all.filter((p) => parents.has(p))
   const ordered: Pet[] = []
   const place = (p: Pet) => {
     ordered.push(p)
-    for (const k of kids
-      .filter((k) => k.ticketId === p.ticketId && parentName(k.agent!) === p.agent)
-      .sort(order))
+    for (const k of kids.filter((k) => k.ticketId === p.ticketId && parents.get(k) === p.agent).sort(order))
       place(k)
   }
-  for (const p of all.filter((p) => !child(p)).sort(order)) place(p)
+  for (const p of all.filter((p) => !parents.has(p)).sort(order)) place(p)
   return {
     pets: ordered.slice(0, MAX_PETS),
     more: Math.max(0, ordered.length - MAX_PETS),

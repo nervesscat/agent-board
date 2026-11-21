@@ -166,25 +166,67 @@ describe('petsOf', () => {
     ).toEqual(first)
   })
 
-  it('puts a subagent small, after its parent on the same ticket, and a lone one in its place', () => {
+  it('puts a subagent small, after its parent on the same ticket', () => {
     const r = petsOf(
       {
         liveNow: [
           live({ ticketId: 1, agents: ['p/b', 'q', 'p', 'p/a'] }),
-          live({ ticketId: 2, agents: ['x/y'] }),
+          live({ ticketId: 2, agents: ['p/y'] }),
         ],
         recentlyActive: [],
       },
       [],
       NOW,
     )
-    expect(r.pets.map((p) => `${p.agent}:${p.size}`)).toEqual([
-      'p:normal',
-      'p/a:small',
-      'p/b:small',
-      'q:normal',
-      'x/y:small',
+    expect(r.pets.map((p) => `${p.ticketId}:${p.agent}:${p.size}`)).toEqual([
+      '1:p:normal',
+      '1:p/a:small',
+      '1:p/b:small',
+      '1:q:normal',
+      '2:p/y:normal',
     ])
+  })
+
+  it('draws an orchestrator named with a slash and a plain helper both normal', () => {
+    const r = petsOf(
+      { liveNow: [live({ agents: ['builder', 'opencode/ticket-941'] })], recentlyActive: [] },
+      [],
+      NOW,
+    )
+    expect(r.pets.map((p) => `${p.agent}:${p.size}`)).toEqual([
+      'builder:normal',
+      'opencode/ticket-941:normal',
+    ])
+  })
+
+  it('draws the child of a slash-named orchestrator small, after it', () => {
+    const r = petsOf(
+      {
+        liveNow: [live({ agents: ['opencode/ticket-941/builder', 'opencode/ticket-941'] })],
+        recentlyActive: [],
+      },
+      [],
+      NOW,
+    )
+    expect(r.pets.map((p) => `${p.agent}:${p.size}`)).toEqual([
+      'opencode/ticket-941:normal',
+      'opencode/ticket-941/builder:small',
+    ])
+  })
+
+  it('draws a lone "a/b" normal', () => {
+    const r = petsOf({ liveNow: [live({ agents: ['claude/helper'] })], recentlyActive: [] }, [], NOW)
+    expect(r.pets.map((p) => p.size)).toEqual(['normal'])
+  })
+
+  it('uses the nearest present ancestor for a grandchild', () => {
+    const run = (agents: string[]) =>
+      petsOf({ liveNow: [live({ agents })], recentlyActive: [] }, [], NOW).pets.map(
+        (p) => `${p.agent}:${p.size}`,
+      )
+    expect(run(['a/b/c', 'a', 'a/b'])).toEqual(['a:normal', 'a/b:small', 'a/b/c:small'])
+    expect(run(['a/b/c', 'a'])).toEqual(['a:normal', 'a/b/c:small'])
+    expect(run(['a/b/c', 'a/b'])).toEqual(['a/b:normal', 'a/b/c:small'])
   })
 
   it('does not repeat a name on a ticket', () => {

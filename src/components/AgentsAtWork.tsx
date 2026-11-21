@@ -82,7 +82,7 @@ function PetLink({ projectId, pet, index }: { projectId: number; pet: Pet; index
         aria-label={pet.label}
         className={cn(
           'flex min-h-11 items-center gap-2 rounded-lg px-2 py-1 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',
-          small ? 'w-40' : 'w-48',
+          small ? 'w-48' : 'w-56',
           pet.state === 'asleep' && 'text-muted-foreground',
         )}
       >
