@@ -463,10 +463,12 @@ export async function installSkill(
   client: AgentClient,
   home = os.homedir(),
   transport: SkillTransport = 'mcp',
+  /** The board address to write; the board's own unless a copy that is kept at another address is rewritten. */
+  url: string = config.boardUrl,
 ): Promise<InstallResult> {
   const at = new Date().toISOString()
   const file = path.join(skillDir(client, home), 'SKILL.md')
-  return { at, files: [{ path: file, action: await installFile(file, renderSkill(client, transport)) }] }
+  return { at, files: [{ path: file, action: await installFile(file, renderSkill(client, transport, url)) }] }
 }
 
 /** Where `client`'s session skill goes: its own folder, beside the board skill's. */

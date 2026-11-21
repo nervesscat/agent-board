@@ -9,7 +9,8 @@ import { AGENT_CLIENTS, type AgentClient } from '#/lib/constants'
 import { AGENTS, repoClaudeDir, reviewSkillsInstall, sessionSkillInstall, skillInstall } from '#/lib/agents'
 import type { UpdatesState } from '#/lib/updates'
 import * as agents from '../agents'
-import { config, servedEntrance } from '../config'
+import type { SkillTransport } from '../agents'
+import { config } from '../config'
 import { checkHostTools, hostTools, type HostTool, type HostTools, type ToolName } from '../hostTools'
 import { listStages, type Stage } from '../stages'
 import { listAgentTokens } from '../tokens'
@@ -61,9 +62,6 @@ const CLIENT_LABEL: Record<AgentClient, string> = {
   opencode: AGENTS.opencode.label,
 }
 
-/** The board's URLs a copy may have been fetched through: its own, and the tailnet entrance's. */
-const boardUrls = () => [config.boardUrl, ...(servedEntrance() ? [servedEntrance()!.origin] : [])]
-
 /** A SKILL.md as installed on this machine, when there is one: its client and what it is. */
 interface InstalledSkill {
   what: string
@@ -82,6 +80,27 @@ async function readText(file: string): Promise<string | null> {
 
 const lf = (text: string) => text.replace(/\r\n/g, '\n')
 
+const MARKER = 'http://board-address.invalid'
+// An origin without the punctuation that may follow it in a sentence.
+const ORIGIN = /^https?:\/\/[^\s"'`)<>/]+?(?=[.,;:]?(?:[\s"'`)<>/]|$))/
+
+/**
+ * The board address `installed` records when it is the skill the board serves for `transport` in all
+ * but that address (every place the address stands holds the same one), else null.
+ */
+function recordedUrl(client: AgentClient, transport: SkillTransport, installed: string): string | null {
+  const text = lf(installed)
+  const before = lf(agents.renderSkill(client, transport, MARKER)).split(MARKER)[0]!
+  if (!text.startsWith(before)) return null
+  const url = ORIGIN.exec(text.slice(before.length))?.[0]
+  if (!url) return null
+  return lf(agents.renderSkill(client, transport, url)) === text ? url : null
+}
+
+/** An address in a skill that no longer matches what is served: the first board-looking one, to keep. */
+const looseAddress = (installed: string): string | null =>
+  /https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):\d+/.exec(installed)?.[0] ?? null
+
 /**
  * The board and session skills installed under `home` that differ from what the board serves now. A
  * skill that is not installed is not outdated (idea 18 says when none is). A copy of the board skill
@@ -93,16 +112,17 @@ export async function outdatedAgentSkills(home: string): Promise<InstalledSkill[
     const label = CLIENT_LABEL[client]
     const board = await readText(path.join(agents.skillDir(client, home), 'SKILL.md'))
     if (board !== null) {
-      const variants = agents.SKILL_TRANSPORTS.flatMap((t) =>
-        boardUrls().map((url) => agents.renderSkill(client, t, url)),
-      )
-      if (!variants.some((v) => lf(v) === lf(board))) {
+      // A copy is current when it equals what the board serves, whatever address it records: a preview
+      // board on this machine shares the home with the live one and serves it at another port.
+      const current = agents.SKILL_TRANSPORTS.some((t) => recordedUrl(client, t, board) !== null)
+      if (!current) {
         // A copy for a session without the MCP tools stays one.
         const transport = board.includes('REST API, no MCP tools)') ? 'rest' : 'mcp'
         out.push({
           what: `Board skill for ${label}`,
           file: path.join(agents.skillDir(client, home), 'SKILL.md'),
-          write: () => agents.installSkill(client, home, transport),
+          // The address already in the file stays: only what really differs is rewritten.
+          write: () => agents.installSkill(client, home, transport, looseAddress(board) ?? config.boardUrl),
         })
       }
     }

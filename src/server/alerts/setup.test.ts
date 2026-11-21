@@ -244,6 +244,35 @@ describe('idea 1: skills outdated', () => {
     expect(await check(t)).toEqual([])
   })
 
+  it('treats a skill that records another board address as current, so a preview board raises nothing', async () => {
+    const t = typeOf(types(), 'skills-outdated')
+    const other = 'http://127.0.0.1:47199'
+    expect(agents.renderSkill('claude', 'mcp', other)).not.toBe(agents.renderSkill('claude', 'mcp'))
+    write(skillsFile('claude'), agents.renderSkill('claude', 'mcp', other))
+    write(skillsFile('codex'), agents.renderSkill('codex', 'rest', other))
+    expect(await check(t)).toEqual([])
+  })
+
+  it('Update rewrites an outdated skill but keeps the address already in the file', async () => {
+    const t = typeOf(types(), 'skills-outdated')
+    const other = 'http://127.0.0.1:47199'
+    write(
+      skillsFile('claude'),
+      agents.renderSkill('claude', 'mcp', other).replace('Keep the board', 'Keep a board'),
+    )
+    write(
+      skillsFile('codex'),
+      agents.renderSkill('codex', 'rest', other).replace('Keep the board', 'Keep a board'),
+    )
+    expect((await check(t))[0]!.details).toEqual(
+      expect.arrayContaining([`Board skill for ${AGENTS.claude.label}: ${skillsFile('claude')}`]),
+    )
+    await action(t, 'update')
+    expect(fs.readFileSync(skillsFile('claude'), 'utf8')).toBe(agents.renderSkill('claude', 'mcp', other))
+    expect(fs.readFileSync(skillsFile('codex'), 'utf8')).toBe(agents.renderSkill('codex', 'rest', other))
+    expect(await check(t)).toEqual([])
+  })
+
   it('raises an alert in the project for a repo whose own review skills differ, and not for one as served', async () => {
     const t = typeOf(types(), 'repo-skills-outdated')
     const projectId = newProject('repo skills')
