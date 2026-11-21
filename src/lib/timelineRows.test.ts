@@ -314,7 +314,7 @@ describe('segments', () => {
 
   it('draws the blocked stages as fixed blocks, and clips them to the axis', () => {
     const t = timeline({
-      spans: [span(1, 'a', 'a', '10:00', '10:30')],
+      spans: [span(1, 'a', 'a', '10:00', '10:10'), span(2, 'a', 'a', '10:20', '10:30')],
       blockedStretches: [{ start: iso('10:10'), end: iso('10:20') }],
       end: iso('10:30'),
     })

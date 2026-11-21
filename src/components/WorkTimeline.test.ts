@@ -91,9 +91,10 @@ describe('collapsed periods on the chart', () => {
     at: at(time, day(d)),
   })
   const reviewed = () => {
+    const opened = event('span_start', '09:00', { phase: 'build' })
     const evs = [
-      { ...event('span_start', '09:00', { phase: 'build' }), at: at('09:00', day(0)) },
-      { ...event('span_end', '10:00', { phase: 'build' }), at: at('10:00', day(0)) },
+      { ...opened, at: at('09:00', day(0)) },
+      { ...event('span_end', '10:00', { phase: 'build', refId: opened.id }), at: at('10:00', day(0)) },
       moved('10:00', 0, 'in_progress', 'review'),
       moved('09:30', 5, 'review', 'done'),
     ]
@@ -135,9 +136,10 @@ describe('collapsed periods on the chart', () => {
 
   it('leaves a break mark out near the right end of a live axis, where the now label is', () => {
     // Ten hours of work, then a live review: the block's break mark is at 98% of the axis.
+    const opened = event('span_start', '09:00', { phase: 'build' })
     const evs = [
-      { ...event('span_start', '09:00', { phase: 'build' }), at: at('09:00', day(0)) },
-      { ...event('span_end', '19:00', { phase: 'build' }), at: at('19:00', day(0)) },
+      { ...opened, at: at('09:00', day(0)) },
+      { ...event('span_end', '19:00', { phase: 'build', refId: opened.id }), at: at('19:00', day(0)) },
       moved('19:00', 0, 'in_progress', 'review'),
     ]
     const timeline = (live: boolean) =>

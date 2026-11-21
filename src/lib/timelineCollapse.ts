@@ -20,7 +20,15 @@ type Ms = { start: number; end: number }
  * A stretch of real time drawn as `virtualMs` of axis. `start`/`end` are the real times, clipped to the
  * axis; `stretch` is the period's own real start and end (null for a gap), as the chip tells them.
  */
-export type Piece = { start: number; end: number; kind: PieceKind; virtualMs: number; stretch: Ms | null }
+export type Piece = {
+  start: number
+  end: number
+  kind: PieceKind
+  virtualMs: number
+  stretch: Ms | null
+  /** The kind of period this time was skipped from (a gap between worker steps inside one too), else null. */
+  skips: Stretch['kind'] | null
+}
 
 export type Stretch = { kind: 'blocked' | 'review'; start: number; end: number }
 
@@ -32,9 +40,25 @@ export type PlanInput = {
   stretches: Stretch[]
   /** The latest merge, null when there is none. */
   merge: number | null
-  /** When each worker step (span, wait, hand-off) starts, and the latest time one ends. */
-  workStarts: number[]
-  lastWorkEnd: number
+  /** The worker steps (spans and waits; a hand-off is a point) in real time, open ones already run to now. */
+  work: Ms[]
+}
+
+/** Shorter than this, what is left of a period around worker steps is not drawn. */
+const MIN_REMAINDER = 1000
+
+/** What is left of [start, end] once the intervals are taken out, in order. */
+function carve(start: number, end: number, out: Ms[]): Ms[] {
+  const left: Ms[] = []
+  let cursor = start
+  for (const w of [...out].filter((x) => x.end > x.start).sort((a, b) => a.start - b.start)) {
+    if (w.end <= cursor) continue
+    if (w.start >= end) break
+    if (w.start > cursor) left.push({ start: cursor, end: w.start })
+    cursor = Math.max(cursor, w.end)
+  }
+  if (cursor < end) left.push({ start: cursor, end })
+  return left.filter((x) => x.end - x.start >= MIN_REMAINDER)
 }
 
 /**
@@ -45,35 +69,41 @@ export type PlanInput = {
 export function planPieces(input: PlanInput): { pieces: Piece[]; pinned: number | null } {
   const all = input.stretches.filter((s) => s.end > s.start).sort((a, b) => a.start - b.start)
   const { merge } = input
-  const pin = merge !== null && input.workStarts.length > 0 && input.workStarts.every((at) => at <= merge)
+  const pin = merge !== null && input.work.length > 0 && input.work.every((w) => w.start <= merge)
+  const lastWorkEnd = Math.max(...input.work.map((w) => w.end))
   // Each period with the end it is drawn to: cut at the merge when one is pinned, which ignores later periods.
   let drawn = all.map((s) => ({ s, end: s.end }))
   let gap: Piece | null = null
   if (pin) {
     drawn = drawn.filter((d) => d.s.start < merge).map((d) => ({ s: d.s, end: Math.min(d.s.end, merge) }))
-    const lastWork = Math.min(input.lastWorkEnd, merge)
+    const lastWork = Math.min(lastWorkEnd, merge)
     let from = Math.max(lastWork, ...drawn.filter((d) => d.end > lastWork).map((d) => d.end))
     if (from > merge - MIN_GAP_REAL) from = merge - MIN_GAP_REAL
-    gap = { start: from, end: merge, kind: 'gap', virtualMs: GAP_MS, stretch: null }
+    gap = { start: from, end: merge, kind: 'gap', virtualMs: GAP_MS, stretch: null, skips: null }
   }
+  // Worker steps keep their real scale, so they are carved out of a period: its first remainder is the
+  // labelled block, each later one a short unlabelled gap (a break on the axis).
   const pieces: Piece[] = []
   let cursor = -Infinity
   for (const { s, end: cut } of drawn) {
-    const start = Math.max(s.start, cursor)
-    const end = gap ? Math.min(cut, gap.start) : cut
-    if (end <= start) continue
-    pieces.push({
-      start,
-      end,
-      kind: s.kind,
-      virtualMs: COLLAPSED_MS,
-      stretch: { start: s.start, end: s.end },
-    })
-    cursor = end
+    const stop = gap ? Math.min(cut, gap.start) : cut
+    const first = pieces.length
+    for (const part of carve(Math.max(s.start, cursor), stop, input.work)) {
+      const labelled = pieces.length === first
+      pieces.push({
+        start: part.start,
+        end: part.end,
+        kind: labelled ? s.kind : 'gap',
+        virtualMs: labelled ? COLLAPSED_MS : GAP_MS,
+        stretch: labelled ? { start: s.start, end: s.end } : null,
+        skips: s.kind,
+      })
+      cursor = part.end
+    }
   }
   if (gap) {
     pieces.push(gap)
-    pieces.push({ start: gap.end, end: Infinity, kind: 'tail', virtualMs: 0, stretch: null })
+    pieces.push({ start: gap.end, end: Infinity, kind: 'tail', virtualMs: 0, stretch: null, skips: null })
   }
   return { pieces, pinned: pin ? merge : null }
 }

@@ -29,7 +29,15 @@ export type Tick = { at: number; label: string }
  * periods, the gap before a merge), and `span`, its length in ms once they are. Without pieces the span is
  * `end - start`.
  */
-export type Axis = { start: number; end: number; ticks: Tick[]; span: number; pieces: Piece[] }
+export type Axis = {
+  start: number
+  end: number
+  ticks: Tick[]
+  span: number
+  pieces: Piece[]
+  /** The merge the axis ends at (no window only), null otherwise. */
+  pinned: number | null
+}
 
 /** A segment narrower than this share of the axis is a cap: its label is in its tooltip and popover. */
 export const NARROW_SHARE = 0.06
@@ -83,7 +91,10 @@ export type Band = {
 export type AxisBreak = { key: string; left: number }
 export type Chart = {
   axis: Axis
+  /** Whether the chart follows the time: the ticket is live and its axis runs to now. */
   live: boolean
+  /** Whether the ticket itself is still going, for the words about its open segments. */
+  going: boolean
   now: number
   rows: AgentRow[]
   marks: Mark[]
@@ -167,14 +178,14 @@ const agentStarts = (t: WorkTimeline): number[] => [
   ...t.handoffs.map((h) => Date.parse(h.at)),
 ]
 
-/** Where each agent event ends: a span or wait at its end (open ones run to now while live), a hand-off at its time. */
-const agentEnds = (t: WorkTimeline, now: number): number[] => {
+/** The worker steps as real intervals: a span or wait from its start to its end (open ones to now while live), a hand-off a point. */
+const agentWork = (t: WorkTimeline, now: number): Ms[] => {
   const endOf = (end: string, open: boolean) =>
     open && t.live ? Math.max(Date.parse(end), now) : Date.parse(end)
   return [
-    ...t.spans.map((s) => endOf(s.end, s.open)),
-    ...t.waits.map((w) => endOf(w.end, w.open)),
-    ...t.handoffs.map((h) => Date.parse(h.at)),
+    ...t.spans.map((s) => ({ start: Date.parse(s.start), end: endOf(s.end, s.open) })),
+    ...t.waits.map((w) => ({ start: Date.parse(w.start), end: endOf(w.end, w.open) })),
+    ...t.handoffs.map((h) => ({ start: Date.parse(h.at), end: Date.parse(h.at) })),
   ]
 }
 
@@ -212,18 +223,23 @@ export function axisFor(t: WorkTimeline, now: number, win?: Window): Axis {
   }
   const merges = t.marks.filter((m) => m.kind === 'merge').map((m) => Date.parse(m.at))
   const latest = merges.length ? Math.max(...merges) : null
-  const ends = agentEnds(t, now)
   const plan = planPieces({
     stretches: stretchesOf(t, now),
     merge: latest !== null && latest > start && latest <= end ? latest : null,
-    workStarts: agentAt,
-    lastWorkEnd: ends.length ? Math.max(...ends) : start,
+    work: agentWork(t, now),
   })
   if (plan.pinned !== null && !win) end = plan.pinned
   if (end <= start) end = start + MIN
   const pieces = clipPieces(plan.pieces, start, end)
   const span = spanOf(start, end, pieces)
-  return { start, end, ticks: ticksFor(start, end, pieces, span), span, pieces }
+  return {
+    start,
+    end,
+    ticks: ticksFor(start, end, pieces, span),
+    span,
+    pieces,
+    pinned: plan.pinned !== null && !win ? plan.pinned : null,
+  }
 }
 
 /** A time's share of the axis, 0 at its start and 1 at its end; a piece's time is spread over its block. */
@@ -337,7 +353,7 @@ export function summarize(t: WorkTimeline, rows: AgentRow[], axis: Axis): string
   const over = spokenDuration(axis.end - axis.start)
   const who = doers ? 'Work by' : 'Activity by'
   const skipped = (['blocked', 'review'] as const).flatMap((k) => {
-    const ms = axis.pieces.filter((p) => p.kind === k).reduce((n, p) => n + p.end - p.start, 0)
+    const ms = axis.pieces.filter((p) => p.skips === k).reduce((n, p) => n + p.end - p.start, 0)
     return ms > 0 ? [`${k === 'review' ? 'in review' : 'blocked'} ${longDuration(ms)}`] : []
   })
   const scale = skipped.length ? ` Not to scale: ${skipped.join(', ')}.` : ''
@@ -347,9 +363,11 @@ export function summarize(t: WorkTimeline, rows: AgentRow[], axis: Axis): string
 /** The whole chart as the view draws it: rows, marks, blocked bands, the creation mark and the summary. */
 export function buildChart(t: WorkTimeline, now: number, win?: Window): Chart {
   const axis = axisFor(t, now, win)
-  const live = t.live
+  const going = t.live
+  // Not live for drawing once the axis ends at a pinned merge: now is days past its right edge.
+  const live = going && axis.pinned === null
   const endOf = (end: string, open: boolean) =>
-    open && live ? Math.max(Date.parse(end), now) : Date.parse(end)
+    open && going ? Math.max(Date.parse(end), now) : Date.parse(end)
 
   const tree = agentTree(t)
   const index = new Map(tree.map((r, i) => [r.agent, i]))
@@ -430,8 +448,10 @@ export function buildChart(t: WorkTimeline, now: number, win?: Window): Chart {
         kind: p.kind,
         start: p.stretch.start,
         end: p.stretch.end,
-        open: live && openAt !== null && p.stretch.end >= openAt,
-        marks: t.marks.filter((m) => Date.parse(m.at) > p.start && Date.parse(m.at) < p.end),
+        open: going && openAt !== null && p.stretch.end >= openAt,
+        marks: t.marks.filter(
+          (m) => m.kind !== 'merge' && Date.parse(m.at) > p.start && Date.parse(m.at) < p.end,
+        ),
         seg,
       })
   })
@@ -440,8 +460,13 @@ export function buildChart(t: WorkTimeline, now: number, win?: Window): Chart {
   const marks: Mark[] = []
   for (const m of t.marks) {
     const at = Date.parse(m.at)
-    if (at >= axis.start && at <= axis.end && !hidden.has(m.id))
-      marks.push({ mark: m, left: share(axis, at) })
+    if (at < axis.start || at > axis.end || hidden.has(m.id)) continue
+    // A merge is never hidden: inside a block it is drawn at the block's end edge, not on its chip.
+    const block =
+      m.kind === 'merge'
+        ? axis.pieces.find((p) => (p.kind === 'blocked' || p.kind === 'review') && at > p.start && at < p.end)
+        : undefined
+    marks.push({ mark: m, left: share(axis, block ? block.end : at) })
   }
   // The creation mark: from the ticket's first event (its creation) to its first agent event, drawn at the
   // creation's place on the axis, and on the left edge only when the creation is before the window.
@@ -452,6 +477,7 @@ export function buildChart(t: WorkTimeline, now: number, win?: Window): Chart {
   return {
     axis,
     live,
+    going,
     now,
     rows,
     marks,

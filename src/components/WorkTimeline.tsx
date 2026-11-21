@@ -7,6 +7,7 @@ import { clock, stamp } from '#/lib/format'
 import {
   buildChart,
   longDuration,
+  axisFor,
   PX_PER_MINUTE,
   share,
   spokenDuration,
@@ -223,14 +224,14 @@ function WaitSegment({
     const on = w.on as string
     return (
       <Segment
-        label={delegationLabel(w, chart.live)}
+        label={delegationLabel(w, chart.going)}
         details={
           <Facts
             items={[
               ['Delegated to', on],
               ['By', w.agent],
               ['Started', stamp(w.start)],
-              ['Ended', endedWhen(w, chart.live)],
+              ['Ended', endedWhen(w, chart.going)],
               ['Note', w.note || '—'],
             ]}
           />
@@ -248,14 +249,14 @@ function WaitSegment({
   const Icon = human ? HUMAN_ICON : waitIcon(w.reason)
   return (
     <Segment
-      label={waitLabel(w, chart.live)}
+      label={waitLabel(w, chart.going)}
       details={
         <Facts
           items={[
             ['Waiting', w.agent],
             ['On', w.reason === 'human' ? 'the human' : w.reason],
             ['Started', stamp(w.start)],
-            ['Ended', endedWhen(w, chart.live)],
+            ['Ended', endedWhen(w, chart.going)],
             ['Duration', spokenDuration(Date.parse(w.end) - Date.parse(w.start))],
             ['Note', w.note || '—'],
           ]}
@@ -295,14 +296,14 @@ function SpanSegment({
   const text = compact ? 'text-[10px]' : 'text-[11px]'
   return (
     <Segment
-      label={spanLabel(s, chart.live)}
+      label={spanLabel(s, chart.going)}
       details={
         <Facts
           items={[
             ['Who', s.by !== s.agent ? `${s.agent} (via ${s.by})` : s.agent],
             ['Work', phaseName(s)],
             ['Started', stamp(s.start)],
-            ['Ended', endedWhen(s, chart.live)],
+            ['Ended', endedWhen(s, chart.going)],
             ['Duration', spokenDuration(Date.parse(s.end) - Date.parse(s.start))],
           ]}
         />
@@ -365,7 +366,8 @@ export function WorkTimelineBar({
   const scroller = useRef<HTMLDivElement>(null)
   // Whether the reader is at the track's right end (where now is); only then does a live track follow the time.
   const atNow = useRef(true)
-  const live = timeline.live
+  // The chart follows the time only while its axis runs to now: not when it ends at a pinned merge.
+  const live = timeline.live && (win !== undefined || axisFor(timeline, now).pinned === null)
   // A live ticket opens at its right end, and stays there as the track grows, unless the reader has scrolled back.
   useEffect(() => {
     const el = scroller.current
@@ -413,7 +415,7 @@ export function WorkTimelineBar({
   return (
     <div
       data-testid="work-timeline"
-      data-live={live ? 'true' : 'false'}
+      data-live={timeline.live ? 'true' : 'false'}
       aria-describedby={summaryId}
       // Isolated, so the rows' sticky labels (z-10, to sit over the track as it scrolls sideways) stay
       // under the page's own sticky headers instead of painting over them as they scroll past.
