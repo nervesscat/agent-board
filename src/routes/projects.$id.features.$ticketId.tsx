@@ -43,6 +43,7 @@ import {
   useState,
 } from 'react'
 import { toast } from 'sonner'
+import { Trans, useTranslation } from 'react-i18next'
 
 import { Actor, useActorKinds } from '#/components/Actor'
 import { AnnotateImage, useAnnotations } from '#/components/AnnotateImage'
@@ -92,7 +93,7 @@ import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
-import { autoPhaseOf, autoPhaseTip } from '#/lib/autoPhases'
+import { autoPhaseOf } from '#/lib/autoPhases'
 import { WorkTimelineCard } from '#/components/WorkTimelineCard'
 import {
   del,
@@ -152,6 +153,7 @@ function TicketPage() {
   const filter = laneFilter(search)
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const { t: tr } = useTranslation()
   const stages = useStages(id)
   // Which sections show, in which column and order: the project's layout, taken once per ticket shown.
   // Until it loads no section is drawn, rather than drawn in its default place and moved (a #link would
@@ -224,7 +226,7 @@ function TicketPage() {
     mutationFn: (to: 'archive' | 'restore') => post(`/api/tickets/${ticketId}/${to}`),
     onSuccess: (_d, to) => {
       invalidate()
-      toast.success(to === 'archive' ? 'Archived: off the board, under Archived' : 'Restored to the board')
+      toast.success(to === 'archive' ? tr('ticketPage.archivedToast') : tr('ticketPage.restoredToast'))
     },
     onError,
   })
@@ -343,13 +345,13 @@ function TicketPage() {
               params: { id, ticketId: String(go.id) },
               search: laneSearch(filter),
             })
-          toast(`#${lane.id} disapproved and cancelled`, {
-            description: `Undo takes back the disapproval and returns it to ${stageOf(stages, before.status).name}${
-              go ? `. Moved on to #${go.id}.` : '.'
-            }`,
+          toast(tr('ticketPage.disapprovedToast', { id: lane.id }), {
+            description: go
+              ? tr('ticketPage.undoMoved', { stage: stageOf(stages, before.status).name, next: go.id })
+              : tr('ticketPage.undo', { stage: stageOf(stages, before.status).name }),
             duration: 10_000,
             action: {
-              label: 'Undo',
+              label: tr('ticketPage.undoAction'),
               onClick: () =>
                 judge.mutate({ ticketId: lane.id, verdict: before.verdict, reopenTo: before.status }),
             },
@@ -401,7 +403,7 @@ function TicketPage() {
   // the summary rides on top of the main column when the ticket has one, and Instructions has no tab
   // (it is the ticket's own text, at the top, not something to jump to).
   const tabs: { key: string; label: string }[] = [
-    ...(t.summary ? [{ key: 'summary', label: 'Summary' }] : []),
+    ...(t.summary ? [{ key: 'summary', label: tr('ticketPage.summary') }] : []),
     ...main.filter(hasTab).map(tabOf),
   ]
 
@@ -409,7 +411,7 @@ function TicketPage() {
     <div className="flex flex-col gap-6">
       <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
         <Link to="/projects/$id/features" params={{ id }} className="hover:text-foreground">
-          Ongoing features
+          {tr('layoutEditor.element.nav.features')}
         </Link>
         {t.ancestors.map((a) => (
           <span key={a.id} className="inline-flex min-w-0 items-center gap-1">
@@ -441,19 +443,26 @@ function TicketPage() {
           <InlineTitle key={t.id} t={t} onSave={(title) => update.mutate({ title })} />
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span>
-              opened by <Actor name={t.createdBy} short /> {ago(t.createdAt)}
+              <Trans
+                i18nKey="ticketPage.openedBy"
+                values={{ when: ago(t.createdAt) }}
+                components={{ actor: <Actor name={t.createdBy} short /> }}
+              />
             </span>
-            <span>updated {ago(t.updatedAt)}</span>
+            <span>{tr('ticketPage.updated', { when: ago(t.updatedAt) })}</span>
             <InlineTags key={t.id} t={t} projectId={id} onSave={(tags) => update.mutate({ tags })} />
           </div>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {t.archivedAt && (
             <Tip
-              content={`Archived by ${t.archivedBy || 'someone'} ${ago(t.archivedAt)}${t.parentId ? ', with the ticket it is a lane of' : ''}`}
+              content={tr(t.parentId ? 'ticketPage.archivedByLane' : 'ticketPage.archivedBy', {
+                name: t.archivedBy || tr('ticketPage.someone'),
+                when: ago(t.archivedAt),
+              })}
             >
               <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
-                <Archive className="size-3.5" /> Archived
+                <Archive className="size-3.5" /> {tr('ticketPage.archivedBadge')}
               </span>
             </Tip>
           )}
@@ -464,20 +473,20 @@ function TicketPage() {
               disabled={archive.isPending}
               onClick={() => archive.mutate('restore')}
             >
-              <ArchiveRestore /> Restore
+              <ArchiveRestore /> {tr('ticketBoard.restore')}
             </Button>
           )}
           {lanesWarning && (
-            <Tip content="This ticket is marked further along than its lanes">
+            <Tip content={tr('ticketPage.lanesWarningTip')}>
               <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
-                <TriangleAlert className="size-3.5" /> {openLanes} lane{openLanes === 1 ? '' : 's'} not done
+                <TriangleAlert className="size-3.5" /> {tr('ticketPage.lanesNotDone', { count: openLanes })}
               </span>
             </Tip>
           )}
           <NeedsStatus t={t} />
           {t.updates.some((u) => u.decision && !u.decidedAt) && (
             <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
-              <Scale className="size-3.5" /> decision needed
+              <Scale className="size-3.5" /> {tr('ticketPage.decisionNeeded')}
             </span>
           )}
           {/* Without a git side the human's approval is the hand-off: shown on every ticket, not only lanes. */}
@@ -494,7 +503,7 @@ function TicketPage() {
           />
           <div className="flex items-center gap-1.5">
             <Label htmlFor="complexity" className="text-xs font-normal text-muted-foreground">
-              Complexity
+              {tr('newTicket.complexity')}
             </Label>
             <ComplexitySelect
               id="complexity"
@@ -503,14 +512,14 @@ function TicketPage() {
             />
           </div>
           {!t.archivedAt && !t.parentId && isClosed(kind) && (
-            <Tip content="Take it off the board, with its lanes; Archived on the features page brings it back">
+            <Tip content={tr('ticketPage.archiveTip')}>
               <Button
                 variant="outline"
                 size="sm"
                 disabled={archive.isPending}
                 onClick={() => archive.mutate('archive')}
               >
-                <Archive /> Archive
+                <Archive /> {tr('ticketBoard.archive')}
               </Button>
             </Tip>
           )}
@@ -524,22 +533,21 @@ function TicketPage() {
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Delete this ticket?</AlertDialogTitle>
+                  <AlertDialogTitle>{tr('ticketPage.deleteTitle')}</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Tasks, updates, attachments and the thread go with it.
-                    {t.lanes.length > 0 &&
-                      ` It has ${t.lanes.length} lane${t.lanes.length === 1 ? '' : 's'}: delete them too, or keep them and move them up a level.`}
+                    {tr('ticketPage.deleteBody')}
+                    {t.lanes.length > 0 && ` ${tr('ticketPage.deleteLanes', { count: t.lanes.length })}`}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogCancel>{tr('ticketBoard.cancel')}</AlertDialogCancel>
                   {t.lanes.length > 0 && (
                     <AlertDialogAction variant="outline" onClick={() => remove.mutate(true)}>
-                      Delete, keep lanes
+                      {tr('ticketPage.deleteKeepLanes')}
                     </AlertDialogAction>
                   )}
                   <AlertDialogAction onClick={() => remove.mutate(false)}>
-                    {t.lanes.length > 0 ? 'Delete with lanes' : 'Delete'}
+                    {t.lanes.length > 0 ? tr('ticketPage.deleteWithLanes') : tr('postTools.delete')}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -635,6 +643,7 @@ function measureHeader(header: HTMLElement | null) {
 
 /** The title, renamed where it is: click it, Enter or leaving the field saves, Esc cancels. */
 function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => void }) {
+  const { t: tr } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(t.title)
   const titleRef = useRef<HTMLSpanElement>(null)
@@ -660,7 +669,7 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
   if (editing)
     return (
       <Input
-        aria-label="Title"
+        aria-label={tr('ticketPage.title')}
         autoFocus
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -681,7 +690,7 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
       {/* A span with the button's role, not a button: browsers draw a button as an inline-block, which drops a
             title too wide for the line under the #id, while a span wraps its text in the heading's own flow.
             Like a button, Space opens the field on its keyup, so a held Space does not type into it. */}
-      <Tip content="Click to rename">
+      <Tip content={tr('ticketPage.clickToRename')}>
         <span
           ref={titleRef}
           role="button"
@@ -729,6 +738,7 @@ function InlineTags({
   projectId: string
   onSave: (tags: string[]) => void
 }) {
+  const { t: tr } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState<string[]>([])
   const [text, setText] = useState('')
@@ -762,12 +772,12 @@ function InlineTags({
         }}
       >
         <TagsInput
-          aria-label="Tags, comma separated"
+          aria-label={tr('ticketPage.tagsAria')}
           value={value}
           onChange={setValue}
           text={text}
           onTextChange={setText}
-          placeholder="High, Forms"
+          placeholder={tr('ticketPage.tagsPlaceholder')}
           choices={choices}
           className="min-h-6 text-xs md:text-xs"
         />
@@ -779,7 +789,7 @@ function InlineTags({
     setEditing(true)
   }
   return t.tags.length > 0 ? (
-    <Tip content="Click to edit the tags">
+    <Tip content={tr('ticketPage.editTagsTip')}>
       <button type="button" onClick={open} className="inline-flex flex-wrap gap-1">
         {[...t.tags].sort(compareTags).map((tag) => (
           <Tag key={tag} tag={tag} />
@@ -788,7 +798,7 @@ function InlineTags({
     </Tip>
   ) : (
     <button type="button" onClick={open} className="hover:text-foreground">
-      + tags
+      {tr('ticketPage.addTags')}
     </button>
   )
 }
@@ -807,6 +817,7 @@ function Instructions({
   onSave: (body: string) => void
   onChange: () => void
 }) {
+  const { t: tr } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [body, setBody] = useState(t.body)
@@ -855,10 +866,10 @@ function Instructions({
     <section
       {...drop.props}
       className={cn('group rounded-lg border p-4', drop.className)}
-      aria-label="Instructions"
+      aria-label={tr('ticketPage.instructions')}
     >
       <div className="mb-2 flex items-center gap-3">
-        <h2 className="text-sm font-medium">Instructions</h2>
+        <h2 className="text-sm font-medium">{tr('ticketPage.instructions')}</h2>
         {/* The attach and edit buttons show while the card is hovered, or when one of them has keyboard focus;
             their labels are for screen readers only. */}
         <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
@@ -877,11 +888,11 @@ function Instructions({
             <>
               <Button type="button" variant="ghost" size="xs" onClick={() => fileInput.current?.click()}>
                 <Paperclip />
-                <span className="sr-only">{attaching > 0 ? 'attaching…' : 'attach'}</span>
+                <span className="sr-only">{attaching > 0 ? tr('ticketPage.attaching') : tr('ticketPage.attach')}</span>
               </Button>
               <Button type="button" variant="ghost" size="xs" onClick={open}>
                 <Pencil />
-                <span className="sr-only">edit</span>
+                <span className="sr-only">{tr('ticketPage.edit')}</span>
               </Button>
             </>
           )}
@@ -899,22 +910,22 @@ function Instructions({
             onCancel={() => setEditing(false)}
             autoFocus
             minHeight="min-h-40"
-            label="Instructions"
-            placeholder="What to do, how to know it is done, what never to do. Paste or drop files to attach them."
+            label={tr('ticketPage.instructions')}
+            placeholder={tr('ticketPage.instructionsPlaceholder')}
           />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
-              Cancel
+              {tr('instructions.cancel')}
             </Button>
             <Button type="button" size="sm" onClick={save}>
-              Save
+              {tr('instructions.save')}
             </Button>
           </div>
         </div>
       ) : t.body ? (
         <>
           {/* Clicking the text edits it; a link inside still opens. */}
-          <Tip content="Click to edit">
+          <Tip content={tr('instructions.clickToEdit')}>
             <div
               role="button"
               tabIndex={0}
@@ -939,13 +950,13 @@ function Instructions({
               className="mt-2 md:hidden"
               onClick={() => setExpanded((v) => !v)}
             >
-              {expanded ? 'Show less' : 'Show full instructions'}
+              {expanded ? tr('ticketPage.showLess') : tr('ticketPage.showFull')}
             </Button>
           )}
         </>
       ) : (
         <button type="button" onClick={open} className="text-sm text-muted-foreground hover:text-foreground">
-          No instructions yet. Click to write them.
+          {tr('instructions.empty')}
         </button>
       )}
       {t.attachments.length > 0 && (
@@ -955,10 +966,10 @@ function Instructions({
             {t.attachments.map((a) => (
               <li key={a.id} className="inline-flex items-center gap-1">
                 <span className="max-w-48 truncate">{a.name}</span>
-                <Tip content={`Remove ${a.name}`}>
+                <Tip content={tr('ticketPage.removeNamed', { name: a.name })}>
                   <button
                     type="button"
-                    aria-label={`Remove ${a.name}`}
+                    aria-label={tr('ticketPage.removeNamed', { name: a.name })}
                     className="hover:text-destructive"
                     onClick={() => detach.mutate(a.id)}
                   >
@@ -1002,6 +1013,7 @@ function OtherRepos({
   repos: { id: number; name: string }[]
   onSave: (p: Record<string, unknown>) => void
 }) {
+  const { t: tr } = useTranslation()
   const others = t.repos.filter((r) => !r.primary)
   const addable = repos.filter((r) => !t.repos.some((x) => x.repoId === r.id))
   const save = (next: TicketFull['repos']) => onSave({ repos: next.map(repoInput) })
@@ -1018,20 +1030,20 @@ function OtherRepos({
   }
   return (
     <div className="space-y-2">
-      <Tip content="The ticket's work in other repos of the project, each on its own branch: they show in Branch and Runs">
-        <Label className="text-xs text-muted-foreground">Other repositories</Label>
+      <Tip content={tr('ticketPage.otherReposTip')}>
+        <Label className="text-xs text-muted-foreground">{tr('ticketPage.otherRepos')}</Label>
       </Tip>
       {others.map((r) => (
-        <div key={r.repoId} className="space-y-1" role="group" aria-label={`Repository ${r.name}`}>
+        <div key={r.repoId} className="space-y-1" role="group" aria-label={tr('ticketPage.repositoryNamed', { name: r.name })}>
           <div className="flex items-center gap-2">
             <Label htmlFor={`branch-${r.repoId}`} className="font-mono text-xs">
               {r.name}
             </Label>
-            <Tip content={`Take ${r.name} off the ticket (its runs for the ticket stop)`}>
+            <Tip content={tr('ticketPage.takeOffTip', { name: r.name })}>
               <button
                 type="button"
                 className="ml-auto text-muted-foreground hover:text-foreground"
-                aria-label={`Remove ${r.name}`}
+                aria-label={tr('ticketPage.removeNamed', { name: r.name })}
                 onClick={() => save(t.repos.filter((x) => x.repoId !== r.repoId))}
               >
                 <X className="size-3.5" />
@@ -1059,8 +1071,8 @@ function OtherRepos({
           }}
           items={Object.fromEntries(addable.map((r) => [String(r.id), r.name]))}
         >
-          <SelectTrigger className="w-full" aria-label="Add a repository">
-            <SelectValue placeholder="Add a repository…" />
+          <SelectTrigger className="w-full" aria-label={tr('ticketPage.addRepo')}>
+            <SelectValue placeholder={tr('ticketPage.addRepoPlaceholder')} />
           </SelectTrigger>
           <SelectContent>
             {addable.map((r) => (
@@ -1088,6 +1100,7 @@ function Details({
   includes?: number[]
   onSave: (p: Record<string, unknown>) => void
 }) {
+  const { t: tr } = useTranslation()
   const { data: project } = useProject(t.projectId)
   const repos = project?.repos ?? []
   const repoId = String(t.repoId ?? repos[0]?.id ?? '')
@@ -1103,14 +1116,14 @@ function Details({
   useEffect(() => setBranch(t.branch), [t.branch])
   useEffect(() => setBaseBranch(t.baseBranch), [t.baseBranch])
   return (
-    <section className="space-y-3 rounded-lg border p-3" aria-label="Details">
+    <section className="space-y-3 rounded-lg border p-3" aria-label={tr('ticketPage.details')}>
       <div className="space-y-1">
         <Label htmlFor="assignee" className="text-xs text-muted-foreground">
-          Assignee
+          {tr('ticketPage.assignee')}
           {t.reserved && (
-            <Tip content="Reserved for this project agent: other agents cannot take it, only you can reassign it">
+            <Tip content={tr('ticketPage.reservedTip')}>
               <span className="ml-auto inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-normal">
-                <Lock className="size-3" /> reserved
+                <Lock className="size-3" /> {tr('ticketPage.reserved')}
               </span>
             </Tip>
           )}
@@ -1120,7 +1133,7 @@ function Details({
       {git && repos.length > 1 && (
         <div className="space-y-1">
           <Label htmlFor="repo" className="text-xs text-muted-foreground">
-            Repository
+            {tr('ticketPage.repository')}
           </Label>
           <Select
             value={repoId}
@@ -1152,7 +1165,7 @@ function Details({
       {git && (
         <div className="space-y-1">
           <Label htmlFor="branch" className="text-xs text-muted-foreground">
-            Branch
+            {tr('ticketPage.branch')}
           </Label>
           <BranchSelect
             id="branch"
@@ -1169,7 +1182,7 @@ function Details({
       {git && (
         <div className="space-y-1">
           <Label htmlFor="base" className="text-xs text-muted-foreground">
-            Base branch
+            {tr('ticketPage.baseBranch')}
           </Label>
           <BranchSelect
             id="base"
@@ -1185,12 +1198,12 @@ function Details({
       {git && repos.length > 1 && !t.prId && <OtherRepos t={t} repos={repos} onSave={onSave} />}
       {git && (
         <div className="space-y-1">
-          <Tip content="Tickets whose branches must be merged into this one's base before it can be done">
+          <Tip content={tr('ticketPage.needsTip')}>
             <Label htmlFor="needs" className="text-xs text-muted-foreground">
-              Needs
+              {tr('ticketPage.needs')}
               {t.neededBy.length > 0 && (
                 <span className="ml-auto font-normal">
-                  needed by{' '}
+                  {tr('ticketPage.neededBy')}{' '}
                   {t.neededBy.map((n, i) => (
                     <span key={n.id}>
                       {i > 0 && ', '}
@@ -1224,6 +1237,7 @@ function Details({
  * be tagged blocked on the human, with what they must do; a task shows how many of its subtasks are.
  */
 function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
+  const { t: tr } = useTranslation()
   const [text, setText] = useState('')
   // The task whose "add a subtask" field is open, and what is typed in it.
   const [subtaskOf, setSubtaskOf] = useState<number | null>(null)
@@ -1282,21 +1296,21 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
           />
           <span className={task.done ? 'text-muted-foreground line-through' : ''}>{task.text}</span>
           {auto && (
-            <Tip content={autoPhaseTip(auto)}>
+            <Tip content={tr(`ticketPage.autoTip.${auto}`)}>
               <span
                 role="img"
                 tabIndex={0}
-                aria-label="Ticked automatically"
+                aria-label={tr('ticketPage.tickedAuto')}
                 className="shrink-0 text-muted-foreground"
               >
                 <RefreshCw className="size-3.5" />
               </span>
             </Tip>
           )}
-          {task.blocked && <span className={BLOCKED_CHIP}>blocked</span>}
+          {task.blocked && <span className={BLOCKED_CHIP}>{tr('ticketPage.blocked')}</span>}
           {blockedSubtasks > 0 && (
             <span className={BLOCKED_CHIP}>
-              {blockedSubtasks === 1 ? '1 subtask blocked' : `${blockedSubtasks} subtasks blocked`}
+              {tr('ticketPage.subtasksBlocked', { count: blockedSubtasks })}
             </span>
           )}
           <span className="ml-auto flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100">
@@ -1313,7 +1327,11 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
                     setReason('')
                   }
                 }}
-                aria-label={task.blocked ? `Unblock ${task.text}` : `Mark ${task.text} blocked`}
+                aria-label={
+                  task.blocked
+                    ? tr('ticketPage.unblock', { name: task.text })
+                    : tr('ticketPage.markBlockedNamed', { name: task.text })
+                }
               >
                 <Hand
                   className={cn(
@@ -1324,7 +1342,7 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
               </Button>
             )}
             {!subtask && (
-              <Tip content="Add a subtask">
+              <Tip content={tr('ticketPage.addSubtask')}>
                 <Button
                   type="button"
                   variant="ghost"
@@ -1333,7 +1351,7 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
                     setSubtaskOf(task.id)
                     setSubtext('')
                   }}
-                  aria-label={`Add a subtask to ${task.text}`}
+                  aria-label={tr('ticketPage.addSubtaskTo', { name: task.text })}
                 >
                   <ListPlus className="size-3.5 text-muted-foreground" />
                 </Button>
@@ -1342,8 +1360,8 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
             <Tip
               content={
                 subtask || !t.tasks.some((s) => s.parentId === task.id)
-                  ? 'remove'
-                  : 'remove, with its subtasks'
+                  ? tr('ticketPage.removeTask')
+                  : tr('ticketPage.removeTaskSubtasks')
               }
             >
               <Button
@@ -1351,7 +1369,7 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
                 variant="ghost"
                 size="icon"
                 onClick={() => remove.mutate(task.id)}
-                aria-label={`Remove ${task.text}`}
+                aria-label={tr('ticketPage.removeNamed', { name: task.text })}
               >
                 <X className="size-3.5 text-muted-foreground" />
               </Button>
@@ -1377,19 +1395,19 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
                 if (e.key === 'Escape') setBlocking(null)
               }}
               maxLength={500}
-              placeholder="What the human must do (optional)"
-              aria-label={`Why ${task.text} is blocked`}
+              placeholder={tr('ticketPage.blockedPlaceholder')}
+              aria-label={tr('ticketPage.whyBlocked', { name: task.text })}
               className="h-7"
             />
             <Button type="submit" size="sm" variant="outline" disabled={tag.isPending}>
-              <Hand data-icon="inline-start" /> Mark blocked
+              <Hand data-icon="inline-start" /> {tr('ticketPage.markBlocked')}
             </Button>
             <Button
               type="button"
               size="sm"
               variant="ghost"
               onClick={() => setBlocking(null)}
-              aria-label="Close"
+              aria-label={tr('common.close')}
             >
               <X />
             </Button>
@@ -1403,10 +1421,10 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
     <section
       id="tasks"
       className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border p-4"
-      aria-label="Tasks"
+      aria-label={tr('ticketPage.tasks')}
     >
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-medium">Tasks</h2>
+        <h2 className="text-sm font-medium">{tr('ticketPage.tasks')}</h2>
         <span className="text-xs tabular-nums text-muted-foreground">
           {t.progress.done}/{t.progress.total} · {pct}%
         </span>
@@ -1416,9 +1434,7 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
       </div>
       {t.tasks.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          No tasks yet. Add the phases a new ticket starts with: Implementation, then the hand-off&apos;s
-          (Pushed, PR, CI, Preview, Summary, Merged). The concrete steps go under Implementation as subtasks.
-          The board ticks Pushed, PR, CI, Preview, Summary and Merged itself.
+          {tr('ticketPage.noTasks')}
         </p>
       )}
       <ul className="space-y-1.5">
@@ -1430,7 +1446,7 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
               <li key={task.id} className="text-sm">
                 {row(task, false)}
                 {subtasks.length > 0 && (
-                  <ul className="mt-1.5 ml-6 space-y-1.5" aria-label={`Subtasks of ${task.text}`}>
+                  <ul className="mt-1.5 ml-6 space-y-1.5" aria-label={tr('ticketPage.subtasksOf', { name: task.text })}>
                     {subtasks.map((s) => (
                       <li key={s.id}>{row(s, true)}</li>
                     ))}
@@ -1451,19 +1467,19 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
                       onKeyDown={(e) => {
                         if (e.key === 'Escape') setSubtaskOf(null)
                       }}
-                      placeholder="Add a subtask"
-                      aria-label={`New subtask of ${task.text}`}
+                      placeholder={tr('ticketPage.addSubtask')}
+                      aria-label={tr('ticketPage.newSubtaskOf', { name: task.text })}
                       className="h-7"
                     />
                     <Button type="submit" size="sm" variant="outline" disabled={!subtext.trim()}>
-                      <Plus data-icon="inline-start" /> Add
+                      <Plus data-icon="inline-start" /> {tr('ticketPage.add')}
                     </Button>
                     <Button
                       type="button"
                       size="sm"
                       variant="ghost"
                       onClick={() => setSubtaskOf(null)}
-                      aria-label="Close"
+                      aria-label={tr('common.close')}
                     >
                       <X />
                     </Button>
@@ -1483,11 +1499,11 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
         <Input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Add a phase: Implementation, Pushed, PR…"
+          placeholder={tr('ticketPage.addPhase')}
           className="h-8"
         />
         <Button type="submit" size="sm" variant="outline" disabled={!text.trim()}>
-          <Plus data-icon="inline-start" /> Add
+          <Plus data-icon="inline-start" /> {tr('ticketPage.add')}
         </Button>
       </form>
     </section>
