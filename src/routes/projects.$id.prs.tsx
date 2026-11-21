@@ -237,8 +237,9 @@ function PrQueue() {
         {/* The filter row, the switch and Refresh wrap among themselves and, when they cannot sit
             beside the title, onto a line of their own: a phone shows no sideways scroll. */}
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <Tabs value={filter} onValueChange={(v) => pickFilter(v as PrFilter)}>
-            <TabsList>
+          <Tabs value={filter} onValueChange={(v) => pickFilter(v as PrFilter)} className="max-w-full">
+            {/* Three choices with their counts do not fit one row of a phone: there they wrap onto a second. */}
+            <TabsList className="max-w-full flex-wrap group-data-horizontal/tabs:h-auto sm:flex-nowrap sm:group-data-horizontal/tabs:h-8">
               {FILTERS.map((f) => (
                 <Tip key={f.key} content={f.title}>
                   <TabsTrigger value={f.key} className={NO_UNDERLINE}>
