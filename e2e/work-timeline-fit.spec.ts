@@ -116,11 +116,13 @@ test('the ticket page and the Roadmap have no horizontal scrollbar on a long liv
   await record(agent, project, t.id, { kind: 'span_start', phase: 'build', agent: 'builder' })
   await record(agent, project, t.id, { kind: 'wait_start', reason: 'human', agent: 'builder' })
   age(t.id, 6 * 60)
+  // A hand-off at the very end of the axis: its line and arrow stay inside the track too.
+  await record(agent, project, t.id, { kind: 'handoff', from: 'builder', to: 'verifier' })
   for (const width of WIDTHS) {
     await page.setViewportSize({ width, height: 900 })
     await page.goto(`/projects/${project.id}/features/${t.id}`)
     const chart = page.getByRole('region', { name: 'Timeline' }).getByTestId('work-timeline')
-    await expect(chart.locator('[data-kind="now"]')).toBeAttached()
+    await expect(chart.locator('[data-kind="now"]').first()).toBeAttached()
     expect(await overflow(chart), `${width}px`).toMatchObject({ outside: [], scrollers: 0, wider: false })
     // The labels on the axis are few enough not to touch: no two of them overlap.
     const touching = await chart.evaluate((root) => {
@@ -130,5 +132,25 @@ test('the ticket page and the Roadmap have no horizontal scrollbar on a long liv
       return labels.some((r, i) => i > 0 && r.left < labels[i - 1]!.right)
     })
     expect(touching, `axis labels at ${width}px`).toBe(false)
+  }
+})
+
+test('a ticket that was only ever blocked shows a small fixed block, not a bar over the whole track', async ({
+  page,
+  project,
+  human,
+}) => {
+  const t = await create(human, project, { title: 'Only blocked', status: 'blocked' })
+  age(t.id, 3 * 24 * 60)
+  for (const width of WIDTHS) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto(`/projects/${project.id}/features/${t.id}`)
+    const chart = page.getByRole('region', { name: 'Timeline' }).getByTestId('work-timeline')
+    await expect(chart.locator('[data-kind="blocked"]')).toBeVisible()
+    const o = await overflow(chart)
+    expect(o, `${width}px`).toMatchObject({ outside: [], scrollers: 0, wider: false })
+    expect(o.chips).toHaveLength(1)
+    expect(o.chips[0]!).toBeLessThanOrEqual(73)
+    expect(o.chips[0]!).toBeLessThan(o.width)
   }
 })

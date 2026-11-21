@@ -470,12 +470,29 @@ describe('fitting the chart to its width', () => {
       },
       { start: m(50), end: m(55), kind: 'gap' as const, virtualMs: GAP_MS, stretch: null, skips: null },
     ]
-    const fitted = fitPieces(pieces, m(0), m(60), 200)
+    const fitted = fitPieces(pieces, m(0), m(60), 200).pieces
     const total = fitted.reduce((n, p) => n + p.virtualMs, 0)
     const real = 60 * MIN - 25 * MIN
     // Fixed blocks 162 px nominal, held to 100 px (half of 200) and the real 35 min get the other 100 px.
     expect(total / (total + real)).toBeCloseTo(0.5, 6)
     expect(fitted[0]!.virtualMs / fitted[2]!.virtualMs).toBeCloseTo(CHIP_PX / GAP_PX, 6)
+  })
+
+  it('keeps a block at its pixels when the whole axis is collapsed, and leaves the rest of the track empty', () => {
+    const t = timeline({
+      live: true,
+      start: iso(m(0)),
+      end: iso(m(60)),
+      blockedStretches: [stretch(m(0), m(60))],
+    })
+    for (const width of [320, 640, 1200]) {
+      const axis = axisFor(t, m(60), undefined, width)
+      const block = axis.pieces.find((p) => p.kind === 'blocked')!
+      const chip = buildChart(t, m(60), undefined, width).bands[0]!
+      expect(chip.seg.width * width).toBeCloseTo(Math.min(CHIP_PX, 0.5 * width), 6)
+      expect(chip.seg.left).toBe(0)
+      expect(block.virtualMs).toBeLessThan(axis.span)
+    }
   })
 
   it('leaves a chart with nothing collapsed to scale, and the same at any width', () => {

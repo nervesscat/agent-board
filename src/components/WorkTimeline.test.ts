@@ -179,3 +179,28 @@ describe('collapsed periods on the chart', () => {
     expect(html).not.toContain(`>${clock(at('10:00'))}<`)
   })
 })
+
+describe('the chart fits its track', () => {
+  it('keeps a hand-off line, its arrow and every box inside the track at the very end of the axis', () => {
+    // A hand-off at the last moment of the axis: its line would be drawn at the right edge, 1 px outside.
+    const opened = event('span_start', '09:00', { phase: 'build' })
+    const evs = [
+      opened,
+      event('span_end', '10:00', { phase: 'build', refId: opened.id }),
+      event('handoff', '10:00', { agent: 'claude', fromAgent: 'claude', toAgent: 'builder' }),
+    ]
+    const t = buildTimeline(evs, {
+      now: Date.parse(at('10:00')),
+      stages: DEFAULT_STAGES,
+      ticket: ticket({ status: 'done', createdAt: at('09:00') }),
+      stallMinutes: 30,
+    })
+    const html = renderToStaticMarkup(createElement(WorkTimelineBar, { timeline: t }))
+    const lines = [...html.matchAll(/data-kind="handoff-line"[^>]*style="left:([^;"]*)/g)].map((x) => x[1])
+    expect(lines.length).toBeGreaterThan(0)
+    for (const left of lines) expect(left).toBe('clamp(8px, 100%, calc(100% - 8px))')
+    // No left in the markup is a bare percentage of 100% or more: each is clamped or kept inside by a min().
+    for (const left of html.matchAll(/left:([^;"]*)/g))
+      expect(left[1]).not.toMatch(/^(100|[1-9]\d\d+)(\.\d+)?%$/)
+  })
+})

@@ -120,17 +120,27 @@ const FIXED_SHARE = 0.5
  * The pieces with their length set for a track `width` px wide: each collapsed block and gap is a fixed
  * number of pixels (CHIP_PX and GAP_PX, shrunk together when they would take more than half the track),
  * and the rest of the width is the real time at one scale. `start` and `end` are the axis's real ends.
+ * `slackMs` is the empty axis to add after them when there is no real time to fill the rest.
  */
-export function fitPieces(pieces: Piece[], start: number, end: number, width: number): Piece[] {
+export function fitPieces(
+  pieces: Piece[],
+  start: number,
+  end: number,
+  width: number,
+): { pieces: Piece[]; slackMs: number } {
   const px = (p: Piece) =>
     p.kind === 'blocked' || p.kind === 'review' ? CHIP_PX : p.kind === 'gap' ? GAP_PX : 0
   const fixed = pieces.reduce((n, p) => n + px(p), 0)
-  if (!fixed || width <= 0) return pieces
+  if (!fixed || width <= 0) return { pieces, slackMs: 0 }
   const shrink = Math.min(1, (FIXED_SHARE * width) / fixed)
   const real = pieces.reduce((n, p) => n - (p.end - p.start), end - start)
-  // The width left for real time; with no real time at all, 3 px per minute as before.
+  // The width left for real time; with no real time at all, 3 px per minute, and that width is left empty
+  // (`slackMs`, added to the axis) so that the blocks keep their pixels instead of filling the track.
   const msPerPx = real > 0 ? real / (width - fixed * shrink) : MIN / 3
-  return pieces.map((p) => (px(p) ? { ...p, virtualMs: px(p) * shrink * msPerPx } : p))
+  return {
+    pieces: pieces.map((p) => (px(p) ? { ...p, virtualMs: px(p) * shrink * msPerPx } : p)),
+    slackMs: real > 0 ? 0 : (width - fixed * shrink) * msPerPx,
+  }
 }
 
 /** The pieces that overlap the window, clipped to it; each still takes its whole fixed block. */

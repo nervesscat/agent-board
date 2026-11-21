@@ -263,8 +263,9 @@ export function axisFor(t: WorkTimeline, now: number, win?: Window, width?: numb
   if (end <= start) end = start + MIN
   const clipped = clipPieces(plan.pieces, start, end)
   // With the track's width known, the blocks are a fixed number of pixels and the real time fills the rest.
-  const pieces = width === undefined ? clipped : fitPieces(clipped, start, end, width)
-  const span = spanOf(start, end, pieces)
+  const fit = width === undefined ? { pieces: clipped, slackMs: 0 } : fitPieces(clipped, start, end, width)
+  const pieces = fit.pieces
+  const span = spanOf(start, end, pieces) + fit.slackMs
   return {
     start,
     end,

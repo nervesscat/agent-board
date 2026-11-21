@@ -541,7 +541,7 @@ export function WorkTimelineBar({
                 aria-hidden
                 data-kind="handoff-line"
                 className={`pointer-events-none absolute w-0 border-l border-dashed ${HANDOFF_LINE}`}
-                style={{ left: `${c.left * 100}%`, top: `${c.top}%`, bottom: `${c.bottom}%` }}
+                style={{ left: keepInside(c.left, 8), top: `${c.top}%`, bottom: `${c.bottom}%` }}
               />
             ))}
             {row.items.map((item) =>
