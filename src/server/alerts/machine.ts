@@ -11,7 +11,7 @@ import { LOCAL_RP_ID } from '../entrance'
 import { checkHostTools, hostTools, type HostTool } from '../hostTools'
 import { HttpError } from '../http'
 import { listPasskeys, revokeSession } from '../passkeys'
-import { prRefreshFailures } from '../prs'
+import { prRefreshFailures, refreshPrs } from '../prs'
 import { generationState } from '../reportGenerate'
 import {
   activeRuns,
@@ -329,7 +329,7 @@ const agentLogin: AlertType = {
 
 /** What GitHub or gh said when it refused the board: a bad or missing token, or one without the scope. */
 const GITHUB_REFUSAL =
-  /\b401\b|\b403\b|bad credentials|not logged in|gh auth|auth login|signed in|token|scope|saml|forbidden/i
+  /\b401\b|bad credentials|not logged in|gh auth|auth login|signed in|token|scope|saml|forbidden.*(credential|auth|login)/i
 
 function githubAlerts(ctx: AlertContext): AlertCandidate[] {
   const gh = toolOf('gh')
@@ -384,7 +384,11 @@ const github: AlertType = {
   actions: {
     check: recheck(
       () => github,
-      () => edges.recheckTools(),
+      async () => {
+        await edges.recheckTools()
+        // The failures are what the last refresh saw: refresh the projects that failed, so they show the present.
+        await Promise.all(prRefreshFailures().map((f) => refreshPrs(f.projectId).catch(() => {})))
+      },
       'GitHub answers again.',
       'GitHub access still has a problem.',
     ),

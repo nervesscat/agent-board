@@ -166,6 +166,8 @@ afterEach(async () => {
   machine.resetMachineState()
   hostTools.setHostTools(null)
   ghFails = null
+  // A refresh that works clears what an earlier one recorded.
+  for (const f of prs.prRefreshFailures()) await prs.refreshPrs(f.projectId)
   for (const p of mp.activePreviews()) await mp.stopPreview(p.workspaceId, 'test over', 'test')
   mp.setPreviewRunner(null)
   db.delete(schema.settings).run()
@@ -385,6 +387,43 @@ describe('5 GitHub access', () => {
   it('is not raised for a refresh that failed for another reason', async () => {
     ghFails = 'gh pr list failed in /somewhere'
     await expect(prs.refreshPrs(previewProject)).rejects.toThrow(/gh pr list failed/)
+    expect(await check('github-access')).toEqual([])
+  })
+
+  it('does not read a rate limit (403) as a login problem', async () => {
+    ghFails = 'HTTP 403: API rate limit exceeded'
+    await expect(prs.refreshPrs(previewProject)).rejects.toThrow(/rate limit/)
+    expect(await check('github-access')).toEqual([])
+    ghFails = 'HTTP 403: Forbidden, the token lacks the repo scope'
+    await expect(prs.refreshPrs(previewProject)).rejects.toThrow(/scope/)
+    expect(await check('github-access')).toHaveLength(1)
+  })
+
+  it('Check again refreshes the failed project, and resolves once gh works again', async () => {
+    ghFails = 'HTTP 401: Bad credentials'
+    await expect(prs.refreshPrs(previewProject)).rejects.toThrow()
+    const [row] = await raise('github-access')
+    expect(row!.subject).toBe('refresh')
+    // The tools check is its own edge here: this machine's gh is not the one under test.
+    machine.edges.recheckTools = async () => {}
+    // Still failing: the refresh runs again, fails again, the alert stays.
+    expect(await press(row!.id, 'check')).toMatchObject({ resolved: false })
+    // gh is signed in again; nothing refreshes the project but the button.
+    ghFails = null
+    expect(await press(row!.id, 'check')).toMatchObject({ resolved: true })
+    expect(prs.prRefreshFailures()).toEqual([])
+  })
+
+  it('forgets the failure of a project that was deleted', async () => {
+    const doomed = projects.createProject({ name: `doomed ${++count}` }, 'human').id
+    db.insert(schema.repos)
+      .values({ projectId: doomed, name: 'app', repoPath: main, githubRepo: 'acme/app' })
+      .run()
+    ghFails = 'HTTP 401: Bad credentials'
+    await expect(prs.refreshPrs(doomed)).rejects.toThrow()
+    expect(await check('github-access')).toHaveLength(1)
+    projects.deleteProject(doomed, 'enrique')
+    expect(prs.prRefreshFailures().map((f) => f.projectId)).not.toContain(doomed)
     expect(await check('github-access')).toEqual([])
   })
 

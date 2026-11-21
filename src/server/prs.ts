@@ -313,9 +313,19 @@ const lastRefresh = new Map<number, number>()
 /** Per project: why its last refresh failed outright (every repo failed), until a later one succeeds. */
 const refreshFailures = new Map<number, { message: string; at: string }>()
 
-/** The projects whose last PR refresh failed, with why: what the alerts say of GitHub access. */
-export const prRefreshFailures = () =>
-  [...refreshFailures].map(([projectId, f]) => ({ projectId, message: f.message, at: f.at }))
+/**
+ * The projects whose last PR refresh failed, with why: what the alerts say of GitHub access. A project
+ * that is gone no longer has a refresh to succeed, so its entry is dropped here.
+ */
+export function prRefreshFailures() {
+  for (const projectId of refreshFailures.keys())
+    try {
+      getProject(projectId)
+    } catch {
+      refreshFailures.delete(projectId)
+    }
+  return [...refreshFailures].map(([projectId, f]) => ({ projectId, message: f.message, at: f.at }))
+}
 /** The repos whose PRs a refresh read from GitHub since the board started. */
 const refreshedRepos = new Set<number>()
 /** Per project: the last refresh queued, which never rejects, so the next one can wait on it. */
