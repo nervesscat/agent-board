@@ -384,6 +384,7 @@ export function WorkTimelineBar({
   const { axis, rows, marks, bands } = chart
   const h = lanePx(compact)
   const minWidth = Math.max(1, Math.round(axis.span / 60_000)) * PX_PER_MINUTE
+  const shownBreaks = chart.breaks.filter((k) => !(live && k.left > 0.92))
   const gridLines = (
     <>
       {axis.ticks.map((t) => (
@@ -541,32 +542,32 @@ export function WorkTimelineBar({
           <Row label={null} height={AXIS_PX} minWidth={minWidth}>
             {axis.ticks
               .filter((t) => !(live && share(axis, t.at) > 0.92))
-              .map((t, i) => (
+              // A break mark always wins: a label centred within 44 px of one is not drawn (its gridline stays).
+              .filter((t) => !shownBreaks.some((k) => Math.abs(k.left - share(axis, t.at)) * minWidth < 44))
+              .map((t) => (
                 <span
                   key={t.at}
                   aria-hidden
                   className="absolute top-0 whitespace-nowrap text-[10.5px] text-muted-foreground tabular-nums"
                   style={{
                     left: `${share(axis, t.at) * 100}%`,
-                    transform: i === 0 ? 'none' : 'translateX(-50%)',
+                    transform: t === axis.ticks[0] ? 'none' : 'translateX(-50%)',
                   }}
                 >
                   {t.label}
                 </span>
               ))}
-            {chart.breaks
-              .filter((k) => !(live && k.left > 0.92))
-              .map((k) => (
-                <span
-                  key={k.key}
-                  aria-hidden
-                  data-kind="axis-break"
-                  className={`absolute top-0 -translate-x-1/2 text-[10.5px] leading-[14px] font-medium ${BREAK_MARK}`}
-                  style={{ left: `${k.left * 100}%` }}
-                >
-                  //
-                </span>
-              ))}
+            {shownBreaks.map((k) => (
+              <span
+                key={k.key}
+                aria-hidden
+                data-kind="axis-break"
+                className={`absolute top-0 -translate-x-1/2 text-[10.5px] leading-[14px] font-medium ${BREAK_MARK}`}
+                style={{ left: `${k.left * 100}%` }}
+              >
+                //
+              </span>
+            ))}
             {live && (
               <span aria-hidden className="absolute top-0 right-0 text-[10.5px] text-muted-foreground">
                 now

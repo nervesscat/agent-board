@@ -157,4 +157,25 @@ describe('collapsed periods on the chart', () => {
       'data-kind="axis-break"',
     )
   })
+
+  it('does not draw a tick label a break mark would overdraw, and keeps the others', () => {
+    // Work 09:00-10:00, merged at 12:00: the axis ends at the merge, whose round-time tick sits at the gap.
+    const opened = event('span_start', '09:00', { phase: 'build' })
+    const evs = [
+      opened,
+      event('span_end', '10:00', { phase: 'build', refId: opened.id }),
+      event('merge', '12:00'),
+    ]
+    const t = buildTimeline(evs, {
+      now: Date.parse(at('12:00')),
+      stages: DEFAULT_STAGES,
+      ticket: ticket({ status: 'done', createdAt: at('08:00') }),
+      stallMinutes: 30,
+    })
+    const html = renderToStaticMarkup(createElement(WorkTimelineBar, { timeline: t }))
+    expect(html).toContain('data-kind="axis-break"')
+    expect(html).toContain(`>${clock(at('09:00'))}<`)
+    expect(html).not.toContain(`>${clock(at('12:00'))}<`)
+    expect(html).not.toContain(`>${clock(at('10:00'))}<`)
+  })
 })
