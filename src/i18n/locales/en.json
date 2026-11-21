@@ -2480,7 +2480,7 @@
     "archiveTip": "Take it off the board, with its lanes; Archived on the features page brings it back",
     "deleteTitle": "Delete this ticket?",
     "deleteBody": "Tasks, updates, attachments and the thread go with it.",
-    "deleteLanes_one": "It has {{count}} lane: delete it too, or keep it and move it up a level.",
+    "deleteLanes_one": "It has {{count}} lane: delete them too, or keep them and move them up a level.",
     "deleteLanes_other": "It has {{count}} lanes: delete them too, or keep them and move them up a level.",
     "deleteKeepLanes": "Delete, keep lanes",
     "deleteWithLanes": "Delete with lanes",
