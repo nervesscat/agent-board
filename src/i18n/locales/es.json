@@ -1,0 +1,61 @@
+{
+  "common": {
+    "saved": "Guardado",
+    "close": "Cerrar"
+  },
+  "shell": {
+    "home": "Inicio",
+    "pages": "Páginas",
+    "connect": "Conectar",
+    "settings": "Ajustes",
+    "testMode": "modo de prueba",
+    "authOff": "sin autenticación",
+    "authOffTip": "BOARD_ENV={{env}}, inicio de sesión desactivado: sesión iniciada como {{actor}}. No es el tablero real."
+  },
+  "time": {
+    "never": "—",
+    "justNow": "ahora mismo",
+    "minutesAgo": "hace {{count}} min",
+    "hoursAgo": "hace {{count}} h",
+    "daysAgo": "hace {{count}} d",
+    "minutesAgoLong_one": "hace {{count}} minuto",
+    "minutesAgoLong_other": "hace {{count}} minutos",
+    "hoursAgoLong_one": "hace {{count}} hora",
+    "hoursAgoLong_other": "hace {{count}} horas",
+    "yesterday": "ayer",
+    "daysAgoLong_one": "hace {{count}} día",
+    "daysAgoLong_other": "hace {{count}} días",
+    "weeksAgoLong_one": "hace {{count}} semana",
+    "weeksAgoLong_other": "hace {{count}} semanas"
+  },
+  "settings": {
+    "title": "Ajustes",
+    "tabs": {
+      "label": "Ajustes",
+      "board": "Tablero",
+      "projectLabel": "Este proyecto: {{name}}",
+      "project": "Este proyecto:"
+    },
+    "board": {
+      "defaultAgent": {
+        "title": "CLI de agente por defecto",
+        "text": "El que <link>Conectar un agente</link> abre al entrar, mostrando solo sus comandos."
+      },
+      "previews": {
+        "title": "Previews",
+        "text": "Cuántas previews construye y ejecuta el tablero a la vez, en todos los proyectos (de 1 a 32). Cada una es un tablero completo con su propia copia de los datos; un inicio por encima del límite se rechaza. La página Previews de un proyecto muestra cuántas están en uso."
+      },
+      "theme": {
+        "title": "Tema",
+        "text": "Sigue el del sistema por defecto. La elección se guarda en este navegador, no en el tablero.",
+        "system": "Sistema",
+        "light": "Claro",
+        "dark": "Oscuro"
+      },
+      "language": {
+        "title": "Idioma",
+        "text": "El idioma de toda la interfaz, con fechas y números. Se guarda en el tablero, así que te sigue a cada dispositivo desde el que inicies sesión. Lo que escriben las personas y los agentes se queda como se escribió."
+      }
+    }
+  }
+}

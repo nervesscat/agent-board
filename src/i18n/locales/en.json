@@ -1,0 +1,61 @@
+{
+  "common": {
+    "saved": "Saved",
+    "close": "Close"
+  },
+  "shell": {
+    "home": "Home",
+    "pages": "Pages",
+    "connect": "Connect",
+    "settings": "Settings",
+    "testMode": "test mode",
+    "authOff": "auth off",
+    "authOffTip": "BOARD_ENV={{env}}, sign-in off: signed in as {{actor}}. Not the live board."
+  },
+  "time": {
+    "never": "—",
+    "justNow": "just now",
+    "minutesAgo": "{{count}} min ago",
+    "hoursAgo": "{{count}} h ago",
+    "daysAgo": "{{count}} d ago",
+    "minutesAgoLong_one": "{{count}} minute ago",
+    "minutesAgoLong_other": "{{count}} minutes ago",
+    "hoursAgoLong_one": "{{count}} hour ago",
+    "hoursAgoLong_other": "{{count}} hours ago",
+    "yesterday": "yesterday",
+    "daysAgoLong_one": "{{count}} day ago",
+    "daysAgoLong_other": "{{count}} days ago",
+    "weeksAgoLong_one": "{{count}} week ago",
+    "weeksAgoLong_other": "{{count}} weeks ago"
+  },
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "label": "Settings",
+      "board": "Board",
+      "projectLabel": "This project: {{name}}",
+      "project": "This project:"
+    },
+    "board": {
+      "defaultAgent": {
+        "title": "Default agent CLI",
+        "text": "The one <link>Connect an agent</link> opens on, showing only its commands."
+      },
+      "previews": {
+        "title": "Previews",
+        "text": "How many previews the board builds and runs at once, in every project (1 to 32). Each is a whole board with its own copy of the data; a start beyond the limit is refused. A project's Previews page shows how many are in use."
+      },
+      "theme": {
+        "title": "Theme",
+        "text": "Follows your system by default. The choice is kept in this browser, not on the board.",
+        "system": "System",
+        "light": "Light",
+        "dark": "Dark"
+      },
+      "language": {
+        "title": "Language",
+        "text": "The language of the whole interface, dates and numbers included. It is kept on the board, so it follows you to every device you sign in from. What people and agents write stays as it was written."
+      }
+    }
+  }
+}

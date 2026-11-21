@@ -1,5 +1,6 @@
 import { createFileRoute, useLocation, useNavigate, useRouter } from '@tanstack/react-router'
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { BoardSettings } from '#/components/BoardSettings'
 import { ProjectSettings } from '#/components/ProjectSettings'
@@ -26,6 +27,7 @@ export const Route = createFileRoute('/settings')({
  * address, and so is the project of the project tab.
  */
 function Settings() {
+  const { t } = useTranslation()
   const search = Route.useSearch()
   const navigate = useNavigate()
   const router = useRouter()
@@ -77,7 +79,7 @@ function Settings() {
   }, [correct, dropHash, hash, navigate, router])
   return (
     <div className="max-w-3xl space-y-6">
-      <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
+      <h1 className="text-xl font-semibold tracking-tight">{t('settings.title')}</h1>
       <Tabs
         value={tab ?? 'board'}
         onValueChange={(value) => {
@@ -86,11 +88,11 @@ function Settings() {
           else if (value === 'board') void navigate({ to: '/settings', search: {} })
         }}
       >
-        <TabsList aria-label="Settings" activateOnFocus className="max-w-full">
-          <TabsTrigger value="board">Board</TabsTrigger>
+        <TabsList aria-label={t('settings.tabs.label')} activateOnFocus className="max-w-full">
+          <TabsTrigger value="board">{t('settings.tabs.board')}</TabsTrigger>
           {project && (
-            <TabsTrigger value="project" aria-label={`This project: ${project.name}`}>
-              This project:
+            <TabsTrigger value="project" aria-label={t('settings.tabs.projectLabel', { name: project.name })}>
+              {t('settings.tabs.project')}
               <span className="max-w-40 truncate sm:max-w-64">{project.name}</span>
             </TabsTrigger>
           )}

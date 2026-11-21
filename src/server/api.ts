@@ -12,11 +12,13 @@ import {
   STAGE_KINDS,
   FEED_TABS,
 } from '#/lib/constants'
+import { LANGUAGES } from '#/i18n/languages'
 import { AGENT_TOKEN_NAME } from '#/lib/agents'
 import { KINDS } from '#/lib/kinds'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import * as agentCards from './agentCards'
 import * as agents from './agents'
+import * as language from './language'
 import { roadmap } from './roadmap'
 import * as runConfig from './runConfig'
 import {
@@ -179,7 +181,15 @@ api.get('/api/me', ({ request, actor }) => {
     parent,
     boardEnv: authMode().boardEnv,
     authOff: authMode().off,
+    // The interface's language this person picked (Settings > Language), null until they do.
+    language: isAgent(request) ? null : language.getLanguage(actor),
   })
+})
+// The person's own choices. Only the human has an interface: an agent is refused.
+api.patch('/api/me', async ({ request, actor }) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human changes the interface language')
+  const body = await readJson(request, z.object({ language: z.enum(LANGUAGES).nullable() }))
+  return json({ language: language.setLanguage(actor, body.language) })
 })
 // The tools on this machine the board runs (git, gh, claude, node, pnpm): the last check, waiting for the
 // one the server started with when it has not ended yet; POST checks them again.

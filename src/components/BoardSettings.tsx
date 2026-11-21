@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { AgentIdentities } from '#/components/AgentIdentities'
@@ -9,14 +10,16 @@ import { Devices } from '#/components/Devices'
 import { TailnetEntrance } from '#/components/TailnetEntrance'
 import { PreviewLimitEditor } from '#/components/Preview'
 import { Updates } from '#/components/Updates'
+import { LANGUAGES, LANGUAGE_NAME, setLanguage, type Language } from '#/i18n'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { errorMessage, get, type Me, patch } from '#/lib/api'
 import { useAnchor, useReveal } from '#/lib/reveal'
-import { THEMES, THEME_LABEL, readTheme, setTheme, type Theme } from '#/lib/theme'
+import { THEMES, readTheme, setTheme, type Theme } from '#/lib/theme'
 import type { Settings } from '#/server/agents'
 
 /** Board-wide preferences: the Board tab of the Settings page. */
 export function BoardSettings() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const { data } = useQuery({ queryKey: ['settings'], queryFn: () => get<Settings>('/api/settings') })
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: () => get<Me>('/api/me'), staleTime: Infinity })
@@ -27,7 +30,7 @@ export function BoardSettings() {
     onSuccess: (s) => {
       qc.setQueryData(['settings'], s)
       qc.invalidateQueries({ queryKey: ['agent-setup'] })
-      toast.success('Saved')
+      toast.success(t('common.saved'))
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
@@ -35,24 +38,20 @@ export function BoardSettings() {
   return (
     <div className="max-w-3xl space-y-6">
       <section id="default-agent" className="scroll-mt-16 space-y-2">
-        <h2 className="text-sm font-medium">Default agent CLI</h2>
+        <h2 className="text-sm font-medium">{t('settings.board.defaultAgent.title')}</h2>
         <p className="text-sm text-muted-foreground">
-          The one{' '}
-          <Link to="/agents" className="underline hover:text-foreground">
-            Connect an agent
-          </Link>{' '}
-          opens on, showing only its commands.
+          <Trans
+            i18nKey="settings.board.defaultAgent.text"
+            components={{ link: <Link to="/agents" className="underline hover:text-foreground" /> }}
+          />
         </p>
         <AgentPicker value={data.defaultAgent} onChange={(defaultAgent) => save.mutate({ defaultAgent })} />
       </section>
       <Theme />
+      <LanguagePicker />
       <section id="previews" className="scroll-mt-16 space-y-2">
-        <h2 className="text-sm font-medium">Previews</h2>
-        <p className="text-sm text-muted-foreground">
-          How many previews the board builds and runs at once, in every project (1 to 32). Each is a whole
-          board with its own copy of the data; a start beyond the limit is refused. A project's Previews page
-          shows how many are in use.
-        </p>
+        <h2 className="text-sm font-medium">{t('settings.board.previews.title')}</h2>
+        <p className="text-sm text-muted-foreground">{t('settings.board.previews.text')}</p>
         <PreviewLimitEditor key={data.previewLimit} id="settings-preview-limit" limit={data.previewLimit} />
       </section>
       {/* The app's updates are the human's: an agent never sees them here, and their routes refuse one. */}
@@ -84,6 +83,7 @@ export function BoardSettings() {
  * system's changes while the system's is picked (src/lib/theme.ts).
  */
 function Theme() {
+  const { t } = useTranslation()
   const [theme, pick] = useState<Theme>('system')
   useEffect(() => {
     const saved = readTheme()
@@ -92,10 +92,8 @@ function Theme() {
   }, [])
   return (
     <section id="theme" className="scroll-mt-16 space-y-2">
-      <h2 className="text-sm font-medium">Theme</h2>
-      <p className="text-sm text-muted-foreground">
-        Follows your system by default. The choice is kept in this browser, not on the board.
-      </p>
+      <h2 className="text-sm font-medium">{t('settings.board.theme.title')}</h2>
+      <p className="text-sm text-muted-foreground">{t('settings.board.theme.text')}</p>
       <Tabs
         value={theme}
         onValueChange={(value) => {
@@ -104,10 +102,52 @@ function Theme() {
           setTheme(next)
         }}
       >
-        <TabsList aria-label="Theme">
+        <TabsList aria-label={t('settings.board.theme.title')}>
           {THEMES.map((value) => (
             <TabsTrigger key={value} value={value}>
-              {THEME_LABEL[value]}
+              {t(`settings.board.theme.${value}`)}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+    </section>
+  )
+}
+
+/**
+ * The language of the interface: kept on the board for the person (it follows them to every device) and
+ * applied at once, with no reload. Until one is picked the browser's decides, and that is what shows here.
+ */
+function LanguagePicker() {
+  const { t, i18n } = useTranslation()
+  const qc = useQueryClient()
+  const save = useMutation({
+    mutationFn: (language: Language) => patch<{ language: Language }>('/api/me', { language }),
+    onSuccess: ({ language }) => {
+      qc.setQueryData<Me>(['me'], (me) => (me ? { ...me, language } : me))
+      toast.success(t('common.saved'))
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+  const showing = i18n.language
+  return (
+    <section id="language" className="scroll-mt-16 space-y-2">
+      <h2 className="text-sm font-medium">{t('settings.board.language.title')}</h2>
+      <p className="text-sm text-muted-foreground">{t('settings.board.language.text')}</p>
+      <Tabs
+        value={showing}
+        onValueChange={(value) => {
+          const next = LANGUAGES.find((l) => l === value)
+          if (!next) return
+          setLanguage(next)
+          save.mutate(next)
+        }}
+      >
+        <TabsList aria-label={t('settings.board.language.title')}>
+          {LANGUAGES.map((value) => (
+            // Each language in its own words, whatever the page is in: findable by whoever cannot read it.
+            <TabsTrigger key={value} value={value} lang={value}>
+              {LANGUAGE_NAME[value]}
             </TabsTrigger>
           ))}
         </TabsList>

@@ -63,11 +63,15 @@ Run all of them before you open a pull request:
 ```
 pnpm typecheck && pnpm lint && pnpm test
 pnpm check:migrations
+pnpm check:i18n
 pnpm test:e2e
 pnpm exec prettier --check --end-of-line auto <changed files>
 ```
 
 - `pnpm test` is vitest (`src/**/*.test.ts`, `scripts/**/*.test.mjs`, `desktop/**/*.test.mjs`).
+- `pnpm check:i18n` (also run by `pnpm test`): every text of the interface is in every language file under
+  `src/i18n/locales`, and no English is left in a component. A new text goes in `en.json` and `es.json`
+  with a key (README: "Language"); never hard-code it in JSX.
 - `pnpm test:e2e` builds the board into `.output-e2e` and runs the Playwright suite against it in test
   mode, on a free loopback port above 47140 with throwaway data, so it is safe beside a running board.
 - Prettier needs `--end-of-line auto`: without it, it flags every file checked out with CRLF line

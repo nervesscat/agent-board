@@ -1,0 +1,198 @@
+// The interface's translation checks, run by `pnpm check:i18n` and by the unit tests (CI):
+//
+//   1. Every key of the English file (the model) is in every other language, and nothing else is: no
+//      missing Spanish text, no leftover key, no empty text, the same {{placeholders}} and <tags>.
+//   2. No English left hard-coded in a component: text between JSX tags, a text attribute (title,
+//      aria-label, placeholder, alt, label, content …) and a toast's message must go through `t(...)`.
+//      The files not extracted yet are listed in scripts/i18n-pending.txt, which only shrinks: a pending
+//      file that is clean is an error, so it comes off the list.
+//
+// A literal that is not language (a brand, a code) is marked with `// i18n-ignore` on its line or the one
+// above, with the reason.
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+export const LOCALES_DIR = path.join(root, 'src/i18n/locales')
+export const PENDING_FILE = path.join(root, 'scripts/i18n-pending.txt')
+
+const PLURAL = /_(zero|one|two|few|many|other)$/
+const TEXT_ATTRIBUTES = new Set([
+  'title',
+  'aria-label',
+  'aria-description',
+  'placeholder',
+  'alt',
+  'label',
+  'content',
+  'description',
+  'emptyText',
+])
+// Words, not a brand name (CrossBoard) or a colour (#0a0a0a).
+const HAS_WORDS = {
+  test: (text) => /\p{L}{2,}/u.test(text.replace(/CrossBoard/g, ' ').replace(/#[0-9a-f]{3,8}\b/gi, ' ')),
+}
+
+/** The leaves of a nested translation file: `{ a: { b: 'x' } }` is `{ 'a.b': 'x' }`. */
+export function flatten(tree, prefix = '') {
+  const out = {}
+  for (const [key, value] of Object.entries(tree)) {
+    const at = prefix ? `${prefix}.${key}` : key
+    if (value && typeof value === 'object') Object.assign(out, flatten(value, at))
+    else out[at] = value
+  }
+  return out
+}
+
+const base = (key) => key.replace(PLURAL, '')
+const placeholders = (text) =>
+  [...String(text).matchAll(/\{\{\s*([\w.]+)\s*(?:,[^}]*)?\}\}/g)].map((m) => m[1]).sort()
+const tags = (text) => [...String(text).matchAll(/<\/?(\w+)\s*\/?>/g)].map((m) => m[1]).sort()
+
+/** The problems of `other` against the model `en`, as readable lines; none when they agree. */
+export function compareLocales(en, other, name) {
+  const problems = []
+  const a = flatten(en)
+  const b = flatten(other)
+  const bases = (flat) => new Set(Object.keys(flat).map(base))
+  const aBases = bases(a)
+  const bBases = bases(b)
+  for (const k of aBases) if (!bBases.has(k)) problems.push(`${name}: missing key ${k}`)
+  for (const k of bBases) if (!aBases.has(k)) problems.push(`${name}: key ${k} is not in the English file`)
+  for (const [key, text] of Object.entries(b)) {
+    if (typeof text !== 'string' || text.trim() === '') problems.push(`${name}: ${key} is empty`)
+  }
+  for (const k of aBases) {
+    const pluralOf = (flat) => Object.keys(flat).filter((x) => base(x) === k && PLURAL.test(x))
+    if (pluralOf(a).length && !pluralOf(b).some((x) => x.endsWith('_other')))
+      problems.push(`${name}: ${k} has no _other form`)
+  }
+  for (const [key, text] of Object.entries(b)) {
+    const model = a[key] ?? a[`${base(key)}_other`]
+    if (model === undefined || typeof text !== 'string' || text.trim() === '') continue
+    if (placeholders(model).join() !== placeholders(text).join())
+      problems.push(`${name}: ${key} uses other {{placeholders}} than the English text`)
+    if (tags(model).join() !== tags(text).join())
+      problems.push(`${name}: ${key} uses other <tags> than the English text`)
+  }
+  return problems
+}
+
+export function readLocales() {
+  const out = {}
+  for (const f of fs.readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.json')))
+    out[path.basename(f, '.json')] = JSON.parse(fs.readFileSync(path.join(LOCALES_DIR, f), 'utf8'))
+  return out
+}
+
+export function checkLocales(locales = readLocales()) {
+  const { en, ...rest } = locales
+  if (!en) return ['the English file (en.json) is missing']
+  return Object.entries(rest).flatMap(([name, tree]) => compareLocales(en, tree, name))
+}
+
+/** The hard-coded texts of one component's source: `[{ line, text }]`. */
+export function findHardcoded(source, fileName = 'file.tsx') {
+  const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  const lines = source.split('\n')
+  const found = []
+  const ignored = (line) => /i18n-ignore/.test(lines[line] ?? '') || /i18n-ignore/.test(lines[line - 1] ?? '')
+  const report = (node, text) => {
+    const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line
+    if (!ignored(line)) found.push({ line: line + 1, text: text.trim().replace(/\s+/g, ' ').slice(0, 60) })
+  }
+  const literal = (node) =>
+    ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)
+      ? node.text
+      : ts.isTemplateExpression(node)
+        ? [node.head.text, ...node.templateSpans.map((s) => s.literal.text)].join(' ')
+        : undefined
+  const visit = (node) => {
+    if (ts.isJsxText(node)) {
+      const text = node.text.replace(/&\w+;|&#\d+;/g, ' ')
+      if (HAS_WORDS.test(text)) report(node, node.text)
+    } else if (ts.isJsxAttribute(node) && TEXT_ATTRIBUTES.has(node.name.getText(sf)) && node.initializer) {
+      const init = node.initializer
+      const text = ts.isStringLiteral(init)
+        ? init.text
+        : ts.isJsxExpression(init) && init.expression
+          ? literal(init.expression)
+          : undefined
+      if (text !== undefined && HAS_WORDS.test(text)) report(node, text)
+    } else if (
+      ts.isJsxExpression(node) &&
+      node.expression &&
+      (ts.isJsxElement(node.parent) || ts.isJsxFragment(node.parent))
+    ) {
+      const text = literal(node.expression)
+      if (text !== undefined && HAS_WORDS.test(text)) report(node, text)
+    } else if (ts.isCallExpression(node)) {
+      const callee = node.expression.getText(sf)
+      if (/^toast(\.(success|error|info|warning|message|loading))?$/.test(callee) && node.arguments[0]) {
+        const text = literal(node.arguments[0])
+        if (text !== undefined && HAS_WORDS.test(text)) report(node, text)
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sf)
+  return found
+}
+
+export const pendingFiles = () =>
+  fs
+    .readFileSync(PENDING_FILE, 'utf8')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'))
+
+function walk(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = path.join(dir, e.name)
+    return e.isDirectory() ? walk(p) : p.endsWith('.tsx') ? [p] : []
+  })
+}
+
+/** The components with English in them that are not listed as pending, and pending ones that are clean. */
+export function checkComponents() {
+  const pending = new Set(pendingFiles())
+  const problems = []
+  const seen = new Set()
+  for (const file of walk(path.join(root, 'src'))) {
+    const rel = path.relative(root, file).split(path.sep).join('/')
+    seen.add(rel)
+    const found = findHardcoded(fs.readFileSync(file, 'utf8'), rel)
+    if (pending.has(rel)) {
+      if (found.length === 0)
+        problems.push(`${rel} has no hard-coded text left: remove it from scripts/i18n-pending.txt`)
+    } else {
+      for (const f of found)
+        problems.push(`${rel}:${f.line} hard-coded text "${f.text}": use t('…') (or mark it // i18n-ignore)`)
+    }
+  }
+  for (const p of pending)
+    if (!seen.has(p)) problems.push(`scripts/i18n-pending.txt lists ${p}, which does not exist`)
+  return problems
+}
+
+/** Every file with English in it, for building the pending list. */
+export function allHardcoded() {
+  return walk(path.join(root, 'src'))
+    .map((f) => path.relative(root, f).split(path.sep).join('/'))
+    .filter((rel) => findHardcoded(fs.readFileSync(path.join(root, rel), 'utf8'), rel).length > 0)
+    .sort()
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const problems = [...checkLocales(), ...checkComponents()]
+  if (problems.length) {
+    console.error(problems.join('\n'))
+    console.error(`\n${problems.length} translation problem(s).`)
+    process.exit(1)
+  }
+  console.log(
+    `i18n: ${Object.keys(readLocales()).join(', ')} agree; ${pendingFiles().length} component file(s) pending.`,
+  )
+}
