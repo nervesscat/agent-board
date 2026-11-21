@@ -433,9 +433,15 @@ const humanWorkflow = (request: Request) => {
 // Every preset with its saved tweaks and its steps as a tree, and the active one.
 api.get('/api/projects/:id/workflow', ({ params }) => json(workflow.workflowOverview(id(params))))
 // What a ticket's agent follows (the ticket's own preset, else the project's, for its complexity), with the text.
+// With no ticket, `preset` and `complexity` pick what to show (the Workflow page's "What agents read").
 api.get('/api/projects/:id/workflow/effective', ({ params, url }) => {
   const ticketId = url.searchParams.get('ticketId')
-  return json(workflow.effectiveWorkflow(id(params), ticketId ? intParam(ticketId, 'ticketId') : null))
+  return json(
+    workflow.effectiveWorkflow(id(params), ticketId ? intParam(ticketId, 'ticketId') : null, {
+      preset: url.searchParams.get('preset'),
+      complexity: url.searchParams.get('complexity'),
+    }),
+  )
 })
 api.put('/api/projects/:id/workflow', async ({ request, params, actor }) => {
   humanWorkflow(request)

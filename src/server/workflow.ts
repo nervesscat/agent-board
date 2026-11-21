@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
-import { type Complexity } from '#/lib/constants'
+import { COMPLEXITIES, type Complexity } from '#/lib/constants'
 import { hasGitSide } from '#/lib/kinds'
 import {
   DEFAULT_WORKFLOW_PRESET,
@@ -186,14 +186,27 @@ export function resetTweaks(projectId: number, preset: string, actor: string) {
  * else the project's active one (`source: project`), with that preset's saved tweaks, resolved for the
  * ticket's complexity; `text` is what the agent reads. With no ticket, the project's workflow for no
  * complexity (the rounds table). A ticket of another project is refused.
+ *
+ * Without a ticket, `view` picks the preset and the complexity to show (the Workflow page reads its
+ * "What agents read" panel this way): the text is what a ticket of that complexity reads, which for a
+ * preset other than the project's is a ticket that names it (`source: ticket`).
  */
-export function effectiveWorkflow(projectId: number, ticketId?: number | null) {
+export function effectiveWorkflow(
+  projectId: number,
+  ticketId?: number | null,
+  view: { preset?: string | null; complexity?: string | null } = {},
+) {
   softwareProject(projectId)
   const { active, tweaks } = projectWorkflow(projectId)
   let preset = active
   let source: 'ticket' | 'project' = 'project'
   let complexity: Complexity | null = null
   if (ticketId != null) {
+    if (view.preset || view.complexity)
+      throw new HttpError(
+        400,
+        'ticketId: the ticket has its own preset and complexity; give no preset or complexity with it',
+      )
     const ticket = db.select().from(schema.tickets).where(eq(schema.tickets.id, ticketId)).get()
     if (!ticket) throw notFound('ticket')
     if (ticket.projectId !== projectId)
@@ -202,6 +215,18 @@ export function effectiveWorkflow(projectId: number, ticketId?: number | null) {
     if (isWorkflowPreset(ticket.workflowPreset)) {
       preset = ticket.workflowPreset
       source = 'ticket'
+    }
+  } else {
+    if (view.preset) {
+      if (!isWorkflowPreset(view.preset))
+        throw new HttpError(400, `preset: one of ${WORKFLOW_PRESETS.join(', ')}`)
+      preset = view.preset
+      if (preset !== active) source = 'ticket'
+    }
+    if (view.complexity) {
+      if (!(COMPLEXITIES as readonly string[]).includes(view.complexity))
+        throw new HttpError(400, `complexity: one of ${COMPLEXITIES.join(', ')}`)
+      complexity = view.complexity as Complexity
     }
   }
   const workflow = resolveWorkflow(preset, tweaks[preset], complexity)

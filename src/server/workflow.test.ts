@@ -379,6 +379,33 @@ describe('the effective workflow (C6, C7, C9, D1 to D3)', () => {
     expect(w.text).not.toContain('gh pr checks')
   })
 
+  it('shows any preset for any complexity when no ticket is named: the text of a ticket that follows it', async () => {
+    const pid = await newProject()
+    await call('PUT', `/api/projects/${pid}/workflow/light`, { rounds: { mid: 2 } })
+    const view = async (query: string) => await call('GET', `/api/projects/${pid}/workflow/effective${query}`)
+    const light = (await view('?preset=light&complexity=mid')).body
+    expect([light.preset, light.source, light.projectPreset, light.complexity]).toEqual([
+      'light',
+      'ticket',
+      'standard',
+      'mid',
+    ])
+    expect(light.steps.find((s: { id: string }) => s.id === 'review').review.rounds).toBe(2)
+    expect(light.text).toContain("# Workflow: Light (set on the ticket; the project's workflow is Standard)")
+    expect(light.text).toContain('Review: up to 2 rounds.')
+    // The project's own preset reads as the project's workflow, exactly as get_workflow serves it.
+    const own = (await view('?preset=standard&complexity=low')).body
+    expect([own.source, own.complexity]).toEqual(['project', 'low'])
+    expect(own.text).toContain("# Workflow: Standard (the project's workflow)")
+    const t = ticket(pid, 'low')
+    const served = (await view(`?ticketId=${t.id}`)).body
+    expect(own.text).toBe(served.text)
+    // Neither a preset nor a complexity that does not exist, and not beside a ticket that has its own.
+    expect((await view('?preset=huge')).status).toBe(400)
+    expect((await view('?complexity=extreme')).status).toBe(400)
+    expect((await view(`?ticketId=${t.id}&preset=light`)).status).toBe(400)
+  })
+
   it('reads the database on each call: a change shows in the next read (C9)', async () => {
     const pid = await newProject()
     const t = ticket(pid, 'mid')
