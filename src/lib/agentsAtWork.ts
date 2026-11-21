@@ -67,7 +67,7 @@ const text = (iso: string, now: number) => {
 /** "Building", "Reviewing round 2", "CI": the open span's phase; the raw phase when it is none of those. */
 export function phaseLabel(phase: string | null, round: number | null): string {
   if (!phase) return ''
-  const base = phase === 'ci' ? 'CI' : (GERUND[phase] ?? phase)
+  const base = phase === 'ci' ? 'CI' : Object.hasOwn(GERUND, phase) ? GERUND[phase] : phase
   return round ? `${base} round ${round}` : base
 }
 
@@ -116,7 +116,9 @@ export function petsOf(
   // The stage kind is a wait on the human too, whatever the timeline says.
   for (const e of work?.liveNow ?? [])
     fromLive(e, e.waitingFor || e.stage.kind === 'blocked' ? 'waiting' : 'working')
-  for (const e of work?.recentlyActive ?? []) if (e.stalled) fromLive(e, 'asleep')
+  // Quiet but not live: stalled, or lost contact (an open span whose lease ran out: stalled is false but the
+  // phase is that of the open span). One with no open span is not an agent at work and draws nothing.
+  for (const e of work?.recentlyActive ?? []) if (e.stalled || e.phase !== null) fromLive(e, 'asleep')
   for (const t of doneToday.slice(0, MAX_DONE)) {
     if (all.some((p) => p.ticketId === t.id)) continue
     const agent = t.assignee || null

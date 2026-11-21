@@ -45,6 +45,15 @@ const done = (over: Record<string, unknown> = {}) =>
 
 const names = (r: ReturnType<typeof petsOf>) => r.pets.map((p) => `${p.ticketId}:${p.agent}:${p.state}`)
 
+describe('phase text that is a property of Object', () => {
+  it.each(['constructor', 'toString', '__proto__'])('shows %s as plain text', (phase) => {
+    expect(phaseLabel(phase, 2)).toBe(`${phase} round 2`)
+    const { pets } = petsOf({ liveNow: [live({ phase, round: 3 })], recentlyActive: [] }, [], NOW)
+    expect(pets[0].phase).toBe(`${phase} round 3`)
+    expect(pets[0].label).toContain(`${phase} round 3`)
+  })
+})
+
 describe('petsOf', () => {
   it('makes one character per agent, with its ticket, phase and time since it was heard', () => {
     const { pets } = petsOf(
@@ -105,7 +114,13 @@ describe('petsOf', () => {
           live({ ticketId: 4, stage: { key: 'b', name: 'Blocked', kind: 'blocked' } }),
           live({ ticketId: 6, silentMinutes: 500, lastHeardAt: minutesAgo(500) }),
         ],
-        recentlyActive: [quiet({ ticketId: 5 }), quiet({ ticketId: 7, stalled: false })],
+        recentlyActive: [
+          quiet({ ticketId: 5 }),
+          // Not stalled and nothing open: not an agent at work.
+          quiet({ ticketId: 7, stalled: false, phase: null }),
+          // Lost contact: an open span whose lease ran out, so not stalled but with a phase.
+          quiet({ ticketId: 8, stalled: false, phase: 'build' }),
+        ],
       },
       [],
       NOW,
@@ -117,10 +132,14 @@ describe('petsOf', () => {
       4: 'waiting',
       5: 'asleep',
       6: 'working',
+      8: 'asleep',
     })
     expect(r.pets.find((p) => p.ticketId === 2)!.phase).toBe('Waiting: which one?')
     expect(r.pets.find((p) => p.ticketId === 4)!.phase).toBe('Blocked')
     expect(r.pets.find((p) => p.ticketId === 5)!.phase).toBe('Building, quiet')
+    expect(r.pets.find((p) => p.ticketId === 8)!.phase).toBe('Building, quiet')
+    expect(r.pets.some((p) => p.ticketId === 7)).toBe(false)
+    expect(r.live).toBe(7)
   })
 
   it('orders waiting, working, asleep, done, ties by ticket then name, the same each time', () => {
