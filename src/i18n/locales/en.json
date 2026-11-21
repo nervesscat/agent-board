@@ -319,7 +319,36 @@
     "dismissTip": "Hide this until the next check finds {{name}} still missing",
     "dismissAria": "Dismiss the {{name}} warning",
     "recheckTip": "Look for git, gh, claude, node and pnpm again on the board's PATH",
-    "recheckAria": "Check the tools again"
+    "recheckAria": "Check the tools again",
+    "text": {
+      "breaks": {
+        "git": "ticket branch and commit status, merged checks and cleanup",
+        "gh": "the PR queue, CI status and PR tickets",
+        "claude": "the board's own report generation (Reports → Generate)",
+        "node": "managed previews",
+        "pnpm": "managed previews",
+        "ghTooOld": "the board's check that gh is signed in"
+      },
+      "problem": {
+        "notFound": "{{name}} was not found on the board's PATH",
+        "claudeNotFound": "claude was not found: CLAUDE_BIN is {{bin}}",
+        "tooOld": "{{gh}} is too old for this check: it does not know --active",
+        "noConfigWhere": "gh cannot find its config: no {{needs}}, so it looked for {{file}}",
+        "noConfig": "gh cannot find its config: no HOME or GH_CONFIG_DIR",
+        "signedOut": "gh is not signed in"
+      },
+      "fix": {
+        "then": "then Check again (restart the board if its folder was not on its PATH yet)",
+        "installGit": "install git (https://git-scm.com/downloads), {{after}}",
+        "installGh": "install the GitHub CLI (https://cli.github.com) and run gh auth login, {{after}}",
+        "installClaude": "install Claude Code (https://docs.claude.com/en/docs/claude-code/setup), or set CLAUDE_BIN in .env (config.env for the desktop app) to its full path, then restart the board",
+        "installNode": "install Node.js (https://nodejs.org), {{after}}",
+        "installPnpm": "run corepack enable pnpm (or install it: https://pnpm.io/installation), {{after}}",
+        "upgradeGh": "upgrade the GitHub CLI (https://cli.github.com; on Debian or Ubuntu: sudo apt install --only-upgrade gh, on macOS: brew upgrade gh), then Check again",
+        "noConfig": "start the board with HOME set to the home gh was signed in from (or GH_CONFIG_DIR to the folder holding hosts.yml), then Check again",
+        "signedOut": "run gh auth login on this machine, then Check again"
+      }
+    }
   },
   "previewLimit": {
     "label": "Preview limit",

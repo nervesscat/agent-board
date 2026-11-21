@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Button } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, type HostTools, post } from '#/lib/api'
+import { hostToolText } from '#/lib/hostToolText'
 import { useHydrated } from '#/lib/useHydrated'
 
 /**
@@ -59,7 +60,7 @@ export function HostToolsBanner() {
               <p className="min-w-0 flex-1 [overflow-wrap:anywhere]">
                 <Trans
                   i18nKey="hostTools.line"
-                  values={{ problem: tool.problem, breaks: tool.breaks, fix: tool.fix }}
+                  values={hostToolText(tool, t)}
                   components={{ strong: <span className="font-medium" /> }}
                 />
               </p>

@@ -319,7 +319,36 @@
     "dismissTip": "Ocultar esto hasta que la próxima comprobación siga sin encontrar {{name}}",
     "dismissAria": "Descartar el aviso de {{name}}",
     "recheckTip": "Buscar de nuevo git, gh, claude, node y pnpm en el PATH del tablero",
-    "recheckAria": "Comprobar de nuevo las herramientas"
+    "recheckAria": "Comprobar de nuevo las herramientas",
+    "text": {
+      "breaks": {
+        "git": "el estado de branches y commits de los tickets, los checks de merge y la limpieza",
+        "gh": "la cola de PR, el estado de CI y los tickets de PR",
+        "claude": "la generación de informes del propio tablero (Informes → Generar)",
+        "node": "las previews gestionadas",
+        "pnpm": "las previews gestionadas",
+        "ghTooOld": "la comprobación del tablero de que gh tiene la sesión iniciada"
+      },
+      "problem": {
+        "notFound": "{{name}} no se encontró en el PATH del tablero",
+        "claudeNotFound": "no se encontró claude: CLAUDE_BIN es {{bin}}",
+        "tooOld": "{{gh}} es demasiado antiguo para esta comprobación: no conoce --active",
+        "noConfigWhere": "gh no encuentra su configuración: no hay {{needs}}, así que la buscó en {{file}}",
+        "noConfig": "gh no encuentra su configuración: no hay HOME ni GH_CONFIG_DIR",
+        "signedOut": "gh no tiene la sesión iniciada"
+      },
+      "fix": {
+        "then": "luego pulsa Comprobar de nuevo (reinicia el tablero si su carpeta aún no estaba en el PATH)",
+        "installGit": "instala git (https://git-scm.com/downloads), {{after}}",
+        "installGh": "instala la CLI de GitHub (https://cli.github.com) y ejecuta gh auth login, {{after}}",
+        "installClaude": "instala Claude Code (https://docs.claude.com/en/docs/claude-code/setup), o define CLAUDE_BIN en .env (config.env en la app de escritorio) con su ruta completa, y reinicia el tablero",
+        "installNode": "instala Node.js (https://nodejs.org), {{after}}",
+        "installPnpm": "ejecuta corepack enable pnpm (o instálalo: https://pnpm.io/installation), {{after}}",
+        "upgradeGh": "actualiza la CLI de GitHub (https://cli.github.com; en Debian o Ubuntu: sudo apt install --only-upgrade gh, en macOS: brew upgrade gh), luego pulsa Comprobar de nuevo",
+        "noConfig": "inicia el tablero con HOME apuntando al home desde el que se inició sesión en gh (o GH_CONFIG_DIR a la carpeta con hosts.yml), luego pulsa Comprobar de nuevo",
+        "signedOut": "ejecuta gh auth login en esta máquina, luego pulsa Comprobar de nuevo"
+      }
+    }
   },
   "previewLimit": {
     "label": "Límite de previews",
@@ -2023,7 +2052,7 @@
     "clearSearch": "Quitar la búsqueda",
     "state": "Estado",
     "clearState": "Quitar el filtro de estado",
-    "allTags": "Todas las etiquetas",
+    "allTags": "Etiquetas",
     "filterByTag": "Filtrar por etiqueta",
     "tags": "Etiquetas",
     "searchTags": "Buscar etiquetas",
@@ -2050,7 +2079,7 @@
     "statusMerged": "Necesita #{{id}} · fusionado",
     "statusNotMerged": "Necesita #{{id}} · sin fusionar aún",
     "removeNeed": "Quitar la dependencia de #{{id}}",
-    "addPlaceholder": "Añade un ticket que debe fusionarse antes…",
+    "addPlaceholder": "Añade un ticket previo…",
     "noOthers": "No hay otros tickets",
     "includes": "Incluye trabajo sin fusionar de <goto>{{ref}}</goto>",
     "cannotBeDone": "#{{id}} no puede darse por hecho hasta que el branch de #{{need}} se fusione en su base",
