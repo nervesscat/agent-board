@@ -391,6 +391,27 @@ describe('wait_for_answer: one answer is delivered or resumed, never both and ne
     expect(rows.at(-1)!.reason).toContain('press Resume')
   })
 
+  it('an answer relayed from the chat and then edited on the board starts no agent', async () => {
+    const out = path.join(tmp, 'relay-edit.txt')
+    dbm.db
+      .update(dbm.schema.projects)
+      .set({ resumeCommand: commandFor(out) })
+      .where(eq(dbm.schema.projects.id, projectId))
+      .run()
+    const { ticket, post } = asked()
+    features.relayDecision(post.id, { option: 0, words: 'sqlite' }, 'orch', { agent: true })
+    expect(rowsOf(ticket.id)).toHaveLength(0)
+    features.decide(post.id, 1, 'changed', HUMAN)
+    features.decide(post.id, 0, 'again', HUMAN)
+    await sleep(150)
+    const rows = rowsOf(ticket.id)
+    expect(rows).toHaveLength(2)
+    expect(rows.every((r) => r.state === 'skipped' && r.pid === null)).toBe(true)
+    expect(rows[0]!.reason).toContain('the answer came from the chat')
+    expect(repliesOf(post.id).at(-1)!.body).toContain('the agent that asked has the first answer')
+    expect(fs.existsSync(out)).toBe(false)
+  })
+
   it('a relayed answer reaches the waiter and starts no resume', async () => {
     const { ticket, post } = asked()
     const p = wait.waitForAnswer({ ticketId: ticket.id, postId: post.id, ...quick })

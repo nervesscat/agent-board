@@ -2613,6 +2613,7 @@ export function decide(
   const picked = post.decision[option]
   if (!picked) throw new HttpError(400, `no option ${option}; there are ${post.decision.length}`)
   const changed = post.decidedAt !== null
+  const wasRelayed = post.relayedBy !== ''
   const row = db
     .update(schema.updates)
     .set({
@@ -2634,7 +2635,7 @@ export function decide(
   const words = `${changed ? 'Changed the decision to' : 'Decided'}: **${picked.label}**${note.trim() ? `\n\n${note.trim()}` : ''}${archiveWords(archive)}${repoWords(repo)}`
   settleDecision(row, actor, words, `decided "${picked.label}"`)
   // The agent that asked has ended its turn: the board continues the work (resume.ts).
-  resumeAfterAnswer(row, words, changed)
+  resumeAfterAnswer(row, words, changed, wasRelayed)
   // An agent waiting for this answer (wait_for_answer) gets it now: the resume above saw it registered.
   answerLanded(row.ticketId, row.id)
   return { ...row, archive, repo }

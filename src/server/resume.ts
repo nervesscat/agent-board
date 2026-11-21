@@ -397,6 +397,8 @@ interface Start {
   since?: string | null
   /** The answer on the card was changed after an earlier one. */
   edited?: boolean
+  /** The answer that was changed had been relayed from the chat, to the session that asked. */
+  wasRelayed?: boolean
 }
 
 const SKIP_OFF = 'resuming is off: the project has no resume command (Settings, Resume)'
@@ -421,6 +423,8 @@ function moveTo(ticket: schema.Ticket, key: string) {
 }
 
 const WAITING = 'an agent is waiting for this answer'
+const FROM_CHAT =
+  'the answer came from the chat, so the agent that asked has the first answer: press Resume on the ticket to run the work with the changed one'
 
 function skipped(s: Start, reason: string, quiet = false) {
   const row = db
@@ -479,16 +483,21 @@ export function startResume(s: Start): schema.TicketResume {
         ? 'a resume is already running for this ticket; it finds the changed answer in its threads'
         : 'a resume is already running for this ticket; it finds this answer in its threads',
     )
+  if (s.edited && s.wasRelayed) return skipped(s, FROM_CHAT)
   if (s.edited && s.postId) {
     // One answer, one agent: the first answer either started a process or was delivered to a waiting agent
     // (its skipped row says so), and in both the agent has it already.
     const earlier = db
-      .select({ startedAt: schema.ticketResumes.startedAt })
+      .select({ startedAt: schema.ticketResumes.startedAt, reason: schema.ticketResumes.reason })
       .from(schema.ticketResumes)
       .where(
         and(
           eq(schema.ticketResumes.postId, s.postId),
-          or(isNotNull(schema.ticketResumes.startedAt), eq(schema.ticketResumes.reason, WAITING)),
+          or(
+            isNotNull(schema.ticketResumes.startedAt),
+            eq(schema.ticketResumes.reason, WAITING),
+            eq(schema.ticketResumes.reason, FROM_CHAT),
+          ),
         ),
       )
       .get()
@@ -497,7 +506,9 @@ export function startResume(s: Start): schema.TicketResume {
         s,
         earlier.startedAt
           ? 'the answer was changed after the resume started: press Resume on the ticket to run it again'
-          : 'the answer was changed after it was delivered to the agent waiting for it: the agent has the first answer, so press Resume on the ticket to run the work with the changed one',
+          : earlier.reason === FROM_CHAT
+            ? FROM_CHAT
+            : 'the answer was changed after it was delivered to the agent waiting for it: the agent has the first answer, so press Resume on the ticket to run the work with the changed one',
       )
   }
   if (s.trigger === 'answer' && s.postId && hasWaiter(s.ticketId, s.postId)) return skipped(s, WAITING)
@@ -685,6 +696,7 @@ export function resumeAfterAnswer(
   post: Pick<schema.Update, 'id' | 'ticketId' | 'createdAt'>,
   answer: string,
   edited: boolean,
+  wasRelayed = false,
 ) {
   return guarded(() =>
     startResume({
@@ -694,6 +706,7 @@ export function resumeAfterAnswer(
       answer,
       since: post.createdAt,
       edited,
+      wasRelayed,
     }),
   )
 }
