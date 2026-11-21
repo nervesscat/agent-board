@@ -1,4 +1,11 @@
 import type { Project } from '#/db/schema'
+import {
+  ALERT_GROUPS,
+  ALERT_GROUP_LABELS,
+  ALERT_SEVERITIES,
+  type AlertGroup,
+  type AlertSeverity,
+} from '#/lib/alerts'
 
 import { alertTypes as housekeeping } from './housekeeping'
 import { alertTypes as machine } from './machine'
@@ -12,18 +19,7 @@ import { alertTypes as work } from './work'
  * with them (seen, dismissed, snoozed), and the notification feed (feed.ts) shows the rows.
  */
 
-export const ALERT_GROUPS = ['setup', 'work', 'machine', 'housekeeping'] as const
-export type AlertGroup = (typeof ALERT_GROUPS)[number]
-
-export const ALERT_GROUP_LABELS: Record<AlertGroup, string> = {
-  setup: 'Setup and versions',
-  work: 'Work',
-  machine: 'This machine',
-  housekeeping: 'Housekeeping',
-}
-
-export const ALERT_SEVERITIES = ['info', 'warning', 'problem'] as const
-export type AlertSeverity = (typeof ALERT_SEVERITIES)[number]
+export { ALERT_GROUPS, ALERT_GROUP_LABELS, ALERT_SEVERITIES, type AlertGroup, type AlertSeverity }
 
 /** A button on an alert. Snooze and Dismiss are not buttons: every alert has them. */
 export type AlertButton =
