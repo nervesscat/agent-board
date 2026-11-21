@@ -9,7 +9,15 @@ const navLink = (page: Page, name: string) =>
 const region = (page: Page, name: string) => page.getByRole('region', { name })
 
 /** The sections only the Settings page has. */
-const SETTINGS = ['Default phases', 'Tag suggestions', 'Stalled tickets', 'Stages', 'Runs', 'Layout']
+const SETTINGS = [
+  'Default phases',
+  'Tag suggestions',
+  'Stalled tickets',
+  'Stages',
+  'Runs',
+  'Resume',
+  'Layout',
+]
 
 test('the sidebar opens Instructions and Settings, each with only its own sections', async ({
   page,

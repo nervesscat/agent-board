@@ -199,6 +199,8 @@ function TicketPage() {
     qc.invalidateQueries({ queryKey: ['ticket-git', ticketId] })
     // Its repos, and with them its runs, may have changed.
     qc.invalidateQueries({ queryKey: ['ticket-runs'] })
+    // An answer or a move may have started a resume: the Resume card shows it now, not on its next poll.
+    qc.invalidateQueries({ queryKey: ['ticket-resume'] })
     // The tags the project's tickets carry, offered under every tags field.
     qc.invalidateQueries({ queryKey: ['project', id] })
   }
