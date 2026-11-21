@@ -12,6 +12,9 @@ import type { AlertCandidate, AlertContext, AlertType } from './registry'
 const tmp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-alerts-')))
 process.env.DATA_DIR = path.join(tmp, 'data')
 process.env.BOARD_ENV = 'test'
+// The setup alerts read the skills installed under the home and CLAUDE_HOME of the machine: an empty one.
+process.env.HOME = process.env.USERPROFILE = tmp
+process.env.CLAUDE_HOME = path.join(tmp, 'claude-home')
 
 const HUMAN = 'human:enrique'
 const CLAUDE = 'agent:claude'
@@ -513,17 +516,17 @@ describe('the background run', () => {
     const projectId = newProject('loop')
     const { state } = typeWith()
     state.found = [candidate()]
-    vi.useFakeTimers()
-    const stop = evaluate.startAlertEvaluator({ first: 1000, every: 5000 })
+    // Real timers: the setup types read files, which fake timers would never let finish.
+    const stop = evaluate.startAlertEvaluator({ first: 100, every: 100 })
     expect(state.asked).toEqual([])
-    await vi.advanceTimersByTimeAsync(1000)
-    expect(state.asked).toContain(projectId)
+    await vi.waitFor(() => expect(state.asked).toContain(projectId), { timeout: 10_000 })
     const asked = state.asked.length
-    await vi.advanceTimersByTimeAsync(5000)
-    expect(state.asked.length).toBeGreaterThan(asked)
+    await vi.waitFor(() => expect(state.asked.length).toBeGreaterThan(asked), { timeout: 10_000 })
     stop()
+    // A run that was under way when it stopped may still finish: let it, then nothing more comes.
+    await new Promise((resolve) => setTimeout(resolve, 500))
     const after = state.asked.length
-    await vi.advanceTimersByTimeAsync(20_000)
+    await new Promise((resolve) => setTimeout(resolve, 500))
     expect(state.asked.length).toBe(after)
   })
 })

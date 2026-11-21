@@ -459,10 +459,25 @@ async function installFile(target: string, text: string): Promise<InstallAction>
 }
 
 /** Writes the board skill for `client` into its own folder under `home` on this machine, as served. */
-export async function installSkill(client: AgentClient, home = os.homedir()): Promise<InstallResult> {
+export async function installSkill(
+  client: AgentClient,
+  home = os.homedir(),
+  transport: SkillTransport = 'mcp',
+): Promise<InstallResult> {
   const at = new Date().toISOString()
   const file = path.join(skillDir(client, home), 'SKILL.md')
-  return { at, files: [{ path: file, action: await installFile(file, renderSkill(client)) }] }
+  return { at, files: [{ path: file, action: await installFile(file, renderSkill(client, transport)) }] }
+}
+
+/** Where `client`'s session skill goes: its own folder, beside the board skill's. */
+export const sessionSkillFile = (client: AgentClient, home = os.homedir()): string =>
+  path.join(skillDir(client, home).replace(/board$/, 'session'), 'SKILL.md')
+
+/** Writes the session skill for `client` into its own folder under `home` on this machine, as served. */
+export async function installSessionSkill(client: AgentClient, home = os.homedir()): Promise<InstallResult> {
+  const at = new Date().toISOString()
+  const file = sessionSkillFile(client, home)
+  return { at, files: [{ path: file, action: await installFile(file, sessionTemplate) }] }
 }
 
 /**
