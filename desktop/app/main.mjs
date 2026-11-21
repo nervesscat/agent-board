@@ -51,7 +51,7 @@ import {
 } from './settings.mjs'
 import { watchLiveness } from './liveness.mjs'
 import { exitLine, logServer, spawnFailedLine, startLine } from './serverLog.mjs'
-import { resolveLanguage, t as translate } from './strings.mjs'
+import { languageOfTag, resolveLanguage, t as translate } from './strings.mjs'
 import {
   BRIDGE,
   createUpdates,
@@ -87,6 +87,12 @@ let language = 'en'
  * @param {Record<string, string | number>} [params]
  */
 const t = (key, params) => translate(language, key, params)
+
+/**
+ * The locale a time is written in: the system's own (24 hours in en-GB) when it is in the app's language,
+ * else the language itself.
+ */
+const clockLocale = () => (languageOfTag(app.getLocale()) === language ? app.getLocale() : language)
 
 /** Reads the board's language from the window's session; true when it changed. */
 async function refreshLanguage() {
@@ -457,7 +463,7 @@ function onServerExit(code, signal) {
     void fatal(
       'stopped',
       () => {
-        const time = at.toLocaleTimeString(language)
+        const time = at.toLocaleTimeString(clockLocale())
         const sentence = signal
           ? t('exitedSignal', { signal, time })
           : code !== null
@@ -501,7 +507,7 @@ async function restartServer(reason, restartedReason) {
   if (!(await waitUntilUp(server))) return
   restarts.healthySince = Date.now()
   greetServer()
-  const at = new Date().toLocaleTimeString(language)
+  const at = new Date().toLocaleTimeString(clockLocale())
   console.log(`agent-board desktop: the board answers again on ${settings.url} (it had exited: ${reason})`)
   appendLog(path.join(settings.dataDir, 'logs'), `the board answers again on ${settings.url}`)
   const shown = restartedReason
