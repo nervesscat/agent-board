@@ -143,6 +143,7 @@ const ghPr = (number: number, head: string, mergedAt: string | null): MyGhPr => 
   reviewRequests: [],
   requested: false,
   assigned: false,
+  involvesMe: true,
 })
 
 function activeTicket(pid: number, title = 'work') {

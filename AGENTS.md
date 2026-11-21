@@ -570,7 +570,9 @@ routine.
 
 ## PR queue and reviews
 
-- `list_prs` shows the human's PRs, open and merged in the last two weeks: `waitingOn` is `me` for
+- `list_prs` shows the human's PRs, open and merged in the last two weeks (with `all: true` also every
+  other open PR of the repos, which have `involvesMe` false: none of the human's searches found them,
+  authored, review requested, reviewed, assigned; the PR queue's All PRs shows them): `waitingOn` is `me` for
   PRs by others that the human reviews, `others` for the human's own (agents' PRs pushed with their
   account included). `status` is where the reviews stand: `pending` (approval missing), `reviewed`
   (approved: by the human on others' PRs, by every reviewer on theirs), `on_hold` (review comments

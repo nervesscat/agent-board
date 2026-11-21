@@ -584,7 +584,8 @@ const MERGED_DAYS = 14
 const mergedSince = () => new Date(Date.now() - MERGED_DAYS * 86_400_000).toISOString()
 
 /**
- * Pull my PRs from GitHub, open and recently merged, and upsert the snapshot; board-side fields (hold)
+ * Pull the repo's open PRs from GitHub (flagged `involvesMe` when one of my searches finds them) and
+ * my recently merged ones, and upsert the snapshot; board-side fields (hold)
  * are kept. Returns the rows that were stored before and changed.
  */
 async function refreshRepoPrs(repo: schema.Repo): Promise<RowChange[]> {
@@ -618,6 +619,7 @@ async function refreshRepoPrs(repo: schema.Repo): Promise<RowChange[]> {
       reviewDecision: pr.reviewDecision || null,
       myReview: mine ? mine.state.toLowerCase() : 'none',
       requested: pr.requested,
+      involvesMe: pr.involvesMe,
       waitingOn: prWaitingOn(pr, me),
       reviewStage: reviewStage(pr, me),
       mergeable: pr.mergeable,
@@ -648,8 +650,8 @@ async function refreshRepoPrs(repo: schema.Repo): Promise<RowChange[]> {
         .values({ ...values, projectId, repoId: repo.id, number: pr.number })
         .run()
   }
-  // A PR that left every search was closed, unassigned, or merged out of the merged searches' reach:
-  // keep the row, mark it closed, and keep what GitHub says it became (null when it cannot say).
+  // A PR that left every list was closed, merged, or beyond the open list's 100 most recent (and no
+  // longer one of mine): keep the row, mark it closed, and keep what GitHub says it became (null when it cannot say).
   const goneOpen = db
     .select()
     .from(schema.prs)
@@ -711,7 +713,12 @@ async function stopMergedPreviews(repo: schema.Repo, left: schema.Pr[]) {
   }
 }
 
-export async function listPrs(projectId: number, opts: { refresh?: boolean } = {}) {
+/**
+ * The queue's rows. `involvingMe` leaves out the open PRs only the repos' plain open list found (what
+ * All PRs adds to the rest): a reader that acts on the queue, such as an agent picking PRs to review,
+ * asks for it; the page gets every row and narrows by choice.
+ */
+export async function listPrs(projectId: number, opts: { refresh?: boolean; involvingMe?: boolean } = {}) {
   getProject(projectId)
   const stale = Date.now() - (lastRefresh.get(projectId) ?? 0) > REFRESH_MS
   if (opts.refresh || stale) await refreshPrs(projectId)
@@ -723,6 +730,7 @@ export async function listPrs(projectId: number, opts: { refresh?: boolean } = {
       and(
         eq(schema.prs.projectId, projectId),
         or(eq(schema.prs.open, true), gte(schema.prs.mergedAt, mergedSince())),
+        ...(opts.involvingMe ? [eq(schema.prs.involvesMe, true)] : []),
       ),
     )
     .orderBy(desc(schema.prs.updatedAt))
