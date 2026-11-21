@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ChevronDown } from 'lucide-react'
 
 import { ClaimedActor } from '#/components/Actor'
+import { DelayedLoading, SkeletonText } from '#/components/Loading'
 import { WorkTimelineBar, hasWork } from '#/components/WorkTimeline'
 import { LastHeard, WorkLine, WorkSummary } from '#/components/WorkStatus'
 import { Button } from '#/components/ui/button'
@@ -48,7 +49,9 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
       {error ? (
         <p className="text-sm text-destructive">{errorMessage(error)}</p>
       ) : !data ? (
-        <p className="text-xs text-muted-foreground">Loading…</p>
+        <DelayedLoading label="Loading timeline…">
+          <SkeletonText lines={3} />
+        </DelayedLoading>
       ) : (
         <div className="space-y-3">
           <div className="space-y-1 text-sm">
