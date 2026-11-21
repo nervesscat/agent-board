@@ -1,7 +1,8 @@
 {
   "common": {
     "saved": "Guardado",
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "somethingWentWrong": "algo salió mal"
   },
   "shell": {
     "home": "Inicio",
