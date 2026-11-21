@@ -108,13 +108,25 @@ describe('declaring needs', () => {
   })
 
   it('shows them on the ticket with whether each is merged, and who needs it', async () => {
-    const a = ticket('a2', 'feat/a', { prNumber: 7 })
+    // Its branch is nowhere in the repo, so no other ticket's branch holds work of it (the board would
+    // add that as a need).
+    const a = ticket('a2', 'feat/none', { prNumber: 7 })
     const landed = ticket('landed', 'feat/landed')
-    const b = ticket('b2', 'feat/b')
+    // Not stacked on anything: only what it declares is among its needs.
+    const b = ticket('b2', 'feat/d')
     await needs.changeTicket(b.id, { needs: [a.id, landed.id] }, 'claude', agent)
     const view = await needs.ticketView(b.id)
     expect(view.needs).toEqual([
-      { id: a.id, title: 'a2', branch: 'feat/a', prNumber: 7, status: 'todo', merged: false, into: 'main' },
+      {
+        id: a.id,
+        title: 'a2',
+        branch: 'feat/none',
+        prNumber: 7,
+        status: 'todo',
+        merged: false,
+        into: 'main',
+        auto: false,
+      },
       {
         id: landed.id,
         title: 'landed',
@@ -123,10 +135,11 @@ describe('declaring needs', () => {
         status: 'todo',
         merged: true,
         into: 'main',
+        auto: false,
       },
     ])
     expect((await needs.ticketView(a.id)).neededBy).toEqual([
-      { id: b.id, title: 'b2', branch: 'feat/b', prNumber: null, status: 'todo' },
+      { id: b.id, title: 'b2', branch: 'feat/d', prNumber: null, status: 'todo' },
     ])
     const rows = await needs.ticketRows(projectId)
     expect(rows.find((t) => t.id === b.id)!.needs.map((n) => [n.id, n.merged])).toEqual([
@@ -183,7 +196,8 @@ describe('done', () => {
   it('is refused while a need is not merged, on every path that changes the status', async () => {
     const { db, schema } = await import('#/db')
     const a = ticket('a', 'feat/a')
-    const b = ticket('b', 'feat/b', { tags: ['PR'] })
+    // On its own branch, so the only need it has is the one declared.
+    const b = ticket('b', 'feat/d', { tags: ['PR'] })
     await needs.changeTicket(b.id, { needs: [a.id] }, 'claude', agent)
     const reason = `#${b.id} needs #${a.id} (branch feat/a) merged into main first`
 
@@ -256,7 +270,7 @@ describe('done', () => {
 })
 
 describe('includes', () => {
-  it('lists the open tickets whose unmerged work the branch holds', async () => {
+  it('adds the need itself where the branch certainly holds the work, and lists what it cannot decide', async () => {
     const { db, schema } = await import('#/db')
     const p = db.insert(schema.projects).values({ name: 'inc' }).returning().get().id
     db.insert(schema.repos).values({ projectId: p, name: 'repo', repoPath: repo, baseBranch: 'main' }).run()
@@ -268,22 +282,53 @@ describe('includes', () => {
     const d = make('d', 'feat/d')
     make('landed', 'feat/landed')
     const includes = async (id: number) => (await needs.ticketGitView(id)).includes
-    // Stacked on feat/a, and feat/a merged in.
-    expect(await includes(b.id)).toEqual([a.id])
-    expect(await includes(c.id)).toEqual([a.id])
+    const added = async () => {
+      await needs.syncAutoNeeds(p)
+      return (id: number) => needs.needIds(id)
+    }
+    // Stacked on feat/a, and feat/a merged in: the board adds the need, so there is nothing to list.
+    const needsOf = await added()
+    expect(needsOf(b.id)).toEqual([a.id])
+    expect(needsOf(c.id)).toEqual([a.id])
+    expect(await includes(b.id)).toEqual([])
+    expect(await includes(c.id)).toEqual([])
     // feat/a is in both, not the other way round; feat/d took nothing in.
+    expect(needsOf(a.id)).toEqual([])
+    expect(needsOf(d.id)).toEqual([])
     expect(await includes(a.id)).toEqual([])
     expect(await includes(d.id)).toEqual([])
     // Built on feat/a by its base: still a's unmerged work.
     const stacked = make('stacked', 'feat/b', { baseBranch: 'feat/a' })
-    expect(await includes(stacked.id)).toContain(a.id)
-    // A finished ticket's work is not asked for.
+    expect((await added())(stacked.id)).toContain(a.id)
+    // A finished ticket's work is not asked for: what was added for it goes (it did not land).
     await needs.changeTicket(a.id, { status: 'cancelled' }, 'me', human)
+    const after = await added()
+    expect(after(b.id)).toEqual([])
     expect(await includes(b.id)).toEqual([])
     // A lane's parent is family, not a need.
     const parent = make('parent', 'feat/a')
     const lane = features.createTicket(p, { title: 'lane', branch: 'feat/b', parentId: parent.id }, 'claude')
+    expect((await added())(lane.id)).not.toContain(parent.id)
     expect(await includes(lane.id)).not.toContain(parent.id)
+
+    // Stacked, and then the lower branch moved on: whose the shared commit is cannot be told. Only the
+    // hint names it, and no need is added.
+    git('checkout', '-q', '-b', 'inc/low', 'main')
+    commit('low.txt', 'low\n', 'low')
+    git('checkout', '-q', '-b', 'inc/up')
+    commit('up.txt', 'up\n', 'up')
+    git('checkout', '-q', 'inc/low')
+    commit('low2.txt', 'low2\n', 'low2')
+    git('checkout', '-q', 'main')
+    // The branches are new: the board lists the checkout afresh.
+    ;(await import('./push')).dropListings(repo)
+    const low = make('low', 'inc/low')
+    const up = make('up', 'inc/up')
+    expect((await added())(up.id)).toEqual([])
+    expect(await includes(up.id)).toEqual([low.id])
+    // A need that is declared is not listed either.
+    await needs.changeTicket(up.id, { needs: [low.id] }, 'claude', agent)
+    expect(await includes(up.id)).toEqual([])
   })
 })
 
