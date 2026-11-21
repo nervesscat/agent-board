@@ -60,6 +60,7 @@ import {
   stageOf,
 } from './stages'
 import { assertUnattached, attachTo, attachmentView } from './uploads'
+import { answerLanded } from './answerWait'
 import { resumeAfterAnswer, resumeAfterMove } from './resume'
 import { noteBoardEvent, noteStageMove } from './workTimeline'
 
@@ -2636,6 +2637,8 @@ export function decide(
   settleDecision(row, actor, words, `decided "${picked.label}"`)
   // The agent that asked has ended its turn: the board continues the work (resume.ts).
   resumeAfterAnswer(row, words, changed)
+  // An agent waiting for this answer (wait_for_answer) gets it now: the resume above saw it registered.
+  answerLanded(row.ticketId, row.id)
   return { ...row, archive, repo }
 }
 
@@ -2698,6 +2701,8 @@ export function relayDecision(
     `Decided in chat: **${picked.label}**\n\n${words}${archiveWords(archive)}${repoWords(repo)}`,
     `relayed the decision "${picked.label}"`,
   )
+  // A relayed answer is an answer: an agent waiting for it (wait_for_answer) gets it.
+  answerLanded(row.ticketId, row.id)
   return { ...row, archive, repo }
 }
 

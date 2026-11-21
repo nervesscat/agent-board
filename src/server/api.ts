@@ -39,6 +39,7 @@ import { cleanupReport } from './cleanup'
 import { DeleteItems, startCleanupDelete } from './cleanupActions'
 import { authMode, servedEntrance } from './config'
 import { dailyReport, today } from './daily'
+import { WAIT_MAX_SECONDS, waitAndReport } from './answerWait'
 import * as features from './features'
 import { GalleryQuery, listGallery } from './gallery'
 import { listDirs } from './fs'
@@ -1100,6 +1101,24 @@ api.get('/api/workspaces/:id/preview/log', ({ params, url }) => {
 })
 // The board continues a ticket's work by running the project's resume command (resume.ts): what happened
 // the last times, and the Resume / Retry button, which is the human's alone.
+// Wait for the human's answer on a decision card (the MCP tool wait_for_answer): the answer at once when
+// the card is answered, else when it lands, else {answered: false, timedOut: true} after timeoutSeconds.
+api.get('/api/tickets/:id/answer', async ({ request, params, url, actor }) => {
+  const post = url.searchParams.get('postId')
+  const seconds = url.searchParams.get('timeoutSeconds')
+  return json(
+    await waitAndReport({
+      ticketId: id(params),
+      postId: post === null ? undefined : intParam(post, 'postId'),
+      timeoutSeconds:
+        seconds === null
+          ? undefined
+          : query(z.coerce.number().int().min(1).max(WAIT_MAX_SECONDS), seconds, 'timeoutSeconds'),
+      signal: request.signal,
+      actor,
+    }),
+  )
+})
 api.get('/api/tickets/:id/resume', ({ params }) => json(ticketResume(id(params))))
 api.post('/api/tickets/:id/resume', ({ request, params }) => {
   if (isAgent(request)) throw new HttpError(403, 'only the human resumes a ticket')

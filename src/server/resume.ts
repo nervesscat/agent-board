@@ -372,6 +372,8 @@ function moveTo(ticket: schema.Ticket, key: string) {
   noteStageMove(ticket.id, ticket.status, key)
 }
 
+const WAITING = 'an agent is waiting for this answer'
+
 function skipped(s: Start, reason: string, quiet = false) {
   const row = db
     .insert(schema.ticketResumes)
@@ -379,7 +381,13 @@ function skipped(s: Start, reason: string, quiet = false) {
     .returning()
     .get()
   // Resuming off is the board as it always was: no new words under the card.
-  if (!quiet) reply(s.postId ?? null, `The board did not resume the work: ${reason}.`)
+  if (!quiet)
+    reply(
+      s.postId ?? null,
+      reason === WAITING
+        ? 'Delivered to the agent waiting for it: the board did not start another.'
+        : `The board did not resume the work: ${reason}.`,
+    )
   return row
 }
 
@@ -423,8 +431,7 @@ export function startResume(s: Start): schema.TicketResume {
         'the answer was changed after the resume started: press Resume on the ticket to run it again',
       )
   }
-  if (s.trigger === 'answer' && s.postId && hasWaiter(s.ticketId, s.postId))
-    return skipped(s, 'an agent is waiting for this answer')
+  if (s.trigger === 'answer' && s.postId && hasWaiter(s.ticketId, s.postId)) return skipped(s, WAITING)
   const live = liveAgent(s.ticketId, s.since ?? null)
   if (live) return skipped(s, `${live} is working the ticket: it has a live agent`)
   const cwd = folderOf(ticket)
