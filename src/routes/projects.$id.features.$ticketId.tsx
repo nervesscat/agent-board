@@ -459,8 +459,8 @@ function TicketPage() {
               <Scale className="size-3.5" /> decision needed
             </span>
           )}
-          {/* Without a git side the human's approval is the hand-off. A lane has none (a PR review does): its stage is the call. */}
-          {!judgedByStage(t) && (verdictOf(t) || (!gitSide && kind === 'review')) && (
+          {/* Without a git side the human's approval is the hand-off. A lane has none: its stage is the call. A PR review (a lane tagged PR) keeps it, with or without a git side. */}
+          {!judgedByStage(t) && (t.parentId || verdictOf(t) || (!gitSide && kind === 'review')) && (
             <VerdictButtons t={t} disabled={judge.isPending} onSet={(verdict) => decide(t, verdict)} />
           )}
           <StatusSelect
