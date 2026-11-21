@@ -340,6 +340,57 @@ describe('wait_for_answer: one answer is delivered or resumed, never both and ne
     expect(fs.existsSync(out)).toBe(true)
   })
 
+  it('an answer edited after it reached a waiting agent starts no second agent, however often', async () => {
+    const out = path.join(tmp, 'edited.txt')
+    dbm.db
+      .update(dbm.schema.projects)
+      .set({ resumeCommand: commandFor(out) })
+      .where(eq(dbm.schema.projects.id, projectId))
+      .run()
+    const { ticket, post } = asked()
+    const p = wait.waitAndReport({ ticketId: ticket.id, postId: post.id, timeoutSeconds: 60, actor: AGENT })
+    features.decide(post.id, 0, 'first', HUMAN)
+    expect(await p).toMatchObject({ answered: true, option: 0 })
+    features.decide(post.id, 1, 'second', HUMAN)
+    features.decide(post.id, 0, 'third', HUMAN)
+    await sleep(150)
+    const rows = rowsOf(ticket.id)
+    expect(rows).toHaveLength(3)
+    expect(rows.every((r) => r.state === 'skipped' && r.pid === null)).toBe(true)
+    expect(rows[1]!.reason).toContain('delivered to the agent waiting for it')
+    expect(rows[2]!.reason).toContain('press Resume')
+    expect(repliesOf(post.id).at(-1)!.body).toContain('the agent has the first answer')
+    expect(fs.existsSync(out)).toBe(false)
+  })
+
+  it('an answer edited after an aborted wait and a resume starts no second agent', async () => {
+    const out = path.join(tmp, 'abort-edit.txt')
+    dbm.db
+      .update(dbm.schema.projects)
+      .set({ resumeCommand: commandFor(out) })
+      .where(eq(dbm.schema.projects.id, projectId))
+      .run()
+    const { ticket, post } = asked()
+    const ctl = new AbortController()
+    const p = wait.waitAndReport({
+      ticketId: ticket.id,
+      postId: post.id,
+      timeoutSeconds: 60,
+      signal: ctl.signal,
+      actor: AGENT,
+    })
+    ctl.abort()
+    expect(await p).toMatchObject({ aborted: true })
+    features.decide(post.id, 0, '', HUMAN)
+    const end = Date.now() + 10_000
+    while (rowsOf(ticket.id).some((r) => r.state !== 'succeeded' && r.state !== 'failed') && Date.now() < end)
+      await sleep(20)
+    features.decide(post.id, 1, 'edited', HUMAN)
+    const rows = rowsOf(ticket.id)
+    expect(rows.filter((r) => r.pid !== null)).toHaveLength(1)
+    expect(rows.at(-1)!.reason).toContain('press Resume')
+  })
+
   it('a relayed answer reaches the waiter and starts no resume', async () => {
     const { ticket, post } = asked()
     const p = wait.waitForAnswer({ ticketId: ticket.id, postId: post.id, ...quick })

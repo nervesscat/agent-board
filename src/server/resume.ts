@@ -2,7 +2,7 @@ import { execFile, execFileSync, spawn as nodeSpawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNotNull, or } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { LEASE_TTL_MINUTES } from '#/lib/constants'
@@ -480,15 +480,24 @@ export function startResume(s: Start): schema.TicketResume {
         : 'a resume is already running for this ticket; it finds this answer in its threads',
     )
   if (s.edited && s.postId) {
+    // One answer, one agent: the first answer either started a process or was delivered to a waiting agent
+    // (its skipped row says so), and in both the agent has it already.
     const earlier = db
-      .select({ id: schema.ticketResumes.id })
+      .select({ startedAt: schema.ticketResumes.startedAt })
       .from(schema.ticketResumes)
-      .where(and(eq(schema.ticketResumes.postId, s.postId), isNotNull(schema.ticketResumes.startedAt)))
+      .where(
+        and(
+          eq(schema.ticketResumes.postId, s.postId),
+          or(isNotNull(schema.ticketResumes.startedAt), eq(schema.ticketResumes.reason, WAITING)),
+        ),
+      )
       .get()
     if (earlier)
       return skipped(
         s,
-        'the answer was changed after the resume started: press Resume on the ticket to run it again',
+        earlier.startedAt
+          ? 'the answer was changed after the resume started: press Resume on the ticket to run it again'
+          : 'the answer was changed after it was delivered to the agent waiting for it: the agent has the first answer, so press Resume on the ticket to run the work with the changed one',
       )
   }
   if (s.trigger === 'answer' && s.postId && hasWaiter(s.ticketId, s.postId)) return skipped(s, WAITING)
