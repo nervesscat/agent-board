@@ -669,6 +669,107 @@ test('the review rounds are four number fields from 0 to 12, saved on change, wi
   await expect(step(page, 'review').getByText('No review rounds', { exact: true })).toBeVisible()
 })
 
+test('a refused save leaves every control on what the board holds, and the rounds field says it was not saved (F12)', async ({
+  page,
+  project,
+  human,
+}) => {
+  await open(page, project.id)
+  const refuse = (route: import('@playwright/test').Route) =>
+    route.request().method() === 'PUT'
+      ? route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'boom' }),
+        })
+      : route.fallback()
+  await page.route(/\/api\/projects\/\d+\/workflow(\/standard)?$/, refuse)
+  const toast = page.locator('[data-sonner-toast]').filter({ hasText: 'boom' })
+
+  // The rounds: the count typed goes back to the saved one, the reason shows next to it.
+  const group = page.getByRole('group', { name: 'Review rounds per complexity' })
+  const mid = group.getByRole('spinbutton', { name: /^Mid/ })
+  await expect(mid).toHaveValue('1')
+  await mid.fill('5')
+  await expect(group.getByRole('alert')).toHaveText('Not saved: boom')
+  await expect(mid).toHaveValue('1')
+  await expect(mid).not.toHaveAttribute('aria-invalid', 'true')
+  const failure = await group.getByRole('alert').getAttribute('id')
+  await expect(mid).toHaveAttribute('aria-describedby', failure!)
+  await expect(toast.first()).toBeVisible()
+  await expect(page.locator('[data-summary]')).toContainText('review: 1 round')
+  await expect(step(page, 'review').getByText('1 round', { exact: true })).toBeVisible()
+  // Typing again clears the reason; a count that is refused again shows it again.
+  await mid.fill('6')
+  await expect(group.getByRole('alert')).toHaveCount(0)
+  await expect(group.getByRole('alert')).toHaveText('Not saved: boom')
+  await expect(mid).toHaveValue('1')
+  // Leaving the field after a refusal leaves the saved count in it.
+  await mid.fill('7')
+  await mid.blur()
+  await expect(mid).toHaveValue('1')
+
+  // The effort, the switch and the move: each stays on what the board holds.
+  const effort = step(page, 'build').getByRole('combobox', { name: 'Effort of Build' })
+  await expect(effort).toContainText('Auto: medium')
+  await effort.click()
+  await page.getByRole('option', { name: 'High', exact: true }).click()
+  await expect(toast.first()).toBeVisible()
+  await expect(effort).toContainText('Auto: medium')
+  await expect(step(page, 'build').getByText('edited', { exact: true })).toHaveCount(0)
+
+  const toggle = step(page, 'preview').getByRole('switch', { name: 'Run Preview' })
+  await toggle.click()
+  await expect(toast.first()).toBeVisible()
+  await expect(toggle).toBeChecked()
+  await expect(step(page, 'preview')).not.toHaveAttribute('data-skipped')
+
+  await step(page, 'preview').getByRole('button', { name: 'Move Preview up' }).click()
+  await expect(toast.first()).toBeVisible()
+  expect(await labels(page)).toEqual(STANDARD)
+
+  // The preset's activation and the reset: nothing changes either.
+  await page.locator('[data-preset="light"]').click()
+  await page.getByRole('button', { name: 'Use this workflow' }).click()
+  await expect(page.getByText('The project follows this workflow')).toHaveCount(0)
+  await expect(page.locator('[data-preset="standard"]').getByText('Active')).toBeVisible()
+  await expect(page.locator('[data-preset="light"]').getByText('Active')).toHaveCount(0)
+
+  const preset = await presetOf(human, project.id, 'standard')
+  expect(preset.tweaked).toBe(false)
+  expect((await overview(human, project.id)).active).toBe('standard')
+})
+
+test('a count typed back to the saved one while the first is still being saved is saved too (F12)', async ({
+  page,
+  project,
+  human,
+}) => {
+  await open(page, project.id)
+  const group = page.getByRole('group', { name: 'Review rounds per complexity' })
+  const mid = group.getByRole('spinbutton', { name: /^Mid/ })
+  await expect(mid).toHaveValue('1')
+  // Each save takes a while, so the second count is typed while the first is out.
+  const puts: unknown[] = []
+  let done = 0
+  await page.route(/\/api\/projects\/\d+\/workflow\/standard$/, async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback()
+    puts.push(route.request().postDataJSON())
+    await new Promise((resolve) => setTimeout(resolve, 700))
+    await route.continue()
+    done += 1
+  })
+  await mid.fill('5')
+  await expect.poll(() => puts.length).toBe(1)
+  await mid.fill('1')
+  await mid.blur()
+  await expect.poll(() => done, { timeout: 10_000 }).toBe(2)
+  expect(puts).toHaveLength(2)
+  await expect(mid).toHaveValue('1')
+  await expect(page.locator('[data-summary]')).toContainText('review: 1 round')
+  expect((await presetOf(human, project.id, 'standard')).rounds.mid).toBe(1)
+})
+
 test("Reset this workflow clears only the viewed preset's changes, after a confirmation (F13, F14)", async ({
   page,
   project,

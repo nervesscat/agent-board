@@ -38,7 +38,8 @@ export interface WorkflowEdits {
    * it was, so the editor stays open on a refusal.
    */
   setInstructions: (id: WorkflowStepId, instructions: string | null) => Promise<string | null>
-  setRounds: (level: Complexity, rounds: number) => void
+  /** Answers with the reason the count was not saved, or null once it was; the field goes back to the saved count. */
+  setRounds: (level: Complexity, rounds: number) => Promise<string | null>
   move: (id: WorkflowStepId, direction: 'up' | 'down') => void
 }
 

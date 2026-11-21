@@ -24,7 +24,7 @@ export function RoundsEditor({
 }: {
   review: ResolvedReview
   complexity: Complexity
-  onChange: (level: Complexity, rounds: number) => void
+  onChange: (level: Complexity, rounds: number) => Promise<string | null>
 }) {
   return (
     <fieldset className="space-y-1.5">
@@ -59,15 +59,27 @@ function RoundsField({
   value: number
   fallback: number
   current: boolean
-  onChange: (rounds: number) => void
+  /** Answers with the reason the count was not saved, or null once it was. */
+  onChange: (rounds: number) => Promise<string | null>
 }) {
   const id = useId()
   const [draft, setDraft] = useState(String(value))
+  const [failure, setFailure] = useState<string | null>(null)
   const typing = useRef(false)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  // What the board has saved, for the handlers that outlive a render.
+  const saved = useRef(value)
+  // The last count sent and how many saves are still out: a count is compared with what the board is about to
+  // hold, not with the answer to a save that has not come back, so typing the old count again is a change.
+  const sent = useRef<number | null>(null)
+  const pending = useRef(0)
+  const issued = useRef(0)
+  const typed = useRef(String(value))
   // What the board has saved shows, unless a count is being typed in: the answer to the last key must not
   // overwrite the next one.
   useEffect(() => {
+    saved.current = value
+    if (pending.current === 0) sent.current = null
     if (!typing.current) setDraft(String(value))
   }, [value])
   useEffect(() => () => clearTimeout(timer.current), [])
@@ -76,7 +88,27 @@ function RoundsField({
   const commit = (text: string) => {
     clearTimeout(timer.current)
     const next = parseRounds(text)
-    if (next.ok && next.rounds !== value) onChange(next.rounds)
+    if (!next.ok || next.rounds === (sent.current ?? saved.current)) return
+    const rounds = next.rounds
+    const mine = ++issued.current
+    sent.current = rounds
+    pending.current += 1
+    setFailure(null)
+    void onChange(rounds).then((reason) => {
+      pending.current -= 1
+      if (reason !== null && pending.current === 0) sent.current = null
+      // Only the latest save speaks for the field; an older one that failed has been overtaken.
+      if (mine !== issued.current) return
+      setFailure(reason)
+      // A refused count does not stay in the field as if it were saved, unless something newer was typed.
+      if (reason !== null) {
+        const now = parseRounds(typed.current)
+        if (now.ok && now.rounds === rounds) {
+          setDraft(String(saved.current))
+          typed.current = String(saved.current)
+        }
+      }
+    })
   }
   return (
     <div className={cn('space-y-1 rounded-md border p-1.5', current && 'border-primary/50 bg-primary/5')}>
@@ -93,13 +125,15 @@ function RoundsField({
         step={1}
         value={draft}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${id}-error` : undefined}
+        aria-describedby={error ? `${id}-error` : failure ? `${id}-failure` : undefined}
         className="h-7"
         onFocus={() => {
           typing.current = true
         }}
         onChange={(e) => {
           setDraft(e.target.value)
+          setFailure(null)
+          typed.current = e.target.value
           clearTimeout(timer.current)
           const text = e.target.value
           timer.current = setTimeout(() => commit(text), SAVE_AFTER_MS)
@@ -108,7 +142,10 @@ function RoundsField({
           typing.current = false
           commit(e.target.value)
           // A count that was not valid goes back to what is saved.
-          if (!parseRounds(e.target.value).ok) setDraft(String(value))
+          if (!parseRounds(e.target.value).ok) {
+            setDraft(String(value))
+            typed.current = String(value)
+          }
         }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') commit(e.currentTarget.value)
@@ -118,6 +155,10 @@ function RoundsField({
         {error ? (
           <span id={`${id}-error`} role="alert" className="text-destructive">
             {error}
+          </span>
+        ) : failure ? (
+          <span id={`${id}-failure`} role="alert" className="text-destructive">
+            Not saved: {failure}
           </span>
         ) : (
           <>default {fallback}</>
@@ -237,7 +278,7 @@ export function ReviewBody({
   level: number
   collapsed: ReadonlySet<string>
   onToggle: (id: string) => void
-  onRounds: (level: Complexity, rounds: number) => void
+  onRounds: (level: Complexity, rounds: number) => Promise<string | null>
 }) {
   const betweenOpen = !collapsed.has('review.between')
   const between = domId('wf-title', 'review.between')
