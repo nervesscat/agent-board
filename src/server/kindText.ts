@@ -62,6 +62,8 @@ export const FILES_HIDDEN_TOOLS: ReadonlySet<string> = new Set([
   'add_repo',
   'set_ticket_repo',
   'get_ticket_git',
+  // the workflow orders the build-and-review cycle of code
+  'get_workflow',
   'list_prs',
   'set_pr_hold',
   'post_review_result',
@@ -90,8 +92,17 @@ export const FILES_HIDDEN_TOOLS: ReadonlySet<string> = new Set([
 
 /** The parameters of a tool that only a git project uses, left out of the tool's schema for these projects. */
 export const FILES_OMITTED_KEYS: Readonly<Record<string, readonly string[]>> = {
-  create_ticket: ['repoId', 'branch', 'baseBranch', 'repos', 'prNumber', 'needs', 'defaultPhases'],
-  update_ticket: ['repoId', 'branch', 'baseBranch', 'repos', 'prNumber', 'needs'],
+  create_ticket: [
+    'repoId',
+    'branch',
+    'baseBranch',
+    'repos',
+    'prNumber',
+    'needs',
+    'defaultPhases',
+    'workflowPreset',
+  ],
+  update_ticket: ['repoId', 'branch', 'baseBranch', 'repos', 'prNumber', 'needs', 'workflowPreset'],
   claim_ticket: ['branch', 'repos'],
   list_tickets: ['repoId'],
 }

@@ -14,6 +14,7 @@ import {
 } from '#/lib/constants'
 import { AGENT_TOKEN_NAME } from '#/lib/agents'
 import { KINDS } from '#/lib/kinds'
+import { WORKFLOW_PRESETS } from '#/lib/workflow'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import * as agentCards from './agentCards'
 import * as agents from './agents'
@@ -85,6 +86,7 @@ import { changeUpdateSettings, checkForUpdates, installUpdate, updatesState } fr
 import { getSummary } from './summary'
 import { deleteUnattachedUploads } from './unattached'
 import * as work from './workTimeline'
+import * as workflow from './workflow'
 import * as uploads from './uploads'
 
 const json = (data: unknown, status = 200) => Response.json(data, { status })
@@ -122,6 +124,8 @@ const TicketPatch = z.object({
   status: Status.optional(),
   // Exactly low, mid, high or max; a lane created without one copies its parent's (features.ts createTicket).
   complexity: z.enum(COMPLEXITIES).optional(),
+  // The preset of the workflow this ticket follows instead of its project's; null follows the project's again.
+  workflowPreset: z.enum(WORKFLOW_PRESETS).nullable().optional(),
   assignee: z.string().max(80).optional(),
   branch: z.string().max(200).optional(),
   baseBranch: z.string().max(200).optional(),
@@ -420,6 +424,34 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
     throw new HttpError(403, "only the human sets the project's layout")
   // Instructions: the human's or an orchestrator's, with their history (as the PUT below).
   return json(projects.updateProject(id(params), body, actor, callerInfo(request)))
+})
+
+// --- the project's workflow (src/server/workflow.ts): read by everyone, changed by the human only ---
+const humanWorkflow = (request: Request) => {
+  if (isAgent(request)) throw new HttpError(403, "only the human sets the project's workflow")
+}
+// Every preset with its saved tweaks and its steps as a tree, and the active one.
+api.get('/api/projects/:id/workflow', ({ params }) => json(workflow.workflowOverview(id(params))))
+// What a ticket's agent follows (the ticket's own preset, else the project's, for its complexity), with the text.
+api.get('/api/projects/:id/workflow/effective', ({ params, url }) => {
+  const ticketId = url.searchParams.get('ticketId')
+  return json(workflow.effectiveWorkflow(id(params), ticketId ? intParam(ticketId, 'ticketId') : null))
+})
+api.put('/api/projects/:id/workflow', async ({ request, params, actor }) => {
+  humanWorkflow(request)
+  const body = await readJson(request, z.object({ preset: z.string().max(40) }))
+  return json(workflow.setActivePreset(id(params), body.preset, actor))
+})
+// Replaces that preset's saved tweaks ({order?, steps?, rounds?}); the other presets keep theirs.
+api.put('/api/projects/:id/workflow/:preset', async ({ request, params, actor }) => {
+  humanWorkflow(request)
+  const body = await readJson(request, z.unknown())
+  return json(workflow.saveTweaks(id(params), params.preset!, body, actor))
+})
+// Back to the preset as shipped; nothing to reset is not an error.
+api.delete('/api/projects/:id/workflow/:preset', ({ request, params, actor }) => {
+  humanWorkflow(request)
+  return json(workflow.resetTweaks(id(params), params.preset!, actor))
 })
 
 // --- the project's instructions: changed by the human or an orchestrator, every change kept ---

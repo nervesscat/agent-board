@@ -3,6 +3,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { db, schema } from '#/db'
 import { retryWhileLocked } from '#/db/busy'
 import { COMMENT_PARENTS, type Complexity, DEFAULT_COMPLEXITY, type FeedTab } from '#/lib/constants'
+import type { WorkflowPresetId } from '#/lib/workflow'
 import { hasGitSide } from '#/lib/kinds'
 import { AUTO_PHASE_RULE, autoPhaseOf } from '#/lib/autoPhases'
 import { columnOrder, isClosed, placeInColumn, stageColumn } from '#/lib/stages'
@@ -592,6 +593,8 @@ export function createTicket(
     status?: string
     /** How much review it gets; a lane's parent's when left out, else the default. */
     complexity?: Complexity
+    /** The workflow preset it follows instead of its project's; a lane's parent's when left out, null follows the project's. */
+    workflowPreset?: WorkflowPresetId | null
     assignee?: string
     branch?: string
     baseBranch?: string
@@ -649,6 +652,9 @@ export function createTicket(
             // A lane copies its parent's level as it is now; a later change to the parent does not reach it.
             // Work with no repo (a project with no software kind) has no review rounds: low, the builder's own check.
             complexity: input.complexity ?? parent?.complexity ?? (repo ? DEFAULT_COMPLEXITY : 'low'),
+            // Likewise copied from the parent once, and null (the project's) for a top-level ticket.
+            workflowPreset:
+              input.workflowPreset !== undefined ? input.workflowPreset : (parent?.workflowPreset ?? null),
             assignee: input.assignee ?? '',
             branch: input.branch ?? '',
             baseBranch,
@@ -730,6 +736,7 @@ type TicketFieldsPatch = Partial<
     | 'body'
     | 'status'
     | 'complexity'
+    | 'workflowPreset'
     | 'assignee'
     | 'branch'
     | 'baseBranch'

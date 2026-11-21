@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { db, schema } from '#/db'
 import { hasGitSide } from '#/lib/kinds'
+import { reviewPhaseRuns } from '#/lib/workflow'
 import {
   RUN_REPORT_AGENTS,
   RUN_REPORT_TIME_KEYS,
@@ -15,6 +16,7 @@ import { HttpError, notFound } from './http'
 import { listAgents } from './projectAgents'
 import { getProject } from './projects'
 import { listStages } from './stages'
+import { ticketWorkflow } from './workflow'
 import { ticketTimeline } from './workTimeline'
 
 /**
@@ -446,16 +448,6 @@ export function missingReports(ticketId: number): MissingRunReport[] {
     .sort((a, b) => a.since.localeCompare(b.since) || a.agent.localeCompare(b.agent))
 }
 
-/** The phases of one review round, in the order the cycle runs them, with how many runs each needs. */
-const REVIEW_PHASES = [
-  { phase: 'spec', expected: 1 },
-  { phase: 'env', expected: 1 },
-  { phase: 'verify', expected: 1 },
-  { phase: 'hunt', expected: 2 },
-  { phase: 'refute', expected: 1 },
-  { phase: 'merge', expected: 1 },
-] as const
-
 /** A review phase the ticket's last round has fewer runs of than the cycle requires: the hand-off's flag. */
 export interface MissingReviewPhase {
   round: number
@@ -467,19 +459,22 @@ export interface MissingReviewPhase {
 }
 
 /**
- * The review phases the ticket's last round lacks. Above low, every round runs spec, env, verify, two
- * hunts, refute and the merge check; a phase counts as run when a span or a run report of its kind
+ * The review phases the ticket's last round lacks. Every round runs the phases of the ticket's effective
+ * workflow (`ticketWorkflow`: its own preset, else the project's, with the project's tweaks, for its
+ * complexity: Standard spec, env, verify, two hunts, refute and the merge check; Light one hunt; Thorough
+ * three hunts; Maximum twice Thorough's); a phase counts as run when a span or a run report of its kind
  * (a numbered worker counts as its agent) carries the round, the larger of the two so one run with a
  * span and a report is one run. The last round is the highest round on any span or report of a review
- * phase, or 1 when the timeline has activity but names no round. Empty for a low ticket, a project with
- * no software kind, and a ticket whose timeline has no activity at all. The intent check is no round
- * phase. Only runs since the ticket last left a review stage count: a send-back restarts the rounds at 1.
+ * phase, or 1 when the timeline has activity but names no round. Empty when the workflow has no review
+ * for the ticket (a low ticket, a review turned off or with no rounds), for a project with no software
+ * kind, and for a ticket whose timeline has no activity at all. The intent check is no round phase. Only runs since the ticket last left a review stage count: a send-back restarts the rounds at 1.
  * Enforcement is a flag, never a refusal: a move to review goes through and answers with this.
  */
 export function missingReviewPhases(ticketId: number): MissingReviewPhase[] {
   const t = db.select().from(schema.tickets).where(eq(schema.tickets.id, ticketId)).get()
-  if (!t || t.complexity === 'low') return []
-  if (!hasGitSide(getProject(t.projectId).kinds)) return []
+  if (!t || !hasGitSide(getProject(t.projectId).kinds)) return []
+  const required = reviewPhaseRuns(ticketWorkflow(t))
+  if (!required.length) return []
   const { timeline, events } = ticketTimeline(ticketId)
   if (!timeline.spans.length && !timeline.handoffs.length && !timeline.waits.length) return []
   // A send-back (a move out of a review stage) starts the next round numbering over: older runs do not count.
@@ -492,7 +487,7 @@ export function missingReviewPhases(ticketId: number): MissingReviewPhase[] {
       .sort()
       .pop() ?? ''
   const known = knownKinds(t.projectId)
-  const phases = new Set<string>(REVIEW_PHASES.map((p) => p.phase))
+  const phases = new Set<string>(required.map((p) => p.phase))
   const spans = new Map<string, number>()
   const reports = new Map<string, number>()
   let last = 0
@@ -516,7 +511,7 @@ export function missingReviewPhases(ticketId: number): MissingReviewPhase[] {
     .filter((x) => x.createdAt >= cut))
     count(reports, runKindOf(r.agent, known), r.round ?? null)
   const round = last || 1
-  return REVIEW_PHASES.flatMap(({ phase, expected }) => {
+  return required.flatMap(({ phase, expected }) => {
     const found = Math.max(spans.get(`${phase}|${round}`) ?? 0, reports.get(`${phase}|${round}`) ?? 0)
     return found < expected ? [{ round, phase, expected, found }] : []
   })

@@ -939,3 +939,99 @@ describe('a project agent’s own template', () => {
     for (const a of rows) expect(a.reportTemplate).toBe(projectAgents.commonRunReportTemplate)
   })
 })
+
+describe('the review phases flag follows the ticket’s workflow', () => {
+  const ticketOf = (pid: number, complexity: 'low' | 'mid' | 'high' | 'max' = 'mid', extra = {}) =>
+    features.createTicket(pid, { title: 'work', status: 'in_progress', complexity, ...extra }, HUMAN)
+  const spans = (pid: number, id: number, round: number, phases: string[]) =>
+    phases.forEach((phase, i) => closedSpan(pid, id, phase, round, 600 - i * 10))
+  const preset = (pid: number, id: string) => call('PUT', `/api/projects/${pid}/workflow`, { preset: id })
+  const STANDARD = ['spec', 'env', 'verify', 'hunt', 'hunt', 'refute', 'merge']
+
+  it('under Light expects one hunt and never asks for the other phases (H2)', async () => {
+    const pid = newProject()
+    await preset(pid, 'light')
+    const t = ticketOf(pid)
+    spans(pid, t.id, 1, ['hunt'])
+    expect(missingReviewPhases(t.id)).toEqual([])
+    // A round of only a spec ran: the hunt is what is missing, and nothing else is asked for.
+    const none = ticketOf(pid)
+    work.handoff(pid, none.id, { to: 'builder' }, AGENT)
+    expect(missingReviewPhases(none.id)).toEqual([{ round: 1, phase: 'hunt', expected: 1, found: 0 }])
+    const toReview = await needs.changeTicket(none.id, { status: 'review' }, HUMAN, { agent: false })
+    expect(toReview.missingReviewPhases).toEqual([{ round: 1, phase: 'hunt', expected: 1, found: 0 }])
+  })
+
+  it('under Thorough expects three hunts (H3)', async () => {
+    const pid = newProject()
+    await preset(pid, 'thorough')
+    const t = ticketOf(pid)
+    spans(pid, t.id, 1, STANDARD)
+    expect(missingReviewPhases(t.id)).toEqual([{ round: 1, phase: 'hunt', expected: 3, found: 2 }])
+    closedSpan(pid, t.id, 'hunt-3', 1, 300)
+    expect(missingReviewPhases(t.id)).toEqual([])
+  })
+
+  it('under Maximum doubles each phase (H3)', async () => {
+    const pid = newProject()
+    await preset(pid, 'maximum')
+    const t = ticketOf(pid)
+    spans(pid, t.id, 1, [...STANDARD, 'hunt', ...STANDARD])
+    expect(missingReviewPhases(t.id)).toEqual([{ round: 1, phase: 'hunt', expected: 6, found: 5 }])
+    closedSpan(pid, t.id, 'hunt', 1, 200)
+    expect(missingReviewPhases(t.id)).toEqual([])
+    const bare = ticketOf(pid)
+    spans(pid, bare.id, 1, ['spec', 'env'])
+    expect(missingReviewPhases(bare.id).map((m) => `${m.phase}:${m.expected}`)).toEqual([
+      'spec:2',
+      'env:2',
+      'verify:2',
+      'hunt:6',
+      'refute:2',
+      'merge:2',
+    ])
+  })
+
+  it('changes with a ticket’s own preset, and with the project’s tweaks (H3)', async () => {
+    const pid = newProject()
+    const t = ticketOf(pid, 'mid', { workflowPreset: 'light' })
+    spans(pid, t.id, 1, ['hunt'])
+    // The project is Standard; the ticket is Light.
+    expect(missingReviewPhases(t.id)).toEqual([])
+    const plain = ticketOf(pid)
+    spans(pid, plain.id, 1, ['hunt'])
+    expect(missingReviewPhases(plain.id).map((m) => m.phase)).toEqual([
+      'spec',
+      'env',
+      'verify',
+      'hunt',
+      'refute',
+      'merge',
+    ])
+    await call('PATCH', `/api/tickets/${t.id}`, { workflowPreset: null })
+    expect(missingReviewPhases(t.id).map((m) => m.phase)).toContain('spec')
+    // A project whose Standard has no review for mid expects nothing.
+    await call('PUT', `/api/projects/${pid}/workflow/standard`, { rounds: { mid: 0 } })
+    expect(missingReviewPhases(t.id)).toEqual([])
+    await call('PUT', `/api/projects/${pid}/workflow/standard`, { steps: { review: { enabled: false } } })
+    expect(missingReviewPhases(plain.id)).toEqual([])
+  })
+
+  it('stays empty for a low ticket, whatever the preset, and for a project with no software kind (H3)', async () => {
+    const pid = newProject()
+    for (const id of ['light', 'standard', 'thorough', 'maximum']) {
+      await preset(pid, id)
+      const low = ticketOf(pid, 'low')
+      spans(pid, low.id, 1, ['spec'])
+      expect(missingReviewPhases(low.id), id).toEqual([])
+    }
+    const music = dbm.db
+      .insert(dbm.schema.projects)
+      .values({ name: 'songs2', kinds: ['music'] })
+      .returning()
+      .get().id
+    const song = features.createTicket(music, { title: 'song', status: 'in_progress' }, HUMAN)
+    spans(music, song.id, 1, ['spec'])
+    expect(missingReviewPhases(song.id)).toEqual([])
+  })
+})
