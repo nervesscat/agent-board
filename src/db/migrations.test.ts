@@ -1736,3 +1736,37 @@ describe('0051_agent_cards', () => {
     sqlite.close()
   })
 })
+
+describe('0057_alerts', () => {
+  it('adds the alert tables beside the rows a board already has, and keeps a board-wide alert unique', () => {
+    const sqlite = databaseAt('0056_closed_by_approval')
+    const project = Number(
+      sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('kept').lastInsertRowid,
+    )
+    sqlite
+      .prepare("INSERT INTO agent_cards (project_id, kind, actor, title) VALUES (?, 'notice', 'a', 't')")
+      .run(project)
+    expect(columns(sqlite, 'alerts')).toEqual([])
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    expect(columns(sqlite, 'alerts')).toContain('resolvedAt')
+    expect(columns(sqlite, 'alert_mutes')).toEqual(['project_id', 'type', 'createdAt'])
+    expect(sqlite.prepare('SELECT count(*) AS n FROM agent_cards').get()).toEqual({ n: 1 })
+    const insert = sqlite.prepare(
+      "INSERT INTO alerts (project_id, type, subject, severity, title) VALUES (?, 'x', '', 'info', 't')",
+    )
+    insert.run(project)
+    expect(() => insert.run(project)).toThrow(/UNIQUE/)
+    insert.run(null)
+    expect(() => insert.run(null)).toThrow(/UNIQUE/)
+    expect(() =>
+      sqlite.prepare("INSERT INTO alerts (type, severity, title) VALUES ('y', 'loud', 't')").run(),
+    ).toThrow(/CHECK/)
+    // A project's alerts and mutes go with it.
+    sqlite.prepare('INSERT INTO alert_mutes (project_id, type) VALUES (?, ?)').run(project, 'x')
+    sqlite.prepare('DELETE FROM projects WHERE id = ?').run(project)
+    expect(sqlite.prepare('SELECT count(*) AS n FROM alert_mutes').get()).toEqual({ n: 0 })
+    expect(sqlite.prepare('SELECT count(*) AS n FROM alerts').get()).toEqual({ n: 1 })
+  })
+})

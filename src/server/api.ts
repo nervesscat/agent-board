@@ -1,6 +1,8 @@
 import { Readable } from 'node:stream'
 import { z } from 'zod'
 
+import { db, schema } from '#/db'
+
 import {
   AGENT_CLIENTS,
   COMMENT_PARENTS,
@@ -16,6 +18,9 @@ import { AGENT_TOKEN_NAME } from '#/lib/agents'
 import { KINDS } from '#/lib/kinds'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import * as agentCards from './agentCards'
+import * as alertActions from './alerts/actions'
+import { notificationFeed } from './alerts/feed'
+import { registerForTest } from './alerts/registry'
 import * as agents from './agents'
 import { roadmap } from './roadmap'
 import * as runConfig from './runConfig'
@@ -1005,6 +1010,97 @@ api.post('/api/projects/:id/agent-cards/:cardId/finish', async ({ request, param
 api.delete('/api/projects/:id/agent-cards/:cardId', ({ request, params, actor }) => {
   agentCards.dismissCard({ name: actor, agent: isAgent(request) }, id(params), id(params, 'cardId'))
   return json({ ok: true })
+})
+
+// --- notifications: the one feed of jobs, agent cards and alerts, and what the human does with alerts (alerts/) ---
+// The project's jobs, cards and active alerts as one list of the same item shape, newest first. An agent
+// sees its own jobs and cards and no alerts. Reads only.
+api.get('/api/projects/:id/notifications', ({ request, params, actor }) =>
+  json(notificationFeed(id(params), { agent: isAgent(request) ? actor : null })),
+)
+// Marks every alert on show in the project seen. Every route below this one is the human's: an agent gets 403.
+api.post('/api/projects/:id/notifications/seen', ({ request, params }) =>
+  json(alertActions.markProjectSeen({ agent: isAgent(request) }, id(params))),
+)
+api.post('/api/alerts/:id/seen', ({ request, params }) => {
+  alertActions.markSeen({ agent: isAgent(request) }, id(params))
+  return json({ ok: true })
+})
+api.post('/api/alerts/:id/dismiss', ({ request, params }) => {
+  alertActions.dismissAlert({ agent: isAgent(request) }, id(params))
+  return json({ ok: true })
+})
+api.post('/api/alerts/:id/snooze', async ({ request, params }) => {
+  const body = await readJson(request, z.object({ ms: z.number().int().positive() }))
+  return json(alertActions.snoozeAlert({ agent: isAgent(request) }, id(params), body.ms))
+})
+// Runs the handler behind a button of kind action.
+api.post('/api/alerts/:id/actions/:buttonId', async ({ request, params }) =>
+  json(await alertActions.runAlertAction({ agent: isAgent(request) }, id(params), params.buttonId!)),
+)
+// Every alert type with its group and whether the project muted it, and the switch to mute one.
+api.get('/api/projects/:id/alert-types', ({ params }) => json(alertActions.alertTypesOf(id(params))))
+api.put('/api/projects/:id/alert-mutes/:type', ({ request, params }) => {
+  alertActions.muteType({ agent: isAgent(request) }, id(params), params.type!)
+  return json({ ok: true })
+})
+api.delete('/api/projects/:id/alert-mutes/:type', ({ request, params }) => {
+  alertActions.unmuteType({ agent: isAgent(request) }, id(params), params.type!)
+  return json({ ok: true })
+})
+// Test mode only, for the browser tests: writes an alert row of a test type (registered on first use)
+// without waiting for a check. Anywhere but a test-mode board this is a 404.
+const TestAlert = z.object({
+  projectId: z.number().int().nullable(),
+  subject: z.string().max(100).default(''),
+  severity: z.enum(['info', 'warning', 'problem']).default('warning'),
+  title: z.string().min(1).max(200),
+  body: z.string().max(2_000).default(''),
+  seen: z.boolean().default(false),
+})
+let removeTestAlertType: (() => void) | null = null
+api.post('/api/test/alerts', async ({ request }) => {
+  if (!testOnlyAllowed(authMode().boardEnv)) throw notFound('endpoint')
+  const body = await readJson(request, TestAlert)
+  if (body.projectId !== null) projects.getProject(body.projectId)
+  removeTestAlertType ??= registerForTest({
+    type: 'test-alert',
+    idea: 0,
+    group: 'work',
+    label: 'Test alert',
+    description: 'An alert the browser tests write by hand',
+    scope: 'project',
+    check: () => [],
+    actions: { ack: () => ({ message: 'Acknowledged', resolve: true }) },
+  })
+  const at = new Date().toISOString()
+  const row = db
+    .insert(schema.alerts)
+    .values({
+      projectId: body.projectId,
+      type: 'test-alert',
+      subject: body.subject,
+      severity: body.severity,
+      title: body.title,
+      body: body.body,
+      data: JSON.stringify({ details: [] }),
+      buttons: JSON.stringify([
+        {
+          id: 'open',
+          label: 'Open',
+          kind: 'link',
+          href: body.projectId ? `/projects/${body.projectId}` : '/',
+        },
+        { id: 'copy', label: 'Copy command', kind: 'copy', text: 'echo test' },
+        { id: 'ack', label: 'Acknowledge', kind: 'action', primary: true },
+      ]),
+      createdAt: at,
+      updatedAt: at,
+      seenAt: body.seen ? at : null,
+    })
+    .returning()
+    .get()
+  return json(row, 201)
 })
 
 // Every preview of the project's tickets, running or not, running first, and the board-wide use of the
