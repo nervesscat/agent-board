@@ -15,14 +15,10 @@ src/components/NotificationCenter.tsx
 src/components/PdfThumb.tsx
 src/components/PostTools.tsx
 src/components/PrState.tsx
-src/components/Preview.tsx
-src/components/PreviewWindow.tsx
 src/components/ProjectSwitcher.tsx
 src/components/PushDot.tsx
 src/components/ReviewResult.tsx
 src/components/RichEditor.tsx
-src/components/RunReport.tsx
-src/components/RunsCard.tsx
 src/components/Summary.tsx
 src/components/Thread.tsx
 src/components/TicketBoard.tsx
@@ -31,12 +27,9 @@ src/components/WorkStatus.tsx
 src/components/WorkTimeline.tsx
 src/components/WorkTimelineCard.tsx
 src/routes/index.tsx
-src/routes/projects.$id.agents.tsx
 src/routes/projects.$id.features.$ticketId.tsx
 src/routes/projects.$id.features.index.tsx
 src/routes/projects.$id.index.tsx
-src/routes/projects.$id.previews.tsx
 src/routes/projects.$id.prs.tsx
 src/routes/projects.$id.roadmap.tsx
-src/routes/projects.$id.run-reports.tsx
 src/routes/projects.$id.tsx

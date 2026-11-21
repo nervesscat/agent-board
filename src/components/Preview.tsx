@@ -32,12 +32,12 @@ import type { Settings } from '#/server/agents'
 export const previewActive = (m: ManagedPreview | null | undefined) =>
   !!m && (m.status === 'building' || m.status === 'starting' || m.status === 'running')
 
-const STEP_LABEL: Record<NonNullable<ManagedPreview['step']>, string> = {
-  install: 'installing dependencies',
-  build: 'building',
-  copy: 'copying the live data',
-  server: 'starting the server',
-}
+const STEP_LABEL = {
+  install: 'previews.step.install',
+  build: 'previews.step.build',
+  copy: 'previews.step.copy',
+  server: 'previews.step.server',
+} as const satisfies Record<NonNullable<ManagedPreview['step']>, string>
 
 /**
  * Open a preview inside CrossBoard (the embedded window, PreviewWindow.tsx), Open in browser for a tab,
@@ -70,6 +70,7 @@ export function PreviewActions({
   ticketTitle?: string
   label?: string
 }) {
+  const { t } = useTranslation()
   const action = useMutation({
     mutationFn: (what: 'start' | 'stop' | 'restart') =>
       post(`/api/workspaces/${workspaceId}/preview/${what}`),
@@ -79,7 +80,7 @@ export function PreviewActions({
   const stopLink = useMutation({
     mutationFn: () => post<LinkStopped>(`/api/workspaces/${workspaceId}/preview/stop-link`),
     onSuccess: (r) => {
-      if (!r.freed) toast.warning(`Stopped, but something still listens on :${r.port}`)
+      if (!r.freed) toast.warning(t('previews.stoppedStillListening', { port: r.port }))
       onChange()
     },
     // Refused (it changed since the page looked): the toast says why, and the row asks again.
@@ -96,19 +97,19 @@ export function PreviewActions({
   const run = { url, proxyUrl: live?.proxyUrl ?? null, remoteUrl: live?.remoteUrl ?? null }
   const tab = previewTab({
     ticketId: ticketId ?? null,
-    title: ticketTitle ?? 'Preview',
+    title: ticketTitle ?? t('runsSettings.typePreview'),
     workspaceId,
     runId: live?.runId ?? null,
-    label: label ?? 'Preview',
+    label: label ?? t('runsSettings.typePreview'),
     run,
   })
   const browser = previewBrowserUrl(run)
   return (
     <>
       {tab && (
-        <Tip content="Show the preview inside CrossBoard, over the page: the board stays as it was">
+        <Tip content={t('runsCard.openTip')}>
           <Button size="sm" data-testid="preview-open" onClick={() => openPreview(tab)}>
-            <AppWindow /> Open
+            <AppWindow /> {t('runsCard.open')}
           </Button>
         </Tip>
       )}
@@ -119,48 +120,48 @@ export function PreviewActions({
           rel="noreferrer"
           className={buttonVariants({ size: 'sm', variant: 'outline' })}
         >
-          Open in browser <ExternalLink />
+          {t('runsCard.openBrowser')} <ExternalLink />
         </a>
       )}
       {!active && url && linkStop === null && (
-        <Tip content="Stop the server behind this link (it runs from the workspace's worktree) and free its port">
+        <Tip content={t('previews.stopLinkTip')}>
           <Button variant="outline" size="sm" disabled={stopLink.isPending} onClick={() => stopLink.mutate()}>
-            <Square /> Stop
+            <Square /> {t('runsCard.stop')}
           </Button>
         </Tip>
       )}
       {!active && cannotStart === null && (
-        <Tip content="Build this worktree and run it on a free port, with a fresh copy of the live data">
+        <Tip content={t('previews.startTip')}>
           <Button
             variant="outline"
             size="sm"
             disabled={action.isPending}
             onClick={() => action.mutate('start')}
           >
-            <Play /> Start
+            <Play /> {t('runsCard.start')}
           </Button>
         </Tip>
       )}
       {active && (
         <>
-          <Tip content="Stop the preview and free its port">
+          <Tip content={t('previews.stopTip')}>
             <Button
               variant="outline"
               size="sm"
               disabled={action.isPending}
               onClick={() => action.mutate('stop')}
             >
-              <Square /> Stop
+              <Square /> {t('runsCard.stop')}
             </Button>
           </Tip>
-          <Tip content="Stop it, build again and start it with a fresh copy of the data">
+          <Tip content={t('previews.restartTip')}>
             <Button
               variant="outline"
               size="sm"
               disabled={action.isPending}
               onClick={() => action.mutate('restart')}
             >
-              <RotateCw /> Restart
+              <RotateCw /> {t('runsCard.restart')}
             </Button>
           </Tip>
         </>
@@ -185,22 +186,27 @@ export function PreviewBadge({
   unchecked?: string | null
   className?: string
 }) {
+  const { t } = useTranslation()
   if (!url) return null
   const state = check
     ? check.running
       ? {
-          label: 'Running',
-          title: `Answered with HTTP ${check.status} at ${clock(check.checkedAt)}`,
+          label: t('runsCard.status.running'),
+          title: t('previews.answered', { status: check.status, time: clock(check.checkedAt) }),
           className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
         }
       : {
-          label: 'Not running',
-          title: `No answer at ${clock(check.checkedAt)}`,
+          label: t('previews.notRunning'),
+          title: t('previews.noAnswer', { time: clock(check.checkedAt) }),
           className: 'bg-muted text-muted-foreground',
         }
     : unchecked
-      ? { label: 'Not checked', title: unchecked, className: 'bg-muted text-muted-foreground' }
-      : { label: 'Checking…', title: 'Checking whether it answers', className: 'text-muted-foreground' }
+      ? { label: t('previews.notChecked'), title: unchecked, className: 'bg-muted text-muted-foreground' }
+      : {
+          label: t('previews.checking'),
+          title: t('previews.checkingTitle'),
+          className: 'text-muted-foreground',
+        }
   return (
     <Tip content={state.title}>
       <span
@@ -219,7 +225,8 @@ export function PreviewBadge({
 
 /** What the board's own preview of the workspace is doing, and why it failed or stopped. */
 export function ManagedLine({ m, workspaceId }: { m: ManagedPreview; workspaceId: number }) {
-  const log = (name: 'build' | 'server', label = 'full log') => (
+  const { t } = useTranslation()
+  const log = (name: 'build' | 'server', label = t('previews.fullLog')) => (
     <a
       href={`/api/workspaces/${workspaceId}/preview/log?name=${name}`}
       target="_blank"
@@ -233,22 +240,30 @@ export function ManagedLine({ m, workspaceId }: { m: ManagedPreview; workspaceId
     return (
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Loader2 className="size-3 animate-spin" />
-        {m.status === 'starting' && m.port ? `Starting on :${m.port}…` : 'Building…'}
-        {m.step && ` ${STEP_LABEL[m.step]}`} · {log(m.step === 'server' ? 'server' : 'build', 'log')}
+        {m.status === 'starting' && m.port
+          ? m.step
+            ? t('previews.startingOnStep', { port: m.port, step: t(STEP_LABEL[m.step]) })
+            : t('previews.startingOn', { port: m.port })
+          : m.step
+            ? t('previews.buildingStep', { step: t(STEP_LABEL[m.step]) })
+            : t('previews.building')}{' '}
+        · {log(m.step === 'server' ? 'server' : 'build', t('previews.log'))}
       </div>
     )
   if (m.status === 'running')
     return (
       <div className="text-xs text-muted-foreground">
-        Run by the board on :{m.port}
-        {m.runningAt && `, since ${clock(m.runningAt)}`} · {log('server', 'server log')}
+        {m.runningAt
+          ? t('previews.runBySince', { port: m.port, time: clock(m.runningAt) })
+          : t('previews.runBy', { port: m.port })}{' '}
+        · {log('server', t('previews.serverLog'))}
       </div>
     )
   if (m.status === 'failed')
     return (
       <div className="space-y-1 text-xs">
         <div className="text-destructive">
-          Failed: {m.reason}
+          {t('previews.failed', { reason: m.reason })}
           {m.tailLog && <> · {log(m.tailLog)}</>}
         </div>
         {m.tail.length > 0 && (
@@ -262,7 +277,9 @@ export function ManagedLine({ m, workspaceId }: { m: ManagedPreview; workspaceId
     <div className="text-xs text-muted-foreground">
       {m.reason?.startsWith('stopped')
         ? m.reason.charAt(0).toUpperCase() + m.reason.slice(1)
-        : `Stopped${m.reason ? `: ${m.reason}` : ''}`}
+        : m.reason
+          ? t('previews.stoppedReason', { reason: m.reason })
+          : t('runsCard.status.stopped')}
       {m.stoppedAt && ` (${clock(m.stoppedAt)})`}
     </div>
   )
