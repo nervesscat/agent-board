@@ -1475,5 +1475,485 @@
     "templateText": "Lo que rellena una ejecución de este agente antes de devolver el control, un informe por ejecución. Empieza con la parte común que lleva todo informe (identidad, tiempo, encargo, pasos, valoraciones, problemas, lagunas); añade lo propio de este agente. El tablero la guarda con el agente.",
     "templatePlaceholder": "## La regla …",
     "add": "Añadir agente"
+  },
+  "gettingStarted": {
+    "agentEmpty": "Aún no hay proyectos. La persona crea el primero desde Primeros pasos en Inicio.",
+    "title": "Primeros pasos · {{done}} de {{total}}",
+    "intro": "Cuatro pasos antes de que un agente trabaje en este tablero. Cada uno se marca solo al completarse.",
+    "entryTip": "Los pasos para empezar a trabajar en este tablero",
+    "entryAria": "Primeros pasos, {{done}} de {{total}} hechos",
+    "entryShort": "Primeros pasos ·",
+    "popoverIntro": "Cada paso se marca solo al completarse.",
+    "dismissTip": "Ocultar Primeros pasos para siempre",
+    "dismissAria": "Descartar Primeros pasos",
+    "menuItem": "Primeros pasos · {{done}}/{{total}}",
+    "stepsAria": "Pasos para empezar",
+    "stepAria": "{{title}}: {{state}}",
+    "titles": {
+      "tools": "Herramientas en esta máquina",
+      "project": "Crea un proyecto y añade su primer repositorio",
+      "agent": "Conecta un agente",
+      "ticket": "Escribe un primer ticket y pásaselo al agente"
+    },
+    "state": {
+      "done": "Hecho",
+      "checking": "Comprobando…",
+      "notDone": "Pendiente"
+    },
+    "couldNotCheck": "No se pudo comprobar este paso: {{error}}",
+    "tools": {
+      "hint": "El tablero ejecuta <code>git</code> y <code>gh</code> (con la sesión iniciada) desde su PATH; <code>claude</code> es opcional, solo para los informes del propio tablero (Informes → Generar); <code>node</code> y <code>pnpm</code> solo para los previews.",
+      "missing": "<problem>{{problem}}</problem>. Solución: {{fix}}."
+    },
+    "project": {
+      "hint": "Un proyecto agrupa los checkouts en los que trabajan los agentes. Su primer repositorio toma la carpeta del checkout, su repositorio de GitHub y su branch base.",
+      "addRepo": "Añadir un repositorio a {{name}}",
+      "new": "Nuevo proyecto"
+    },
+    "agent": {
+      "hint": "En Conectar un agente, Generar comandos crea el token del agente y los comandos para ejecutar en tu terminal: conectar el servidor MCP del tablero e instalar la skill del tablero."
+    },
+    "ticket": {
+      "hint": "Escribe lo que hay que hacer como un ticket en la página Features del proyecto. Luego, en tu repositorio, ejecuta <code>claude</code> y di <code>/board pick up the next ticket</code>.",
+      "write": "Escribir un ticket",
+      "createFirst": "Crea primero un proyecto (paso 2)."
+    },
+    "checkAgain": "Comprobar de nuevo"
+  },
+  "projectSwitcher": {
+    "project": "Proyecto",
+    "select": "Elige un proyecto",
+    "projects": "Proyectos",
+    "repos_one": "{{count}} repo",
+    "repos_other": "{{count}} repos",
+    "tickets_one": "{{count}} ticket",
+    "tickets_other": "{{count}} tickets",
+    "openPrs_one": "{{count}} PR abierto",
+    "openPrs_other": "{{count}} PR abiertos",
+    "newProject": "Nuevo proyecto…",
+    "manage": "Gestionar proyectos…",
+    "newTitle": "Nuevo proyecto",
+    "newDescription": "Un proyecto agrupa repositorios. Añade los suyos desde su página Repositorios.",
+    "name": "Nombre",
+    "create": "Crear",
+    "manageDescription": "Cambia el nombre de un proyecto o elimínalo. Añade, mueve o quita sus repositorios en su página Repositorios.",
+    "renamed": "Renombrado a {{name}}",
+    "nameOf": "Nombre de {{name}}",
+    "rename": "Renombrar",
+    "deleteName": "Eliminar {{name}}",
+    "deleteTitle": "¿Eliminar {{name}}?",
+    "deleteText": "Se va con él: {{repos}}, {{tickets}}, {{openPrs}}, y sus revisiones y su diario. Los checkouts en disco no se tocan. Para conservar un repositorio, muévelo antes a otro proyecto.",
+    "keep": "Conservar",
+    "delete": "Eliminar",
+    "noRepos": "sin repositorios",
+    "counts": "{{tickets}} · {{openPrs}}"
+  },
+  "newTicket": {
+    "newTicket": "Nuevo ticket",
+    "newLane": "Nuevo lane",
+    "description": "Escríbelo como se lo explicarías a un colega: los agentes lo leen antes de empezar.",
+    "laneDescription": "Una parte en paralelo de <parent>{{title}}</parent>, con su propio branch, responsable, tareas y novedades.",
+    "title": "Título",
+    "instructions": "Instrucciones",
+    "instructionsPlaceholder": "Qué hacer, cómo saber que está hecho y qué no hacer nunca. Pega o suelta archivos para adjuntarlos.",
+    "initialTasks": "Tareas iniciales",
+    "phases": "Empieza con las fases del proyecto: {{phases}}. Las tareas escritas aquí van dentro de {{first}}.",
+    "stage": "Etapa",
+    "complexity": "Complejidad",
+    "repository": "Repositorio",
+    "assignee": "Responsable (opcional)",
+    "tags": "Etiquetas (opcional)",
+    "tagsPlaceholder": "Alta, Formularios",
+    "branchesOff": "Sale de <branch>{{branch}}</branch> cuando está en el mismo repositorio.",
+    "uploading": "Subiendo…",
+    "create": "Crear"
+  },
+  "notes": {
+    "title": "Notas",
+    "manageAll": "Gestionar todas ({{count}})",
+    "add": "Añadir nota",
+    "loading": "Cargando notas…",
+    "dialogTitle": "Notas ({{count}})",
+    "dialogDescription": "Un hecho breve cada una, las fijadas primero. Su autor, un orquestador o la persona pueden cambiar una nota.",
+    "empty": "Una nota es un hecho breve que la próxima sesión no debe volver a descubrir: un comando, una ruta, una regla, un recordatorio. Un solo hecho en cada una, nunca un documento.",
+    "exampleLabel": "Comando de release",
+    "exampleLabel2": "Puertos de los previews",
+    "exampleBody2": "del 47101 en adelante, uno por ejecución",
+    "unpinTip": "Desfijar esta nota",
+    "pinTip": "Fijar esta nota sobre las demás",
+    "unpin": "Desfijar {{label}}",
+    "pin": "Fijar {{label}}",
+    "editTip": "Editar esta nota",
+    "edit": "Editar {{label}}",
+    "deleteTip": "Eliminar esta nota",
+    "delete": "Eliminar {{label}}",
+    "labelAria": "Título de la nota",
+    "bodyAria": "Contenido de la nota",
+    "save": "Guardar nota",
+    "cancel": "Cancelar"
+  },
+  "actor": {
+    "howBoard": "el tablero, registrado automáticamente",
+    "howHuman": "tú, con la sesión iniciada con una passkey",
+    "howOrchestrator": "un agente, con la sesión iniciada con un token que la persona hizo orquestador: también cambia las instrucciones de los proyectos",
+    "howWorkerUnder": "un agente, trabajador bajo {{parent}}",
+    "howAgent": "un agente, con la sesión iniciada con un token",
+    "projectAgent": "{{name}} (uno de los agentes del proyecto)",
+    "projectAgentVia": "{{name}} (uno de los agentes del proyecto, publicó vía {{chain}})",
+    "via": "vía {{via}}",
+    "tip": "{{chain}}: {{how}}",
+    "under": "bajo {{parent}}",
+    "by": "por <actor/>"
+  },
+  "postTools": {
+    "editText": "Editar texto",
+    "cancel": "Cancelar",
+    "saving": "Guardando…",
+    "save": "Guardar",
+    "edited": "editado",
+    "editedAt": "editado {{when}}",
+    "editLabel": "editar",
+    "edit": "Editar",
+    "deleteLabel": "eliminar",
+    "delete": "Eliminar",
+    "deletePostTitle": "¿Eliminar esta publicación?",
+    "deleteReplyTitle": "¿Eliminar esta respuesta?",
+    "deleteText": "Sus respuestas y archivos se van con ella. No se puede deshacer.",
+    "keep": "Conservar"
+  },
+  "pickers": {
+    "unassigned": "Sin asignar",
+    "reserved": "{{name}} (reservado)",
+    "projectAgents": "Agentes del proyecto: solo ellos lo trabajan",
+    "connectedAgents": "Agentes conectados: compartido",
+    "loadingBranches": "cargando branches…",
+    "noBranchYet": "— ninguno aún —",
+    "clear": "Quitar {{what}}"
+  },
+  "prState": {
+    "merge": {
+      "clean": {
+        "label": "fusionable",
+        "title": "Sin conflictos con la base."
+      },
+      "conflicts": {
+        "label": "conflictos",
+        "title": "Tiene conflictos con el branch base: necesita un rebase o un merge antes de poder entrar."
+      },
+      "behind": {
+        "label": "por detrás de la base",
+        "title": "La base avanzó y la protección del branch pide tenerlo al día primero."
+      },
+      "blocked": {
+        "label": "bloqueado",
+        "title": "Protección del branch: aún falta una revisión o una comprobación obligatoria."
+      },
+      "checking": {
+        "label": "comprobando",
+        "title": "GitHub aún está calculando si se puede fusionar (suele pasar justo después de un push). Actualiza en un momento."
+      }
+    },
+    "ci": {
+      "passing": "CI correcto",
+      "failing": "CI fallando",
+      "pending": "CI en curso",
+      "none": "sin CI"
+    },
+    "review": {
+      "APPROVED": "aprobado",
+      "CHANGES_REQUESTED": "cambios solicitados",
+      "REVIEW_REQUIRED": "revisión requerida"
+    },
+    "checkedLocal": "{{title}} Comprobado aquí contra origin/{{base}}.",
+    "checkedLocalAt": "{{title}} Comprobado aquí contra origin/{{base}}, {{when}}.",
+    "outdated": "origin/{{base}} avanzó después de lo que dijo GitHub: esperando a que GitHub vuelva a mirar.",
+    "outdatedAt": "origin/{{base}} avanzó después de lo que dijo GitHub el {{when}}: esperando a que GitHub vuelva a mirar.",
+    "githubAt": "{{title}} Según GitHub, actualizado {{when}}.",
+    "githubLast": "{{title}} Según GitHub en la última actualización.",
+    "checks": "{{pass}} correctas · {{failed}} fallidas · {{pending}} en curso · {{skipped}} omitidas",
+    "noChecks": "Sin comprobaciones en el commit de cabeza.",
+    "draft": "borrador",
+    "failed": "fallidas:",
+    "mergeConflicts": "conflictos de merge"
+  },
+  "pushDot": {
+    "pushed": "subido",
+    "pushedBehind": "subido, {{count}} por detrás",
+    "pushedBehindTitle_one": "subido; origin tiene {{count}} commit más",
+    "pushedBehindTitle_other": "subido; origin tiene {{count}} commits más",
+    "ahead": "{{count}} sin subir",
+    "aheadTitle_one": "sin subir: {{count}} commit solo aquí",
+    "aheadTitle_other": "sin subir: {{count}} commits solo aquí",
+    "aheadBehindTitle_one": "sin subir: {{count}} commit solo aquí; origin además tiene {{behind}} que le faltan a este branch",
+    "aheadBehindTitle_other": "sin subir: {{count}} commits solo aquí; origin además tiene {{behind}} que le faltan a este branch",
+    "localOnly": "no está en origin",
+    "localOnlyTitle": "sin subir: no existe ese branch en origin",
+    "localOnlyAheadTitle_one": "sin subir: no existe ese branch en origin, {{count}} commit solo aquí",
+    "localOnlyAheadTitle_other": "sin subir: no existe ese branch en origin, {{count}} commits solo aquí",
+    "itsBase": "su base",
+    "merged": "fusionado en {{into}}",
+    "mergedTitle": "fusionado en {{into}}; el branch ya no está en origin",
+    "remoteOnly": "solo en origin",
+    "remoteOnlyTitle": "solo en origin: sin branch local",
+    "none": "no encontrado",
+    "noneTitle": "no existe ese branch aquí ni en origin",
+    "checked": "comprobado {{ago}}",
+    "notFetched": "origin aún sin traer",
+    "fetchNow": "Traer origin ahora"
+  },
+  "clock": {
+    "typeTime": "{{label}} (escribe una hora)",
+    "amPm": "{{label}}: AM o PM",
+    "setHourOrMinute": "{{label}}: elige la hora o el minuto",
+    "hour": "Hora",
+    "minute": "Minuto"
+  },
+  "markdown": {
+    "agentChip": "{{name}}, uno de los agentes del proyecto",
+    "pages_one": "{{count}} página",
+    "pages_other": "{{count}} páginas"
+  },
+  "editor": {
+    "text": "Texto",
+    "bold": "Negrita",
+    "italic": "Cursiva",
+    "strikethrough": "Tachado",
+    "inlineCode": "Código en línea",
+    "heading": "Encabezado",
+    "bulletList": "Lista con viñetas",
+    "numberedList": "Lista numerada",
+    "checklist": "Lista de tareas",
+    "quote": "Cita",
+    "codeBlock": "Bloque de código",
+    "link": "Enlace",
+    "linkTo": "Enlazar a",
+    "attaching": "Adjuntando archivos…",
+    "attach": "Adjuntar archivos",
+    "formatting": "Formato"
+  },
+  "projectNav": {
+    "homeText": "Todos los proyectos de un vistazo: lo que te espera, lo que está en curso, lo que se hizo hoy y lo que viene.",
+    "overviewText": "Qué te necesita, qué avanza y qué viene.",
+    "page": "Página del proyecto",
+    "toggle": {
+      "expanded": "Reducir la barra lateral",
+      "shrunk": "Ocultar la barra lateral",
+      "hidden": "Mostrar la barra lateral"
+    }
+  },
+  "palette": {
+    "page": {
+      "overview": {
+        "title": "Resumen",
+        "subtitle": "El resumen del proyecto",
+        "keywords": "inicio, proyecto, resumen, te necesita, "
+      },
+      "board": {
+        "title": "Features",
+        "subtitle": "Features en curso",
+        "keywords": "tickets, features, kanban, etapas, en curso, "
+      },
+      "roadmap": {
+        "title": "Hoja de ruta",
+        "subtitle": "La cronología del trabajo",
+        "keywords": "cronología, trabajo, calendario, plan, "
+      },
+      "prs": {
+        "title": "Cola de PR",
+        "subtitle": "PR por revisar y a la espera de otros",
+        "keywords": "prs, pull requests, revisiones, merge, "
+      },
+      "reviews": {
+        "title": "Revisiones",
+        "subtitle": "Resultados de revisión, en la cola de PR",
+        "keywords": "veredicto, hallazgos, resultados de revisión, prs, "
+      },
+      "previews": {
+        "title": "Previews",
+        "subtitle": "Los previews que ejecuta el tablero",
+        "keywords": "ejecuciones, servidores, puertos, "
+      },
+      "gallery": {
+        "title": "Galería",
+        "subtitle": "Archivos y capturas",
+        "keywords": "archivos, imágenes, subidas, "
+      },
+      "team": {
+        "title": "Equipo",
+        "subtitle": "Los agentes con los que trabaja el proyecto",
+        "keywords": "agentes, personas, reservas, "
+      },
+      "daily": {
+        "title": "Diario",
+        "subtitle": "El día del proyecto",
+        "keywords": "actividad, hoy, informe, "
+      },
+      "cleanup": {
+        "title": "Limpieza",
+        "subtitle": "Branches y worktrees que quedaron atrás",
+        "keywords": "branches, worktrees, eliminar, restos, "
+      },
+      "repositories": {
+        "title": "Repositorios",
+        "subtitle": "Checkouts que lee este proyecto",
+        "keywords": "repos, git, checkouts, "
+      },
+      "instructions": {
+        "title": "Instrucciones",
+        "subtitle": "Ajustes: lo que lee cada agente",
+        "keywords": "ajustes, ajustes del proyecto, reglas, diseño, fases, etapas, ejecuciones, "
+      },
+      "home": {
+        "title": "Inicio",
+        "subtitle": "Todos los proyectos de un vistazo",
+        "keywords": "proyectos, resumen, tablero, "
+      },
+      "dailyGlobal": {
+        "title": "Diario",
+        "subtitle": "Lo que hizo cada proyecto",
+        "keywords": "actividad, informes, hoy, "
+      },
+      "connect": {
+        "title": "Conectar",
+        "subtitle": "Conecta un agente e instala la skill",
+        "keywords": "agentes, mcp, tokens, configuración, instalar, "
+      },
+      "settingsGlobal": {
+        "title": "Ajustes",
+        "subtitle": "Preferencias de todo el tablero",
+        "keywords": "preferencias, tema, previews, dispositivos, "
+      }
+    },
+    "setting": {
+      "theme": {
+        "title": "Tema",
+        "subtitle": "Sistema, claro u oscuro",
+        "keywords": "apariencia, color, oscuro, claro, sistema, appearance, colour, color, dark, light, system"
+      },
+      "defaultAgent": {
+        "title": "CLI de agente por defecto",
+        "subtitle": "El CLI con el que se abre Conectar",
+        "keywords": "agente, claude, codex, opencode, conectar, agent, claude, codex, opencode, connect"
+      },
+      "previewsLimit": {
+        "title": "Límite de previews",
+        "subtitle": "Cuántos previews corren a la vez",
+        "keywords": "previews, ejecuciones, límite, puertos, previews, runs, limit, ports"
+      },
+      "updates": {
+        "title": "Actualizaciones",
+        "subtitle": "Las actualizaciones de la app del tablero",
+        "keywords": "versión, release, actualizar, version, release, upgrade"
+      },
+      "agentRoles": {
+        "title": "Roles de los agentes",
+        "subtitle": "Trabajador u orquestador",
+        "keywords": "agentes, tokens, orquestador, trabajador, permisos, agents, tokens, orchestrator, worker, permissions"
+      },
+      "tailnet": {
+        "title": "Entrada tailnet",
+        "subtitle": "Accede al tablero desde otro dispositivo",
+        "keywords": "tailscale, red, remoto, público, tailscale, network, remote, public"
+      },
+      "devices": {
+        "title": "Dispositivos y passkeys",
+        "subtitle": "Los dispositivos que inician sesión",
+        "keywords": "passkeys, sesiones, iniciar sesión, seguridad, passkeys, sessions, sign in, security"
+      },
+      "instructions": {
+        "title": "Instrucciones del proyecto",
+        "subtitle": "Lo que lee cada agente",
+        "keywords": "reglas, agentes, prompt, rules, agents, prompt"
+      },
+      "instructionsHistory": {
+        "title": "Historial de instrucciones",
+        "subtitle": "Cada cambio de las instrucciones",
+        "keywords": "versiones, historial, cambios, versions, history, changes"
+      },
+      "defaultPhases": {
+        "title": "Fases por defecto",
+        "subtitle": "Las tareas con las que empieza cada ticket nuevo",
+        "keywords": "tareas, fases, ticket nuevo, tasks, phases, new ticket"
+      },
+      "tagSuggestions": {
+        "title": "Etiquetas sugeridas",
+        "subtitle": "Las etiquetas que se ofrecen en los tickets",
+        "keywords": "etiquetas, tags, tags, labels"
+      },
+      "stalledTickets": {
+        "title": "Tickets estancados",
+        "subtitle": "Cuándo un ticket se considera estancado",
+        "keywords": "estancado, minutos, inactivo, stall, minutes, idle"
+      },
+      "stages": {
+        "title": "Etapas",
+        "subtitle": "Las columnas del tablero y lo que significan",
+        "keywords": "columnas, flujo, estado, etapa de trabajo, columns, workflow, status, work stage"
+      },
+      "runs": {
+        "title": "Ejecuciones",
+        "subtitle": "Previews y trabajos que ejecuta el tablero",
+        "keywords": "previews, trabajos, comandos, build, previews, jobs, commands, build"
+      },
+      "layout": {
+        "title": "Diseño",
+        "subtitle": "Las páginas, tarjetas y secciones del ticket",
+        "keywords": "ordenar, menú, barra lateral, arrange, menu, sidebar"
+      },
+      "agentTokens": {
+        "title": "Tokens de agente",
+        "subtitle": "Los tokens con los que inician sesión los agentes",
+        "keywords": "tokens, agentes, claves, revocar, roles, tokens, agents, keys, revoke, roles"
+      },
+      "skills": {
+        "title": "Skills de revisión",
+        "subtitle": "Instala las skills de revisión (Claude Code)",
+        "keywords": "skills, revisión, instalar, skills, review, install"
+      }
+    },
+    "kinds": {
+      "ticket": "Tickets",
+      "page": "Páginas",
+      "setting": "Ajustes",
+      "action": "Acciones"
+    },
+    "keywords": {
+      "newTicket": "crear, añadir, ticket, lane, nuevo, create, add, new",
+      "copyLink": "url, compartir, portapapeles, enlace, share, clipboard",
+      "startPreview": "ejecutar, preview, iniciar, servidor, run, start, server",
+      "stopPreview": "ejecutar, preview, detener, servidor, run, stop, server",
+      "switchProject": "proyecto, cambiar, abrir, project, switch, open"
+    },
+    "recent": "Recientes",
+    "notStarted_one": "{{count}} sin iniciar: {{details}}",
+    "notStarted_other": "{{count}} sin iniciar: {{details}}",
+    "notStopped_one": "{{count}} sin detener: {{details}}",
+    "notStopped_other": "{{count}} sin detener: {{details}}",
+    "nothingRunning": "No había nada en ejecución",
+    "createIn": "Crea un ticket en {{name}}",
+    "createInThis": "Crea un ticket en este proyecto",
+    "copyLink": "Copiar enlace del ticket",
+    "copyLinkText": "Copia la dirección de este ticket al portapapeles",
+    "linkCopied": "Enlace del ticket copiado",
+    "startPreview": "Iniciar preview",
+    "startPreviewText": "Inicia los previews y trabajos del ticket",
+    "stopPreview": "Detener preview",
+    "stopPreviewText": "Detiene los previews y trabajos del ticket",
+    "switchTo": "Cambiar a {{name}}",
+    "currentProject": "Proyecto actual",
+    "openOverview": "Abre su Resumen",
+    "searchTip": "Buscar en el tablero (Ctrl+F)",
+    "search": "Buscar en el tablero",
+    "description": "Busca tickets, páginas, ajustes y acciones. Usa las flechas arriba y abajo para moverte, Enter para ejecutar una y Escape para cerrar.",
+    "placeholder": "Busca tickets, páginas, ajustes y acciones…",
+    "close": "Cerrar la búsqueda",
+    "results": "Resultados de la búsqueda",
+    "searching": "Buscando…",
+    "noMatches": "Sin coincidencias para “{{query}}”.",
+    "type": "Escribe para buscar en el tablero.",
+    "toMove": "para moverte",
+    "toOpen": "para abrir",
+    "toClose": "para cerrar",
+    "anywhere": "en cualquier página"
   }
 }

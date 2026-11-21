@@ -1,5 +1,6 @@
 import { useRouter } from '@tanstack/react-router'
 import ReactMarkdown from 'react-markdown'
+import { useTranslation } from 'react-i18next'
 import remarkGfm from 'remark-gfm'
 
 import { AgentAvatar } from '#/components/AgentAvatar'
@@ -32,6 +33,7 @@ function linkMentions(md: string, agents: ProjectAgent[]): string {
 
 /** Markdown as agents write it; images and links are the board's own uploads or external URLs. */
 export function Markdown({ children, className = '' }: { children: string; className?: string }) {
+  const { t } = useTranslation()
   const agents = useProjectAgents()
   const router = useRouter()
   return (
@@ -45,7 +47,7 @@ export function Markdown({ children, className = '' }: { children: string; class
               agents.find((a) => a.name === props.href!.slice(MENTION.length))
             if (agent)
               return (
-                <Tip content={`${agent.name}, one of the project's agents`}>
+                <Tip content={t('markdown.agentChip', { name: agent.name })}>
                   <span className="inline-flex items-center gap-1 rounded bg-muted px-1 align-baseline font-medium not-prose">
                     <AgentAvatar agent={agent} className="size-3.5" />@{agent.name}
                   </span>

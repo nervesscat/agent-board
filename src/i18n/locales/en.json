@@ -1475,5 +1475,485 @@
     "templateText": "What a run of this agent fills in before it hands back, one report per run. It starts with the common part every report carries (identity, time, brief, steps, ratings, problems, gaps); add what this agent does. The board keeps it with the agent.",
     "templatePlaceholder": "## The rule …",
     "add": "Add agent"
+  },
+  "gettingStarted": {
+    "agentEmpty": "No projects yet. The human creates the first one from Getting started on Home.",
+    "title": "Getting started · {{done}} of {{total}}",
+    "intro": "Four steps before an agent works on this board. Each ticks itself once it is done.",
+    "entryTip": "The steps to start working on this board",
+    "entryAria": "Getting started, {{done}} of {{total}} done",
+    "entryShort": "Getting started ·",
+    "popoverIntro": "Each step ticks itself once it is done.",
+    "dismissTip": "Hide Getting started for good",
+    "dismissAria": "Dismiss Getting started",
+    "menuItem": "Getting started · {{done}}/{{total}}",
+    "stepsAria": "Getting started steps",
+    "stepAria": "{{title}}: {{state}}",
+    "titles": {
+      "tools": "Tools on this machine",
+      "project": "Create a project and add its first repository",
+      "agent": "Connect an agent",
+      "ticket": "Write a first ticket and hand it to the agent"
+    },
+    "state": {
+      "done": "Done",
+      "checking": "Checking…",
+      "notDone": "Not done"
+    },
+    "couldNotCheck": "Could not check this step: {{error}}",
+    "tools": {
+      "hint": "The board runs <code>git</code> and <code>gh</code> (signed in) on its PATH; <code>claude</code> is optional, only for the board's own reports (Reports → Generate); <code>node</code> and <code>pnpm</code> only for previews.",
+      "missing": "<problem>{{problem}}</problem>. Fix: {{fix}}."
+    },
+    "project": {
+      "hint": "A project groups the checkouts agents work in. Its first repository takes the checkout's folder, its GitHub repo and its base branch.",
+      "addRepo": "Add a repository to {{name}}",
+      "new": "New project"
+    },
+    "agent": {
+      "hint": "On Connect an agent, Generate commands makes the agent's token and the commands to run in your terminal: connect the board's MCP server and install the board skill."
+    },
+    "ticket": {
+      "hint": "Write what to do as a ticket on the project's Features page. Then, in your repo, run <code>claude</code> and say <code>/board pick up the next ticket</code>.",
+      "write": "Write a ticket",
+      "createFirst": "Create a project first (step 2)."
+    },
+    "checkAgain": "Check again"
+  },
+  "projectSwitcher": {
+    "project": "Project",
+    "select": "Select a project",
+    "projects": "Projects",
+    "repos_one": "{{count}} repo",
+    "repos_other": "{{count}} repos",
+    "tickets_one": "{{count}} ticket",
+    "tickets_other": "{{count}} tickets",
+    "openPrs_one": "{{count}} open PR",
+    "openPrs_other": "{{count}} open PRs",
+    "newProject": "New project…",
+    "manage": "Manage projects…",
+    "newTitle": "New project",
+    "newDescription": "A project groups repositories. Add its repos from its Repositories page.",
+    "name": "Name",
+    "create": "Create",
+    "manageDescription": "Rename or delete a project. Add, move or remove its repos on its Repositories page.",
+    "renamed": "Renamed to {{name}}",
+    "nameOf": "Name of {{name}}",
+    "rename": "Rename",
+    "deleteName": "Delete {{name}}",
+    "deleteTitle": "Delete {{name}}?",
+    "deleteText": "Goes with it: {{repos}}, {{tickets}}, {{openPrs}}, and its reviews and daily log. The checkouts on disk are untouched. To keep a repo, move it to another project first.",
+    "keep": "Keep",
+    "delete": "Delete",
+    "noRepos": "no repos",
+    "counts": "{{tickets}} · {{openPrs}}"
+  },
+  "newTicket": {
+    "newTicket": "New ticket",
+    "newLane": "New lane",
+    "description": "Write it the way you would brief a colleague: agents read this before they start.",
+    "laneDescription": "A parallel piece of <parent>{{title}}</parent>, with its own branch, assignee, tasks and updates.",
+    "title": "Title",
+    "instructions": "Instructions",
+    "instructionsPlaceholder": "What to do, how to know it is done, what never to do. Paste or drop files to attach them.",
+    "initialTasks": "Initial tasks",
+    "phases": "It starts with the project's phases: {{phases}}. The tasks typed here go under {{first}}.",
+    "stage": "Stage",
+    "complexity": "Complexity",
+    "repository": "Repository",
+    "assignee": "Assignee (optional)",
+    "tags": "Tags (optional)",
+    "tagsPlaceholder": "High, Forms",
+    "branchesOff": "Branches off <branch>{{branch}}</branch> when it is in the same repo.",
+    "uploading": "Uploading…",
+    "create": "Create"
+  },
+  "notes": {
+    "title": "Notes",
+    "manageAll": "Manage all ({{count}})",
+    "add": "Add note",
+    "loading": "Loading notes…",
+    "dialogTitle": "Notes ({{count}})",
+    "dialogDescription": "One short fact each, pinned first. A note's author, an orchestrator or the human can change it.",
+    "empty": "A note is one short fact the next session must not rediscover — a command, a path, a rule, a reminder. Keep each to one fact, never a document.",
+    "exampleLabel": "Release command",
+    "exampleLabel2": "Preview ports",
+    "exampleBody2": "47101 and up, one per run",
+    "unpinTip": "Unpin this note",
+    "pinTip": "Pin this note above the others",
+    "unpin": "Unpin {{label}}",
+    "pin": "Pin {{label}}",
+    "editTip": "Edit this note",
+    "edit": "Edit {{label}}",
+    "deleteTip": "Delete this note",
+    "delete": "Delete {{label}}",
+    "labelAria": "Note label",
+    "bodyAria": "Note body",
+    "save": "Save note",
+    "cancel": "Cancel"
+  },
+  "actor": {
+    "howBoard": "the board, recorded automatically",
+    "howHuman": "you, signed in with a passkey",
+    "howOrchestrator": "an agent, signed in with a token the human made an orchestrator: it also changes the projects' instructions",
+    "howWorkerUnder": "an agent, a worker under {{parent}}",
+    "howAgent": "an agent, signed in with a token",
+    "projectAgent": "{{name}} (one of the project's agents)",
+    "projectAgentVia": "{{name}} (one of the project's agents, posted via {{chain}})",
+    "via": "via {{via}}",
+    "tip": "{{chain}}: {{how}}",
+    "under": "under {{parent}}",
+    "by": "by <actor/>"
+  },
+  "postTools": {
+    "editText": "Edit text",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "save": "Save",
+    "edited": "edited",
+    "editedAt": "edited {{when}}",
+    "editLabel": "edit",
+    "edit": "Edit",
+    "deleteLabel": "delete",
+    "delete": "Delete",
+    "deletePostTitle": "Delete this post?",
+    "deleteReplyTitle": "Delete this reply?",
+    "deleteText": "Its replies and files go with it. This cannot be undone.",
+    "keep": "Keep"
+  },
+  "pickers": {
+    "unassigned": "Unassigned",
+    "reserved": "{{name}} (reserved)",
+    "projectAgents": "Project agents: only they work it",
+    "connectedAgents": "Connected agents: shared",
+    "loadingBranches": "loading branches…",
+    "noBranchYet": "— none yet —",
+    "clear": "Clear {{what}}"
+  },
+  "prState": {
+    "merge": {
+      "clean": {
+        "label": "mergeable",
+        "title": "No conflicts with the base."
+      },
+      "conflicts": {
+        "label": "conflicts",
+        "title": "Conflicts with the base branch: it needs a rebase or a merge before it can land."
+      },
+      "behind": {
+        "label": "behind base",
+        "title": "The base moved on and branch protection wants the branch up to date first."
+      },
+      "blocked": {
+        "label": "blocked",
+        "title": "Branch protection: a required review or check is still missing."
+      },
+      "checking": {
+        "label": "checking",
+        "title": "GitHub is still working out whether it merges (usually right after a push). Refresh in a moment."
+      }
+    },
+    "ci": {
+      "passing": "CI passing",
+      "failing": "CI failing",
+      "pending": "CI running",
+      "none": "no CI"
+    },
+    "review": {
+      "APPROVED": "approved",
+      "CHANGES_REQUESTED": "changes requested",
+      "REVIEW_REQUIRED": "review required"
+    },
+    "checkedLocal": "{{title}} Checked here against origin/{{base}}.",
+    "checkedLocalAt": "{{title}} Checked here against origin/{{base}}, {{when}}.",
+    "outdated": "origin/{{base}} moved after GitHub's word: waiting for GitHub to look again.",
+    "outdatedAt": "origin/{{base}} moved after GitHub's word of {{when}}: waiting for GitHub to look again.",
+    "githubAt": "{{title}} GitHub's word as of {{when}}.",
+    "githubLast": "{{title}} GitHub's word as of the last refresh.",
+    "checks": "{{pass}} passed · {{failed}} failed · {{pending}} running · {{skipped}} skipped",
+    "noChecks": "No checks on the head commit.",
+    "draft": "draft",
+    "failed": "failed:",
+    "mergeConflicts": "merge conflicts"
+  },
+  "pushDot": {
+    "pushed": "pushed",
+    "pushedBehind": "pushed, behind {{count}}",
+    "pushedBehindTitle_one": "pushed; origin has {{count}} commit more",
+    "pushedBehindTitle_other": "pushed; origin has {{count}} commits more",
+    "ahead": "{{count}} not pushed",
+    "aheadTitle_one": "not pushed: {{count}} commit only here",
+    "aheadTitle_other": "not pushed: {{count}} commits only here",
+    "aheadBehindTitle_one": "not pushed: {{count}} commit only here; origin also has {{behind}} this branch lacks",
+    "aheadBehindTitle_other": "not pushed: {{count}} commits only here; origin also has {{behind}} this branch lacks",
+    "localOnly": "not on origin",
+    "localOnlyTitle": "not pushed: no such branch on origin",
+    "localOnlyAheadTitle_one": "not pushed: no such branch on origin, {{count}} commit only here",
+    "localOnlyAheadTitle_other": "not pushed: no such branch on origin, {{count}} commits only here",
+    "itsBase": "its base",
+    "merged": "merged into {{into}}",
+    "mergedTitle": "merged into {{into}}; the branch is gone from origin",
+    "remoteOnly": "only on origin",
+    "remoteOnlyTitle": "only on origin: no local branch",
+    "none": "not found",
+    "noneTitle": "no such branch here or on origin",
+    "checked": "checked {{ago}}",
+    "notFetched": "origin not fetched yet",
+    "fetchNow": "Fetch origin now"
+  },
+  "clock": {
+    "typeTime": "{{label}} (type a time)",
+    "amPm": "{{label}}: AM or PM",
+    "setHourOrMinute": "{{label}}: set the hour or the minute",
+    "hour": "Hour",
+    "minute": "Minute"
+  },
+  "markdown": {
+    "agentChip": "{{name}}, one of the project's agents",
+    "pages_one": "{{count}} page",
+    "pages_other": "{{count}} pages"
+  },
+  "editor": {
+    "text": "Text",
+    "bold": "Bold",
+    "italic": "Italic",
+    "strikethrough": "Strikethrough",
+    "inlineCode": "Inline code",
+    "heading": "Heading",
+    "bulletList": "Bullet list",
+    "numberedList": "Numbered list",
+    "checklist": "Checklist",
+    "quote": "Quote",
+    "codeBlock": "Code block",
+    "link": "Link",
+    "linkTo": "Link to",
+    "attaching": "Attaching files…",
+    "attach": "Attach files",
+    "formatting": "Formatting"
+  },
+  "projectNav": {
+    "homeText": "Every project at a glance: what waits on you, what is in progress, what got done today and what is next.",
+    "overviewText": "What needs you, what is moving, what is next.",
+    "page": "Project page",
+    "toggle": {
+      "expanded": "Shrink sidebar",
+      "shrunk": "Hide sidebar",
+      "hidden": "Show sidebar"
+    }
+  },
+  "palette": {
+    "page": {
+      "overview": {
+        "title": "Overview",
+        "subtitle": "The project's summary",
+        "keywords": ""
+      },
+      "board": {
+        "title": "Board",
+        "subtitle": "Ongoing features",
+        "keywords": ""
+      },
+      "roadmap": {
+        "title": "Roadmap",
+        "subtitle": "The work timeline",
+        "keywords": ""
+      },
+      "prs": {
+        "title": "PR queue",
+        "subtitle": "Pull requests to review and waiting on others",
+        "keywords": ""
+      },
+      "reviews": {
+        "title": "Reviews",
+        "subtitle": "Review results, in the PR queue",
+        "keywords": ""
+      },
+      "previews": {
+        "title": "Previews",
+        "subtitle": "The previews the board runs",
+        "keywords": ""
+      },
+      "gallery": {
+        "title": "Gallery",
+        "subtitle": "Files and screenshots",
+        "keywords": ""
+      },
+      "team": {
+        "title": "Team",
+        "subtitle": "The agents the project works with",
+        "keywords": ""
+      },
+      "daily": {
+        "title": "Daily",
+        "subtitle": "The project's day",
+        "keywords": ""
+      },
+      "cleanup": {
+        "title": "Cleanup",
+        "subtitle": "Branches and worktrees left behind",
+        "keywords": ""
+      },
+      "repositories": {
+        "title": "Repositories",
+        "subtitle": "Checkouts this project reads",
+        "keywords": ""
+      },
+      "instructions": {
+        "title": "Instructions",
+        "subtitle": "Settings: what every agent reads",
+        "keywords": ""
+      },
+      "home": {
+        "title": "Home",
+        "subtitle": "Every project at a glance",
+        "keywords": ""
+      },
+      "dailyGlobal": {
+        "title": "Daily",
+        "subtitle": "What every project did",
+        "keywords": ""
+      },
+      "connect": {
+        "title": "Connect",
+        "subtitle": "Connect an agent and install the skill",
+        "keywords": ""
+      },
+      "settingsGlobal": {
+        "title": "Settings",
+        "subtitle": "Board-wide preferences",
+        "keywords": ""
+      }
+    },
+    "setting": {
+      "theme": {
+        "title": "Theme",
+        "subtitle": "System, light or dark",
+        "keywords": "appearance, colour, color, dark, light, system"
+      },
+      "defaultAgent": {
+        "title": "Default agent CLI",
+        "subtitle": "The CLI Connect opens on",
+        "keywords": "agent, claude, codex, opencode, connect"
+      },
+      "previewsLimit": {
+        "title": "Previews limit",
+        "subtitle": "How many previews run at once",
+        "keywords": "previews, runs, limit, ports"
+      },
+      "updates": {
+        "title": "Updates",
+        "subtitle": "The board app's updates",
+        "keywords": "version, release, upgrade"
+      },
+      "agentRoles": {
+        "title": "Agent roles",
+        "subtitle": "Worker or orchestrator",
+        "keywords": "agents, tokens, orchestrator, worker, permissions"
+      },
+      "tailnet": {
+        "title": "Tailnet entrance",
+        "subtitle": "Reach the board from another device",
+        "keywords": "tailscale, network, remote, public"
+      },
+      "devices": {
+        "title": "Devices and passkeys",
+        "subtitle": "The devices that sign in",
+        "keywords": "passkeys, sessions, sign in, security"
+      },
+      "instructions": {
+        "title": "Project instructions",
+        "subtitle": "What every agent reads",
+        "keywords": "rules, agents, prompt"
+      },
+      "instructionsHistory": {
+        "title": "Instructions history",
+        "subtitle": "Every change to the instructions",
+        "keywords": "versions, history, changes"
+      },
+      "defaultPhases": {
+        "title": "Default phases",
+        "subtitle": "The tasks every new ticket starts with",
+        "keywords": "tasks, phases, new ticket"
+      },
+      "tagSuggestions": {
+        "title": "Tag suggestions",
+        "subtitle": "The tags offered on tickets",
+        "keywords": "tags, labels"
+      },
+      "stalledTickets": {
+        "title": "Stalled tickets",
+        "subtitle": "When a ticket reads as stalled",
+        "keywords": "stall, minutes, idle"
+      },
+      "stages": {
+        "title": "Stages",
+        "subtitle": "The board columns and what they mean",
+        "keywords": "columns, workflow, status, work stage"
+      },
+      "runs": {
+        "title": "Runs",
+        "subtitle": "Previews and jobs the board runs",
+        "keywords": "previews, jobs, commands, build"
+      },
+      "layout": {
+        "title": "Layout",
+        "subtitle": "The pages, cards and ticket sections",
+        "keywords": "arrange, menu, sidebar"
+      },
+      "agentTokens": {
+        "title": "Agent tokens",
+        "subtitle": "The tokens agents sign in with",
+        "keywords": "tokens, agents, keys, revoke, roles"
+      },
+      "skills": {
+        "title": "Review skills",
+        "subtitle": "Install the review skills (Claude Code)",
+        "keywords": "skills, review, install"
+      }
+    },
+    "kinds": {
+      "ticket": "Tickets",
+      "page": "Pages",
+      "setting": "Settings",
+      "action": "Actions"
+    },
+    "keywords": {
+      "newTicket": "create, add, ticket, lane, new",
+      "copyLink": "url, share, clipboard",
+      "startPreview": "run, preview, start, server",
+      "stopPreview": "run, preview, stop, server",
+      "switchProject": "project, switch, open"
+    },
+    "recent": "Recent",
+    "notStarted_one": "{{count}} not started: {{details}}",
+    "notStarted_other": "{{count}} not started: {{details}}",
+    "notStopped_one": "{{count}} not stopped: {{details}}",
+    "notStopped_other": "{{count}} not stopped: {{details}}",
+    "nothingRunning": "Nothing was running",
+    "createIn": "Create a ticket in {{name}}",
+    "createInThis": "Create a ticket in this project",
+    "copyLink": "Copy ticket link",
+    "copyLinkText": "Put this ticket’s address on the clipboard",
+    "linkCopied": "Ticket link copied",
+    "startPreview": "Start preview",
+    "startPreviewText": "Start the ticket's previews and jobs",
+    "stopPreview": "Stop preview",
+    "stopPreviewText": "Stop the ticket's previews and jobs",
+    "switchTo": "Switch to {{name}}",
+    "currentProject": "Current project",
+    "openOverview": "Open its Overview",
+    "searchTip": "Search the board (Ctrl+F)",
+    "search": "Search the board",
+    "description": "Search tickets, pages, settings and actions. Use the up and down keys to move, Enter to run one, and Escape to close.",
+    "placeholder": "Search tickets, pages, settings and actions…",
+    "close": "Close search",
+    "results": "Search results",
+    "searching": "Searching…",
+    "noMatches": "No matches for “{{query}}”.",
+    "type": "Type to search the board.",
+    "toMove": "to move",
+    "toOpen": "to open",
+    "toClose": "to close",
+    "anywhere": "anywhere"
   }
 }

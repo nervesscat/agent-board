@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Bot, Cog, User } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { Tip } from '#/components/ui/tooltip'
@@ -9,6 +10,7 @@ import { type ActorRow, get } from '#/lib/api'
 import { useProjectAgent } from '#/lib/project'
 import { ROLE_LABEL, type Who, type WhoRole, chainOf, claimedShape, whoOf } from '#/lib/roles'
 import { cn } from '#/lib/utils'
+import type { TFunction } from 'i18next'
 
 /**
  * Who each name is, as the board last saw it sign in (roles.ts whoOf): an agent token is an agent (an
@@ -54,12 +56,11 @@ export function RoleBadge({ role, className }: { role: WhoRole; className?: stri
 }
 
 /** What the tooltip says after the chain: how the name signs in, and what its role lets it do. */
-function how({ role, parent }: Who): string {
-  if (role === 'board') return 'the board, recorded automatically'
-  if (role === 'human') return 'you, signed in with a passkey'
-  if (role === 'orchestrator')
-    return "an agent, signed in with a token the human made an orchestrator: it also changes the projects' instructions"
-  return parent ? `an agent, a worker under ${parent}` : 'an agent, signed in with a token'
+function how({ role, parent }: Who, t: TFunction): string {
+  if (role === 'board') return t('actor.howBoard')
+  if (role === 'human') return t('actor.howHuman')
+  if (role === 'orchestrator') return t('actor.howOrchestrator')
+  return parent ? t('actor.howWorkerUnder', { parent }) : t('actor.howAgent')
 }
 
 /**
@@ -113,6 +114,7 @@ export function Actor({
   short?: boolean
   className?: string
 }) {
+  const { t } = useTranslation()
   const who = useWho()
   const agent = useProjectAgent(name)
   // A sub-identity shows the name it works as: the leaf, cut at a word boundary rather than mid-word.
@@ -120,21 +122,31 @@ export function Actor({
   if (agent)
     return (
       <Tip
-        content={`${agent.name} (one of the project's agents${via ? `, posted via ${chainOf(via, who)}` : ''})`}
+        content={
+          via
+            ? t('actor.projectAgentVia', { name: agent.name, chain: chainOf(via, who) })
+            : t('actor.projectAgent', { name: agent.name })
+        }
       >
         <span className={`${ROOT} ${className}`}>
           <Picture>
             <AgentAvatar agent={agent} />
           </Picture>
           <Name name={agent.name} truncate={truncate} />
-          {via && <span className="min-w-0 font-normal text-muted-foreground">via {via}</span>}
+          {via && (
+            <span className="min-w-0 font-normal text-muted-foreground">{t('actor.via', { via })}</span>
+          )}
         </span>
       </Tip>
     )
   const me = who(name)
   const Icon = me.kind === 'board' ? Cog : me.kind === 'agent' ? Bot : User
   return (
-    <Tip content={me.role === 'board' ? how(me) : `${chainOf(name, who)}: ${how(me)}`}>
+    <Tip
+      content={
+        me.role === 'board' ? how(me, t) : t('actor.tip', { chain: chainOf(name, who), how: how(me, t) })
+      }
+    >
       <span className={`${ROOT} ${className}`} data-role={me.role}>
         <Picture>
           <Icon className="size-3.5 text-muted-foreground" />
@@ -143,7 +155,9 @@ export function Actor({
         <RoleBadge role={me.role} />
         {!short && me.role === 'worker' && me.parent && (
           // Kept on one line, cut short with an ellipsis where it cannot fit (the tooltip has the chain).
-          <span className="min-w-0 truncate font-normal text-muted-foreground">under {me.parent}</span>
+          <span className="min-w-0 truncate font-normal text-muted-foreground">
+            {t('actor.under', { parent: me.parent })}
+          </span>
         )}
       </span>
     </Tip>
@@ -177,7 +191,10 @@ export function ClaimedActor({
         data-testid="event-by"
         className="inline-flex min-w-0 flex-wrap items-baseline gap-1 text-muted-foreground"
       >
-        by <Actor name={by} className="min-w-0 flex-wrap break-all" />
+        <Trans
+          i18nKey="actor.by"
+          components={{ actor: <Actor name={by} className="min-w-0 flex-wrap break-all" /> }}
+        />
       </span>
     </>
   )

@@ -1,5 +1,6 @@
 import { FileText } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { galleryItem } from '#/components/Gallery'
 import { Tip } from '#/components/ui/tooltip'
@@ -20,6 +21,7 @@ const HEIGHT = 288 // the same box as image thumbnails (max-h-72)
 
 /** The first page of a PDF as a thumbnail, with its name and page count; a click opens the gallery. */
 export function PdfThumb({ url, name, size }: { url: string; name: string; size: number }) {
+  const { t } = useTranslation()
   const box = useRef<HTMLAnchorElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const [visible, setVisible] = useState(false)
@@ -65,12 +67,13 @@ export function PdfThumb({ url, name, size }: { url: string; name: string; size:
     }
   }, [visible, url])
 
+  const kilobytes = `${Math.round(size / 1024)} KB` // i18n-ignore: a unit
   const caption = (
     <span className="flex items-center gap-1.5 text-xs">
       <FileText className="size-3.5 shrink-0 text-muted-foreground" />
       <span className="truncate">{name}</span>
       <span className="shrink-0 text-muted-foreground">
-        {pages ? `${pages} page${pages === 1 ? '' : 's'}` : `${Math.round(size / 1024)} KB`}
+        {pages ? t('markdown.pages', { count: pages }) : kilobytes}
       </span>
     </span>
   )

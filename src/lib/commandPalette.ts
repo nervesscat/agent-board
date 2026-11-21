@@ -1,3 +1,4 @@
+import { shared } from '#/i18n'
 import type { StageColor, StageKind } from '#/lib/constants'
 
 /**
@@ -9,10 +10,19 @@ export const PALETTE_KINDS = ['ticket', 'page', 'setting', 'action'] as const
 export type PaletteKind = (typeof PALETTE_KINDS)[number]
 
 export const PALETTE_KIND_LABEL: Record<PaletteKind, string> = {
-  ticket: 'Tickets',
-  page: 'Pages',
-  setting: 'Settings',
-  action: 'Actions',
+  // Read while rendering, in the language shown then.
+  get ticket() {
+    return shared.t('palette.kinds.ticket')
+  },
+  get page() {
+    return shared.t('palette.kinds.page')
+  },
+  get setting() {
+    return shared.t('palette.kinds.setting')
+  },
+  get action() {
+    return shared.t('palette.kinds.action')
+  },
 }
 
 /** A ticket's stage, as the badge shows it. */

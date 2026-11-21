@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { Check, ChevronsUpDown, FolderGit2, Plus, Settings2 } from 'lucide-react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { KindPicker } from '#/components/KindPicker'
@@ -38,10 +39,9 @@ import { useHydrated } from '#/lib/useHydrated'
 // The project's Overview is its own address (no module segment); the rest keep their segment.
 const MODULES = ['overview', 'prs', 'features', 'daily', 'settings'] as const
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
-
 /** The project everything below the top bar is about. Switching keeps you on the same module. */
 export function ProjectSwitcher() {
+  const { t } = useTranslation()
   const { data: projects } = useProjects()
   const params = useParams({ strict: false }) as { id?: string }
   const { pathname } = useLocation()
@@ -82,16 +82,18 @@ export function ProjectSwitcher() {
               className="min-w-0 shrink justify-between font-normal sm:w-44"
             />
           }
-          aria-label="Project"
+          aria-label={t('projectSwitcher.project')}
         >
           <span className={current ? 'min-w-0 truncate' : 'min-w-0 truncate text-muted-foreground'}>
-            {current?.name ?? 'Select a project'}
+            {current?.name ?? t('projectSwitcher.select')}
           </span>
           <ChevronsUpDown className="text-muted-foreground" />
         </PopoverTrigger>
         <PopoverContent align="start" className="w-64 gap-0 p-1">
           {projects?.length ? (
-            <div className="px-2 pt-1 pb-1.5 text-xs font-medium text-muted-foreground">Projects</div>
+            <div className="px-2 pt-1 pb-1.5 text-xs font-medium text-muted-foreground">
+              {t('projectSwitcher.projects')}
+            </div>
           ) : null}
           {projects?.map((p) => (
             <button
@@ -106,7 +108,7 @@ export function ProjectSwitcher() {
               <Check className={`size-4 shrink-0 ${p.id === current?.id ? '' : 'invisible'}`} />
               <span className="truncate">{p.name}</span>
               <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                {plural(p.repos.length, 'repo')}
+                {t('projectSwitcher.repos', { count: p.repos.length })}
               </span>
             </button>
           ))}
@@ -119,7 +121,7 @@ export function ProjectSwitcher() {
               setCreating(true)
             }}
           >
-            <Plus className="size-4 shrink-0" /> New project…
+            <Plus className="size-4 shrink-0" /> {t('projectSwitcher.newProject')}
           </button>
           {projects?.length ? (
             <button
@@ -130,7 +132,7 @@ export function ProjectSwitcher() {
                 setManaging(true)
               }}
             >
-              <Settings2 className="size-4 shrink-0" /> Manage projects…
+              <Settings2 className="size-4 shrink-0" /> {t('projectSwitcher.manage')}
             </button>
           ) : null}
         </PopoverContent>
@@ -155,6 +157,7 @@ export function NewProject({
   onOpenChange: (open: boolean) => void
   onCreated: (p: Project) => void
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [name, setName] = useState('')
   const [kinds, setKinds] = useState<Kind[]>([...DEFAULT_KINDS])
@@ -182,22 +185,20 @@ export function NewProject({
           }}
         >
           <DialogHeader>
-            <DialogTitle>New project</DialogTitle>
-            <DialogDescription>
-              A project groups repositories. Add its repos from its Repositories page.
-            </DialogDescription>
+            <DialogTitle>{t('projectSwitcher.newTitle')}</DialogTitle>
+            <DialogDescription>{t('projectSwitcher.newDescription')}</DialogDescription>
           </DialogHeader>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Name"
+            placeholder={t('projectSwitcher.name')}
             required
             autoFocus
           />
           <KindPicker value={kinds} onChange={setKinds} />
           <DialogFooter>
             <Button type="submit" disabled={create.isPending}>
-              Create
+              {t('projectSwitcher.create')}
             </Button>
           </DialogFooter>
         </form>
@@ -218,14 +219,13 @@ function ManageProjects({
   projects: ProjectRow[]
   onDeleted: (p: ProjectRow) => void
 }) {
+  const { t } = useTranslation()
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Projects</DialogTitle>
-          <DialogDescription>
-            Rename or delete a project. Add, move or remove its repos on its Repositories page.
-          </DialogDescription>
+          <DialogTitle>{t('projectSwitcher.projects')}</DialogTitle>
+          <DialogDescription>{t('projectSwitcher.manageDescription')}</DialogDescription>
         </DialogHeader>
         <ul className="max-h-[60vh] divide-y overflow-y-auto rounded-md border">
           {projects.map((p) => (
@@ -238,6 +238,7 @@ function ManageProjects({
 }
 
 function ProjectRowEditor({ p, onDeleted }: { p: ProjectRow; onDeleted: () => void }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [name, setName] = useState(p.name)
   const refresh = () => {
@@ -249,7 +250,7 @@ function ProjectRowEditor({ p, onDeleted }: { p: ProjectRow; onDeleted: () => vo
     mutationFn: () => patch(`/api/projects/${p.id}`, { name }),
     onSuccess: () => {
       refresh()
-      toast.success(`Renamed to ${name}`)
+      toast.success(t('projectSwitcher.renamed', { name }))
     },
     onError,
   })
@@ -262,11 +263,9 @@ function ProjectRowEditor({ p, onDeleted }: { p: ProjectRow; onDeleted: () => vo
     },
     onError,
   })
-  const goes = [
-    plural(p.repos.length, 'repo'),
-    plural(p.counts.tickets, 'ticket'),
-    plural(p.counts.openPrs, 'open PR'),
-  ].join(', ')
+  const repos = t('projectSwitcher.repos', { count: p.repos.length })
+  const tickets = t('projectSwitcher.tickets', { count: p.counts.tickets })
+  const openPrs = t('projectSwitcher.openPrs', { count: p.counts.openPrs })
 
   return (
     <li className="space-y-1.5 p-3">
@@ -281,31 +280,39 @@ function ProjectRowEditor({ p, onDeleted }: { p: ProjectRow; onDeleted: () => vo
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="h-8"
-          aria-label={`Name of ${p.name}`}
+          aria-label={t('projectSwitcher.nameOf', { name: p.name })}
           required
         />
         <Button type="submit" size="sm" variant="outline" disabled={!name.trim() || name === p.name}>
-          Rename
+          {t('projectSwitcher.rename')}
         </Button>
         <AlertDialog>
-          <Tip content={`Delete ${p.name}`}>
+          <Tip content={t('projectSwitcher.deleteName', { name: p.name })}>
             <AlertDialogTrigger
-              render={<Button type="button" variant="ghost" size="icon-sm" aria-label={`Delete ${p.name}`} />}
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t('projectSwitcher.deleteName', { name: p.name })}
+                />
+              }
             >
               <TrashIcon />
             </AlertDialogTrigger>
           </Tip>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete {p.name}?</AlertDialogTitle>
+              <AlertDialogTitle>{t('projectSwitcher.deleteTitle', { name: p.name })}</AlertDialogTitle>
               <AlertDialogDescription>
-                Goes with it: {goes}, and its reviews and daily log. The checkouts on disk are untouched. To
-                keep a repo, move it to another project first.
+                {t('projectSwitcher.deleteText', { repos, tickets, openPrs })}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Keep</AlertDialogCancel>
-              <AlertDialogAction onClick={() => remove.mutate()}>Delete</AlertDialogAction>
+              <AlertDialogCancel>{t('projectSwitcher.keep')}</AlertDialogCancel>
+              <AlertDialogAction onClick={() => remove.mutate()}>
+                {t('projectSwitcher.delete')}
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -320,11 +327,9 @@ function ProjectRowEditor({ p, onDeleted }: { p: ProjectRow; onDeleted: () => vo
             </Tip>
           ))
         ) : (
-          <span>no repos</span>
+          <span>{t('projectSwitcher.noRepos')}</span>
         )}
-        <span className="ml-auto">
-          {plural(p.counts.tickets, 'ticket')} · {plural(p.counts.openPrs, 'open PR')}
-        </span>
+        <span className="ml-auto">{t('projectSwitcher.counts', { tickets, openPrs })}</span>
       </div>
     </li>
   )

@@ -1,11 +1,13 @@
 import { CalendarDays, X } from 'lucide-react'
 import { useState } from 'react'
 import type { Matcher } from 'react-day-picker'
+import { useTranslation } from 'react-i18next'
 
 import { Button } from '#/components/ui/button'
 import { Calendar } from '#/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
 import { Tip } from '#/components/ui/tooltip'
+import { currentLocale } from '#/i18n'
 import { localDate } from '#/lib/format'
 
 type Picked = {
@@ -27,7 +29,7 @@ type Optional = {
 
 const asDate = (day: string) => new Date(`${day}T00:00:00`)
 const longDay = (d: Date) =>
-  d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+  d.toLocaleDateString(currentLocale(), { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
 
 /**
  * A day as `YYYY-MM-DD` (local), picked from a calendar. Future days are off. With a `placeholder`
@@ -35,6 +37,7 @@ const longDay = (d: Date) =>
  * takes the day away, and `min`/`max` bound the days that can be picked.
  */
 export function DatePicker(props: Picked | Optional) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const optional = 'placeholder' in props
   const selected = props.value ? asDate(props.value) : undefined
@@ -74,11 +77,11 @@ export function DatePicker(props: Picked | Optional) {
     <span className="inline-flex items-center">
       {picker}
       {selected && (
-        <Tip content={`Clear ${props.placeholder}`}>
+        <Tip content={t('pickers.clear', { what: props.placeholder })}>
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label={`Clear ${props.placeholder}`}
+            aria-label={t('pickers.clear', { what: props.placeholder })}
             onClick={() => props.onChange(undefined)}
           >
             <X />
