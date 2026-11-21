@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 
 import { formatTime, useHour12 } from '#/components/AnalogClock'
+import { DelayedLoading } from '#/components/Loading'
+import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { get, type ReportSettingsView } from '#/lib/api'
 import { localDate } from '#/lib/format'
@@ -19,7 +21,13 @@ export function ShiftClock({ projectId }: { projectId: number }) {
   })
   const hour12 = useHour12()
   const now = useMinuteClock()
-  if (!settings || settings.cadence === 'off' || !now) return null
+  if (!settings)
+    return (
+      <DelayedLoading label="Loading shift…">
+        <Skeleton className="h-8 w-28 rounded-full" />
+      </DelayedLoading>
+    )
+  if (settings.cadence === 'off' || !now) return null
 
   const start = minutesOf(settings.shiftStart)
   const end = minutesOf(settings.shiftEnd)

@@ -3,7 +3,9 @@ import { Link } from '@tanstack/react-router'
 import { cn } from 'cn'
 import { GitCommitHorizontal } from 'lucide-react'
 
+import { DelayedLoading } from '#/components/Loading'
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
+import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { get, type PushedToday } from '#/lib/api'
 import { ago } from '#/lib/format'
@@ -24,7 +26,12 @@ export function PushedTodayBadge({ projectId }: { projectId: number }) {
     queryFn: () => get<PushedToday>(`/api/projects/${projectId}/pushed-today`),
     refetchInterval: 60_000,
   })
-  if (!data) return null
+  if (!data)
+    return (
+      <DelayedLoading label="Loading pushed today…">
+        <Skeleton className="h-6 w-36 rounded-full" />
+      </DelayedLoading>
+    )
   const pushed = data.commits > 0
   const label = pushed
     ? `Pushed today: ${plural(data.commits, 'commit')}, ${data.added} lines added, ${data.removed} removed`

@@ -3,9 +3,11 @@ import { SkipForward } from 'lucide-react'
 import { useState, type ComponentProps } from 'react'
 import type { DayButton } from 'react-day-picker'
 
+import { DelayedLoading } from '#/components/Loading'
 import { REPORT_STATUS } from '#/components/daily/status'
 import { Button } from '#/components/ui/button'
 import { Calendar, CalendarDayButton } from '#/components/ui/calendar'
+import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { get, type ReportList, type ReportSettingsView, type ReportStatus } from '#/lib/api'
 import { localDate } from '#/lib/format'
@@ -57,7 +59,14 @@ export function ReportCalendar({
     enabled: tracked,
     refetchInterval: 5 * 60_000,
   })
-  if (!settings || settings.cadence === 'off') return null
+  if (!settings)
+    return (
+      <DelayedLoading label="Loading calendar…" className="min-w-0 rounded-lg border p-3">
+        <Skeleton className="h-72 w-full" />
+        <Skeleton className="mt-3 h-4 w-32" />
+      </DelayedLoading>
+    )
+  if (settings.cadence === 'off') return null
   const cadence = settings.cadence
 
   const byPeriod = new Map((list?.periods ?? []).map((p) => [p.period, p.status]))
