@@ -9,8 +9,8 @@ import {
   languageOfTag,
   type Language,
 } from './languages'
-import en from './locales/en.json'
-import es from './locales/es.json'
+import en from './locales/en.json' with { type: 'json' }
+import es from './locales/es.json' with { type: 'json' }
 
 export * from './languages'
 

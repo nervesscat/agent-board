@@ -18,7 +18,6 @@ import type {
   Activity,
 } from '#/db/schema'
 import type { Language } from '#/i18n/languages'
-import { shared } from '#/i18n'
 import type { AnnotationDoc } from '#/lib/annotations'
 import { annotationsOf } from '#/lib/annotations'
 import type { ReportStatus } from '#/lib/reports'
@@ -226,7 +225,7 @@ export async function uploadAll(files: File[]): Promise<number[]> {
   return ids
 }
 
-export function errorMessage(err: unknown, fallback = shared.t('common.somethingWentWrong')): string {
+export function errorMessage(err: unknown, fallback = 'something went wrong'): string {
   if (err instanceof Error && err.message) return err.message
   return fallback
 }

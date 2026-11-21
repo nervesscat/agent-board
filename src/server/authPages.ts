@@ -1,8 +1,8 @@
 import i18next, { type TFunction } from 'i18next'
 
 import { DEFAULT_LANGUAGE, LANGUAGES, languageOfRequest, type Language } from '#/i18n/languages'
-import en from '#/i18n/locales/en.json'
-import es from '#/i18n/locales/es.json'
+import en from '#/i18n/locales/en.json' with { type: 'json' }
+import es from '#/i18n/locales/es.json' with { type: 'json' }
 import { callerOf, onThisMachine, redirectTo } from './auth'
 import { config } from './config'
 import { LOCAL_RP_ID, localSite, type SignInSite } from './entrance'

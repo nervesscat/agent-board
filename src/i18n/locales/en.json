@@ -1,8 +1,7 @@
 {
   "common": {
     "saved": "Saved",
-    "close": "Close",
-    "somethingWentWrong": "something went wrong"
+    "close": "Close"
   },
   "shell": {
     "home": "Home",
