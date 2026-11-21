@@ -731,6 +731,9 @@ describe('the instructions agents read', () => {
       '/api/projects/:id/agent-cards/notices',
       '/api/projects/:id/agent-cards/:cardId/progress',
       '/api/projects/:id/agent-cards/:cardId/finish',
+      '/api/projects/:id/workflow',
+      '/api/projects/:id/workflow/:preset',
+      '/api/projects/:id/workflow/effective?ticketId=',
     ])
       expect(readme).toContain(route)
   })

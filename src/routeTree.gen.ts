@@ -29,6 +29,7 @@ import { Route as ProjectsIdReviewsRouteImport } from './routes/projects.$id.rev
 import { Route as ProjectsIdRoadmapRouteImport } from './routes/projects.$id.roadmap'
 import { Route as ProjectsIdRunReportsRouteImport } from './routes/projects.$id.run-reports'
 import { Route as ProjectsIdSettingsRouteImport } from './routes/projects.$id.settings'
+import { Route as ProjectsIdWorkflowRouteImport } from './routes/projects.$id.workflow'
 import { Route as ProjectsIdFeaturesIndexRouteImport } from './routes/projects.$id.features.index'
 import { Route as ProjectsIdFeaturesTicketIdRouteImport } from './routes/projects.$id.features.$ticketId'
 
@@ -132,6 +133,11 @@ const ProjectsIdSettingsRoute = ProjectsIdSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => ProjectsIdRoute,
 } as any)
+const ProjectsIdWorkflowRoute = ProjectsIdWorkflowRouteImport.update({
+  id: '/workflow',
+  path: '/workflow',
+  getParentRoute: () => ProjectsIdRoute,
+} as any)
 const ProjectsIdFeaturesIndexRoute = ProjectsIdFeaturesIndexRouteImport.update({
   id: '/features/',
   path: '/features/',
@@ -164,6 +170,7 @@ export interface FileRoutesByFullPath {
   '/projects/$id/roadmap': typeof ProjectsIdRoadmapRoute
   '/projects/$id/run-reports': typeof ProjectsIdRunReportsRoute
   '/projects/$id/settings': typeof ProjectsIdSettingsRoute
+  '/projects/$id/workflow': typeof ProjectsIdWorkflowRoute
   '/projects/$id/': typeof ProjectsIdIndexRoute
   '/projects/$id/features/$ticketId': typeof ProjectsIdFeaturesTicketIdRoute
   '/projects/$id/features/': typeof ProjectsIdFeaturesIndexRoute
@@ -187,6 +194,7 @@ export interface FileRoutesByTo {
   '/projects/$id/roadmap': typeof ProjectsIdRoadmapRoute
   '/projects/$id/run-reports': typeof ProjectsIdRunReportsRoute
   '/projects/$id/settings': typeof ProjectsIdSettingsRoute
+  '/projects/$id/workflow': typeof ProjectsIdWorkflowRoute
   '/projects/$id': typeof ProjectsIdIndexRoute
   '/projects/$id/features/$ticketId': typeof ProjectsIdFeaturesTicketIdRoute
   '/projects/$id/features': typeof ProjectsIdFeaturesIndexRoute
@@ -212,6 +220,7 @@ export interface FileRoutesById {
   '/projects/$id/roadmap': typeof ProjectsIdRoadmapRoute
   '/projects/$id/run-reports': typeof ProjectsIdRunReportsRoute
   '/projects/$id/settings': typeof ProjectsIdSettingsRoute
+  '/projects/$id/workflow': typeof ProjectsIdWorkflowRoute
   '/projects/$id/': typeof ProjectsIdIndexRoute
   '/projects/$id/features/$ticketId': typeof ProjectsIdFeaturesTicketIdRoute
   '/projects/$id/features/': typeof ProjectsIdFeaturesIndexRoute
@@ -238,6 +247,7 @@ export interface FileRouteTypes {
     | '/projects/$id/roadmap'
     | '/projects/$id/run-reports'
     | '/projects/$id/settings'
+    | '/projects/$id/workflow'
     | '/projects/$id/'
     | '/projects/$id/features/$ticketId'
     | '/projects/$id/features/'
@@ -261,6 +271,7 @@ export interface FileRouteTypes {
     | '/projects/$id/roadmap'
     | '/projects/$id/run-reports'
     | '/projects/$id/settings'
+    | '/projects/$id/workflow'
     | '/projects/$id'
     | '/projects/$id/features/$ticketId'
     | '/projects/$id/features'
@@ -285,6 +296,7 @@ export interface FileRouteTypes {
     | '/projects/$id/roadmap'
     | '/projects/$id/run-reports'
     | '/projects/$id/settings'
+    | '/projects/$id/workflow'
     | '/projects/$id/'
     | '/projects/$id/features/$ticketId'
     | '/projects/$id/features/'
@@ -442,6 +454,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsIdSettingsRouteImport
       parentRoute: typeof ProjectsIdRoute
     }
+    '/projects/$id/workflow': {
+      id: '/projects/$id/workflow'
+      path: '/workflow'
+      fullPath: '/projects/$id/workflow'
+      preLoaderRoute: typeof ProjectsIdWorkflowRouteImport
+      parentRoute: typeof ProjectsIdRoute
+    }
     '/projects/$id/features/': {
       id: '/projects/$id/features/'
       path: '/features'
@@ -472,6 +491,7 @@ interface ProjectsIdRouteChildren {
   ProjectsIdRoadmapRoute: typeof ProjectsIdRoadmapRoute
   ProjectsIdRunReportsRoute: typeof ProjectsIdRunReportsRoute
   ProjectsIdSettingsRoute: typeof ProjectsIdSettingsRoute
+  ProjectsIdWorkflowRoute: typeof ProjectsIdWorkflowRoute
   ProjectsIdIndexRoute: typeof ProjectsIdIndexRoute
   ProjectsIdFeaturesTicketIdRoute: typeof ProjectsIdFeaturesTicketIdRoute
   ProjectsIdFeaturesIndexRoute: typeof ProjectsIdFeaturesIndexRoute
@@ -490,6 +510,7 @@ const ProjectsIdRouteChildren: ProjectsIdRouteChildren = {
   ProjectsIdRoadmapRoute: ProjectsIdRoadmapRoute,
   ProjectsIdRunReportsRoute: ProjectsIdRunReportsRoute,
   ProjectsIdSettingsRoute: ProjectsIdSettingsRoute,
+  ProjectsIdWorkflowRoute: ProjectsIdWorkflowRoute,
   ProjectsIdIndexRoute: ProjectsIdIndexRoute,
   ProjectsIdFeaturesTicketIdRoute: ProjectsIdFeaturesTicketIdRoute,
   ProjectsIdFeaturesIndexRoute: ProjectsIdFeaturesIndexRoute,

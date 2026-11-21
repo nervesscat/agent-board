@@ -1,8 +1,8 @@
 ---
 name: feature-review
-description: "Reviews one feature or change for correctness, reliability and security using a spec -> env -> verify -> hunt -> refute protocol built to produce zero false positives. The code under review runs from its own worktree at the exact commit, on servers the review starts itself; every finding needs a concrete failure scenario and must survive an adversarial refutation pass; an empty result is valid and comes with proof of what was checked."
+description: "Reviews one feature or change for correctness, reliability and security with a protocol built to produce zero false positives. The phases it runs are a plan: the caller's phases= argument or, on a board ticket, the ticket's workflow (get_workflow); with neither, the six standard phases (spec, env, verify, hunt, refute, merge check). The code under review runs from its own worktree at the exact commit, on servers the review starts itself; every finding needs a concrete failure scenario and must survive an adversarial refutation pass; an empty result is valid and comes with proof of what was checked."
 user-invocable: true
-argument-hint: "[repo=<path>] [<PR number> | <branch> | diff | staged | <path>] [ticket=<id>] [deep] [light] [keep] [ports=<from>-<to>] [browser=yes|no] [scoped] [post] [slots=<dir>] [build=<path>] [repoId=<id>]"
+argument-hint: "[repo=<path>] [<PR number> | <branch> | diff | staged | <path>] [ticket=<id>] [phases=<list>] [deep] [light] [keep] [ports=<from>-<to>] [browser=yes|no] [scoped] [post] [slots=<dir>] [build=<path>] [repoId=<id>]"
 ---
 
 # Feature Review
@@ -79,8 +79,9 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `repo=<path>` | the repository's main checkout | current working directory |
 | a number | a GitHub PR | |
 | a branch name, `diff`, `staged`, or a path | the change to review | see Setup |
-| `deep` | the two independent hunts also report each finding's stability (both hunts or one) | off |
-| `light` | a depth name only: it has no effect on the phases, every round runs all of them (two hunts included) | off |
+| `phases=<list>` | the plan: the phases this run executes, as comma-separated tokens (**The plan**, below): e.g. `spec,env,verify,hunt,hunt,refute,merge`, or `reviewer` alone. A board cycle's ticket agent passes what its workflow's review step gives | the ticket's workflow on a board ticket, else the six standard phases |
+| `deep` | the independent hunts also report each finding's stability (every hunt or one) | off |
+| `light` | a depth name only: it has no effect on the phases, every phase the plan lists runs (every hunt included) | off |
 | `keep` | keep the worktree and servers after the report, for debugging | off |
 | `ports=<from>-<to>` | range to allocate from when a default port is busy | `8100-8199` |
 | `browser=yes\|no` | whether browser automation may be used | `yes` |
@@ -90,19 +91,82 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `build=<path>` | a build record the caller's gate wrote after its end-to-end build: the head SHA, the `.output-e2e` path and the time. The env phase reuses that artifact when the SHA is the commit under review, and builds once when it is not | none |
 | `repoId=<id>` | the repo id the test slot folders are named with (`tests-<id>-1` … `-N`, `tests-<id>-full`), passed to every phase; the env phase writes the exact folders into `00-env.md` | none |
 | `post` | post the report as a PR comment when the target is a PR | off |
-| `effort=<low\|medium\|high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`; a board cycle sets it from the ticket's complexity (`low` for low, `medium` for mid and high, `high` for max) | the session's |
-| `round=<n>` | the review round this run is: every phase span (`start_span` / `end_span` with `agent` = the phase's agent name, e.g. `spec`, `env`, `verify`, `hunt-1`, `hunt-2`, `refute`, `merge`, and `round`) and every phase's run report (`write_run_report` with `round`) carry it, because the board counts a phase only when its span or report carries the round | `1` when a board ticket is given and no round is |
+| `effort=<low\|medium\|high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`; a board cycle's ticket agent passes the effort its workflow's review step names (`auto` means `low` for a low ticket, `medium` for mid and high, `high` for max) | the session's |
+| `round=<n>` | the review round this run is: every phase span (`start_span` / `end_span` with `agent` = the phase's agent name, e.g. `spec`, `env`, `verify`, `hunt-1`, `hunt-2`, `hunt-3`, `hunt-security`, `reviewer`, `refute`, `merge`, and `round`; the board counts any `hunt-<name>` or `reviewer` as a hunt) and every phase's run report (`write_run_report` with `round`) carry it, because the board counts a phase only when its span or report carries the round | `1` when a board ticket is given and no round is |
 | `ticket=<id>` | the board ticket this change belongs to: turns on **On the board** below | found from the PR's `ticket` in `list_prs` when the board is connected |
+| `agent=<prefix>` | only when the caller runs this review more than once for the same round (a workflow's two reviews of a round): the name every phase agent's span and report of this run starts with, so the runs stay apart (`<prefix>/<phase agent name>`); the last segment still names the phase. The prefix's last segment (`AGENT_TAG`, e.g. `review-second` for `<name>/review-second`) also goes into this run's `SLUG` (Setup), so each run has its own `WORKDIR`, claim, worktree and ledger line | none |
+
+## The plan: which phases run
+
+The phases of a run are a **plan**, a list of tokens, and **every phase the plan lists runs**. None is
+skipped because the findings look obvious, the change looks small or a finding was already
+reproduced, and each phase posts its result, so a skipped phase is visible. Where the plan comes from,
+first match:
+
+1. **`phases=<list>`**: the caller's plan. A ticket agent passes the `phases=` its workflow's review
+   step gives (`get_workflow` serves it, e.g. `phases=spec,env,verify,hunt,hunt,refute,merge`).
+2. **On a board ticket without `phases=`**: the ticket's workflow. `get_workflow` with the project and
+   the ticket (`ticket=<id>`), the `phases=` its review step gives for this run.
+   When that workflow lists the ticket's review as skipped (a low ticket, no rounds for its level, or
+   the review step turned off) it gives no `phases=`; if a review is asked for anyway (a queue review of
+   its PR, a person's request), run the six standard phases and say so in the report: "workflow lists no
+   review for this ticket: the six standard phases". A workflow whose review is Light gives
+   `phases=reviewer`, and that is the plan.
+3. **No board, no ticket, or a board that does not answer**: the six standard phases,
+   `spec,env,verify,hunt,hunt,refute,merge` (spec, env, verify, two independent hunts, refute and the
+   merge check), and the report says so: "no workflow: the six standard phases".
+
+| Token | The phase |
+|---|---|
+| `spec` | Phase 1: Spec |
+| `env` | Phase 1b: Environment |
+| `verify` | Phase 2: Verify |
+| `hunt` | one hunt (Phase 2), independent of every other hunt; the token repeats once per hunt, so two `hunt` tokens are two hunts that never share notes |
+| `hunt-security` | one more independent hunt whose checklist sections are the Security one only |
+| `refute` | Phase 3: Refute |
+| `merge` | Phase 3b: Merge check |
+| `reviewer` | the single-reviewer plan, alone (below) |
+
+The order the phases run in is fixed by what each one reads, as written below (spec, then env, then
+verify and every hunt at once, then refute, then the merge check), not by the order of the tokens.
+
+**The single-reviewer plan (`phases=reviewer`).** One reviewer, no spec, env, verify, refute or merge
+phase. Setup and the context bundle are as always (`00-diff.patch`, `00-context.md`,
+`00-focus.md`), and the ticket's instructions and acceptance criteria in `00-context.md` stand in for
+a spec: there is no `01-spec.md`, `02-verification.md`, `04-verdicts.md` or `05-merge.md`, and the only
+environment file is the small `00-env.md` the run writes (below).
+There is no env phase, so **the run itself prepares the worktree** before it spawns the reviewer, as
+Phase 1b does for a hunt: install or reuse the dependencies inside the worktree (a prepared
+`node_modules` copied by hardlink with `cp -al` into a real directory, never a symlink or a junction, or
+the project's own install), and write a small `00-env.md` with the test command that runs from the
+worktree (the project's own, from its runbook or scripts), the repo's `Test slots:` folders when `slots=`
+was given, and `Servers: none started`. Spawn one `feature-review-hunt` agent (the project's `hunt`
+agent when it has one) with prefix `_frh_`, the context pack, the focus, the diff, the checklists and
+`00-env.md`, and tell it the test slots' rule (a heavy run, such as an end-to-end spec, takes the first
+free slot and releases it right after; a targeted unit test or probe takes none). It runs only targeted
+tests and probes from the worktree. Starting a server is the reviewer's own call, only when reproducing
+a finding needs one: it starts it itself on a free port, from the worktree, calls only that port, and
+stops it by the PID it recorded before it returns (this replaces the hunt agent's rule that it never
+starts a server, for this plan only). Its candidates (`03-candidates.md`) are the findings: `confirmed`
+only when it reproduced one by execution, else `plausible`. The report is `review.md` in the same
+shape with these differences: the Freshness block says `Hunts: one`, `Refutation: none (single
+reviewer)` and names the plan; the verdict is `DO NOT SHIP` for a confirmed blocker, `SHIP AFTER
+FIXES` for a confirmed bug or a plausible blocker, else `SHIP` (never `COULD NOT VERIFY`); the
+acceptance criteria table is left out (the caller's evidence covers them); and the summary's three
+checks each read `not run: single-reviewer plan`.
 
 ## Setup
 
 1. `MAIN` = the repo path. `SLUG` = `<repo-dir-name>-<target>` (e.g. `myapp-pr-123`,
-   `webapp-diff`). `WORKDIR` = `~/.claude/feature-review/<SLUG>/` (resolve `~` with
+   `webapp-diff`), and `<repo-dir-name>-<target>-<AGENT_TAG>` when `agent=<prefix>` was given
+   (`AGENT_TAG` = the prefix's last segment, e.g. `myapp-feature-x-review-second`): two runs of one
+   target under different prefixes never share a folder, a claim or a worktree, so they may run at once
+   or one after the other and neither removes the other's files. `WORKDIR` = `~/.claude/feature-review/<SLUG>/` (resolve `~` with
    `echo ~`). `WORKTREE` = `WORKDIR/wt`.
    **Claim before you clean.** Another session may be reviewing the same target. A claim
    is live when `WORKDIR/CLAIM.md` exists, is less than 6 hours old, and
-   `~/.claude/feature-review/ledger.jsonl` has no entry for this target written after
-   the claim (a finished review that forgot to remove its claim is not live). When the
+   `~/.claude/feature-review/ledger.jsonl` has no entry for this target (and this `agent`, when
+   `agent=` was given) written after the claim (a finished review that forgot to remove its claim is not live). When the
    claim is not live and `WORKDIR/LEFTOVER.md` exists, an earlier review of this target
    could not remove its worktree for a git lock (Teardown step 2): remove `WORKTREE` now as
    Teardown step 2 does, then delete `LEFTOVER.md`; still locked, stop with the error
@@ -188,7 +252,7 @@ and the path of
 `00-focus.md` with this rule: start from it; read outside it only to follow a reference from it.
 With `scoped`, it also includes the word `scoped`. Agents treat `WORKTREE` as the repo root.
 
-## Phase 1: Spec (1 agent)
+## Phase 1: Spec (1 agent; token `spec`)
 
 Spawn `feature-review-spec` with paths to `00-diff.patch`, `00-context.md`, `00-focus.md`, and
 the output path `01-spec.md`. It writes what it establishes — the changed files, their tests,
@@ -219,7 +283,7 @@ The spec's classification picks the work. A change with several classes takes th
 
 Every hunt also applies Diff guard analysis and the Project overlay.
 
-## Phase 1b: Environment (1 agent)
+## Phase 1b: Environment (1 agent; token `env`)
 
 Spawn `feature-review-env` with `01-spec.md`, `00-context.md`, `00-focus.md`, `NOTES`, the port
 range, the browser flag, `FRONTEND` if given, the build record's path when `build=` was given,
@@ -241,15 +305,16 @@ Read `00-env.md`. If nothing could be started, continue: the verify agent will r
 runtime criteria as `UNVERIFIED` and the hunt still runs on the code. Do not start
 anything yourself, and do not reuse anything that was already running.
 
-## Phase 2: Verify and two hunts (3 agents in parallel)
+## Phase 2: Verify and the hunts (in parallel; tokens `verify`, `hunt`, `hunt-security`)
 
-Spawn in a single message:
+Spawn in a single message one agent per token of the plan (the standard plan: three):
 
 | Agent | Temp-file prefix | Output |
 |---|---|---|
 | `feature-review-verify` | `_frv_` | `02-verification.md` |
 | `feature-review-hunt` | `_frh_` | `03-candidates.md`, `03-hunt-notes.md` |
 | `feature-review-hunt` (second, independent instance) | `_frh2_` | `03-candidates-b.md`, `03-hunt-notes-b.md` |
+| `feature-review-hunt` (a third instance, for each `hunt-security` token: checklist sections the Security one only) | `_frh3_` | `03-candidates-c.md`, `03-hunt-notes-c.md` |
 
 Each prompt includes paths to `01-spec.md`, `00-env.md`, `00-diff.patch`, `00-context.md`,
 `00-focus.md`, `checklists.md`, its output paths, the `SLOTS` directory when `slots=` was given,
@@ -273,25 +338,24 @@ end-to-end run, so it takes a slot the same way, released right after it. With `
 in `00-env.md`, verify's end-to-end command reuses the caller's build instead of building again.
 
 Wait for all. Then build the refutation input, `03-all-candidates.md`:
-- every candidate from `03-candidates.md` (and `03-candidates-b.md`,
-  de-duplicated by location and claim; keep a private note of which hunt found which,
+- every candidate from `03-candidates.md` (and `03-candidates-b.md` and `03-candidates-c.md` when the
+  plan ran those hunts, de-duplicated by location and claim; keep a private note of which hunt found which,
   the refute agent must not see it);
 - every `FAIL` row from `02-verification.md`, rewritten as a candidate in the same format;
 - **nothing from the hunt notes files.** The refute agent never sees hunt reasoning.
 
 Renumber candidates C1..Cn.
 
-**Two independent hunts always run.** Every review spawns both hunts, in parallel with verify and
-never sharing notes, whatever the depth: a clean hunt is no reason to run one hunt, and `light` does
-not drop the second. A missed blocker costs far more than twenty minutes. Merge their candidates as
-above. For a change on a ticket above low (`mid`, `high`, `max`), every review round runs spec, env, verify,
-two independent hunts, refute and the merge check. None is skipped because the findings look
-obvious, the change looks small or a finding was already reproduced, and each phase posts its
-result, so a skipped phase is visible.
+**Every hunt the plan lists runs.** Each `hunt` token is its own hunt, in parallel with verify and
+never sharing notes with another, whatever the depth: a clean hunt is no reason to run one hunt fewer,
+and `light` does not drop one. A missed blocker costs far more than twenty minutes. Merge their
+candidates as above. Every phase the plan lists runs in every review round; none is skipped because the
+findings look obvious, the change looks small or a finding was already reproduced, and each phase
+posts its result, so a skipped phase is visible.
 
-## Phase 3: Refute (1 agent)
+## Phase 3: Refute (1 agent; token `refute`)
 
-Refute always runs, also when `03-all-candidates.md` has no candidate at all: it then verifies that
+When the plan lists it, refute always runs, also when `03-all-candidates.md` has no candidate at all: it then verifies that
 nothing is left to refute and records that.
 
 Spawn `feature-review-refute` with temp-file prefix `_frr_` and paths to `01-spec.md`,
@@ -301,7 +365,7 @@ the output path `04-verdicts.md`. Like the hunt, it runs only targeted tests, ne
 suite, and those targeted unit tests and probes take no test slot; a targeted end-to-end spec is
 heavy like any end-to-end run and takes one. Wait for it.
 
-## Phase 3b: Merge check (1 agent)
+## Phase 3b: Merge check (1 agent; token `merge`)
 
 Runs after every other agent has finished, because it temporarily changes the worktree.
 Spawn `feature-review-merge` with `HEAD_SHA`, the base branch name, the `SLOTS` directory when
@@ -339,10 +403,10 @@ without spawning the agent.
      path, environment summary from `00-env.md` (reused or fresh dependencies, the caller's
      build reused at this head with `E2E_SKIP_BUILD=1` or a build here, services
      up, services unavailable).
-   - The Freshness block's `Hunts` line says `two`.
+   - The Freshness block's `Hunts` line says how many hunts the plan ran (`two` for the standard plan, `three` with a security hunt, `one` for the single reviewer), and a `Plan` line says which phases ran and where the plan came from: the `phases=` argument, the ticket's workflow, or "no workflow: the six standard phases".
    - Findings are the candidates with verdict `CONFIRMED` or `PLAUSIBLE` in
      `04-verdicts.md`, using the refute agent's final severity. In deep mode add
-     `Stability: both hunts` or `one hunt` to each (the finding's hunts, both of which ran).
+     `Stability: both hunts` or `one hunt` to each (of the hunts that ran).
    - Verdict line: `DO NOT SHIP` if any confirmed blocker. `SHIP AFTER FIXES` if any
      confirmed bug or any plausible blocker. `COULD NOT VERIFY` if there are no findings
      and more than half the criteria are `UNVERIFIED`. Otherwise `SHIP`.
@@ -368,7 +432,9 @@ without spawning the agent.
    | Did you make sure this works and is running? | every acceptance criterion is `PASS` by execution, not traced (an `instructions` criterion read where its reader gets it and quoted is execution), and verify's test run (scoped, or full where no CI runs it) passed apart from pre-existing failures | which criteria are unverified or failed, and why |
    | Will this have any issue with the latest version of the base branch? | this one is inverted: **NO** when the merge check result is `NO ISSUE`; **YES** for `CONFLICTS`, `TESTS FAIL AFTER MERGE`, or `UNVERIFIED` | the conflicting files, the new failures, or "not verified: <reason>" |
 4. Append one line to `~/.claude/feature-review/ledger.jsonl`:
-   `{"repo": "<origin url, or MAIN path if none>", "target": "<pr N | branch | diff>", "sha": "<commit>", "verdict": "<verdict>", "confirmed": n, "plausible": n, "refuted": n, "unverified": n, "merge": "<merge result>", "checks": {"reliable": "YES|NO", "works": "YES|NO", "base_issue": "YES|NO"}, "stale": bool, "path": "<WORKDIR>/review.md", "at": "<ISO timestamp>"}`
+   `{"repo": "<origin url, or MAIN path if none>", "target": "<pr N | branch | diff>", "sha": "<commit>", "verdict": "<verdict>", "confirmed": n, "plausible": n, "refuted": n, "unverified": n, "merge": "<merge result>", "checks": {"reliable": "YES|NO", "works": "YES|NO", "base_issue": "YES|NO"}, "stale": bool, "path": "<WORKDIR>/review.md", "at": "<ISO timestamp>"}`, plus `"agent": "<the agent= prefix>"`
+   when `agent=` was given: a line with an `agent` is that run's review only (its `path` is its own
+   folder), never the review of the same target by a run with another prefix or none.
 5. If `post` was given, the target is a PR, and the review is not stale:
    `gh pr comment N --body-file WORKDIR/review.md` from `MAIN`. Otherwise do not post.
    A single-review PDF can be built with
@@ -458,16 +524,17 @@ plan first, then the result with its proofs.
    off; the review itself never runs it, the orchestrator that hands the ticket off does (the
    todo-review skill's ticket agent). It runs on every ticket, of any complexity (low included, which
    has no review rounds), and again after any human comment that sent the ticket back. It runs the
-   project's `intent` agent (or `feature-review-intent`) at `low` effort, whatever the complexity,
+   project's `intent` agent (or `feature-review-intent`) at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity,
    and gives it only the human's own words and attachments (the ticket's instructions, every post
    and reply by the human, newest last, and the human's own answer on a decision card, the latest comment that sent the ticket back weighing most)
    and the result (the preview, the screenshots or recordings, the diff). It never gets the
    builder's plan, the spec, the review's findings or the options an agent put on a card, so it cannot inherit their reading. It returns
    one line per thing the human asked (`done as asked`, `done differently (how)` or `not done`, with
-   the evidence) and a verdict, `matches` or `does not match`. `matches` hands off. `does not match`
+   the evidence) and a verdict, `matches` or `does not match`. `matches` hands off. When the ticket's workflow lists the intent step as skipped (a low ticket with the check
+   turned off on the Workflow page), no check runs and none is required. `does not match`
    goes back to the builder with the intent check's lines as the brief, then the gate, then ONE more
-   full review round above low (numbering continues from the last round, all six phases, two hunts; a
-   low ticket has no review, only the gate), then the intent check again. A `does not match` is
+   review round of the ticket's workflow (numbering continues from the last round; a ticket whose
+   workflow lists no review has only the gate), then the intent check again. A `does not match` is
    outside the complexity's round budget. After the SECOND `does not match` on one ticket, the ticket
    agent asks the human with `ask_decision` (keep going, ship as is, drop), with the intent check's
    lines and the human's words on the card. Earlier than that the human is asked only when two
@@ -487,6 +554,7 @@ plan first, then the result with its proofs.
   `00-env.md`, and `03-all-candidates.md`, and state in the report's Freshness block that
   the refutation ran inline without blinding.
 - With `effort=` given, pass it as `effort` on every phase agent's Agent call.
+- The run follows its plan (**The plan**): spawn only the phases it lists, and all of them.
 - Agents inherit the session model. Review quality depends on it, so do not downgrade
   the hunt or refute agents.
 - If an agent fails, report the failure and produce the report from what succeeded.

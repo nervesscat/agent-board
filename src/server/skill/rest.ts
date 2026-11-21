@@ -9,6 +9,7 @@ export const TOOL_ROUTES: Record<string, string> = {
   find_project:
     'GET /api/projects, then match your origin (`githubRepo` owner/name), checkout path or folder against `repos[]` yourself',
   get_project: 'GET /api/projects/:id',
+  get_workflow: 'GET /api/projects/:id/workflow/effective?ticketId=',
   set_project_instructions: 'PUT /api/projects/:id/instructions `{instructions}`',
   set_tag_suggestions: 'PATCH /api/projects/:id `{tagSuggestions}`',
   list_notes: 'GET /api/projects/:id/notes',

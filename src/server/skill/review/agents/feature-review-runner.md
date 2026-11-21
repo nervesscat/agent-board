@@ -67,7 +67,7 @@ COUNTS: confirmed=<n> plausible=<n> refuted=<n> passed=<n> unverified=<n>
 SHA: <commit reviewed>
 REVIEW: <absolute path to review.md>
 SUMMARY: <absolute path to summary.md>
-NOTES: <one line: environment problems with the port and the process holding it if any; "browser unavailable" if so; assumptions taken; optional-notes count; or "none">
+NOTES: <one line: environment problems with the port and the process holding it if any; "browser unavailable" if so; assumptions taken; the plan the review ran when it was not the six standard phases (`phases=reviewer`, or "workflow lists no review: the six standard phases"); optional-notes count; or "none">
 ```
 
 For `STATUS: error`, `VERDICT`, `CHECKS`, `COUNTS`, and `SUMMARY` are `n/a`, and `NOTES`

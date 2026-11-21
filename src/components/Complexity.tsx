@@ -6,18 +6,19 @@ import { COMPLEXITIES, type Complexity } from '#/lib/constants'
 const COMPLEXITY_LABEL: Record<Complexity, string> = { low: 'Low', mid: 'Mid', high: 'High', max: 'Max' }
 
 /**
- * The hover hint of the select: what each level does to the review, and where max stops being the
- * answer (a feature in an existing codebase is at most high).
+ * The hover hint of the select: how many review rounds each level gets is the project's workflow's to say (the
+ * Standard one gives none, one, three and up to ten), and where max stops being the answer (a feature in an
+ * existing codebase is at most high).
  */
 const SELECT_HINT =
-  'Low: no review. Mid: one review round. High: up to three. Max: up to ten rounds, for work built from scratch; a feature in an existing codebase is never max, however difficult.'
+  "Low: no spec or review in the Standard workflow. Mid, High and Max: the review rounds the project's workflow sets (Standard: one, three, up to ten). Max is for work built from scratch; a feature in an existing codebase is never max, however difficult."
 
-/** The hover hint of a level's chip: what that level does to the review. */
+/** The hover hint of a level's chip: what that level does to the review under the project's workflow. */
 const LEVEL_HINT: Record<Complexity, string> = {
-  low: 'Low: no review. The builder verifies it itself.',
-  mid: 'Mid: one review round.',
-  high: 'High: up to three review rounds.',
-  max: 'Max: up to ten review rounds, for a whole site or app built from scratch, a new product or a standalone service, and it stops at the first round that survives. A feature in an existing codebase is at most high, however difficult.',
+  low: "Low: the review rounds the project's workflow sets (Standard: none). The builder verifies it itself.",
+  mid: "Mid: the review rounds the project's workflow sets (Standard: one).",
+  high: "High: the review rounds the project's workflow sets (Standard: up to three).",
+  max: "Max: the review rounds the project's workflow sets (Standard: up to ten), for a whole site or app built from scratch, a new product or a standalone service, and it stops at the first round that survives. A feature in an existing codebase is at most high, however difficult.",
 }
 
 const CHIP_COLOR: Record<Complexity, string> = {

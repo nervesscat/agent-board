@@ -4,12 +4,12 @@ import type { TicketFull, TicketRow } from '#/lib/api'
 import { expect, expectTooltip, ok, test } from './fixtures'
 
 const SELECT_HINT =
-  'Low: no review. Mid: one review round. High: up to three. Max: up to ten rounds, for work built from scratch; a feature in an existing codebase is never max, however difficult.'
+  "Low: no spec or review in the Standard workflow. Mid, High and Max: the review rounds the project's workflow sets (Standard: one, three, up to ten). Max is for work built from scratch; a feature in an existing codebase is never max, however difficult."
 const CHIP_HINT = {
-  Low: 'Low: no review. The builder verifies it itself.',
-  Mid: 'Mid: one review round.',
-  High: 'High: up to three review rounds.',
-  Max: 'Max: up to ten review rounds, for a whole site or app built from scratch, a new product or a standalone service, and it stops at the first round that survives. A feature in an existing codebase is at most high, however difficult.',
+  Low: "Low: the review rounds the project's workflow sets (Standard: none). The builder verifies it itself.",
+  Mid: "Mid: the review rounds the project's workflow sets (Standard: one).",
+  High: "High: the review rounds the project's workflow sets (Standard: up to three).",
+  Max: "Max: the review rounds the project's workflow sets (Standard: up to ten), for a whole site or app built from scratch, a new product or a standalone service, and it stops at the first round that survives. A feature in an existing codebase is at most high, however difficult.",
 } as const
 
 async function box(el: Locator) {
