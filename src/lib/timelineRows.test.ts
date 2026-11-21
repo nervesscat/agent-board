@@ -73,6 +73,7 @@ const timeline = (more: Partial<WorkTimeline> = {}): WorkTimeline => ({
   handoffs: [],
   marks: [],
   blockedStretches: [],
+  reviewStretches: [],
   totals: { workingMs: 0, waitingMs: 0, blockedOnHumanMs: 0 },
   lastSignalAt: iso('10:00'),
   lastWordAt: iso('10:00'),
@@ -311,7 +312,7 @@ describe('segments', () => {
     expect(packLanes([])).toEqual({ lane: [], count: 0 })
   })
 
-  it('draws the blocked stages as bands, and clips them to the axis', () => {
+  it('draws the blocked stages as fixed blocks, and clips them to the axis', () => {
     const t = timeline({
       spans: [span(1, 'a', 'a', '10:00', '10:30')],
       blockedStretches: [{ start: iso('10:10'), end: iso('10:20') }],
@@ -319,7 +320,9 @@ describe('segments', () => {
     })
     const chart = buildChart(t, ms('10:30'))
     expect(chart.bands).toHaveLength(1)
-    expect(chart.bands[0]!.seg.left).toBeCloseTo(1 / 3, 2)
+    // The 10 minutes of blocked time take a fixed 24: the axis is 20 real minutes plus the block.
+    expect(chart.bands[0]!.seg.left).toBeCloseTo(10 / 44, 4)
+    expect(chart.bands[0]!.seg.width).toBeCloseTo(24 / 44, 4)
   })
 })
 

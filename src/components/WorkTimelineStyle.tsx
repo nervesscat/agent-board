@@ -46,6 +46,12 @@ export const HATCH = {
 export const BLOCKED_BAND = 'bg-amber-500/10 dark:bg-amber-400/10'
 export const BLOCKED_CHIP =
   'border border-dashed border-amber-700/70 bg-amber-500/30 text-amber-950 dark:border-amber-300/70 dark:bg-amber-400/25 dark:text-amber-50'
+/** A review stage (In review, Approved, Release): the same, in the review stage's violet. */
+export const REVIEW_BAND = 'bg-violet-500/10 dark:bg-violet-400/10'
+export const REVIEW_CHIP =
+  'border border-dashed border-violet-700/70 bg-violet-500/30 text-violet-950 dark:border-violet-300/70 dark:bg-violet-400/25 dark:text-violet-50'
+/** The skip mark on the axis, where time was left out. */
+export const BREAK_MARK = 'text-muted-foreground'
 export const HANDOFF_LINE = 'border-muted-foreground'
 export const NOW_LINE = 'bg-foreground'
 export const GRID_LINE = 'bg-border'

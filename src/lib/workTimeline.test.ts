@@ -236,6 +236,22 @@ describe('buildTimeline', () => {
     expect(build([span, hb], '11:00', { status: 'review' }).totals.workingMs).toBe(60 * MIN)
   })
 
+  it('lists time in a review-kind stage, one stretch across In review and Approved', () => {
+    const events = [
+      event('span_start', '09:30', { phase: 'build' }),
+      event('stage', '10:00', { agent: 'board', by: 'board', fromStage: 'in_progress', toStage: 'review' }),
+      event('stage', '10:30', { agent: 'board', by: 'board', fromStage: 'review', toStage: 'approved' }),
+      event('stage', '11:00', { agent: 'board', by: 'board', fromStage: 'approved', toStage: 'in_progress' }),
+      event('stage', '11:20', { agent: 'board', by: 'board', fromStage: 'in_progress', toStage: 'review' }),
+    ]
+    const t = build(events, '12:00', { status: 'review' })
+    expect(t.reviewStretches).toEqual([
+      { start: at('10:00'), end: at('11:00') },
+      { start: at('11:20'), end: at('12:00') },
+    ])
+    expect(t.blockedStretches).toEqual([])
+  })
+
   it('counts time in a blocked stage as blocked on human, until the next stage move', () => {
     const events = [
       event('span_start', '09:30', { phase: 'build' }),

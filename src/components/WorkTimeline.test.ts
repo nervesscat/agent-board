@@ -1,10 +1,12 @@
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import { DEFAULT_STAGES } from '#/lib/constants'
-import { clock } from '#/lib/format'
+import { clock, stamp } from '#/lib/format'
 import { buildTimeline, type TimelineEvent, type TimelineTicket } from '#/lib/workTimeline'
 
-import { spanLabel, waitLabel } from './WorkTimeline'
+import { collapsedLabel, spanLabel, waitLabel, WorkTimelineBar } from './WorkTimeline'
 
 const at = (hhmm: string, day = '2026-10-20') => `${day}T${hhmm}:00.000Z`
 
@@ -79,5 +81,55 @@ describe('segment labels', () => {
     expect(waitLabel(t.waits[0]!, t.live)).toBe(
       `wait: lock (claude), ${clock(at('10:30'))} to now, 30 min, open`,
     )
+  })
+})
+
+describe('collapsed periods on the chart', () => {
+  const day = (n: number) => `2026-11-${String(10 + n).padStart(2, '0')}`
+  const moved = (time: string, d: number, from: string, to: string) => ({
+    ...event('stage', time, { agent: 'board', by: 'board', fromStage: from, toStage: to }),
+    at: at(time, day(d)),
+  })
+  const reviewed = () => {
+    const evs = [
+      { ...event('span_start', '09:00', { phase: 'build' }), at: at('09:00', day(0)) },
+      { ...event('span_end', '10:00', { phase: 'build' }), at: at('10:00', day(0)) },
+      moved('10:00', 0, 'in_progress', 'review'),
+      moved('09:30', 5, 'review', 'done'),
+    ]
+    return buildTimeline(evs, {
+      now: Date.parse(at('12:00', day(6))),
+      stages: DEFAULT_STAGES,
+      ticket: ticket({ status: 'done', createdAt: at('08:00', day(0)) }),
+      stallMinutes: 30,
+    })
+  }
+
+  it('words a period with its real start, end and length, and that it is not to scale', () => {
+    const t = reviewed()
+    expect(t.reviewStretches).toHaveLength(1)
+    const [r] = t.reviewStretches
+    const label = collapsedLabel({
+      kind: 'review',
+      start: Date.parse(r!.start),
+      end: Date.parse(r!.end),
+      open: false,
+    })
+    expect(label).toBe(
+      `In review, ${stamp(r!.start)} to ${stamp(r!.end)}, 4 d 23 h 30 min, not drawn to scale`,
+    )
+    expect(collapsedLabel({ kind: 'blocked', start: 0, end: 90 * 60_000, open: true })).toMatch(
+      /^Blocked, .* to now, 1 h 30 min, not drawn to scale$/,
+    )
+  })
+
+  it('draws an In review chip with that label, its real times in the name and a break mark', () => {
+    const html = renderToStaticMarkup(createElement(WorkTimelineBar, { timeline: reviewed() }))
+    expect(html).toContain('data-kind="review"')
+    expect(html).toContain('aria-label="In review, ')
+    expect(html).toContain('4 d 23 h 30 min, not drawn to scale')
+    expect(html).toContain('>In review</button>')
+    expect(html).toContain('data-kind="axis-break"')
+    expect(html).toContain('Not to scale: in review 4 d 23 h 30 min.')
   })
 })

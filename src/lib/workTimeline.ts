@@ -148,6 +148,8 @@ export type WorkTimeline = {
   handoffs: TimelineHandoff[]
   marks: TimelineMark[]
   blockedStretches: { start: string; end: string }[]
+  /** Time in a review-kind stage (In review, Approved, Release), joined where one move follows the next. */
+  reviewStretches: { start: string; end: string }[]
   totals: WorkTotals
   lastSignalAt: string
   /** The latest agent event or agent post: when the agent last said something. */
@@ -338,12 +340,21 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
 
   // In a blocked-kind stage from the move into it to the next move (or the end); a stage the project
   // no longer has is not blocked, and nothing before the first recorded move counts.
-  const blockedStretches = stageMoves.flatMap((e, i) => {
-    if (kindOfKey(e.toStage) !== 'blocked' || endMs === null) return []
-    const next = stageMoves[i + 1]
-    const b = next ? Date.parse(next.at) : endMs
-    return b > Date.parse(e.at) ? [{ start: e.at, end: iso(b) }] : []
-  })
+  const stretchesIn = (kind: StageKind) =>
+    stageMoves.flatMap((e, i) => {
+      if (kindOfKey(e.toStage) !== kind || endMs === null) return []
+      const next = stageMoves[i + 1]
+      const b = next ? Date.parse(next.at) : endMs
+      return b > Date.parse(e.at) ? [{ start: e.at, end: iso(b) }] : []
+    })
+  const blockedStretches = stretchesIn('blocked')
+  // One unbroken stay in review (In review, then Approved, then Release) is one stretch.
+  const reviewStretches = stretchesIn('review').reduce<{ start: string; end: string }[]>((out, s) => {
+    const last = out.at(-1)
+    if (last && Date.parse(last.end) >= Date.parse(s.start)) last.end = s.end
+    else out.push({ ...s })
+    return out
+  }, [])
 
   // The stage the ticket is in now and when it entered it: the latest move into its status (the creation
   // recorded one too), else its creation. A review row counts its wait from this, never from updatedAt.
@@ -462,6 +473,7 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
     handoffs,
     marks,
     blockedStretches,
+    reviewStretches,
     totals: sums,
     lastSignalAt,
     lastWordAt,

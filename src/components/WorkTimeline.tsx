@@ -6,10 +6,12 @@ import { nameParts, parentName, shortName } from '#/lib/actorName'
 import { clock, stamp } from '#/lib/format'
 import {
   buildChart,
+  longDuration,
   PX_PER_MINUTE,
   share,
   spokenDuration,
   type AgentRow,
+  type Band,
   type Chart,
   type ChartWait,
   type Handoff,
@@ -25,6 +27,7 @@ import {
   ARROW_ICON,
   BLOCKED_BAND,
   BLOCKED_CHIP,
+  BREAK_MARK,
   DELEGATION,
   GRID_LINE,
   HANDOFF_LINE,
@@ -37,6 +40,8 @@ import {
   OTHER_PHASE,
   PHASE,
   PLAIN_WAIT,
+  REVIEW_BAND,
+  REVIEW_CHIP,
   waitIcon,
   boxStyle,
 } from './WorkTimelineStyle'
@@ -77,6 +82,12 @@ export const delegationLabel = (w: ChartWait, live: boolean) =>
 
 const handoffLabel = (h: { from: string; to: string; at: string; note: string }) =>
   `${h.from} passed the work to ${h.to}, ${clock(h.at)}${h.note ? `: ${h.note}` : ''}`
+
+const BAND_NAME = { blocked: 'Blocked', review: 'In review' } as const
+
+/** A collapsed period's story: its real start, end and length, and that it is not drawn to scale. */
+export const collapsedLabel = (b: Pick<Band, 'kind' | 'start' | 'end' | 'open'>) =>
+  `${BAND_NAME[b.kind]}, ${stamp(new Date(b.start).toISOString())} to ${b.open ? 'now' : stamp(new Date(b.end).toISOString())}, ${longDuration(b.end - b.start)}, not drawn to scale`
 
 const markLabel = (m: TimelineMark) =>
   `${(MARK[m.kind] ?? OTHER_MARK).name}${m.note ? `: ${m.note}` : ''}, ${clock(m.at)}`
@@ -370,7 +381,7 @@ export function WorkTimelineBar({
   const chart = buildChart(timeline, now, win)
   const { axis, rows, marks, bands } = chart
   const h = lanePx(compact)
-  const minWidth = Math.max(1, Math.round((axis.end - axis.start) / 60_000)) * PX_PER_MINUTE
+  const minWidth = Math.max(1, Math.round(axis.span / 60_000)) * PX_PER_MINUTE
   const gridLines = (
     <>
       {axis.ticks.map((t) => (
@@ -385,7 +396,7 @@ export function WorkTimelineBar({
         <span
           key={b.key}
           aria-hidden
-          className={`pointer-events-none absolute inset-y-0 ${BLOCKED_BAND}`}
+          className={`pointer-events-none absolute inset-y-0 ${b.kind === 'review' ? REVIEW_BAND : BLOCKED_BAND}`}
           style={{ left: `${b.seg.left * 100}%`, width: `${b.seg.width * 100}%` }}
         />
       ))}
@@ -398,7 +409,6 @@ export function WorkTimelineBar({
       )}
     </>
   )
-  const atSec = (t: number) => clock(new Date(t).toISOString())
 
   return (
     <div
@@ -442,21 +452,23 @@ export function WorkTimelineBar({
               {bands.map((b) => (
                 <Segment
                   key={b.key}
-                  label={`blocked stage, ${atSec(b.start)} to ${atSec(b.end)}, ${spokenDuration(b.end - b.start)}`}
+                  label={collapsedLabel(b)}
                   details={
                     <Facts
                       items={[
-                        ['Stage', 'blocked'],
+                        ['Stage', BAND_NAME[b.kind]],
                         ['From', stamp(new Date(b.start).toISOString())],
-                        ['Duration', spokenDuration(b.end - b.start)],
+                        ['To', b.open ? 'now' : stamp(new Date(b.end).toISOString())],
+                        ['Duration', longDuration(b.end - b.start)],
+                        ['Not to scale', 'This time is shown as a short block, not at its real length.'],
                       ]}
                     />
                   }
-                  className={`${SEG_BASE} ${compact ? 'text-[10px]' : 'text-[11px]'} ${BLOCKED_CHIP}`}
+                  className={`${SEG_BASE} justify-center ${compact ? 'text-[10px]' : 'text-[11px]'} ${b.kind === 'review' ? REVIEW_CHIP : BLOCKED_CHIP}`}
                   style={boxStyle(b.seg.left, b.seg.width, 2, RAIL_PX - 4)}
-                  attrs={{ 'data-kind': 'blocked', 'data-narrow': b.seg.narrow ? 'true' : undefined }}
+                  attrs={{ 'data-kind': b.kind }}
                 >
-                  {!b.seg.narrow && 'blocked'}
+                  {BAND_NAME[b.kind]}
                 </Segment>
               ))}
               {marks.map(({ mark: m, left }) => {
@@ -530,6 +542,17 @@ export function WorkTimelineBar({
                   {t.label}
                 </span>
               ))}
+            {chart.breaks.map((k) => (
+              <span
+                key={k.key}
+                aria-hidden
+                data-kind="axis-break"
+                className={`absolute top-0 -translate-x-1/2 text-[10.5px] leading-[14px] font-medium ${BREAK_MARK}`}
+                style={{ left: `${k.left * 100}%` }}
+              >
+                //
+              </span>
+            ))}
             {live && (
               <span aria-hidden className="absolute top-0 right-0 text-[10.5px] text-muted-foreground">
                 now
@@ -545,6 +568,12 @@ export function WorkTimelineBar({
   )
 }
 
-/** Whether there is something to draw: a span, a wait, a hand-off, a board event or time in a blocked stage. */
+/** Whether there is something to draw: a span, a wait, a hand-off, a board event or time in a blocked or review stage. */
 export const hasWork = (t: WorkTimeline) =>
-  t.spans.length + t.waits.length + t.handoffs.length + t.marks.length + t.blockedStretches.length > 0
+  t.spans.length +
+    t.waits.length +
+    t.handoffs.length +
+    t.marks.length +
+    t.blockedStretches.length +
+    t.reviewStretches.length >
+  0
