@@ -20,7 +20,7 @@ import { localDate, shiftDate } from '#/lib/format'
  */
 export function DailyView({ projectId }: { projectId: number }) {
   const [date, setDate] = useState(localDate())
-  const { data, isPlaceholderData } = useQuery({
+  const { data, error, isPlaceholderData } = useQuery({
     queryKey: ['daily', date, projectId],
     queryFn: () => get<DailyPayload>(`/api/daily?date=${date}&projectId=${projectId}`),
     // Another day's activity stays (dimmed) until this one's arrives; another project's never does.
@@ -74,7 +74,13 @@ export function DailyView({ projectId }: { projectId: number }) {
       </div>
       <ReportSettingsPanel projectId={projectId} />
 
-      <ActivityLog activity={data?.activity} stale={isPlaceholderData} projectId={projectId} date={date} />
+      <ActivityLog
+        activity={data?.activity}
+        stale={isPlaceholderData}
+        failed={Boolean(error)}
+        projectId={projectId}
+        date={date}
+      />
     </div>
   )
 }

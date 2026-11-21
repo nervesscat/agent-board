@@ -34,11 +34,15 @@ import { cn } from '#/lib/utils'
  * gallery), the earlier ones on demand, and a form to post a new one; claude can write it too.
  */
 export function ReportCard({ projectId, date }: { projectId: number; date: string }) {
-  const { data: settings } = useQuery({
+  const { data: settings, error: settingsError } = useQuery({
     queryKey: ['report-settings', projectId],
     queryFn: () => get<ReportSettingsView>(`/api/projects/${projectId}/report-settings`),
   })
-  const { data: list, isPlaceholderData } = useQuery({
+  const {
+    data: list,
+    error: listError,
+    isPlaceholderData,
+  } = useQuery({
     queryKey: ['reports', projectId, 'card', date],
     queryFn: () => get<ReportList>(`/api/projects/${projectId}/reports?from=${date}&to=${date}`),
     // A period turns red when its due time passes, without anyone posting; while claude writes the
@@ -50,7 +54,7 @@ export function ReportCard({ projectId, date }: { projectId: number; date: strin
   })
 
   if (!settings)
-    return (
+    return settingsError ? null : (
       <DelayedLoading label="Loading report…">
         <SkeletonCard lines={5} className="min-w-0" />
       </DelayedLoading>
@@ -79,10 +83,12 @@ export function ReportCard({ projectId, date }: { projectId: number; date: strin
         <p className="text-sm text-muted-foreground">
           Reports are off for this project: choose how often one is due in the report settings.
         </p>
-      ) : !list ? (
-        <DelayedLoading label="Loading report…">
-          <SkeletonText lines={4} />
-        </DelayedLoading>
+      ) : !list || (isPlaceholderData && !period) ? (
+        !listError && (
+          <DelayedLoading label="Loading report…">
+            <SkeletonText lines={4} />
+          </DelayedLoading>
+        )
       ) : period ? (
         <PeriodReport key={period.period} projectId={projectId} period={period} format={settings.format} />
       ) : (

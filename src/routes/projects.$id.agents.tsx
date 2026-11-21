@@ -38,7 +38,7 @@ export const Route = createFileRoute('/projects/$id/agents')({
 
 function Agents() {
   const { id } = Route.useParams()
-  const { data: project } = useProject(id)
+  const { data: project, error: projectError } = useProject(id)
   // Every ticket, lanes included: an agent can hold a lane as much as a top-level ticket.
   const { data: tickets } = useQuery(ticketsQuery(id, 'all'))
   const [adding, setAdding] = useState(false)
@@ -75,10 +75,12 @@ function Agents() {
         />
       )}
       {!project ? (
-        <DelayedLoading label="Loading agents…" className="space-y-3">
-          <SkeletonCard lines={4} />
-          <SkeletonCard lines={4} />
-        </DelayedLoading>
+        !projectError && (
+          <DelayedLoading label="Loading agents…" className="space-y-3">
+            <SkeletonCard lines={4} />
+            <SkeletonCard lines={4} />
+          </DelayedLoading>
+        )
       ) : project.agents.length === 0 && !adding ? (
         <Empty>No agents yet. Every ticket is shared by the connected agents.</Empty>
       ) : (

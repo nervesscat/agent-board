@@ -15,14 +15,14 @@ import { cn } from '#/lib/utils'
  * shift is the arc from its start to its end, and now is the hand. Only while reports are tracked.
  */
 export function ShiftClock({ projectId }: { projectId: number }) {
-  const { data: settings } = useQuery({
+  const { data: settings, error } = useQuery({
     queryKey: ['report-settings', projectId],
     queryFn: () => get<ReportSettingsView>(`/api/projects/${projectId}/report-settings`),
   })
   const hour12 = useHour12()
   const now = useMinuteClock()
   if (!settings)
-    return (
+    return error ? null : (
       <DelayedLoading label="Loading shift…">
         <Skeleton className="h-8 w-28 rounded-full" />
       </DelayedLoading>

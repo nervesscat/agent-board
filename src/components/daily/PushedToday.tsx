@@ -21,13 +21,13 @@ const lines = (t: { added: number; removed: number }) => `+${t.added} −${t.rem
  * header.
  */
 export function PushedTodayBadge({ projectId }: { projectId: number }) {
-  const { data } = useQuery({
+  const { data, error } = useQuery({
     queryKey: ['pushed-today', projectId],
     queryFn: () => get<PushedToday>(`/api/projects/${projectId}/pushed-today`),
     refetchInterval: 60_000,
   })
   if (!data)
-    return (
+    return error ? null : (
       <DelayedLoading label="Loading pushed today…">
         <Skeleton className="h-6 w-36 rounded-full" />
       </DelayedLoading>

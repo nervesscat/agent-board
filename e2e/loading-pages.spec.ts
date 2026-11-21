@@ -167,3 +167,67 @@ test('going to another day keeps the day on show, dimmed, until the new one arri
   await expect(card).not.toHaveAttribute('aria-busy', 'true')
   await expect(card).not.toContainText('Shipped it.')
 })
+
+test('going to another day from an empty one does not say the new day is empty while it loads', async ({
+  page,
+  project,
+  human,
+}) => {
+  await ok(
+    human.patch(`/api/projects/${project.id}/report-settings`, {
+      data: { cadence: 'daily', shiftStart: '00:00', shiftEnd: '23:59', workdays: [1, 2, 3, 4, 5, 6, 7] },
+    }),
+  )
+  await page.goto(`/projects/${project.id}/daily`)
+  await page.getByRole('button', { name: 'Previous day' }).click()
+  await expect(page.getByText(/^Nothing happened on/)).toBeVisible()
+  await expect(page.getByText(/^No report is asked for on/)).toBeVisible()
+
+  await delayApi(page, /^\/api\/(daily|projects\/\d+\/reports\?)/)
+  await page.getByRole('button', { name: 'Previous day' }).click()
+  await expect(status(page, 'Loading activity…')).toBeVisible()
+  await expect(status(page, 'Loading report…')).toBeVisible()
+  await expect(page.getByText(/^Nothing happened on/)).toHaveCount(0)
+  await expect(page.getByText(/^No report is asked for on/)).toHaveCount(0)
+  await expect(page.getByText(/^Nothing happened on/)).toBeVisible()
+  await expect(page.getByText(/^No report is asked for on/)).toBeVisible()
+})
+
+/** Answers every matching request with a 500 after a short wait, so the placeholder is seen before the failure. */
+async function failApi(page: import('@playwright/test').Page, match: RegExp) {
+  await page.route(
+    (url) => url.pathname.startsWith('/api/') && match.test(url.pathname + url.search),
+    async (route) => {
+      await new Promise((r) => setTimeout(r, 400))
+      await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"down"}' })
+    },
+  )
+}
+
+test('a Daily read that fails leaves no loading status behind', async ({ page, project, human }) => {
+  await ok(
+    human.patch(`/api/projects/${project.id}/report-settings`, {
+      data: { cadence: 'daily', shiftStart: '00:00', shiftEnd: '23:59', workdays: [1, 2, 3, 4, 5, 6, 7] },
+    }),
+  )
+  await failApi(page, /^\/api\/(daily|projects\/\d+\/(report-settings|reports|pushed-today))/)
+  await page.goto(`/projects/${project.id}/daily`)
+  await expect(page.getByRole('heading', { name: 'Daily', exact: true })).toBeVisible()
+  await expect(status(page, 'Loading activity…')).toBeVisible()
+  await expect(page.locator('[role=status][aria-busy]')).toHaveCount(0, { timeout: 10_000 })
+})
+
+test('a Team and an Instructions read that fail leave no loading status behind', async ({
+  page,
+  project,
+}) => {
+  await failApi(page, new RegExp(`^/api/projects/${project.id}$`))
+  for (const [path, label] of [
+    ['agents', 'Loading agents…'],
+    ['instructions', 'Loading instructions…'],
+  ]) {
+    await page.goto(`/projects/${project.id}/${path}`)
+    await expect(status(page, label!)).toBeVisible()
+    await expect(page.locator('[role=status][aria-busy]')).toHaveCount(0, { timeout: 10_000 })
+  }
+})

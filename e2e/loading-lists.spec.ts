@@ -217,3 +217,32 @@ test('Roadmap: counts read as a dash, not 0, until the tickets are there', async
   await expect(stats.first()).toHaveText('1')
   await expect(stats.filter({ hasText: '–' })).toHaveCount(0)
 })
+
+test('Run reports and Gallery: an empty result kept for a new filter is not its empty state', async ({
+  page,
+  project,
+  api,
+  agent,
+}) => {
+  const t = await api.ticket({ title: 'Reported work' })
+  await writeReport(agent, project.id, t.id, 'hunt')
+  await page.goto(`/projects/${project.id}/run-reports?agent=nobody`)
+  await expect(page.getByText('No run reports for that filter.')).toBeVisible()
+  await delayApi(page, new RegExp(`^/api/projects/${project.id}/run-reports`))
+  await page.getByRole('button', { name: 'Clear' }).click()
+  await expect(status(page, 'Loading run reports…')).toBeVisible()
+  await expect(page.getByText('No run reports')).toHaveCount(0)
+  await expect(page.getByRole('list', { name: 'Run reports' }).getByRole('listitem')).toHaveCount(1)
+
+  const image = await upload(agent, 'shot.png', png(16))
+  await ok(
+    agent.post(`/api/tickets/${t.id}/updates`, { data: { body: 'Files.', attachmentIds: [image.id] } }),
+  )
+  await page.goto(`/projects/${project.id}/gallery?type=video`)
+  await expect(page.getByText('No files match these filters.')).toBeVisible()
+  await delayApi(page, new RegExp(`^/api/projects/${project.id}/gallery`))
+  await page.getByRole('button', { name: 'Clear filters' }).click()
+  await expect(status(page, 'Loading files…')).toBeVisible()
+  await expect(page.getByText('No files match these filters.')).toHaveCount(0)
+  await expect(page.locator('li[data-file]')).toHaveCount(1)
+})

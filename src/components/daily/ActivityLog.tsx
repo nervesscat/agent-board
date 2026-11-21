@@ -55,6 +55,7 @@ type Line = DailyPayload['activity'][number]
 export function ActivityLog({
   activity,
   stale,
+  failed,
   projectId,
   date,
 }: {
@@ -62,12 +63,15 @@ export function ActivityLog({
   activity: DailyPayload['activity'] | undefined
   /** The activity shown is the previous day's, until this day's arrives. */
   stale?: boolean
+  /** The read failed: nothing is drawn, not a loading status. */
+  failed?: boolean
   projectId?: number
   date: string
 }) {
   const [open, setOpen] = useOpenHours(projectId ?? 'all', date)
-  if (!activity)
-    return (
+  // An empty previous day kept while this one loads is not this day's answer: no empty message yet.
+  if (!activity || (stale && !activity.length))
+    return failed ? null : (
       <DelayedLoading label="Loading activity…">
         <SkeletonCard lines={5} />
       </DelayedLoading>

@@ -191,7 +191,7 @@ function TicketPage() {
     placeholderData: keepPreviousData,
     refetchInterval: 10_000,
   })
-  const { data: ticketGit } = useQuery({
+  const { data: ticketGit, error: ticketGitError } = useQuery({
     queryKey: ['ticket-git', ticketId],
     queryFn: () => get<TicketGit>(`/api/tickets/${ticketId}/git`),
     refetchInterval: 30_000,
@@ -408,8 +408,10 @@ function TicketPage() {
     'ticket.details': (
       <Details key={t.id} t={t} git={gitSide} includes={git?.includes} onSave={(p) => update.mutate(p)} />
     ),
-    'ticket.branch': gitSide ? <BranchPanel t={t} git={git} /> : null,
-    'ticket.workspaces': gitSide ? <WorkspacesPanel t={t} git={git} onChange={invalidate} /> : null,
+    'ticket.branch': gitSide ? <BranchPanel t={t} git={git} gitFailed={Boolean(ticketGitError)} /> : null,
+    'ticket.workspaces': gitSide ? (
+      <WorkspacesPanel t={t} git={git} gitFailed={Boolean(ticketGitError)} onChange={invalidate} />
+    ) : null,
   }
   const main = layout ? shownIn(layout, 'ticket.main').filter((s) => sections[s] != null) : []
   const side = layout ? shownIn(layout, 'ticket.side').filter((s) => sections[s] != null) : []
@@ -2804,7 +2806,7 @@ function PrLine({ pr }: { pr: NonNullable<TicketFull['pr']> }) {
 }
 
 /** The ticket's branch: its git state and its PR; one panel per repo when it spans several. */
-function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
+function BranchPanel({ t, git, gitFailed }: { t: TicketFull; git?: TicketGit; gitFailed?: boolean }) {
   if ((git?.repos.length ?? 0) > 1)
     return (
       <>
@@ -2860,7 +2862,7 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
             </div>
           )}
           {git && <Info info={git.info} />}
-          {!git && (
+          {!git && !gitFailed && (
             <DelayedLoading label="Loading branch state…" className="mt-1">
               <SkeletonText lines={2} />
             </DelayedLoading>
@@ -2876,7 +2878,17 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
 }
 
 /** The worktrees, sub-branches and sandboxes opened for the ticket and its lanes. */
-function WorkspacesPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
+function WorkspacesPanel({
+  t,
+  git,
+  gitFailed,
+  onChange,
+}: {
+  t: TicketFull
+  git?: TicketGit
+  gitFailed?: boolean
+  onChange: () => void
+}) {
   const remove = useMutation({
     mutationFn: (id: number) => del(`/api/workspaces/${id}`),
     onSuccess: onChange,
@@ -2885,7 +2897,7 @@ function WorkspacesPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
   return (
     <section className="rounded-lg border p-3">
       <h2 className="mb-2 text-sm font-medium">Workspaces</h2>
-      {!git && (
+      {!git && !gitFailed && (
         <DelayedLoading label="Loading workspaces…" className="mb-2">
           <SkeletonText lines={1} />
         </DelayedLoading>

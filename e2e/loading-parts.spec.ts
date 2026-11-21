@@ -180,8 +180,30 @@ test('fast loads draw no placeholder in the New ticket dialog or the ticket deta
   await page.getByRole('button', { name: 'New lane' }).click()
   await expect(page.getByRole('dialog', { name: 'New lane' })).toBeVisible()
   await page.keyboard.press('Escape')
+  // The git state, runs and timeline load on their own and may pass 150 ms on a loaded machine, so the
+  // ticket page is held to its page-level placeholder; the page after it must show none at all.
+  const onTicket = await watch.seen()
+  expect(onTicket).not.toContain('Loading ticket…')
   await page.goto(`/projects/${project.id}/features`)
   await page.getByRole('button', { name: 'New ticket' }).click()
   await expect(page.getByText(/It starts with the project/)).toBeVisible()
-  expect(await watch.seen()).toEqual([])
+  expect((await watch.seen()).slice(onTicket.length)).toEqual([])
+})
+
+test('the palette on a page outside a project shows no recents placeholder for a remembered ticket', async ({
+  page,
+  project,
+  api,
+}) => {
+  const t = await api.ticket({ title: 'Remembered ticket' })
+  await page.addInitScript(
+    ([key, value]) => localStorage.setItem(key!, value!),
+    ['command-palette.recents', JSON.stringify([`ticket:${project.id}:${t.id}`])],
+  )
+  await page.goto('/')
+  await page.keyboard.press('Control+f')
+  await expect(page.getByRole('dialog', { name: 'Search the board' })).toBeVisible()
+  // Well past the 150 ms a placeholder waits: the tickets are not asked for here, so none is on its way.
+  await page.waitForTimeout(600)
+  await expect(status(page, 'Loading recent tickets…')).toHaveCount(0)
 })

@@ -30,7 +30,7 @@ export function ReportCalendar({
   date: string
   onDate: (date: string) => void
 }) {
-  const { data: settings } = useQuery({
+  const { data: settings, error } = useQuery({
     queryKey: ['report-settings', projectId],
     queryFn: () => get<ReportSettingsView>(`/api/projects/${projectId}/report-settings`),
   })
@@ -60,7 +60,7 @@ export function ReportCalendar({
     refetchInterval: 5 * 60_000,
   })
   if (!settings)
-    return (
+    return error ? null : (
       <DelayedLoading label="Loading calendar…" className="min-w-0 rounded-lg border p-3">
         <Skeleton className="h-72 w-full" />
         <Skeleton className="mt-3 h-4 w-32" />

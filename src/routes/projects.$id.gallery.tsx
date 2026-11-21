@@ -188,7 +188,7 @@ function GalleryPage() {
 
       {error ? (
         <Empty>Could not load the files: {errorMessage(error)}</Empty>
-      ) : isPending ? (
+      ) : isPending || (isPlaceholderData && !files.length) ? (
         <DelayedLoading label="Loading files…">
           <div aria-hidden className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {Array.from({ length: 10 }, (_, i) => (

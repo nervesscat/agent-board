@@ -29,7 +29,7 @@ export const Route = createFileRoute('/projects/$id/instructions')({ component: 
 
 function InstructionsPage() {
   const { id } = Route.useParams()
-  const { data: p } = useProject(id)
+  const { data: p, error } = useProject(id)
   // A link into the history (#instructions-history) lands on it on an in-app navigation too.
   useReveal(useAnchor(), { page: id, ready: p !== undefined })
   return (
@@ -44,12 +44,14 @@ function InstructionsPage() {
       {p ? (
         <Instructions key={id} projectId={id} saved={p.instructions} />
       ) : (
-        <DelayedLoading label="Loading instructions…" className="space-y-2">
-          <div className="h-5" />
-          <div className="rounded-md border p-4">
-            <SkeletonText lines={8} />
-          </div>
-        </DelayedLoading>
+        !error && (
+          <DelayedLoading label="Loading instructions…" className="space-y-2">
+            <div className="h-5" />
+            <div className="rounded-md border p-4">
+              <SkeletonText lines={8} />
+            </div>
+          </DelayedLoading>
+        )
       )}
       <div className="space-y-1 text-right text-sm">
         <ul className="space-y-0.5">

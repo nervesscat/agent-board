@@ -15,12 +15,12 @@ import { describeSchedule } from '#/lib/reports'
  */
 export function ReportSettingsPanel({ projectId }: { projectId: number }) {
   const [open, setOpen] = useState(false)
-  const { data: settings } = useQuery({
+  const { data: settings, error } = useQuery({
     queryKey: ['report-settings', projectId],
     queryFn: () => get<ReportSettingsView>(`/api/projects/${projectId}/report-settings`),
   })
   if (!settings)
-    return (
+    return error ? null : (
       <DelayedLoading label="Loading report settings…" className="rounded-lg border px-4 py-3">
         <Skeleton className="h-5 w-48" />
       </DelayedLoading>

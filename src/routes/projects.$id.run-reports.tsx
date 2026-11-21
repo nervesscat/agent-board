@@ -110,7 +110,7 @@ function RunReportsPage() {
       </div>
       {error ? (
         <p className="text-sm text-destructive">{errorMessage(error)}</p>
-      ) : isLoading ? (
+      ) : isLoading || (isPlaceholderData && !data?.length) ? (
         <DelayedLoading label="Loading run reports…" className="space-y-2">
           {Array.from({ length: 3 }, (_, i) => (
             <div key={i} className="flex items-center gap-2 rounded-lg border px-3 py-2" aria-hidden>

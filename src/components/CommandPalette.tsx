@@ -739,7 +739,7 @@ export function CommandPalette() {
             aria-label="Search results"
             className="max-h-[min(60vh,26rem)] overflow-x-hidden overflow-y-auto overscroll-contain p-1"
           >
-            {q === '' && allTickets.isPending && recentKeys.some((k) => k.startsWith('ticket:')) && (
+            {q === '' && allTickets.isLoading && recentKeys.some((k) => k.startsWith('ticket:')) && (
               <DelayedLoading label="Loading recent tickets…" className="space-y-2 px-2 py-2">
                 <Skeleton className="h-4 w-2/3" />
                 <Skeleton className="h-4 w-1/2" />
