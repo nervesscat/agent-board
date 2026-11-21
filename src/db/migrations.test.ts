@@ -62,6 +62,17 @@ function ticketsWithClosedFlag(rows: Record<string, unknown>[]) {
   return rows.map(({ closed_by_approval: _c, ...rest }) => rest)
 }
 
+/**
+ * The needs of a database migrated past 0057: each has the columns it added, `auto` (0: written before the
+ * board added any) and `held` (empty), and the other columns are compared as they were.
+ */
+function needsWithAutoColumns(rows: Record<string, unknown>[]) {
+  // Before 0057 the table has no such columns: the rows are compared as they are.
+  if (!rows.length || !('auto' in rows[0]!)) return rows
+  expect(rows.map((r) => [r.auto, r.held])).toEqual(rows.map(() => [0, '']))
+  return rows.map(({ auto: _a, held: _h, ...rest }) => rest)
+}
+
 describe('0023_daily_reports_and_shifts', () => {
   it('turns the daily summaries into report versions and the due time into the shift end', () => {
     const sqlite = databaseAt('0022_pr_review_stages')
@@ -1505,9 +1516,11 @@ describe('0050_widen_ticket_complexity', () => {
 
     // Every ticket kept its id, its level and the rest of its columns, and so did each row that refers to one.
     const after = rows()
-    expect({ ...after, tickets: ticketsWithClosedFlag(after.tickets as Record<string, unknown>[]) }).toEqual(
-      before,
-    )
+    expect({
+      ...after,
+      tickets: ticketsWithClosedFlag(after.tickets as Record<string, unknown>[]),
+      ticket_needs: needsWithAutoColumns(after.ticket_needs as Record<string, unknown>[]),
+    }).toEqual(before)
     expect(
       Object.fromEntries(
         (after.tickets as { id: number; complexity: string }[]).map((t) => [t.id, t.complexity]),

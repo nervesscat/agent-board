@@ -98,7 +98,9 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   later()
 })
-afterEach(() => {
+afterEach(async () => {
+  // What a read starts in the background (the sweep for needs) is done before the next test counts git.
+  await (await import('./needs')).syncAutoNeeds(projectId)
   vi.useRealTimers()
 })
 
@@ -118,7 +120,13 @@ const quiet = () => {
 }
 
 let projectId: number
-const view = async (id: number) => (await import('./needs')).ticketGitView(id)
+const view = async (id: number) => (await import('./needs')).ticketGitView(id, { includes: true })
+/** The needs the board added to a ticket, once the sweep a read starts in the background has finished. */
+const autoNeeds = async (id: number) => {
+  const needs = await import('./needs')
+  await needs.syncAutoNeeds(projectId)
+  return needs.needIds(id)
+}
 const features = () => import('./features')
 
 /**
@@ -176,6 +184,14 @@ const fixture = async (name: string) => {
 }
 
 describe('ticketGitView', () => {
+  it('leaves out includes, and the scan behind it, unless asked for it', async () => {
+    const { ticket } = await fixture('plain')
+    const plain = await (await import('./needs')).ticketGitView(ticket.id)
+    expect(plain.info).toMatchObject({ exists: true })
+    expect('includes' in plain).toBe(false)
+    expect((await view(ticket.id)).includes).toEqual([])
+  })
+
   it('asks git nothing per branch on a second read, and nothing at all within the refs window', async () => {
     const { ticket } = await fixture('again')
     const first = await view(ticket.id)
@@ -195,7 +211,7 @@ describe('ticketGitView', () => {
 
   it('answers as a read with every cache empty, and as git itself does', async () => {
     const { ticket, lane, wt } = await fixture('same')
-    // Another ticket's work merged into this branch, so `includes` has something to say.
+    // Another ticket's work merged into this branch: the board adds the need itself.
     branches('refs/heads/main', 'same/other')
     const f = await features()
     const otherTicket = f.createTicket(
@@ -208,6 +224,8 @@ describe('ticketGitView', () => {
     for (const id of [ticket.id, lane.id, otherTicket.id]) {
       vi.resetModules()
       const cold = await view(id)
+      // What the read started in the background is done before the next one is counted.
+      await autoNeeds(id)
       later()
       quiet()
       const warm = await view(id)
@@ -228,7 +246,8 @@ describe('ticketGitView', () => {
       push: { state: 'ahead', ahead: 2 },
       reach: { state: 'unique', into: 'main' },
     })
-    expect(v.includes).toEqual([otherTicket.id])
+    expect(v.includes).toEqual([])
+    expect(await autoNeeds(ticket.id)).toEqual([otherTicket.id])
     const [wtSpace, laneSpace] = v.workspaces
     expect(wtSpace!.info).toMatchObject({
       sha: git('rev-parse', 'same/wt'),
@@ -397,11 +416,14 @@ describe('ticketGitView', () => {
       (b) => f.createTicket(projectId, { title: b, branch: b, status: 'in_progress' }, 't').id,
     )
     for (const id of ids) await view(id)
+    await autoNeeds(ids[0]!)
 
     later()
     quiet()
     await Promise.all(ids.map(view))
-    expect(ran()).toEqual({ refs: 1, worktrees: 1, other: [] })
+    // One listing of the ticket's repo (with its worktrees), and one of the branches of the project's
+    // other repo, which the sweep for needs reads.
+    expect(ran()).toEqual({ refs: 2, worktrees: 1, other: [] })
   })
 
   it('does not keep a failure: the read degrades, then answers in full once git can read the repo', async () => {
@@ -425,6 +447,8 @@ describe('ticketGitView', () => {
     const degraded = await view(t.id)
     expect(degraded.info).toMatchObject({ exists: false, sha: null, reach: null, push: { state: 'none' } })
     expect(degraded.includes).toEqual([])
+    // What the read started in the background has failed too, before the repo is back.
+    await (await import('./needs')).syncAutoNeeds(pid)
 
     // Back, and read at once: the failed listing was not kept for the window.
     fs.renameSync(away, lonely)
@@ -474,18 +498,20 @@ describe('ticketGitView', () => {
       't',
     )
 
-    // Listed, then the other branch merged in within the window: nothing taken in at the listed tip.
+    // Listed, then the other branch merged in within the window: nothing taken in at the listed tip,
+    // so no need is added for it.
     await (await import('./push')).readRefs(repo)
     mergeInto('took/branch', 'took/other')
-    expect((await view(t.id)).includes).toEqual([])
+    expect(await autoNeeds(t.id)).toEqual([])
 
     // Undone, then done again: each read answers for the tip git has.
     git('update-ref', 'refs/heads/took/branch', tip)
     later()
-    expect((await view(t.id)).includes).toEqual([])
+    expect(await autoNeeds(t.id)).toEqual([])
     mergeInto('took/branch', 'took/other')
     later()
-    expect((await view(t.id)).includes).toEqual([o.id])
+    expect(await autoNeeds(t.id)).toEqual([o.id])
+    expect((await view(t.id)).includes).toEqual([])
   })
 })
 
