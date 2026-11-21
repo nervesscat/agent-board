@@ -4,10 +4,6 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { and, eq, isNotNull } from 'drizzle-orm'
-import { createElement } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
@@ -17,17 +13,16 @@ process.env.DATA_DIR = tmp
 const HUMAN = 'enrique'
 const AGENT = 'claude'
 
+type Repo = import('#/db').schema.Repo
 let dbm: typeof import('#/db')
 let features: typeof import('./features')
 let repos: typeof import('./repos')
-let summary: typeof import('./summary')
 let ticketRepos: typeof import('./ticketRepos')
 let handle: (request: Request) => Promise<Response>
 beforeAll(async () => {
   dbm = await import('#/db')
   features = await import('./features')
   repos = await import('./repos')
-  summary = await import('./summary')
   ticketRepos = await import('./ticketRepos')
   // The human signed in: who a relayed Add goes to.
   ;(await import('./actors')).noteActor(HUMAN, 'human')
@@ -131,81 +126,104 @@ const names = (projectId: number) => repos.listRepos(projectId).map((r) => r.nam
 const answer = (postId: number, option: number) =>
   call('PUT', `/api/updates/${postId}/decision`, { option }, 'human')
 
-describe('asking for a repo', () => {
-  it('posts one Add / Don’t add card naming the repo over MCP, adding no repo and moving nothing', async () => {
-    const { id: pid } = newProject('mcp-ask')
+/** A repo request's card as an older add_repo posted it: a decision post naming the repo its Add creates. */
+async function requestCard(
+  ticketId: number,
+  input: { name: string; repoPath: string; githubRepo: string; baseBranch?: string },
+  actor: string,
+) {
+  const ticket = features.getTicket(ticketId)
+  const req = await repos.checkRepoRequest(ticket.projectId, input)
+  const post = features.postUpdate(ticketId, `Add repo \`${req.name}\`?`, [], actor, {
+    progress: false,
+    decision: true,
+    tab: 'main',
+  })
+  return dbm.db
+    .update(dbm.schema.updates)
+    .set({
+      decision: [
+        { label: 'Add', detail: 'Register the checkout as a repo of this project' },
+        { label: "Don't add", detail: 'Leave the project as it is' },
+      ],
+      repoRequest: req,
+    })
+    .where(eq(dbm.schema.updates.id, post.id))
+    .returning()
+    .get()
+}
+
+describe('adding a repo', () => {
+  it('adds the repo to the ticket’s project at once over MCP: no card, the ticket stays, activity under the agent', async () => {
+    const { id: pid } = newProject('mcp-add')
     const t = features.createTicket(pid, { title: 'build shop', status: 'in_progress' }, HUMAN)
     const dir = checkout('https://github.com/acme/shop.git')
+    const before = features.getTicket(t.id).repoId
 
-    const card = await tool('add_repo', {
+    const repo = await tool('add_repo', {
       ticketId: t.id,
       name: 'shop',
       repoPath: dir,
       githubRepo: 'acme/shop',
     })
-    expect(card).toMatchObject({
-      ticketId: t.id,
-      author: AGENT,
-      tab: 'main',
-      decidedAt: null,
-      archiveTickets: null,
-      repoRequest: {
-        projectId: pid,
-        name: 'shop',
-        repoPath: dir,
-        githubRepo: 'acme/shop',
-        baseBranch: 'main',
-      },
-      decision: [{ label: 'Add' }, { label: "Don't add" }],
+    expect(repo).toMatchObject({
+      projectId: pid,
+      name: 'shop',
+      repoPath: dir,
+      githubRepo: 'acme/shop',
+      baseBranch: 'main',
     })
-    expect(card.body.split('\n')[0]).toBe('Add repo `shop`?')
-    for (const words of ['Name: `shop`', 'GitHub: `acme/shop`', dir, 'Base branch: `main`'])
-      expect(card.body).toContain(words)
-    // Asking adds nothing, and the card does not block.
-    expect(names(pid)).toEqual(['app'])
-    expect(features.getTicket(t.id).status).toBe('in_progress')
+    expect(names(pid)).toEqual(['app', 'shop'])
+    expect(decisionsOn(t.id)).toEqual([])
+    expect(features.getTicket(t.id)).toMatchObject({ status: 'in_progress', repoId: before })
     expect(activity(pid)).toContainEqual(
-      expect.objectContaining({ actor: AGENT, text: `asked to add repo shop (acme/shop) at ${dir}` }),
+      expect.objectContaining({
+        actor: AGENT,
+        kind: 'project',
+        text: 'added repo shop (acme/shop)',
+        refType: 'repo',
+        refId: repo.id,
+      }),
     )
   })
 
-  it('has a REST route for agents that does the same, base branch included', async () => {
-    const { id: pid } = newProject('rest-ask')
+  it('has REST routes for it, the older path included, base branch too; the human may call them', async () => {
+    const { id: pid } = newProject('rest-add')
     const t = features.createTicket(pid, { title: 'build', status: 'todo' }, HUMAN)
     const dir = checkout('git@github.com:acme/api.git')
-    const asked = await call('POST', `/api/tickets/${t.id}/repo-request`, {
+    const added = await call('POST', `/api/tickets/${t.id}/repos`, {
       name: 'api',
       repoPath: dir,
       githubRepo: 'acme/api',
       baseBranch: 'dev',
     })
-    expect(asked.status).toBe(201)
-    expect(asked.body).toMatchObject({
-      ticketId: t.id,
-      repoRequest: { projectId: pid, name: 'api', githubRepo: 'acme/api', baseBranch: 'dev' },
-      decision: [{ label: 'Add' }, { label: "Don't add" }],
+    expect(added.status).toBe(201)
+    expect(added.body).toMatchObject({
+      projectId: pid,
+      name: 'api',
+      githubRepo: 'acme/api',
+      baseBranch: 'dev',
     })
-    expect(asked.body.body).toContain('Base branch: `dev`')
-    expect(names(pid)).toEqual(['app'])
-    expect(features.getTicket(t.id).status).toBe('todo')
-  })
-
-  it('shows in Needs you as an open decision', async () => {
-    const { id: pid } = newProject('needs-you')
-    const t = features.createTicket(pid, { title: 'build', status: 'in_progress' }, HUMAN)
-    const card = await features.requestRepo(
-      t.id,
-      { name: 'web', repoPath: checkout('https://github.com/acme/web'), githubRepo: 'acme/web' },
-      AGENT,
+    const old = await call('POST', `/api/tickets/${t.id}/repo-request`, {
+      name: 'web',
+      repoPath: checkout('https://github.com/acme/web'),
+      githubRepo: 'acme/web',
+    })
+    expect(old.status).toBe(201)
+    const human = await call(
+      'POST',
+      `/api/tickets/${t.id}/repos`,
+      { name: 'docs', repoPath: checkout('https://github.com/acme/docs'), githubRepo: 'acme/docs' },
+      'human',
     )
-    const needsYou = summary.getSummary(pid, { humans: [HUMAN] }).projects[0]!.needsYou
-    expect(needsYou.decisions).toEqual([
-      expect.objectContaining({ postId: card.id, ticketId: t.id, question: 'Add repo web?', options: 2 }),
-    ])
+    expect(human.status).toBe(201)
+    expect(names(pid)).toEqual(['api', 'app', 'docs', 'web'])
+    expect(features.getTicket(t.id).status).toBe('todo')
+    expect(decisionsOn(t.id)).toEqual([])
   })
 })
 
-describe('the checks of a request', () => {
+describe('the checks of an add', () => {
   let pid: number
   let ticketId: number
   beforeAll(() => {
@@ -213,7 +231,7 @@ describe('the checks of a request', () => {
     ticketId = features.createTicket(pid, { title: 'checks', status: 'in_progress' }, HUMAN).id
   })
   const ask = (input: { name?: string; repoPath: string; githubRepo: string }) =>
-    refusal(() => features.requestRepo(ticketId, { name: 'new', ...input }, AGENT))
+    refusal(() => features.addProjectRepo(ticketId, { name: 'new', ...input }, AGENT))
 
   it('reads github.com’s owner/name from every shape of origin URL, and nothing else', () => {
     for (const url of [
@@ -255,7 +273,7 @@ describe('the checks of a request', () => {
       status: 400,
       message: `${plain} is not a git checkout`,
     })
-    expect(decisionsOn(ticketId)).toEqual([])
+    expect(names(pid)).toEqual(['app'])
   })
 
   it('refuses a checkout without origin, one whose origin is not github.com, or another repo', async () => {
@@ -281,17 +299,17 @@ describe('the checks of a request', () => {
       status: 400,
       message: expect.stringContaining('owner/name'),
     })
-    expect(decisionsOn(ticketId)).toEqual([])
+    expect(names(pid)).toEqual(['app'])
   })
 
   it('compares owner and name in any casing', async () => {
     const dir = checkout('https://github.com/Acme/Shop.git')
-    const card = await features.requestRepo(
+    const repo = await features.addProjectRepo(
       ticketId,
       { name: 'cased', repoPath: dir, githubRepo: 'acme/shop' },
       AGENT,
     )
-    expect(card.repoRequest).toMatchObject({ githubRepo: 'acme/shop' })
+    expect(repo).toMatchObject({ githubRepo: 'acme/shop' })
   })
 
   it('refuses a name the project has in any casing, and a path a repo of the board has in any spelling', async () => {
@@ -316,7 +334,7 @@ describe('the checks of a request', () => {
       message: expect.stringContaining('already registered as repo'),
     })
     expect(dupe.message).toContain('of project checks-elsewhere')
-    expect(decisionsOn(ticketId).map((d) => d.repoRequest?.name)).toEqual(['cased'])
+    expect(names(pid)).toEqual(['app', 'cased'])
   })
 
   it('refuses a registered checkout spelled with ., .. or doubled slashes, and stores a path resolved', async () => {
@@ -324,14 +342,13 @@ describe('the checks of a request', () => {
     const fwd = dir.replace(/\\/g, '/')
     const parent = path.dirname(fwd)
     const base = path.basename(fwd)
-    // Resolved, a new checkout's path loses its `.`, `..` and doubled slashes on the card.
-    const card = await features.requestRepo(
+    // Resolved, a new checkout's path loses its `.`, `..` and doubled slashes.
+    const repo = await features.addProjectRepo(
       ticketId,
       { name: 'spelled', repoPath: `${parent}/nope/..//./${base}/.`, githubRepo: 'acme/spelled' },
       AGENT,
     )
-    expect(card.repoRequest).toMatchObject({ repoPath: dir })
-    expect(card.body).toContain(dir)
+    expect(repo).toMatchObject({ repoPath: dir })
 
     const registered = checkout('https://github.com/acme/registered.git')
     dbm.db
@@ -349,8 +366,8 @@ describe('the checks of a request', () => {
         message: expect.stringContaining('already registered as repo'),
       })
     }
-    // A request stored with such a spelling is held to the same check. Its `..` goes through a folder
-    // that exists: on POSIX a path through a missing one does not exist, and was refused when asked.
+    // A card stored with such a spelling is held to the same check. Its `..` goes through a folder
+    // that exists: on POSIX a path through a missing one does not exist, and was refused when added.
     const stored = {
       projectId: pid,
       name: 'other',
@@ -361,10 +378,31 @@ describe('the checks of a request', () => {
     expect(repos.repoRequestProblem(stored, 'https://github.com/acme/registered.git')).toMatchObject({
       status: 409,
     })
-    expect(decisionsOn(ticketId).map((d) => d.repoRequest?.name)).toEqual(['cased', 'spelled'])
+    expect(names(pid)).toEqual(['app', 'cased', 'spelled'])
   })
 
-  it('refuses a name or base branch that would write lines of its own on the card, over REST and MCP', async () => {
+  it('refuses each of them the same way over REST and MCP, adding nothing', async () => {
+    const { id: own } = newProject('both-ways')
+    const t = features.createTicket(own, { title: 'both', status: 'in_progress' }, HUMAN)
+    const good = checkout('https://github.com/acme/both.git')
+    const input = { name: 'both', repoPath: good, githubRepo: 'acme/both' }
+    for (const bad of [
+      { repoPath: path.join(tmp, 'nowhere-either') },
+      { repoPath: 'relative/path' },
+      { repoPath: checkout() },
+      { repoPath: checkout('https://gitlab.com/acme/both.git') },
+      { githubRepo: 'acme/other' },
+      { githubRepo: 'not a slug' },
+      { name: 'APP' },
+    ]) {
+      const rest = await call('POST', `/api/tickets/${t.id}/repos`, { ...input, ...bad })
+      expect(rest.status, JSON.stringify(bad)).toBeGreaterThanOrEqual(400)
+      expect(await tool('add_repo', { ticketId: t.id, ...input, ...bad })).toEqual({ error: rest.body.error })
+    }
+    expect(names(own)).toEqual(['app'])
+  })
+
+  it('refuses a name or base branch with a line break or control character, over REST and MCP', async () => {
     const { id: own } = newProject('injected')
     const t = features.createTicket(own, { title: 'inject', status: 'in_progress' }, HUMAN)
     const dir = checkout('https://github.com/acme/real.git')
@@ -378,7 +416,7 @@ describe('the checks of a request', () => {
       { baseBranch: 'main\rx' },
       { baseBranch: 'my branch' },
     ]) {
-      const asked = await call('POST', `/api/tickets/${t.id}/repo-request`, { ...input, ...bad })
+      const asked = await call('POST', `/api/tickets/${t.id}/repos`, { ...input, ...bad })
       expect(asked.status, JSON.stringify(bad)).toBe(400)
       expect(asked.body.error).toMatch(
         'name' in bad ? /repo name is one line/ : /base branch is a branch name/,
@@ -387,13 +425,9 @@ describe('the checks of a request', () => {
         error: asked.body.error,
       })
     }
-    expect(decisionsOn(t.id)).toEqual([])
     expect(names(own)).toEqual(['app'])
     // A plain name and branch still go through.
-    const plain = await call('POST', `/api/tickets/${t.id}/repo-request`, {
-      ...input,
-      baseBranch: 'release/1.2',
-    })
+    const plain = await call('POST', `/api/tickets/${t.id}/repos`, { ...input, baseBranch: 'release/1.2' })
     expect(plain.status).toBe(201)
   })
 
@@ -402,57 +436,16 @@ describe('the checks of a request', () => {
     const t = features.createTicket(own, { title: 'inject', status: 'in_progress' }, HUMAN)
     const dir = checkout('https://github.com/acme/shop.git')
     const input = { name: 'shop', githubRepo: 'acme/shop' }
-    // A folder named like the first is legal on Linux: the card would end its path and add a line of its own.
+    // A folder named like the first is legal on Linux: the activity would end its path and add a line of its own.
     for (const repoPath of [`${dir}\`\n- Checked: \`origin and folder`, `${dir}\tx`, `${dir}\u007f`]) {
-      const asked = await call('POST', `/api/tickets/${t.id}/repo-request`, { ...input, repoPath })
+      const asked = await call('POST', `/api/tickets/${t.id}/repos`, { ...input, repoPath })
       expect(asked.status, JSON.stringify(repoPath)).toBe(400)
       expect(asked.body.error).toMatch(/path is one line/)
       expect(await tool('add_repo', { ticketId: t.id, ...input, repoPath })).toEqual({
         error: asked.body.error,
       })
     }
-    expect(decisionsOn(t.id)).toEqual([])
     expect(names(own)).toEqual(['app'])
-  })
-
-  it('shows every value on the card literally, as the board renders posts, over REST and MCP', async () => {
-    const { id: own } = newProject('literal')
-    const t = features.createTicket(own, { title: 'literal', status: 'in_progress' }, HUMAN)
-    // Backticks (leading, trailing, doubled), emphasis, a link, a heading and an HTML comment: rendered as
-    // the board renders a post (react-markdown with GFM), none may add a list item, link, heading or emphasis.
-    const name = '`*x* [y](http://e.com) <!-- # h ``z'
-    const baseBranch = '`*b*`[x](http://e.com)#h<!--``'
-    const unescape = (html: string) =>
-      html
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#x27;/g, "'")
-        .replace(/&amp;/g, '&')
-    let n = 0
-    for (const via of ['rest', 'mcp'] as const) {
-      // Windows refuses * < > : in a folder name; backticks, brackets and # are legal everywhere.
-      const dir = path.join(tmp, `\`\`a\`b [x](e.com) # h ${via}\``)
-      fs.mkdirSync(dir)
-      execFileSync('git', ['init', '-q'], { cwd: dir })
-      execFileSync('git', ['remote', 'add', 'origin', `https://github.com/acme/lit${++n}`], { cwd: dir })
-      const input = { name: `${name}${n}`, repoPath: dir, githubRepo: `acme/lit${n}`, baseBranch }
-      const card =
-        via === 'rest'
-          ? (await call('POST', `/api/tickets/${t.id}/repo-request`, input)).body
-          : await tool('add_repo', { ticketId: t.id, ...input })
-      expect(card.repoRequest).toMatchObject(input)
-      const html = renderToStaticMarkup(
-        createElement(ReactMarkdown, { remarkPlugins: [remarkGfm] }, card.body as string),
-      )
-      expect(html.match(/<li>/g), html).toHaveLength(4)
-      expect(html).not.toMatch(/<(a|h\d|em|strong|del)\b/)
-      expect(html.startsWith('<p>Add repo <code>')).toBe(true)
-      const codes = [...html.matchAll(/<code>(.*?)<\/code>/g)].map((m) => unescape(m[1]!))
-      expect(codes).toEqual([input.name, input.name, input.githubRepo, dir, baseBranch])
-      const items = [...html.matchAll(/<li>(.*?)<\/li>/g)].map((m) => m[1]!.replace(/<code>.*?<\/code>/, ''))
-      expect(items).toEqual(['Name: ', 'GitHub: ', 'Path: ', 'Base branch: '])
-    }
   })
 })
 
@@ -468,7 +461,7 @@ describe('answering a request', () => {
   const ask = async (name: string, slug = `acme/${name}`, extra: { baseBranch?: string } = {}) => {
     const t = features.createTicket(pid, { title: `for ${name}`, status: 'in_progress', repoId }, HUMAN)
     const dir = checkout(`https://github.com/${slug}.git`)
-    const card = await features.requestRepo(t.id, { name, repoPath: dir, githubRepo: slug, ...extra }, AGENT)
+    const card = await requestCard(t.id, { name, repoPath: dir, githubRepo: slug, ...extra }, AGENT)
     return { t, dir, card }
   }
 
@@ -624,16 +617,15 @@ describe('answering a request', () => {
   })
 })
 
-describe('the card stays as asked', () => {
+describe('a card an older add_repo posted stays as asked', () => {
   it('refuses editing its body over REST and MCP, and moving its tab leaves its words', async () => {
     const { id: pid } = newProject('card-stays')
     const t = features.createTicket(pid, { title: 'stays', status: 'in_progress' }, HUMAN)
-    const card = await tool('add_repo', {
-      ticketId: t.id,
-      name: 'stays',
-      repoPath: checkout('https://github.com/acme/stays'),
-      githubRepo: 'acme/stays',
-    })
+    const card = await requestCard(
+      t.id,
+      { name: 'stays', repoPath: checkout('https://github.com/acme/stays'), githubRepo: 'acme/stays' },
+      AGENT,
+    )
     for (const as of ['agent', 'human'] as const) {
       const edit = await call('PATCH', `/api/updates/${card.id}`, { body: 'Add repo other?' }, as)
       expect(edit.status, as).toBe(409)
@@ -647,22 +639,13 @@ describe('the card stays as asked', () => {
 })
 
 describe('who may add repos', () => {
-  it('the request is an agent’s: the human gets 403 on add_repo and its REST route', async () => {
-    const { id: pid } = newProject('human-asks')
-    const t = features.createTicket(pid, { title: 'h', status: 'in_progress' }, HUMAN)
-    const input = { name: 'h', repoPath: checkout('https://github.com/acme/h'), githubRepo: 'acme/h' }
-    expect(await tool('add_repo', { ticketId: t.id, ...input }, 'human')).toEqual({
-      error: 'the human adds repos directly; agents ask here',
-    })
-    expect((await call('POST', `/api/tickets/${t.id}/repo-request`, input, 'human')).status).toBe(403)
-    expect(decisionsOn(t.id)).toEqual([])
-  })
-
   it('an agent gets 403 on adding, changing and removing a repo; the human keeps all three', async () => {
     const { id: pid, repo } = newProject('repo-writes')
     const dir = checkout()
     const add = { projectId: pid, name: 'direct', repoPath: dir }
-    expect((await call('POST', '/api/repos', add)).status).toBe(403)
+    const refused = await call('POST', '/api/repos', add)
+    expect(refused.status).toBe(403)
+    expect(refused.body.error).toContain('POST /api/tickets/:id/repos')
     expect((await call('PATCH', `/api/repos/${repo.id}`, { name: 'renamed' })).status).toBe(403)
     expect((await call('DELETE', `/api/repos/${repo.id}`)).status).toBe(403)
     expect(names(pid)).toEqual(['app'])
@@ -677,7 +660,7 @@ describe('who may add repos', () => {
   it('an agent’s Add answer on the board is refused', async () => {
     const { id: pid } = newProject('agent-decides')
     const t = features.createTicket(pid, { title: 'a', status: 'in_progress' }, HUMAN)
-    const card = await features.requestRepo(
+    const card = await requestCard(
       t.id,
       { name: 'a', repoPath: checkout('https://github.com/acme/a'), githubRepo: 'acme/a' },
       AGENT,
@@ -688,11 +671,11 @@ describe('who may add repos', () => {
 })
 
 describe('own project only', () => {
-  it('a request goes to the named ticket’s project, whatever else is passed', async () => {
+  it('an add goes to the named ticket’s project, whatever else is passed', async () => {
     const { id: here } = newProject('own-here')
     const { id: there } = newProject('own-there')
     const t = features.createTicket(here, { title: 'here', status: 'in_progress' }, HUMAN)
-    const card = await tool('add_repo', {
+    const repo = await tool('add_repo', {
       ticketId: t.id,
       projectId: there,
       projectName: 'brand new',
@@ -700,8 +683,8 @@ describe('own project only', () => {
       repoPath: checkout('https://github.com/acme/own'),
       githubRepo: 'acme/own',
     })
-    expect(card.repoRequest.projectId).toBe(here)
-    expect((await answer(card.id, 0)).body.repo.added).toMatchObject({ projectId: here })
+    expect(repo).toMatchObject({ projectId: here, name: 'own' })
+    expect(names(here)).toEqual(['app', 'own'])
     expect(names(there)).toEqual(['app'])
     expect(
       dbm.db
@@ -716,11 +699,11 @@ describe('own project only', () => {
     const { id: pid } = newProject('own-as')
     const t = features.createTicket(pid, { title: 'as', status: 'in_progress' }, HUMAN)
     const input = { name: 'as', repoPath: checkout('https://github.com/acme/as'), githubRepo: 'acme/as' }
-    const asked = await call('POST', `/api/tickets/${t.id}/repo-request`, { ...input, as: 'nobody' })
-    expect(asked.status).toBe(400)
-    expect(asked.body.error).toContain('is not one of this project')
-    expect((await call('POST', '/api/tickets/999999/repo-request', input)).status).toBe(404)
-    expect(decisionsOn(t.id)).toEqual([])
+    const added = await call('POST', `/api/tickets/${t.id}/repos`, { ...input, as: 'nobody' })
+    expect(added.status).toBe(400)
+    expect(added.body.error).toContain('is not one of this project')
+    expect((await call('POST', '/api/tickets/999999/repos', input)).status).toBe(404)
+    expect(names(pid)).toEqual(['app'])
   })
 })
 
@@ -843,5 +826,291 @@ describe('moving a ticket to a repo', () => {
 
     expect((await call('PUT', '/api/tickets/999999/repo', { repoId: app.id })).status).toBe(404)
     expect((await call('PUT', `/api/tickets/${t.id}/repo`, { repoId: 999_999 })).status).toBe(404)
+  })
+})
+
+/** A project with an agent-added repo `shop` (a checkout with origin acme/shop) and its ticket. */
+async function projectWithShop(name: string) {
+  const { id: pid, repo: app } = newProject(name)
+  const t = features.createTicket(pid, { title: 'work', status: 'in_progress' }, HUMAN)
+  const dir = checkout('https://github.com/acme/shop.git')
+  const shop = await tool('add_repo', {
+    ticketId: t.id,
+    name: 'shop',
+    repoPath: dir,
+    githubRepo: 'acme/shop',
+  })
+  return { pid, app, shop, dir, t }
+}
+const repoRow = (id: number) =>
+  dbm.db.select().from(dbm.schema.repos).where(eq(dbm.schema.repos.id, id)).get()
+const patchRepo = (pid: number, repoId: number, body: Record<string, unknown>) =>
+  call('PATCH', `/api/projects/${pid}/repos/${repoId}`, body)
+
+describe('changing a repo', () => {
+  it('changes the name and base branch over MCP, logging each under the agent, and nothing else', async () => {
+    const { pid, shop, dir } = await projectWithShop('upd-basic')
+    const named = await tool('update_repo', { projectId: pid, repoId: shop.id, name: '  Storefront  ' })
+    expect(named).toMatchObject({ id: shop.id, name: 'Storefront', repoPath: dir, githubRepo: 'acme/shop' })
+    const based = await tool('update_repo', { projectId: pid, repoId: shop.id, baseBranch: 'release/2' })
+    expect(based).toMatchObject({ name: 'Storefront', baseBranch: 'release/2', projectId: pid })
+    expect(activity(pid).filter((a) => a.text.startsWith('updated repo'))).toEqual([
+      expect.objectContaining({
+        actor: AGENT,
+        kind: 'project',
+        text: 'updated repo Storefront',
+        refType: 'repo',
+        refId: shop.id,
+      }),
+      expect.objectContaining({ actor: AGENT, text: 'updated repo Storefront' }),
+    ])
+    // Over REST: the same, and the case of its own name may change.
+    const rest = await patchRepo(pid, shop.id, { name: 'STOREFRONT' })
+    expect(rest.status).toBe(200)
+    expect(rest.body).toMatchObject({ name: 'STOREFRONT' })
+  })
+
+  it('refuses an empty patch, a bad name or base branch, and a name another repo of the project has', async () => {
+    const { pid, shop } = await projectWithShop('upd-fields')
+    expect(await patchRepo(pid, shop.id, {})).toMatchObject({ status: 400 })
+    expect(await tool('update_repo', { projectId: pid, repoId: shop.id })).toEqual({
+      error: expect.stringContaining('give at least one of'),
+    })
+    expect((await patchRepo(pid, shop.id, { name: 'a\nb' })).body.error).toMatch(/repo name is one line/)
+    expect((await patchRepo(pid, shop.id, { baseBranch: 'my branch' })).body.error).toMatch(/base branch/)
+    expect((await patchRepo(pid, shop.id, { githubRepo: 'nope' })).body.error).toMatch(/owner\/name/)
+    const taken = await patchRepo(pid, shop.id, { name: ' APP ' })
+    expect(taken.status).toBe(409)
+    expect(taken.body.error).toContain('already has a repo named app')
+    expect(await tool('update_repo', { projectId: pid, repoId: shop.id, name: 'App' })).toEqual({
+      error: taken.body.error,
+    })
+    expect(repoRow(shop.id)).toMatchObject({ name: 'shop', baseBranch: 'main' })
+    expect(activity(pid).filter((a) => a.text.startsWith('updated repo'))).toEqual([])
+  })
+
+  it('repaths to another checkout of the same origin, clears the origin looks, and checks what changes', async () => {
+    const { pid, shop, dir } = await projectWithShop('upd-path')
+    dbm.db.insert(dbm.schema.originRefs).values({ repoId: shop.id, ref: 'main', sha: 'abc' }).run()
+    dbm.db.insert(dbm.schema.originRefMoves).values({ repoId: shop.id, ref: 'main', newSha: 'abc' }).run()
+    dbm.db.insert(dbm.schema.originLooks).values({ repoId: shop.id }).run()
+    const looks = () => [
+      dbm.db.select().from(dbm.schema.originRefs).where(eq(dbm.schema.originRefs.repoId, shop.id)).all()
+        .length,
+      dbm.db
+        .select()
+        .from(dbm.schema.originRefMoves)
+        .where(eq(dbm.schema.originRefMoves.repoId, shop.id))
+        .all().length,
+      dbm.db.select().from(dbm.schema.originLooks).where(eq(dbm.schema.originLooks.repoId, shop.id)).all()
+        .length,
+    ]
+    expect(looks()).toEqual([1, 1, 1])
+
+    // Refused: not a checkout of acme/shop, or one that is not a checkout at all; nothing changes.
+    const other = checkout('https://github.com/acme/other.git')
+    expect((await patchRepo(pid, shop.id, { repoPath: other })).body.error).toBe(
+      `${other}'s origin is acme/other, not acme/shop`,
+    )
+    expect((await patchRepo(pid, shop.id, { repoPath: path.join(tmp, 'gone') })).status).toBe(400)
+    expect((await patchRepo(pid, shop.id, { repoPath: 'rel/path' })).body.error).toContain('absolute path')
+    expect(repoRow(shop.id)).toMatchObject({ repoPath: dir })
+    expect(looks()).toEqual([1, 1, 1])
+
+    // Another repo's path is refused, any spelling; the repo's own path is not another's.
+    const app = names(pid).includes('app') ? repos.listRepos(pid).find((r) => r.name === 'app')! : null
+    const taken = checkout('https://github.com/acme/shop.git')
+    dbm.db.update(dbm.schema.repos).set({ repoPath: taken }).where(eq(dbm.schema.repos.id, app!.id)).run()
+    const dupe = await patchRepo(pid, shop.id, { repoPath: `${taken}/.` })
+    expect(dupe.status).toBe(409)
+    expect(dupe.body.error).toContain('already registered as repo')
+    expect(await patchRepo(pid, shop.id, { repoPath: `${dir}/.` })).toMatchObject({ status: 200 })
+    expect(looks()).toEqual([1, 1, 1])
+
+    const moved = checkout('git@github.com:Acme/Shop.git')
+    const done = await tool('update_repo', { projectId: pid, repoId: shop.id, repoPath: moved })
+    expect(done).toMatchObject({ repoPath: moved, githubRepo: 'acme/shop', projectId: pid })
+    expect(looks()).toEqual([0, 0, 0])
+    expect(activity(pid)).toContainEqual(
+      expect.objectContaining({ actor: AGENT, text: 'updated repo shop', refType: 'repo', refId: shop.id }),
+    )
+  })
+
+  it('changes githubRepo only to the slug the checkout’s origin has, and a repath with it', async () => {
+    const { pid, shop } = await projectWithShop('upd-slug')
+    const rename = checkout('https://github.com/acme/renamed.git')
+    // The origin is not the stored slug, and the new slug is not what the current checkout has either.
+    expect((await patchRepo(pid, shop.id, { githubRepo: 'acme/renamed' })).body.error).toContain(
+      'origin is acme/shop, not acme/renamed',
+    )
+    expect((await patchRepo(pid, shop.id, { repoPath: rename })).body.error).toContain(
+      'origin is acme/renamed, not acme/shop',
+    )
+    const both = await patchRepo(pid, shop.id, { repoPath: rename, githubRepo: 'ACME/Renamed' })
+    expect(both.status).toBe(200)
+    expect(both.body).toMatchObject({ repoPath: rename, githubRepo: 'ACME/Renamed' })
+    // The same slug in another casing is no change.
+    expect(await patchRepo(pid, shop.id, { githubRepo: 'acme/renamed' })).toMatchObject({ status: 200 })
+    expect(repoRow(shop.id)!.githubRepo).toBe('ACME/Renamed')
+  })
+
+  it('refuses another project’s repo with 403 and an unknown one with 404, changing nothing', async () => {
+    const mine = await projectWithShop('upd-mine')
+    const theirs = await projectWithShop('upd-theirs')
+    const before = repoRow(theirs.shop.id)
+    const rest = await patchRepo(mine.pid, theirs.shop.id, { name: 'taken-over', baseBranch: 'x' })
+    expect(rest.status).toBe(403)
+    expect(rest.body.error).toContain('is in another project')
+    expect(
+      await tool('update_repo', { projectId: mine.pid, repoId: theirs.shop.id, name: 'taken-over' }),
+    ).toEqual({ error: rest.body.error })
+    expect(repoRow(theirs.shop.id)).toEqual(before)
+    expect(activity(theirs.pid).filter((a) => a.text.startsWith('updated repo'))).toEqual([])
+    expect((await patchRepo(mine.pid, 999999, { name: 'x' })).status).toBe(404)
+    expect(await tool('update_repo', { projectId: mine.pid, repoId: 999999, name: 'x' })).toEqual({
+      error: expect.stringContaining('not found'),
+    })
+    // The project is no way to move a repo: projectId in the body is not a field.
+    const move = await patchRepo(mine.pid, mine.shop.id, { projectId: theirs.pid, name: 'stays' })
+    expect(move.status).toBe(200)
+    expect(repoRow(mine.shop.id)).toMatchObject({ projectId: mine.pid, name: 'stays' })
+  })
+})
+
+describe('removing a repo', () => {
+  /** A project with two repos: `one` has a run, a PR with its PR ticket and two feature tickets. */
+  async function scenario(name: string) {
+    const prTickets = await import('./prTickets')
+    const projectId = dbm.db.insert(dbm.schema.projects).values({ name }).returning().get().id
+    const [one, two] = ['one', 'two'].map((n) =>
+      dbm.db
+        .insert(dbm.schema.repos)
+        .values({ projectId, name: n, repoPath: path.join(tmp, `${name}-${n}`), githubRepo: `acme/${n}` })
+        .returning()
+        .get(),
+    ) as [Repo, Repo]
+    dbm.db
+      .insert(dbm.schema.runConfigs)
+      .values({ repoId: one.id, name: 'preview', type: 'preview', start: 'node x.js' })
+      .run()
+    const now = new Date().toISOString()
+    const pr = dbm.db
+      .insert(dbm.schema.prs)
+      .values({
+        projectId,
+        repoId: one.id,
+        number: 7,
+        title: 'seven',
+        url: 'https://github.com/acme/one/pull/7',
+        author: 'ana',
+        headRef: 'feat/one',
+        baseRef: 'main',
+        headSha: 'abc1234',
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .returning()
+      .get()
+    prTickets.openPrTickets(projectId, () => 'pending')
+    // Spans both: the primary falls to the second. Spans one only: it keeps no repo.
+    const spans = features.createTicket(
+      projectId,
+      {
+        title: 'spans',
+        repos: [
+          { repoId: one.id, branch: 'a' },
+          { repoId: two.id, branch: 'b' },
+        ],
+      },
+      HUMAN,
+    )
+    const solo = features.createTicket(projectId, { title: 'solo', repoId: one.id }, HUMAN)
+    const rest = features.createTicket(projectId, { title: 'rest', repoId: two.id }, HUMAN)
+    return { projectId, one, two, pr, spans, solo, rest }
+  }
+  /** What a removal leaves, by names: the same for the page's Remove and the agent's. */
+  function snapshot(s: Awaited<ReturnType<typeof scenario>>) {
+    const repoName = (id: number | null) =>
+      repos.listRepos(s.projectId).find((r) => r.id === id)?.name ?? null
+    return {
+      repos: names(s.projectId),
+      runs: dbm.db
+        .select()
+        .from(dbm.schema.runConfigs)
+        .where(eq(dbm.schema.runConfigs.repoId, s.one.id))
+        .all().length,
+      prs: dbm.db.select().from(dbm.schema.prs).where(eq(dbm.schema.prs.projectId, s.projectId)).all().length,
+      prTickets: dbm.db
+        .select()
+        .from(dbm.schema.tickets)
+        .where(and(eq(dbm.schema.tickets.projectId, s.projectId), isNotNull(dbm.schema.tickets.prId)))
+        .all().length,
+      tickets: features
+        .listTickets(s.projectId)
+        .map((t) => ({ title: t.title, repo: repoName(t.repoId), branch: t.branch }))
+        .sort((a, b) => a.title.localeCompare(b.title)),
+    }
+  }
+
+  it('does what the Repositories page’s Remove does, over MCP and REST', async () => {
+    const page = await scenario('remove-page')
+    expect(snapshot(page)).toMatchObject({ repos: ['one', 'two'], runs: 1, prs: 1, prTickets: 1 })
+    expect((await call('DELETE', `/api/repos/${page.one.id}`, undefined, 'human')).status).toBe(200)
+    const expected = snapshot(page)
+    expect(expected).toEqual({
+      repos: ['two'],
+      runs: 0,
+      prs: 0,
+      prTickets: 0,
+      tickets: [
+        { title: 'rest', repo: 'two', branch: '' },
+        { title: 'solo', repo: null, branch: '' },
+        { title: 'spans', repo: 'two', branch: 'b' },
+      ],
+    })
+
+    const viaMcp = await scenario('remove-mcp')
+    const gone = await tool('delete_repo', { projectId: viaMcp.projectId, repoId: viaMcp.one.id })
+    expect(gone).toMatchObject({ id: viaMcp.one.id, name: 'one', projectId: viaMcp.projectId })
+    expect(snapshot(viaMcp)).toEqual(expected)
+
+    const viaRest = await scenario('remove-rest')
+    const res = await call('DELETE', `/api/projects/${viaRest.projectId}/repos/${viaRest.one.id}`)
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ id: viaRest.one.id, name: 'one' })
+    expect(snapshot(viaRest)).toEqual(expected)
+
+    // The same line in the project's activity as the page's, under the agent's name.
+    for (const s of [viaMcp, viaRest])
+      expect(activity(s.projectId)).toContainEqual(
+        expect.objectContaining({ actor: AGENT, kind: 'project', text: 'removed repo one' }),
+      )
+    expect(activity(page.projectId)).toContainEqual(
+      expect.objectContaining({ actor: HUMAN, text: 'removed repo one' }),
+    )
+  })
+
+  it('leaves the checkout on disk alone', async () => {
+    const { pid, shop, dir } = await projectWithShop('remove-disk')
+    await tool('delete_repo', { projectId: pid, repoId: shop.id })
+    expect(fs.existsSync(path.join(dir, '.git'))).toBe(true)
+    expect(names(pid)).toEqual(['app'])
+  })
+
+  it('refuses another project’s repo with 403 and an unknown one with 404, removing nothing', async () => {
+    const mine = await projectWithShop('remove-mine')
+    const theirs = await projectWithShop('remove-theirs')
+    const rest = await call('DELETE', `/api/projects/${mine.pid}/repos/${theirs.shop.id}`)
+    expect(rest.status).toBe(403)
+    expect(rest.body.error).toContain('is in another project')
+    expect(await tool('delete_repo', { projectId: mine.pid, repoId: theirs.shop.id })).toEqual({
+      error: rest.body.error,
+    })
+    expect(names(theirs.pid)).toEqual(['app', 'shop'])
+    expect(activity(theirs.pid).filter((a) => a.text.startsWith('removed repo'))).toEqual([])
+    expect((await call('DELETE', `/api/projects/${mine.pid}/repos/999999`)).status).toBe(404)
+    expect(await tool('delete_repo', { projectId: mine.pid, repoId: 999999 })).toEqual({
+      error: expect.stringContaining('not found'),
+    })
   })
 })
