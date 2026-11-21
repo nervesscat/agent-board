@@ -439,10 +439,17 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    (commits only here) or `local-only` (not on origin) is red: push, then check again. (`merged`:
    gone from origin because its PR was merged into the base.)
 4. `needs` declared for any unmerged branch it builds on. If your branch is built on another
-   ticket's open branch (stacked), or you merged one in to get past a conflict, declare it with
+   ticket's open branch (stacked), or you merged one in to get past a conflict, the board adds
+   that need itself once the commits are in the branches it looks at (after a push or a fetch, and
+   when a ticket is read; `get_ticket` → `needs[].auto` is true, and it drops the need again when
+   the branch no longer holds those commits or the other ticket was cancelled or archived without
+   landing). It cannot see a branch before it is pushed: when you stack first, declare it with
    `update_ticket` → `needs: [<its ticket id>]` (or `needs` on `create_ticket`) instead of only
-   writing "builds on …" in the PR. `get_ticket_git` → `includes` lists the open tickets whose
-   unmerged work your branch holds: each one belongs in `needs`. The PR queue then marks your PR
+   writing "builds on …" in the PR; the board then confirms it, and a need you declared is yours,
+   never touched by the board. Your `needs` list never removes one the board added (only the
+   human does). `get_ticket_git` → `includes` lists only the open tickets whose unmerged work your
+   branch holds but git cannot prove is theirs, so the board adds no need for them: each one that
+   is a real dependency belongs in `needs`. The PR queue then marks your PR
    "merge after #<its PR>", and the ticket cannot go to `done` until those branches are merged into
    its base: `update_ticket` to `done` is refused with which one (`get_ticket` → `needs[].merged`).
    Only the human can mark it done anyway; in Approved, where an orchestrator merges the PR without
