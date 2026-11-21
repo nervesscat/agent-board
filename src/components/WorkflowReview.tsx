@@ -16,14 +16,28 @@ import { cn } from '#/lib/utils'
  * shown, not edited. Every node is a tree item one level below its parent.
  */
 
+/**
+ * What a rounds field has sent and not seen answered, kept outside the field: the field is made again when the
+ * preset is switched away and back or the Review node is closed and opened, and the new one must still know
+ * which count the board is about to hold. The owner keeps one per preset and level.
+ */
+export interface RoundsFlight {
+  /** The last count sent, until the board's answer is in. */
+  sent: number | null
+  /** How many saves are still out. */
+  pending: number
+}
+
 /** The four round counts: a number field for each complexity, saved as it is typed (once it is valid). */
 export function RoundsEditor({
   review,
   complexity,
+  flightOf,
   onChange,
 }: {
   review: ResolvedReview
   complexity: Complexity
+  flightOf: (level: Complexity) => RoundsFlight
   onChange: (level: Complexity, rounds: number) => Promise<string | null>
 }) {
   return (
@@ -37,6 +51,7 @@ export function RoundsEditor({
             value={review.roundsByComplexity[level]}
             fallback={review.defaultRounds[level]}
             current={level === complexity}
+            flight={flightOf(level)}
             onChange={(rounds) => onChange(level, rounds)}
           />
         ))}
@@ -53,12 +68,14 @@ function RoundsField({
   value,
   fallback,
   current,
+  flight,
   onChange,
 }: {
   level: Complexity
   value: number
   fallback: number
   current: boolean
+  flight: RoundsFlight
   /** Answers with the reason the count was not saved, or null once it was. */
   onChange: (rounds: number) => Promise<string | null>
 }) {
@@ -69,39 +86,47 @@ function RoundsField({
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   // What the board has saved, for the handlers that outlive a render.
   const saved = useRef(value)
-  // The last count sent and how many saves are still out: a count is compared with what the board is about to
-  // hold, not with the answer to a save that has not come back, so typing the old count again is a change.
-  const sent = useRef<number | null>(null)
-  const pending = useRef(0)
+  // The last count sent and how many saves are still out (`flight`, which outlives this field): a count is
+  // compared with what the board is about to hold, not with the answer to a save that has not come back, so
+  // typing the old count again is a change.
+  const alive = useRef(true)
   const issued = useRef(0)
   const typed = useRef(String(value))
   // What the board has saved shows, unless a count is being typed in: the answer to the last key must not
   // overwrite the next one.
   useEffect(() => {
     saved.current = value
-    if (pending.current === 0) sent.current = null
+    if (flight.pending === 0) flight.sent = null
     if (!typing.current) setDraft(String(value))
-  }, [value])
-  useEffect(() => () => clearTimeout(timer.current), [])
+  }, [value, flight])
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+      clearTimeout(timer.current)
+    }
+  }, [])
   const parsed = parseRounds(draft)
   const error = parsed.ok ? null : parsed.error
   const commit = (text: string) => {
     clearTimeout(timer.current)
     const next = parseRounds(text)
     if (!next.ok) return
-    if (next.rounds === (sent.current ?? saved.current)) {
+    if (next.rounds === (flight.sent ?? saved.current)) {
       // The count is what the board holds (or is about to): an older refusal's message no longer fits it.
       setFailure(null)
       return
     }
     const rounds = next.rounds
     const mine = ++issued.current
-    sent.current = rounds
-    pending.current += 1
+    flight.sent = rounds
+    flight.pending += 1
     setFailure(null)
     void onChange(rounds).then((reason) => {
-      pending.current -= 1
-      if (reason !== null && pending.current === 0) sent.current = null
+      flight.pending -= 1
+      // A refused count is not held by the board; and an answer that came after this field was gone has no
+      // field left to clear the count when the saved one arrives.
+      if (flight.pending === 0 && (reason !== null || !alive.current)) flight.sent = null
       // Only the latest save speaks for the field; an older one that failed has been overtaken.
       if (mine !== issued.current) return
       setFailure(reason)
@@ -275,6 +300,7 @@ export function ReviewBody({
   level,
   collapsed,
   onToggle,
+  flightOf,
   onRounds,
 }: {
   review: ResolvedReview
@@ -283,6 +309,7 @@ export function ReviewBody({
   level: number
   collapsed: ReadonlySet<string>
   onToggle: (id: string) => void
+  flightOf: (level: Complexity) => RoundsFlight
   onRounds: (level: Complexity, rounds: number) => Promise<string | null>
 }) {
   const betweenOpen = !collapsed.has('review.between')
@@ -290,7 +317,7 @@ export function ReviewBody({
   const rounds = review.roundsByComplexity[complexity]
   return (
     <div className="mt-3 space-y-3 border-t pt-3">
-      <RoundsEditor review={review} complexity={complexity} onChange={onRounds} />
+      <RoundsEditor review={review} complexity={complexity} flightOf={flightOf} onChange={onRounds} />
       <div className="space-y-1.5">
         <p className="text-xs font-medium text-muted-foreground">
           Each round runs these phases, none skipped

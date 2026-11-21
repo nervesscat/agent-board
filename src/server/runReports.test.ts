@@ -1026,6 +1026,36 @@ describe('the review phases flag follows the ticket’s workflow', () => {
     expect(missingReviewPhases(reviewers.id)).toEqual([{ round: 1, phase: 'hunt', expected: 1, found: 0 }])
   })
 
+  it('counts a span or report named reviewer as a hunt even when the project has an agent of that name', async () => {
+    const pid = newProject()
+    defaultAgents.addDefaultAgents(pid, HUMAN)
+    projectAgents.createAgent(pid, { name: 'reviewer' }, HUMAN)
+    await preset(pid, 'light')
+    const flags = async (id: number) => {
+      const moved = await needs.changeTicket(id, { status: 'review' }, HUMAN, { agent: false })
+      await needs.changeTicket(id, { status: 'in_progress' }, HUMAN, { agent: false })
+      return [moved.missingReviewPhases, moved.missingRunReports]
+    }
+    // Spans and reports named after the one reviewer, and after the hunt, in every pairing: neither flag.
+    for (const [spanName, reportName] of [
+      ['reviewer', 'reviewer'],
+      ['hunt', 'hunt'],
+      ['reviewer', 'hunt'],
+      ['hunt', 'reviewer'],
+    ] as const) {
+      const t = ticketOf(pid)
+      closedSpan(pid, t.id, spanName, 1, 60)
+      await tool('write_run_report', { projectId: pid, ticketId: t.id, agent: reportName, round: 1 })
+      expect(await flags(t.id), `${spanName} span, ${reportName} report`).toEqual([[], []])
+    }
+    // Without the report the run is flagged, as a hunt.
+    const bare = ticketOf(pid)
+    closedSpan(pid, bare.id, 'reviewer', 1, 60)
+    const [phases, reports] = await flags(bare.id)
+    expect(phases).toEqual([])
+    expect(reports).toEqual([expect.objectContaining({ agent: 'hunt', round: 1, runs: 1, reports: 0 })])
+  })
+
   it('under Maximum doubles each phase (H3)', async () => {
     const pid = newProject()
     await preset(pid, 'maximum')

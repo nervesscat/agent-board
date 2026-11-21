@@ -872,6 +872,74 @@ test('typing the saved count back while an older save is out and then refused le
   expect(puts).toBe(1)
 })
 
+test('a move saved after the person went on into a hand-off editor does not take the focus back (F11)', async ({
+  page,
+  project,
+  human,
+}) => {
+  await open(page, project.id)
+  // The move's answer is slow: the person is typing in a hand-off editor by the time it lands.
+  let moves = 0
+  await page.route(/\/api\/projects\/\d+\/workflow\/standard$/, async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback()
+    moves += 1
+    await new Promise((resolve) => setTimeout(resolve, 600))
+    await route.continue()
+  })
+  const connector = page.locator('[data-handoff="build"]')
+  await connector.getByRole('button', { name: 'Edit the Build hand-off' }).click()
+  const field = connector.getByRole('textbox', { name: 'Build hand-off instruction' })
+  await field.fill('')
+  await step(page, 'preview').getByRole('button', { name: 'Move Preview up' }).click()
+  await expect.poll(() => moves).toBe(1)
+  await field.focus()
+  const text = 'typed while the move was being saved'
+  await page.keyboard.type(text, { delay: 40 })
+  await saved(page)
+  const expected = [...STANDARD]
+  ;[expected[4], expected[5]] = [expected[5]!, expected[4]!]
+  await expect.poll(() => labels(page)).toEqual(expected)
+  // The answer landed while the text was still being typed, or just after: either way the field kept the focus.
+  await expect(field).toBeFocused()
+  await expect(field).toHaveValue(text)
+  await expect(page.locator('[data-move]:focus')).toHaveCount(0)
+  expect((await presetOf(human, project.id, 'standard')).order.slice(4, 6)).toEqual(['preview', 'review'])
+})
+
+test('a count typed back to the saved one after the preset round trip, with the first save still out, is saved (F12)', async ({
+  page,
+  project,
+  human,
+}) => {
+  await open(page, project.id)
+  const presets = page.getByRole('group', { name: 'Workflow presets' })
+  const group = page.getByRole('group', { name: 'Review rounds per complexity' })
+  const mid = group.getByRole('spinbutton', { name: /^Mid/ })
+  await expect(mid).toHaveValue('1')
+  // Only the first save is slow; the field is made again while it is out.
+  const puts: unknown[] = []
+  await page.route(/\/api\/projects\/\d+\/workflow\/standard$/, async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback()
+    puts.push(route.request().postDataJSON())
+    if (puts.length === 1) await new Promise((resolve) => setTimeout(resolve, 2500))
+    await route.continue()
+  })
+  await mid.fill('4')
+  await mid.blur()
+  await expect.poll(() => puts.length).toBe(1)
+  await presets.getByRole('button', { name: /^Thorough/ }).click()
+  await expect(page.getByRole('tree')).toHaveAccessibleName(/^Thorough workflow/)
+  await presets.getByRole('button', { name: /^Standard/ }).click()
+  await expect(page.getByRole('tree')).toHaveAccessibleName(/^Standard workflow/)
+  // The board still holds 1 as far as this field knows: typing 1 is a change from the 4 on its way.
+  await mid.fill('1')
+  await mid.blur()
+  await expect.poll(() => puts.length, { timeout: 10_000 }).toBe(2)
+  await expect.poll(async () => (await presetOf(human, project.id, 'standard')).rounds.mid).toBe(1)
+  await expect(mid).toHaveValue('1')
+  await expect(page.locator('[data-summary]')).toContainText('review: 1 round')
+})
+
 test('a refused move does not pull the focus onto a Move button when the order changes later (F11)', async ({
   page,
   project,

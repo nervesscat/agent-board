@@ -3,7 +3,7 @@ import { useLayoutEffect, useMemo, useRef } from 'react'
 
 import { AgentChip, Chip, EditedChip, LockChip } from '#/components/WorkflowChips'
 import { WorkflowHandoff } from '#/components/WorkflowHandoff'
-import { ReviewBody } from '#/components/WorkflowReview'
+import { ReviewBody, type RoundsFlight } from '#/components/WorkflowReview'
 import { Button } from '#/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Switch } from '#/components/ui/switch'
@@ -80,6 +80,15 @@ export function WorkflowTree({
   const moved = useRef<{ id: string; direction: 'up' | 'down'; preset: WorkflowPresetId } | null>(null)
   const list = useRef<HTMLOListElement>(null)
   const order = workflow.order.join()
+  // The rounds being saved, per preset and level: the fields are made again when the preset or the Review node's
+  // open state changes, and the count sent but not yet answered must outlive them.
+  const flights = useRef(new Map<string, RoundsFlight>())
+  const flightOf = (level: Complexity) => {
+    const key = `${workflow.preset}:${level}`
+    let flight = flights.current.get(key)
+    if (!flight) flights.current.set(key, (flight = { sent: null, pending: 0 }))
+    return flight
+  }
   // The same preset and tweaks at the other complexities: a hand-off whose default reads differently there.
   const others = useMemo(
     () =>
@@ -95,6 +104,12 @@ export function WorkflowTree({
     // A move saved on another preset's tree does not pull the focus here.
     if (target.preset !== workflow.preset) return
     const { id, direction } = target
+    // The answer can come after the person went on (into a hand-off editor, a rounds field): the focus goes back
+    // only if it is still on one of this step's Move buttons or nowhere (the move took the button out of the page).
+    const active = document.activeElement
+    const nowhere = active === null || active === document.body
+    const onStep = active instanceof HTMLElement && active.dataset.move?.startsWith(`${id}:`)
+    if (!nowhere && !onStep) return
     const find = (d: string) => list.current?.querySelector<HTMLButtonElement>(`[data-move="${id}:${d}"]`)
     const button = find(direction)
     // At an end the button is inert now: the other arrow takes the focus.
@@ -120,6 +135,7 @@ export function WorkflowTree({
             (w) => w.steps.find((o) => o.id === step.id)?.handoffDefault !== step.handoffDefault,
           )}
           edits={edits}
+          flightOf={flightOf}
           open={!collapsed.has(step.id)}
           collapsed={collapsed}
           onToggle={onToggle}
@@ -145,6 +161,7 @@ function StepNode({
   complexity,
   handoffVaries,
   edits,
+  flightOf,
   open,
   collapsed,
   onToggle,
@@ -158,6 +175,7 @@ function StepNode({
   /** Whether this step's default hand-off reads differently at another complexity. */
   handoffVaries: boolean
   edits: WorkflowEdits
+  flightOf: (level: Complexity) => RoundsFlight
   open: boolean
   collapsed: ReadonlySet<string>
   onToggle: (id: string) => void
@@ -264,6 +282,7 @@ function StepNode({
               level={2}
               collapsed={collapsed}
               onToggle={onToggle}
+              flightOf={flightOf}
               onRounds={edits.setRounds}
             />
           )}

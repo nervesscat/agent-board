@@ -49,11 +49,15 @@ const segment = (name: string) => name.trim().toLowerCase().split('/').at(-1) ??
  * The kind of run a name stands for: a known agent (`hunt`) or that agent's numbered worker (`hunt-1`).
  * A known name wins before the number is stripped, so a project agent actually named `hunt-1` is not
  * folded into `hunt`. A hunt may also carry a word (`hunt-security`, `hunt-security-2`), and Light's one
- * reviewer (`reviewer`) is a hunt; `huntress` or a bare `hunt-` is neither.
+ * reviewer (`reviewer`) is a hunt; `huntress` or a bare `hunt-` is neither. The one exception to the
+ * known-name rule is `reviewer` itself: even where the project has an agent of that name it counts as
+ * `hunt`, for the review phases and for its run report alike, so one span or report named `reviewer` and
+ * one named `hunt` (the hunt template's name) each clear both flags of Light's one review run.
  */
 function runKindOf(name: string, known: Set<string>) {
   const seg = segment(name)
   if (!seg) return null
+  if (seg === 'reviewer' && known.has('hunt')) return 'hunt'
   if (known.has(seg)) return seg
   const base = seg.replace(/-\d+$/, '')
   if (base !== seg && known.has(base)) return base
