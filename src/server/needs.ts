@@ -12,6 +12,7 @@ import {
   baseRefs,
   branchRef,
   gitCache,
+  localRef,
   type GitCache,
   type RepoGit,
   memo,
@@ -455,13 +456,13 @@ async function includedWork(t: Ticket, ctx: Context): Promise<number[]> {
     ...((await certainWork(t, ctx).catch(() => null))?.keys() ?? []),
   ])
   const candidates = candidatesOf(t, ctx, repo).filter((o) => !settled.has(o.id))
-  // Every ticket's branch in the repo, this one's too: what a branch is built on is not its own work.
+  // Every branch of the repo, this one's too: what a branch is built on, a shared integration branch
+  // included, is not its own work.
   const others = [
     ...new Set([
       ref,
-      ...ctx.all.flatMap(
-        (o) => (o.branch && ctx.repoOf(o)?.id === repo.id && branchRef(o.branch, refs)) || [],
-      ),
+      ...[...refs.local.keys()].map((b) => localRef(b)),
+      ...[...refs.remote.keys()].map((b) => `origin/${b}`),
     ]),
   ]
   const at = (r: string) => `${r}@${refSha(r, refs)}`
@@ -482,7 +483,8 @@ async function includedWork(t: Ticket, ctx: Context): Promise<number[]> {
         sha(ref),
         sha(other),
         bases.map(sha),
-        others.filter((x) => x !== other).map(sha),
+        // Not the other ticket's own copies: its pushed commits are its own work.
+        others.filter((x) => x !== localRef(o.branch) && x !== `origin/${o.branch}`).map(sha),
       ),
     )
     return holds ? o.id : null
