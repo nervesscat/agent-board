@@ -1,7 +1,14 @@
 import i18next, { type i18n as I18n } from 'i18next'
 import { initReactI18next } from 'react-i18next'
 
-import { DEFAULT_LANGUAGE, LANGUAGE_COOKIE, LANGUAGES, languageCookie, type Language } from './languages'
+import {
+  DEFAULT_LANGUAGE,
+  LANGUAGE_COOKIE,
+  LANGUAGES,
+  languageCookie,
+  languageOfTag,
+  type Language,
+} from './languages'
 import en from './locales/en.json'
 import es from './locales/es.json'
 
@@ -43,8 +50,18 @@ export const shared = createI18n(DEFAULT_LANGUAGE)
 /** The language the helpers outside React format in. */
 export const currentLanguage = (): Language => (shared.language as Language | undefined) ?? DEFAULT_LANGUAGE
 
-/** The tag `Intl` and `toLocale…String` take for the current language. */
-export const currentLocale = (): string => currentLanguage()
+/**
+ * The tag `Intl` and `toLocale…String` take: the browser's own locale when it is one of the current language
+ * (en-GB keeps its 24-hour clock in English, es-MX its separators in Spanish), else the language itself.
+ */
+export const currentLocale = (): string => {
+  const language = currentLanguage()
+  const own =
+    typeof navigator === 'undefined'
+      ? undefined
+      : navigator.languages?.find((tag) => languageOfTag(tag) === language)
+  return own ?? language
+}
 
 /**
  * Switches the browser's language now, with no reload: the instance, the page's `lang`, and what the

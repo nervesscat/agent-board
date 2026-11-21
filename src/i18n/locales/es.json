@@ -713,7 +713,7 @@
     "notifyBodyDaily": "El informe diario de {{label}} vence a las {{time}}.",
     "notifyBodyWeekly": "El informe semanal de {{label}} vence a las {{time}}.",
     "missing": ": informe atrasado, el turno terminó a las {{time}}",
-    "due": ": informe en {{left}}, a las {{time}}",
+    "due": ": el informe vence en {{left}}, a las {{time}}",
     "leftMinutes": "{{count}} min",
     "leftHours": "{{hours}} h",
     "leftHoursMinutes": "{{hours}} h {{minutes}} min",

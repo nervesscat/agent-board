@@ -12,10 +12,12 @@ const DAY = 24 * HOUR
 
 afterEach(async () => {
   vi.useRealTimers()
+  vi.unstubAllGlobals()
   await shared.changeLanguage('en')
 })
 
-const at = async (language: 'en' | 'es') => {
+const at = async (language: 'en' | 'es', browser: string[] = ['en-US']) => {
+  vi.stubGlobal('navigator', { languages: browser })
   vi.useFakeTimers()
   vi.setSystemTime(NOW)
   await shared.changeLanguage(language)
@@ -66,6 +68,16 @@ describe('times, dates and numbers follow the language', () => {
     expect(clock(iso)).toMatch(/3:30\s?PM/)
     await at('es')
     expect(clock(iso)).toMatch(/15:30/)
+  })
+
+  it("keeps the browser's own regional format when it is in the interface's language", async () => {
+    const iso = '2026-03-05T15:30:00'
+    await at('en', ['en-GB'])
+    expect(clock(iso)).toMatch(/15:30/)
+    await at('es', ['en-GB', 'es-MX'])
+    expect(formatNumber(1234.5)).toBe('1,234.5')
+    await at('es', ['en-GB'])
+    expect(formatNumber(1234.5)).toBe('1234,5')
   })
 
   it("writes numbers with the language's separators", async () => {
