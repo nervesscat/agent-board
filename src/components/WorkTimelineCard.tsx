@@ -53,7 +53,10 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
             <WorkLine timeline={data.timeline} stage={stallStage(stages, t.status)} detail />
             <LastHeard timeline={data.timeline} />
           </div>
-          <WorkTimelineBar timeline={data.timeline} />
+          <WorkTimelineBar
+            timeline={data.timeline}
+            reports={{ projectId: t.projectId, ticketId: t.id, known: t.runReports }}
+          />
           {hasWork(data.timeline) && <WorkSummary totals={data.timeline.totals} />}
           {events.length > 0 && (
             <div className="space-y-3">

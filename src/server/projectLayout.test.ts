@@ -79,7 +79,6 @@ describe("a project's layout", () => {
     expect(nav.map((it) => it.id)).toEqual([
       'nav.gallery',
       'nav.agents',
-      'nav.runReports',
       'nav.daily',
       'nav.cleanup',
       'nav.repositories',
