@@ -368,7 +368,7 @@ describe('who is who in test mode: orchestrator:, agent: and sub-identities', ()
     expect(await ok.json()).toMatchObject({ decidedOption: 1, relayedBy: 'orch' })
   })
 
-  it("takes a sub-identity's repo request, refuses its relay of the Add; the orchestrator's adds the repo", async () => {
+  it("adds a sub-identity's repo at once, under its name, and refuses its relay of a decision", async () => {
     const { execFileSync } = await import('node:child_process')
     const features = await import('./features')
     const repos = await import('./repos')
@@ -377,23 +377,37 @@ describe('who is who in test mode: orchestrator:, agent: and sub-identities', ()
     fs.mkdirSync(dir)
     execFileSync('git', ['init', '-q'], { cwd: dir })
     execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/acme/subrepo'], { cwd: dir })
-    // Asking is open to a worker: the card carries the sub-identity's name.
-    const card = await tool(ORCH, 'add_repo', {
+    // A worker adds a repo to its project directly: no card, and the activity carries its name.
+    const added = await tool(ORCH, 'add_repo', {
       ticketId: ticket.id,
       name: 'subrepo',
       repoPath: dir,
       githubRepo: 'acme/subrepo',
       agentName: 'orch/worker-2',
     })
-    expect(card).toMatchObject({ author: 'orch/worker-2', decidedAt: null })
-    const added = () => repos.listRepos(projectId).filter((r) => r.name === 'subrepo')
+    expect(added).toMatchObject({ projectId, name: 'subrepo', githubRepo: 'acme/subrepo' })
+    expect(repos.listRepos(projectId).filter((r) => r.name === 'subrepo')).toHaveLength(1)
+    const { db, schema } = await import('#/db')
+    expect(
+      db
+        .select()
+        .from(schema.activity)
+        .all()
+        .filter((a) => a.projectId === projectId && a.text === 'added repo subrepo (acme/subrepo)'),
+    ).toEqual([expect.objectContaining({ actor: 'orch/worker-2', refType: 'repo', refId: added.id })])
 
+    // Relaying a decision stays the orchestrator's own: a sub-identity is refused, as before.
+    const card = features.askDecision(
+      ticket.id,
+      { body: 'Which?', options: [{ label: 'A' }, { label: 'B' }] },
+      'orch',
+    )
     const refusal = 'only the session that talks to the human relays an answer'
     const rest = await send(
       'POST',
       `/api/updates/${card.id}/decision/relay`,
       { ...ORCH, 'x-agent-name': 'orch/worker-2' },
-      { option: 0, words: 'add it' },
+      { option: 0, words: 'a' },
     )
     expect(rest.status).toBe(403)
     expect(await rest.json()).toEqual({ error: refusal })
@@ -401,16 +415,11 @@ describe('who is who in test mode: orchestrator:, agent: and sub-identities', ()
       await tool(ORCH, 'answer_decision', {
         postId: card.id,
         option: 0,
-        words: 'add it',
+        words: 'a',
         agentName: 'orch/worker-2',
       }),
     ).toEqual({ error: refusal })
     expect(features.getPost(card.id)).toMatchObject({ decidedAt: null, relayedBy: '' })
-    expect(added()).toEqual([])
-
-    const ok = await tool(ORCH, 'answer_decision', { postId: card.id, option: 0, words: 'add it' })
-    expect(ok).toMatchObject({ relayedBy: 'orch', repo: { added: { name: 'subrepo' } } })
-    expect(added()).toHaveLength(1)
   })
 
   it('set_project_instructions: an orchestrator changes them, a worker hears to ask its orchestrator', async () => {

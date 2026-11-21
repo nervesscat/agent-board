@@ -78,40 +78,65 @@ export function githubSlug(url: string): string | null {
 const GITHUB_REPO = /^[\w.-]+\/[\w.-]+$/
 
 /**
- * Why the repo an agent asks for (`requestRepo`) cannot be added now, or null when it can: its path is an
+ * Why the repo an agent adds, or a card it posted asks for, cannot be added now, or null when it can: its path is an
  * existing git checkout, given whole; `origin` (the checkout's origin URL, as `originUrl` read it) is
  * github.com's `githubRepo`, owner and name in any casing; the project has no repo of that name (trimmed,
  * any casing); and no repo of the board is registered at that folder (`folderKey`: in any spelling, `.`,
  * `..`, doubled or either slashes, a trailing one, links, and on Windows any casing). Checked when it is
- * asked and again when the human answers Add, since the checkout or the board may have changed in between.
+ * added, and again when the human answers Add on a card an agent posted before, since the checkout or the
+ * board may have changed in between.
  */
 export function repoRequestProblem(req: schema.RepoRequest, origin: string | null): HttpError | null {
-  if (!path.isAbsolute(req.repoPath))
-    return new HttpError(400, `give the checkout's absolute path, not ${req.repoPath}`)
+  return (
+    checkoutProblem(req.repoPath, req.githubRepo, origin) ??
+    nameProblem(req.projectId, req.name) ??
+    pathProblem(req.repoPath)
+  )
+}
+
+/**
+ * Why `repoPath` is not an existing git checkout, given whole, whose `origin` (as `originUrl` read it) is
+ * github.com's `githubRepo` in any casing; null when it is.
+ */
+function checkoutProblem(repoPath: string, githubRepo: string, origin: string | null): HttpError | null {
+  if (!path.isAbsolute(repoPath))
+    return new HttpError(400, `give the checkout's absolute path, not ${repoPath}`)
   try {
-    assertRepo(req.repoPath)
+    assertRepo(repoPath)
   } catch (err) {
     return err as HttpError
   }
-  if (!fs.statSync(req.repoPath).isDirectory()) return new HttpError(400, `${req.repoPath} is not a folder`)
-  if (!origin) return new HttpError(400, `${req.repoPath} has no origin remote`)
+  if (!fs.statSync(repoPath).isDirectory()) return new HttpError(400, `${repoPath} is not a folder`)
+  if (!origin) return new HttpError(400, `${repoPath} has no origin remote`)
   const slug = githubSlug(origin)
   // Any credentials in the URL stay out of the message.
   const shown = origin.replace(/\/\/[^@/]+@/, '//')
-  if (!slug) return new HttpError(400, `${req.repoPath}'s origin, ${shown}, is not a github.com repository`)
-  if (slug.toLowerCase() !== req.githubRepo.toLowerCase())
-    return new HttpError(400, `${req.repoPath}'s origin is ${slug}, not ${req.githubRepo}`)
-  const named = listRepos(req.projectId).find((r) => r.name.trim().toLowerCase() === req.name.toLowerCase())
-  if (named)
-    return new HttpError(409, `this project already has a repo named ${named.name} (repo ${named.id})`)
-  const key = folderKey(req.repoPath)
-  const there = listRepos().find((r) => folderKey(r.repoPath) === key)
-  if (there)
-    return new HttpError(
-      409,
-      `${req.repoPath} is already registered as repo ${there.id} ${there.name} of project ${getProject(there.projectId).name}`,
-    )
+  if (!slug) return new HttpError(400, `${repoPath}'s origin, ${shown}, is not a github.com repository`)
+  if (slug.toLowerCase() !== githubRepo.toLowerCase())
+    return new HttpError(400, `${repoPath}'s origin is ${slug}, not ${githubRepo}`)
   return null
+}
+
+/** Why the project has a repo of this name already (trimmed, any casing; `exceptRepoId` is not counted). */
+function nameProblem(projectId: number, name: string, exceptRepoId?: number): HttpError | null {
+  const named = listRepos(projectId).find(
+    (r) => r.id !== exceptRepoId && r.name.trim().toLowerCase() === name.toLowerCase(),
+  )
+  return named
+    ? new HttpError(409, `this project already has a repo named ${named.name} (repo ${named.id})`)
+    : null
+}
+
+/** Why a repo of the board is registered at this folder already (`exceptRepoId` is not counted). */
+function pathProblem(repoPath: string, exceptRepoId?: number): HttpError | null {
+  const key = folderKey(repoPath)
+  const there = listRepos().find((r) => r.id !== exceptRepoId && folderKey(r.repoPath) === key)
+  return there
+    ? new HttpError(
+        409,
+        `${repoPath} is already registered as repo ${there.id} ${there.name} of project ${getProject(there.projectId).name}`,
+      )
+    : null
 }
 
 /** The checkout's origin URL for `repoRequestProblem`; null when it is no checkout to ask git in. */
@@ -123,44 +148,155 @@ export async function requestOrigin(repoPath: string): Promise<string | null> {
 /** Whether `text` has a control character (U+0000 to U+001F, or DEL): a line break, a tab, an escape. */
 const hasControl = (text: string) => [...text].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f)
 
+const cleanName = (raw: string) => {
+  const name = raw.trim()
+  if (!name || name.length > 100) throw new HttpError(400, 'give the repo a name: 1 to 100 characters')
+  // The name is quoted in the activity: a line break in it would write lines of its own.
+  if (hasControl(name)) throw new HttpError(400, 'the repo name is one line, with no control characters')
+  return name
+}
+
+/** A path as given: an absolute one resolved, so its `.`, `..` and doubled slashes go; a relative one stays, for the checks to refuse. */
+const cleanPath = (raw: string) => {
+  const repoPath = raw.trim()
+  if (!repoPath) throw new HttpError(400, "give the checkout's path")
+  // A folder may be named with a line break on Linux; the activity would show it as lines of its own.
+  if (hasControl(repoPath))
+    throw new HttpError(400, "the checkout's path is one line, with no control characters")
+  return path.isAbsolute(repoPath) ? path.resolve(repoPath) : repoPath
+}
+
+const cleanGithubRepo = (raw: string) => {
+  const githubRepo = raw.trim()
+  if (!GITHUB_REPO.test(githubRepo))
+    throw new HttpError(400, `githubRepo is the GitHub owner/name (like acme/shop), not ${githubRepo}`)
+  return githubRepo
+}
+
+const cleanBaseBranch = (raw: string | undefined) => {
+  const baseBranch = raw?.trim() || 'main'
+  if (baseBranch.length > 200) throw new HttpError(400, 'the base branch is 200 characters at most')
+  // As in git, a branch name has no whitespace or control characters.
+  if (/\s/.test(baseBranch) || hasControl(baseBranch))
+    throw new HttpError(400, 'the base branch is a branch name: no spaces, line breaks or control characters')
+  return baseBranch
+}
+
 /**
- * The repo an agent asks to add to `projectId`, cleaned (trimmed; an absolute path resolved, so its `.`,
- * `..` and doubled slashes go; base branch main when left out) and checked (`repoRequestProblem`): what its card names and its Add creates. A problem is thrown.
+ * The repo to add to `projectId`, cleaned (trimmed; an absolute path resolved; base branch main when left
+ * out) and checked (`repoRequestProblem`): what a card names and its Add creates, and what a direct add
+ * inserts. A problem is thrown.
  */
 export async function checkRepoRequest(
   projectId: number,
   input: { name: string; repoPath: string; githubRepo: string; baseBranch?: string },
 ): Promise<schema.RepoRequest> {
-  const repoPath = input.repoPath.trim()
   const req = {
     projectId,
-    name: input.name.trim(),
-    // A relative path stays as given, for `repoRequestProblem` to refuse.
-    repoPath: path.isAbsolute(repoPath) ? path.resolve(repoPath) : repoPath,
-    githubRepo: input.githubRepo.trim(),
-    baseBranch: input.baseBranch?.trim() || 'main',
+    name: cleanName(input.name),
+    repoPath: cleanPath(input.repoPath),
+    githubRepo: cleanGithubRepo(input.githubRepo),
+    baseBranch: cleanBaseBranch(input.baseBranch),
   }
-  if (!req.name || req.name.length > 100)
-    throw new HttpError(400, 'give the repo a name: 1 to 100 characters')
-  // The card's body quotes the name and base branch: a line break in either would write lines of its own.
-  if (hasControl(req.name)) throw new HttpError(400, 'the repo name is one line, with no control characters')
-  if (!req.repoPath) throw new HttpError(400, "give the checkout's path")
-  // A folder may be named with a line break on Linux; the card would show it as lines of its own.
-  if (hasControl(req.repoPath))
-    throw new HttpError(400, "the checkout's path is one line, with no control characters")
-  if (!GITHUB_REPO.test(req.githubRepo))
-    throw new HttpError(400, `githubRepo is the GitHub owner/name (like acme/shop), not ${req.githubRepo}`)
-  if (req.baseBranch.length > 200) throw new HttpError(400, 'the base branch is 200 characters at most')
-  // As in git, a branch name has no whitespace or control characters.
-  if (/\s/.test(req.baseBranch) || hasControl(req.baseBranch))
-    throw new HttpError(400, 'the base branch is a branch name: no spaces, line breaks or control characters')
   const problem = repoRequestProblem(req, await requestOrigin(req.repoPath))
   if (problem) throw problem
   return req
 }
 
 /**
- * A repo request's Add: the repo is created as it was asked (its `githubRepo` as checked, not looked up
+ * An agent adds a repo to `projectId` at once: it passes the checks of `checkRepoRequest` (nothing is added
+ * otherwise) and goes in the project's activity under the agent's name.
+ */
+export async function addRepoDirect(
+  projectId: number,
+  input: { name: string; repoPath: string; githubRepo: string; baseBranch?: string },
+  actor: string,
+) {
+  getProject(projectId)
+  const row = insertRequestedRepo(await checkRepoRequest(projectId, input))
+  logActivity({
+    projectId,
+    actor,
+    kind: 'project',
+    text: `added repo ${row.name} (${row.githubRepo})`,
+    refType: 'repo',
+    refId: row.id,
+  })
+  return row
+}
+
+/** The repo of `projectId` an agent's write names: another project's is refused (403), an unknown one is 404. */
+function repoOfProject(projectId: number, repoId: number) {
+  const repo = getRepo(repoId)
+  if (repo.projectId !== projectId)
+    throw new HttpError(
+      403,
+      `repo ${repoId} is in another project, not project ${projectId}: it is left alone`,
+    )
+  return repo
+}
+
+/**
+ * An agent changes a repo of `projectId`: the fields given, cleaned as when adding, and only what changes
+ * is checked. A new name is unique in the project (any casing); a new path or GitHub repo is the full
+ * check of an add (the path is a git checkout whose origin is the GitHub repo, given or current, and no
+ * other repo is at that path). Written through `updateRepo`, so a new path forgets the old checkout's
+ * origin looks; the repo never leaves its project.
+ */
+export async function editRepo(
+  projectId: number,
+  repoId: number,
+  input: { name?: string; repoPath?: string; githubRepo?: string; baseBranch?: string },
+  actor: string,
+) {
+  const before = repoOfProject(projectId, repoId)
+  if (
+    input.name === undefined &&
+    input.repoPath === undefined &&
+    input.githubRepo === undefined &&
+    input.baseBranch === undefined
+  )
+    throw new HttpError(400, 'give at least one of name, repoPath, githubRepo and baseBranch')
+  const name = input.name === undefined ? undefined : cleanName(input.name)
+  const repoPath = input.repoPath === undefined ? undefined : cleanPath(input.repoPath)
+  const githubRepo = input.githubRepo === undefined ? undefined : cleanGithubRepo(input.githubRepo)
+  const baseBranch = input.baseBranch === undefined ? undefined : cleanBaseBranch(input.baseBranch)
+  const patch: Parameters<typeof updateRepo>[1] = {}
+  if (name !== undefined && name !== before.name) {
+    const problem = nameProblem(projectId, name, repoId)
+    if (problem) throw problem
+    patch.name = name
+  }
+  const pathChanged = repoPath !== undefined && repoPath !== before.repoPath
+  const slugChanged =
+    githubRepo !== undefined && githubRepo.toLowerCase() !== (before.githubRepo ?? '').toLowerCase()
+  if (pathChanged || slugChanged) {
+    const where = repoPath ?? before.repoPath
+    const slug = githubRepo ?? before.githubRepo
+    if (!slug) throw new HttpError(400, `give githubRepo: ${before.name} has none stored`)
+    const problem =
+      checkoutProblem(where, slug, await requestOrigin(where)) ??
+      (pathChanged ? pathProblem(where, repoId) : null)
+    if (problem) throw problem
+    if (pathChanged) patch.repoPath = where
+    if (slugChanged) patch.githubRepo = githubRepo
+    // A new path keeps the stored slug as checked, not looked up again with gh.
+    else if (pathChanged) patch.githubRepo = slug
+  }
+  if (baseBranch !== undefined && baseBranch !== before.baseBranch) patch.baseBranch = baseBranch
+  if (!Object.keys(patch).length) return before
+  return updateRepo(repoId, patch, actor)
+}
+
+/** An agent removes a repo of `projectId`: exactly the Repositories page's Remove (`deleteRepo`). Returns the removed repo. */
+export function deleteRepoIn(projectId: number, repoId: number, actor: string) {
+  const repo = repoOfProject(projectId, repoId)
+  deleteRepo(repoId, actor)
+  return repo
+}
+
+/**
+ * A repo's add: the repo is created as it was asked (its `githubRepo` as checked, not looked up
  * again with gh). The caller checked it just before (`repoRequestProblem`) and logs it.
  */
 export function insertRequestedRepo(req: schema.RepoRequest) {
@@ -180,7 +316,7 @@ export function insertRequestedRepo(req: schema.RepoRequest) {
   return row
 }
 
-/** The repo a repo request's Add created already: the same name and folder (`folderKey`) in its project. */
+/** The repo a card's Add created already: the same name and folder (`folderKey`) in its project. */
 export function requestedRepo(req: schema.RepoRequest) {
   const key = folderKey(req.repoPath)
   return (
@@ -230,7 +366,7 @@ export async function createRepo(
 
 export async function updateRepo(
   id: number,
-  patch: Partial<Pick<schema.Repo, 'name' | 'repoPath' | 'baseBranch' | 'projectId'>>,
+  patch: Partial<Pick<schema.Repo, 'name' | 'repoPath' | 'githubRepo' | 'baseBranch' | 'projectId'>>,
   actor: string,
 ) {
   const before = getRepo(id)
@@ -239,7 +375,8 @@ export async function updateRepo(
   const repath = !!patch.repoPath && patch.repoPath !== before.repoPath
   if (patch.repoPath && repath) {
     assertRepo(patch.repoPath)
-    set.githubRepo = await repoNameWithOwner(patch.repoPath)
+    // A slug the caller checked is stored as given, not looked up again with gh.
+    set.githubRepo = patch.githubRepo ?? (await repoNameWithOwner(patch.repoPath))
   }
   const moved = patch.projectId !== undefined && patch.projectId !== before.projectId
   // A ticket's repos are all of its project: what the move splits apart leaves the ticket, and its

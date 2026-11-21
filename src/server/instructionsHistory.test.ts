@@ -410,10 +410,11 @@ describe('moving a repo to another project', () => {
       })
       expect(projectOf(repo)).toBe(from)
     }
-    // The rest of a repo's patch is the human's alone: an agent asks with a repo request, an
-    // orchestrator only moves it, and its own projectId again is no move.
+    // The rest of a repo's patch here is the human's alone (an agent changes its project's repos under the
+    // project: update_repo), an orchestrator only moves it, and its own projectId again is no move.
     const humanOnly = {
-      error: 'only the human adds, changes and removes repos; an agent asks with a repo request',
+      error:
+        "this is the human's route: an agent adds a repo with POST /api/tickets/:id/repos and changes or removes its project's with PATCH or DELETE /api/projects/:id/repos/:repoId",
     }
     for (const [actor, body] of [
       ['agent:w', { name: 'renamed', projectId: from }],
