@@ -76,6 +76,8 @@ export type Band = {
   end: number
   open: boolean
   seg: Seg
+  /** The board's events (push, preview, ...) that fall inside the period: not drawn on the rail, listed with it. */
+  marks: TimelineMark[]
 }
 /** A break in the axis: where a piece of time was skipped, as a share of the axis. */
 export type AxisBreak = { key: string; left: number }
@@ -137,7 +139,7 @@ export function ticksFor(start: number, end: number, pieces: Piece[] = [], span 
   let dated = false
   for (let at = Math.ceil((start + offset) / step) * step - offset; at <= end; at += step) {
     if (at < start) continue
-    if (pieces.some((p) => at > p.start && at < p.end)) {
+    if (pieces.some((p) => at > p.start && (at < p.end || p.kind === 'tail'))) {
       dated = true
       continue
     }
@@ -413,19 +415,14 @@ export function buildChart(t: WorkTimeline, now: number, win?: Window): Chart {
       })
   }
 
-  const marks: Mark[] = []
-  for (const m of t.marks) {
-    const at = Date.parse(m.at)
-    if (at >= axis.start && at <= axis.end) marks.push({ mark: m, left: share(axis, at) })
-  }
   // A block per blocked or review period (its fixed place on the axis), with the period's own real times.
   const bands: Band[] = []
   const breaks: AxisBreak[] = []
   const openAt = t.end ? Date.parse(t.end) : null
   axis.pieces.forEach((p, i) => {
     const mid = (position(axis.start, axis.pieces, p.start) + p.virtualMs / 2) / axis.span
-    breaks.push({ key: `break-${i}`, left: mid })
-    if (p.kind === 'gap' || !p.stretch) return
+    if (p.kind !== 'tail') breaks.push({ key: `break-${i}`, left: mid })
+    if (p.kind === 'gap' || p.kind === 'tail' || !p.stretch) return
     const seg = place({ start: p.start, end: p.end }, axis)
     if (seg)
       bands.push({
@@ -434,9 +431,18 @@ export function buildChart(t: WorkTimeline, now: number, win?: Window): Chart {
         start: p.stretch.start,
         end: p.stretch.end,
         open: live && openAt !== null && p.stretch.end >= openAt,
+        marks: t.marks.filter((m) => Date.parse(m.at) > p.start && Date.parse(m.at) < p.end),
         seg,
       })
   })
+  // A board event strictly inside a block is listed with the block, not drawn over its chip.
+  const hidden = new Set(bands.flatMap((b) => b.marks.map((m) => m.id)))
+  const marks: Mark[] = []
+  for (const m of t.marks) {
+    const at = Date.parse(m.at)
+    if (at >= axis.start && at <= axis.end && !hidden.has(m.id))
+      marks.push({ mark: m, left: share(axis, at) })
+  }
   // The creation mark: from the ticket's first event (its creation) to its first agent event, drawn at the
   // creation's place on the axis, and on the left edge only when the creation is before the window.
   const agentAt = agentStarts(t)

@@ -123,7 +123,7 @@ describe('collapsed periods', () => {
       lastWorkEnd: m(60),
     })
     expect(plan.pinned).toBe(m(60) + DAY)
-    expect(plan.pieces.map((p) => p.kind)).toEqual(['review', 'gap'])
+    expect(plan.pieces.map((p) => p.kind)).toEqual(['review', 'gap', 'tail'])
     expect(plan.pieces[1]!.end).toBe(m(60) + DAY)
   })
 
@@ -155,16 +155,17 @@ describe('collapsed periods', () => {
     expect(axis.end).toBe(m(120) + DAY)
   })
 
-  it('spread a segment that crosses a block over it, and map marks inside it inside the block', () => {
+  it('spread a segment that crosses a block over it, and map a mark on its edge to the edge', () => {
     const t = timeline({
       spans: [span(1, m(0), m(300))],
       reviewStretches: [stretch(m(100), m(200))],
-      marks: [{ id: 9, kind: 'pr', at: iso(m(150)), note: '' }],
+      marks: [{ id: 9, kind: 'pr', at: iso(m(200)), note: '' }],
       end: iso(m(300)),
     })
     const chart = buildChart(t, m(0))
     const block = chart.bands[0]!.seg
-    expect(chart.marks[0]!.left).toBeCloseTo(block.left + block.width / 2, 6)
+    // A mark on the block's edge is drawn there; one strictly inside is carried by the block.
+    expect(chart.marks[0]!.left).toBeCloseTo(block.left + block.width, 6)
     expect(chart.rows[0]!.items[0]!.seg.width).toBeCloseTo(1, 6)
     expect(chart.axis.span).toBe(200 * MIN + COLLAPSED_MS)
   })
@@ -236,6 +237,50 @@ describe('collapsed periods', () => {
     const chart = buildChart(reviewed(2 * DAY + 3 * HOUR), m(0))
     expect(chart.summary).toContain('Not to scale: in review 2 d 3 h.')
     expect(blockOf(reviewed(HOUR)).kind).toBe('review')
+  })
+})
+
+describe('a pinned merge in a window and marks inside blocks', () => {
+  it('ends the axis at the merge in a window, a live ticket included', () => {
+    const now = m(60) + 3 * DAY
+    const t = timeline({
+      spans: [span(1, m(0), m(60))],
+      reviewStretches: [stretch(m(60), m(60) + DAY)],
+      marks: [merge(2, m(60) + DAY)],
+      live: true,
+      end: iso(now),
+      now: iso(now),
+    })
+    const win = { start: iso(m(0)), end: iso(now) }
+    const chart = buildChart(t, now, win)
+    expect(chart.axis.span).toBe(60 * MIN + COLLAPSED_MS + GAP_MS)
+    expect(chart.marks[0]!.left).toBeCloseTo(1, 6)
+    expect(position(chart.axis.start, chart.axis.pieces, now) / chart.axis.span).toBeCloseTo(1, 6)
+    // The skipped tail has no break mark, and no tick inside it.
+    expect(chart.breaks).toHaveLength(2)
+    expect(chart.axis.ticks.every((k) => k.at <= m(60) + DAY)).toBe(true)
+    // Without a window nothing changes.
+    expect(buildChart(t, now).axis.span).toBe(chart.axis.span)
+  })
+
+  it('lists a mark inside a block with the block and keeps the others on the rail', () => {
+    const t = timeline({
+      spans: [span(1, m(0), m(300))],
+      reviewStretches: [stretch(m(100), m(200))],
+      marks: [
+        { id: 9, kind: 'preview', at: iso(m(150)), note: '' },
+        { id: 10, kind: 'push', at: iso(m(250)), note: '' },
+      ],
+      end: iso(m(300)),
+    })
+    const chart = buildChart(t, m(0))
+    expect(chart.marks.map((k) => k.mark.id)).toEqual([10])
+    expect(chart.bands[0]!.marks.map((k) => k.id)).toEqual([9])
+  })
+
+  it('never hides the pinned merge', () => {
+    const chart = buildChart(reviewed(2 * DAY), m(0))
+    expect(chart.marks.map((k) => k.mark.kind)).toEqual(['merge'])
   })
 })
 

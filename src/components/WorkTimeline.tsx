@@ -461,6 +461,16 @@ export function WorkTimelineBar({
                         ['To', b.open ? 'now' : stamp(new Date(b.end).toISOString())],
                         ['Duration', longDuration(b.end - b.start)],
                         ['Not to scale', 'This time is shown as a short block, not at its real length.'],
+                        ...(b.marks.length
+                          ? [
+                              [
+                                'Also then',
+                                b.marks
+                                  .map((m) => `${(MARK[m.kind] ?? OTHER_MARK).name}, ${stamp(m.at)}`)
+                                  .join('; '),
+                              ] as [string, ReactNode],
+                            ]
+                          : []),
                       ]}
                     />
                   }

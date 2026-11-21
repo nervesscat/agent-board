@@ -12,7 +12,8 @@ export const COLLAPSED_MS = 24 * MIN
 /** The axis the stretch between the last work (or the last collapsed period) and the merge takes. */
 export const GAP_MS = 6 * MIN
 
-export type PieceKind = 'blocked' | 'review' | 'gap'
+/** `tail` is everything after a pinned merge: it takes no axis at all (virtualMs 0). */
+export type PieceKind = 'blocked' | 'review' | 'gap' | 'tail'
 type Ms = { start: number; end: number }
 
 /**
@@ -70,7 +71,10 @@ export function planPieces(input: PlanInput): { pieces: Piece[]; pinned: number 
     })
     cursor = end
   }
-  if (gap) pieces.push(gap)
+  if (gap) {
+    pieces.push(gap)
+    pieces.push({ start: gap.end, end: Infinity, kind: 'tail', virtualMs: 0, stretch: null })
+  }
   return { pieces, pinned: pin ? merge : null }
 }
 
