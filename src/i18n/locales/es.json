@@ -2168,9 +2168,9 @@
       "waitingOn": "esperando a {{on}}, sin noticias de nadie desde las {{time}}",
       "nothingOpen": "nada abierto desde las {{time}}",
       "work": "trabajo",
-      "ended": "nada abierto desde que terminó «{{phase}}» a las {{time}}",
-      "endedQuote": "nada abierto desde que terminó «{{phase}}» a las {{time}} ('{{quote}}')",
-      "noProgress": "ninguna novedad de progreso desde las {{time}}"
+      "ended": "nada abierto desde que terminó {{phase}} a las {{time}}",
+      "endedQuote": "nada abierto desde que terminó {{phase}} a las {{time}} ('{{quote}}')",
+      "noProgress": "ninguna publicación de progreso desde las {{time}}"
     },
     "verb": {
       "spec": "Especificando",
@@ -2244,13 +2244,13 @@
       "ended": "Fin",
       "note": "Nota",
       "waiting": "Esperando",
-      "on": "A",
+      "on": "Esperando a",
       "duration": "Duración",
       "who": "Quién",
       "work": "Trabajo",
       "from": "De",
       "to": "A",
-      "at": "El",
+      "at": "Cuándo",
       "stage": "Etapa",
       "event": "Evento"
     },
@@ -2278,15 +2278,15 @@
       "story": "Historia de la cronología"
     },
     "story": {
-      "waitingFor": "esperando por {{who}} · {{duration}}",
-      "waitedFor": "esperó por {{who}} · {{duration}}{{note}}",
+      "waitingFor": "esperando a {{who}} · {{duration}}",
+      "waitedFor": "esperó a {{who}} · {{duration}}{{note}}",
       "started": "empezó {{phase}}{{note}}",
       "ended": "terminó {{phase}}{{note}}",
       "handoff": "pasó el trabajo{{from}} a {{to}}{{note}}",
       "handoffFrom": " de {{name}}",
       "someone": "alguien",
-      "waiting": "esperando por {{who}}",
-      "stoppedWaiting": "dejó de esperar por {{who}}{{note}}",
+      "waiting": "esperando a {{who}}",
+      "stoppedWaiting": "dejó de esperar a {{who}}{{note}}",
       "heartbeat": "latido{{note}}",
       "movedTo": "pasó a {{stage}}",
       "createdIn": "creado en {{stage}}",
