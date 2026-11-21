@@ -65,6 +65,7 @@ or counted has its own field; only what needs a sentence goes in a section.
 ## Where it goes
 
 `write_run_report` stores it on the board against the ticket and this run: the ticket's Agents side
-shows it with its agent, round and every section, and the project's Run reports page lists this
-agent's reports across tickets. The report is the last thing you do: your hand-off and the result you
+shows it with its agent, round and every section, and a work bar on the timeline (the ticket page's
+and the Roadmap's) opens the report written for that run. `list_run_reports` lists this agent's
+reports across tickets. The report is the last thing you do: your hand-off and the result you
 return come after it, and the orchestrator checks for it as it checks your result.
