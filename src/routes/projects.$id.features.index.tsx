@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { cn } from 'cn'
-import { Archive, Columns3, List, Loader2, Search, Tags, X } from 'lucide-react'
+import { Archive, ChevronDown, CircleDot, Columns3, List, Loader2, Search, Tags, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -24,6 +24,7 @@ import {
   ComboboxScroller,
   ComboboxTrigger,
   ComboboxValue,
+  comboboxTriggerClass,
 } from '#/components/ui/combobox'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Skeleton } from '#/components/ui/skeleton'
@@ -312,9 +313,14 @@ function StateFilter({
   return (
     <div className="flex items-center gap-1">
       <Popover>
-        <PopoverTrigger render={<Button variant="outline" size="sm" />}>
+        <PopoverTrigger
+          data-size="sm"
+          className={cn(comboboxTriggerClass, 'min-w-0', value.length === 0 && 'text-muted-foreground')}
+        >
+          <CircleDot className="text-muted-foreground" />
           State
           {value.length > 0 && <span className="tabular-nums text-muted-foreground">{value.length}</span>}
+          <ChevronDown className="pointer-events-none size-4 text-muted-foreground" />
         </PopoverTrigger>
         <PopoverContent align="end" className="w-56 gap-0.5 p-1">
           {WORK_LINE_STATES.map((s) => {
