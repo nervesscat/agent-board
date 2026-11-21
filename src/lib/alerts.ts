@@ -27,3 +27,10 @@ export function snoozeLabel(ms: number): string {
   const days = Math.round(hours / 24)
   return `${days} day${days === 1 ? '' : 's'}`
 }
+
+/**
+ * Time constants every alert type file uses. They live here, not in the registry: the registry imports
+ * the type files, so a value the files read from it would still be undefined while they load.
+ */
+export const HOUR_MS = 60 * 60_000
+export const DAY_MS = 24 * HOUR_MS

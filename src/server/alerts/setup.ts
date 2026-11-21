@@ -5,6 +5,7 @@ import path from 'node:path'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
+import { DAY_MS } from '#/lib/alerts'
 import { AGENT_CLIENTS, type AgentClient } from '#/lib/constants'
 import { AGENTS, repoClaudeDir, reviewSkillsInstall, sessionSkillInstall, skillInstall } from '#/lib/agents'
 import type { UpdatesState } from '#/lib/updates'
@@ -15,7 +16,7 @@ import { checkHostTools, hostTools, type HostTool, type HostTools, type ToolName
 import { listStages, type Stage } from '../stages'
 import { listAgentTokens } from '../tokens'
 import { checkForUpdates, insideDesktopApp, installUpdate, updatesState } from '../updates'
-import { HOUR_MS, type AlertCandidate, type AlertType } from './registry'
+import type { AlertCandidate, AlertType } from './registry'
 
 /**
  * The alerts about the board's own setup and versions (group `setup`): the skills it serves against the
@@ -24,8 +25,6 @@ import { HOUR_MS, type AlertCandidate, type AlertType } from './registry'
  * the board runs. Each type is made by a function that takes the board's edges (the home folder, the
  * desktop app's updater, the host-tools check), so a test hands it fakes at the edges and nothing else.
  */
-
-const DAY_MS = 24 * HOUR_MS
 
 /** What a type reaches outside the database and the files it reads: swapped in tests. */
 export interface SetupEdges {

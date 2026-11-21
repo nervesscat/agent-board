@@ -1,6 +1,8 @@
 import type { Project } from '#/db/schema'
 import {
   ALERT_GROUPS,
+  DAY_MS,
+  HOUR_MS,
   ALERT_GROUP_LABELS,
   ALERT_SEVERITIES,
   type AlertGroup,
@@ -101,8 +103,8 @@ export interface AlertType {
   stickyDismiss?: boolean
 }
 
-export const HOUR_MS = 60 * 60_000
-export const DEFAULT_SNOOZE_OPTIONS = [HOUR_MS, 24 * HOUR_MS, 7 * 24 * HOUR_MS]
+export { HOUR_MS }
+export const DEFAULT_SNOOZE_OPTIONS = [HOUR_MS, DAY_MS, 7 * DAY_MS]
 
 const added: AlertType[] = []
 
