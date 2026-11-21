@@ -39,30 +39,30 @@ Kept in English, as Spanish-speaking developers say them: **ticket**, **lane**, 
 
 Translated, always the same word:
 
-| English            | Spanish                  |
-| ------------------ | ------------------------ |
-| board              | tablero                  |
-| project            | proyecto                 |
-| agent              | agente                   |
-| orchestrator       | orquestador              |
-| worker             | trabajador               |
-| stage              | etapa                    |
-| task, subtask      | tarea, subtarea          |
-| post, update       | publicación, novedad     |
-| comment, reply     | comentario, respuesta    |
-| summary            | resumen                  |
-| review (noun)      | revisión                 |
-| report             | informe                  |
-| settings           | ajustes                  |
-| sign in / sign out | iniciar / cerrar sesión  |
-| device             | dispositivo              |
-| repository         | repositorio              |
-| attachment         | adjunto                  |
-| notification       | notificación             |
-| search             | buscar, búsqueda         |
-| save, cancel       | guardar, cancelar        |
-| delete, remove     | eliminar, quitar         |
-| needs you          | te necesita              |
-| in progress        | en curso                 |
-| blocked            | bloqueado                |
-| done               | hecho                    |
+| English            | Spanish                 |
+| ------------------ | ----------------------- |
+| board              | tablero                 |
+| project            | proyecto                |
+| agent              | agente                  |
+| orchestrator       | orquestador             |
+| worker             | trabajador              |
+| stage              | etapa                   |
+| task, subtask      | tarea, subtarea         |
+| post, update       | publicación, novedad    |
+| comment, reply     | comentario, respuesta   |
+| summary            | resumen                 |
+| review (noun)      | revisión                |
+| report             | informe                 |
+| settings           | ajustes                 |
+| sign in / sign out | iniciar / cerrar sesión |
+| device             | dispositivo             |
+| repository         | repositorio             |
+| attachment         | adjunto                 |
+| notification       | notificación            |
+| search             | buscar, búsqueda        |
+| save, cancel       | guardar, cancelar       |
+| delete, remove     | eliminar, quitar        |
+| needs you          | te necesita             |
+| in progress        | en curso                |
+| blocked            | bloqueado               |
+| done               | hecho                   |
