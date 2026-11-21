@@ -397,6 +397,8 @@ export const tasks = sqliteTable(
     // Only an open task is blocked: ticking it done clears both.
     blocked: integer({ mode: 'boolean' }).notNull().default(false),
     blockedReason: text('blocked_reason').notNull().default(''),
+    // When it was tagged blocked, kept while it stays blocked (a reworded reason does not move it); null when not blocked.
+    blockedAt: text('blocked_at'),
   },
   (t) => [index('tasks_parent').on(t.parentId)],
 )

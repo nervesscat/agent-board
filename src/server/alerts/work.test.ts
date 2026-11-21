@@ -342,21 +342,88 @@ describe('24: a task waits on you', () => {
     expect(await check('task-waits-on-you', pid, 2 * DAY)).toEqual([])
   })
 
-  it('keeps the clock when only the reason of an already blocked task is reworded', async () => {
+  /** The task's wait began `ago` ago: the stored time moved back, as time passing would. */
+  const blockedFor = (taskId: number, ago: number) =>
+    db
+      .update(schema.tasks)
+      .set({ blockedAt: new Date(Date.now() - ago).toISOString() })
+      .where(eq(schema.tasks.id, taskId))
+      .run()
+  const blockedAtOf = (taskId: number) =>
+    db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId)).get()!.blockedAt
+  const firstTask = (ticketId: number) => features.getTicketFull(ticketId).tasks[0]!
+
+  it('stores the time the tag went on, and nothing on a task that is not blocked', () => {
+    const pid = newProject()
+    const t = ticket(pid, { tasks: ['Plain', 'Other'] })
+    const [plain, other] = features.getTicketFull(t.id).tasks
+    expect(blockedAtOf(plain!.id)).toBeNull()
+    const before = Date.now()
+    features.updateTask(other!.id, { blocked: true, blockedReason: 'Sign' }, 'claude')
+    expect(Date.parse(blockedAtOf(other!.id)!)).toBeGreaterThanOrEqual(before)
+    expect(blockedAtOf(plain!.id)).toBeNull()
+  })
+
+  it('keeps the clock when the task is reworded or only its reason is', async () => {
     const pid = newProject()
     const t = ticket(pid, { tasks: ['Write the code'] })
-    const [task] = features.getTicketFull(t.id).tasks
-    features.updateTask(task!.id, { blocked: true, blockedReason: 'Paste the key' }, 'claude')
-    // The flag was raised six hours ago.
-    db.update(schema.activity)
-      .set({ createdAt: new Date(Date.now() - 6 * HOUR).toISOString() })
-      .where(eq(schema.activity.refId, t.id))
-      .run()
-    features.updateTask(task!.id, { blockedReason: 'Paste the production key' }, 'claude')
+    const task = firstTask(t.id)
+    features.updateTask(task.id, { blocked: true, blockedReason: 'Paste the key' }, 'claude')
+    blockedFor(task.id, 6 * HOUR)
+    features.updateTask(task.id, { text: 'Write the whole code' }, 'claude')
+    expect(await check('task-waits-on-you', pid)).toHaveLength(1)
+    features.updateTask(task.id, { blockedReason: 'Paste the production key' }, 'claude')
     expect(await check('task-waits-on-you', pid)).toMatchObject([{ body: 'Paste the production key' }])
-    // Cleared and flagged again: a new wait.
-    features.updateTask(task!.id, { blocked: false }, 'claude')
-    features.updateTask(task!.id, { blocked: true, blockedReason: 'Again' }, 'claude')
+  })
+
+  it('keeps the clock of a task added already blocked when its reason is reworded', async () => {
+    const pid = newProject()
+    const t = ticket(pid)
+    features.addTasks(t.id, [{ text: 'Sign the form', blocked: true, blockedReason: 'Sign' }], 'claude')
+    const task = firstTask(t.id)
+    expect(blockedAtOf(task.id)).not.toBeNull()
+    blockedFor(task.id, 6 * HOUR)
+    features.updateTask(task.id, { blockedReason: 'Sign and return' }, 'claude')
+    expect(await check('task-waits-on-you', pid)).toMatchObject([{ body: 'Sign and return' }])
+  })
+
+  it('gives each task its own clock', async () => {
+    const pid = newProject()
+    const older = ticket(pid)
+    const newer = ticket(pid)
+    for (const t of [older, newer])
+      features.addTasks(t.id, [{ text: 'Step', blocked: true, blockedReason: 'Do it' }], 'claude')
+    blockedFor(firstTask(older.id).id, 6 * HOUR)
+    blockedFor(firstTask(newer.id).id, 1 * HOUR)
+    expect(ids(await check('task-waits-on-you', pid))).toEqual([String(firstTask(older.id).id)])
+    expect((await check('task-waits-on-you', pid, 3.5 * HOUR)).map((c) => c.subject).sort()).toEqual(
+      [firstTask(older.id).id, firstTask(newer.id).id].map(String).sort(),
+    )
+  })
+
+  it('starts the count again when the tag is cleared and put back', async () => {
+    const pid = newProject()
+    const t = ticket(pid, { tasks: ['Write the code'] })
+    const task = firstTask(t.id)
+    features.updateTask(task.id, { blocked: true, blockedReason: 'Paste the key' }, 'claude')
+    blockedFor(task.id, 6 * HOUR)
+    expect(await check('task-waits-on-you', pid)).toHaveLength(1)
+    features.updateTask(task.id, { blocked: false }, 'claude')
+    expect(blockedAtOf(task.id)).toBeNull()
+    features.updateTask(task.id, { blocked: true, blockedReason: 'Again' }, 'claude')
+    expect(await check('task-waits-on-you', pid)).toEqual([])
+  })
+
+  it('starts the count again for a subtask whose flag a tick of its parent cleared silently', async () => {
+    const pid = newProject()
+    const t = ticket(pid, { tasks: [{ text: 'Parent', subtasks: ['Child'] }] })
+    const [parent, child] = features.getTicketFull(t.id).tasks
+    features.updateTask(child!.id, { blocked: true, blockedReason: 'Call them' }, 'claude')
+    blockedFor(child!.id, 6 * HOUR)
+    features.updateTask(parent!.id, { done: true }, 'claude')
+    expect(blockedAtOf(child!.id)).toBeNull()
+    features.updateTask(parent!.id, { done: false }, 'claude')
+    features.updateTask(child!.id, { blocked: true, blockedReason: 'Call them again' }, 'claude')
     expect(await check('task-waits-on-you', pid)).toEqual([])
   })
 
@@ -666,6 +733,32 @@ describe('33: work only on this machine', () => {
     git(repoPath, 'push', '-q', 'origin', 'feat/local')
     push.dropListings(repoPath)
     expect(await check('work-only-here', pid, 6 * HOUR)).toEqual([])
+  })
+
+  it('keeps the original start through a read git could not answer', async () => {
+    const repoPath = checkout()
+    branchWithCommit(repoPath, 'feat/flaky')
+    const pid = newProject()
+    const repo = repoOf(pid, repoPath)
+    const t = ticket(pid, { status: 'review', repoId: repo.id, branch: 'feat/flaky', baseBranch: 'main' })
+    const later = work.UNPUSHED_HOURS * HOUR + 5 * MIN
+    expect(await check('work-only-here', pid)).toEqual([])
+    push.dropListings(repoPath)
+    expect(await check('work-only-here', pid, later)).toHaveLength(1)
+
+    // The checkout cannot be read for a moment: no information, so the alert stays and the clock too.
+    const away = `${repoPath}-away`
+    fs.renameSync(repoPath, away)
+    push.dropListings(repoPath)
+    const unknown = await check('work-only-here', pid, later + 10 * MIN)
+    expect(unknown).toMatchObject([{ subject: String(t.id), title: expect.stringContaining('1 commit') }])
+    fs.renameSync(away, repoPath)
+    push.dropListings(repoPath)
+
+    // Known again, still ahead: raised from the first sighting, not from the failed read.
+    const again = await check('work-only-here', pid, later + 20 * MIN)
+    expect(again).toHaveLength(1)
+    expect(again[0]!.body).toContain('4 hours')
   })
 
   it('is not raised for a ticket still being worked, or one already pushed', async () => {

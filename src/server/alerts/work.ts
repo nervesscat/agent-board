@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { lastHuman, listActors } from '../actors'
@@ -302,36 +302,17 @@ const readyForYou: AlertType = {
 
 // --- 24: a task waits on you ---
 
-/**
- * When the task was tagged blocked: the board writes a line when a task is flagged (and when a task is
- * added already blocked), so the first such line since the task was last clear is when the wait began. A task with no such line (one
- * written before the log kept it) counts from the ticket's last change.
- */
-function blockedSince(ticketId: number, taskText: string, fallback: string): number {
-  const lines = db
-    .select({ text: schema.activity.text, createdAt: schema.activity.createdAt })
-    .from(schema.activity)
-    .where(
-      and(
-        eq(schema.activity.refType, 'ticket'),
-        eq(schema.activity.refId, ticketId),
-        eq(schema.activity.kind, 'task'),
-      ),
-    )
-    .orderBy(desc(schema.activity.createdAt), desc(schema.activity.id))
-    .all()
-  // The wait began at the first flag of the current stretch: a later flag only rewords the reason.
-  let flagged: string | undefined
-  for (const l of lines) {
-    if (l.text.startsWith(`flagged "${taskText}" as blocked`)) flagged = l.createdAt
-    else if (
-      l.text.startsWith(`cleared the blocked flag on "${taskText}"`) ||
-      l.text.startsWith(`completed "${taskText}"`)
-    )
-      break
-  }
-  const added = lines.find((l) => /^added \d+ (tasks?|subtasks?) \(\d+ blocked\)/.test(l.text))
-  return Date.parse(flagged ?? added?.createdAt ?? fallback)
+/** When each task was tagged blocked (the board stores it with the tag), by task id. */
+function blockedAtOf(taskIds: number[]) {
+  if (!taskIds.length) return new Map<number, string | null>()
+  return new Map(
+    db
+      .select({ id: schema.tasks.id, blockedAt: schema.tasks.blockedAt })
+      .from(schema.tasks)
+      .where(inArray(schema.tasks.id, taskIds))
+      .all()
+      .map((t) => [t.id, t.blockedAt] as const),
+  )
 }
 
 const taskWaits: AlertType = {
@@ -345,8 +326,12 @@ const taskWaits: AlertType = {
   check(ctx) {
     const projectId = projectOf(ctx)
     const tickets = new Map(projectTickets(projectId).map((t) => [t.id, t]))
-    return summaryOf(ctx).needsYou.blockedTasks.flatMap((b): AlertCandidate[] => {
-      const waited = ctx.now() - blockedSince(b.ticketId, b.text, tickets.get(b.ticketId)?.updatedAt ?? '')
+    const blockedTasks = summaryOf(ctx).needsYou.blockedTasks
+    const blockedAt = blockedAtOf(blockedTasks.map((b) => b.taskId))
+    return blockedTasks.flatMap((b): AlertCandidate[] => {
+      // A row with no stored time (none after the migration's backfill) counts from the ticket's last change.
+      const since = blockedAt.get(b.taskId) ?? tickets.get(b.ticketId)?.updatedAt ?? ''
+      const waited = ctx.now() - Date.parse(since)
       if (!(waited > BLOCKED_TASK_HOURS * HOUR_MS)) return []
       return [
         {
@@ -588,7 +573,7 @@ const noAgent: AlertType = {
 // --- 33: work only on this machine ---
 
 /** When a ticket's branch was first seen with commits origin does not have, by project and ticket; a restart starts the count again. */
-const unpushedSince = new Map<string, number>()
+const unpushedSince = new Map<string, { since: number; ahead: number }>()
 
 const onlyHere: AlertType = {
   type: 'work-only-here',
@@ -620,17 +605,23 @@ const onlyHere: AlertType = {
       )
       for (const t of here) {
         const push = states.get(t.branch)
-        if (!push || !unpushed(push)) continue
         const key = `${projectId}:${t.id}:${t.branch}`
-        keep.add(key)
-        const since = unpushedSince.get(key) ?? now
-        unpushedSince.set(key, since)
-        if (now - since <= UNPUSHED_HOURS * HOUR_MS) continue
+        const known = unpushedSince.get(key)
+        // Git could not say (a transient failure): no information, so the clock and the alert stay as they were.
+        if (push?.unknown) {
+          if (known) keep.add(key)
+        } else if (!push || !unpushed(push)) continue
+        else {
+          keep.add(key)
+          unpushedSince.set(key, { since: known?.since ?? now, ahead: push.ahead })
+        }
+        const clock = unpushedSince.get(key)
+        if (!clock || now - clock.since <= UNPUSHED_HOURS * HOUR_MS) continue
         found.push({
           subject: String(t.id),
           severity: 'warning',
-          title: `${label(t.id, t.title)} has ${plural(push.ahead, 'commit')} only on this machine`,
-          body: `Branch ${t.branch} has not been on origin for ${span(now - since)}: a disk or worktree failure would lose it.`,
+          title: `${label(t.id, t.title)} has ${plural(clock.ahead, 'commit')} only on this machine`,
+          body: `Branch ${t.branch} has not been on origin for ${span(now - clock.since)}: a disk or worktree failure would lose it.`,
           buttons: [
             openTicket(projectId, t.id),
             { id: 'ask-push', label: 'Ask the agent to push', kind: 'action', primary: true },
