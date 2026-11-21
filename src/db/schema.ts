@@ -448,6 +448,13 @@ export const updates = sqliteTable(
     // it, and the words as the human gave them. Both '' on a decision the human made on the board.
     relayedBy: text('relayed_by').notNull().default(''),
     relayedText: text('relayed_text').notNull().default(''),
+    // Who has the answer on this card already, so an edit of it starts no second agent: 'chat' (relayed to the
+    // session that asked), 'waiter' (handed to an agent waiting on it) or 'resume' (a process the board
+    // started was given it); '' until one did. A skipped start never sets it, and an edit never clears it.
+    answerDelivered: text('answer_delivered')
+      .$type<'' | 'chat' | 'waiter' | 'resume'>()
+      .notNull()
+      .default(''),
     // On a decision an agent posted to have tickets archived (features.requestArchive): the top-level tickets
     // it names. Answering its Archive option archives those still finished then. Null on any other post.
     archiveTickets: text('archive_tickets', { mode: 'json' }).$type<number[] | null>(),

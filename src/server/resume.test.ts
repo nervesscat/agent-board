@@ -804,3 +804,132 @@ describe('resume: Retry and the cards that are not questions', () => {
     }
   })
 })
+
+describe('resume: an answer that reached an agent is recorded on its card', () => {
+  /** Hours later: no signal of an agent on the ticket is recent, so only the answer's own history decides. */
+  function hoursLater(ticketId: number) {
+    const old = new Date(Date.now() - 3 * 3_600_000).toISOString()
+    dbm.db
+      .update(dbm.schema.ticketEvents)
+      .set({ at: old })
+      .where(eq(dbm.schema.ticketEvents.ticketId, ticketId))
+      .run()
+    dbm.db
+      .update(dbm.schema.updates)
+      .set({ createdAt: old })
+      .where(eq(dbm.schema.updates.ticketId, ticketId))
+      .run()
+  }
+
+  /** A ticket whose first card started a resume that still runs, and a second card asked a while ago. */
+  async function runningWithSecondCard() {
+    const out = outFile()
+    setCommand(commandFor(out, 'hang'))
+    const { ticket, post } = asked('First?')
+    features.decide(post.id, 0, '', HUMAN)
+    await until(() => fs.existsSync(out) && fs.readFileSync(out, 'utf8').endsWith('}'))
+    const second = ask(ticket.id, 'Second?')
+    askedLongAgo(second.id)
+    const first = rowsOf(ticket.id).find((r) => r.pid !== null)!
+    return { ticket, second, first }
+  }
+
+  it('an answer relayed while another resume runs, then edited, starts no process, now or later', async () => {
+    const { ticket, second, first } = await runningWithSecondCard()
+    features.relayDecision(second.id, { option: 0, words: 'sqlite' }, 'orch', { agent: true })
+    features.decide(second.id, 1, 'edited while it runs', HUMAN)
+    await resumeKill(first.id)
+    hoursLater(ticket.id)
+    features.decide(second.id, 0, 'edited after it ended', HUMAN)
+    features.decide(second.id, 1, 'and again', HUMAN)
+    const rows = rowsOf(ticket.id)
+    expect(rows.filter((r) => r.pid !== null)).toHaveLength(1)
+    expect(rows.filter((r) => r.postId === second.id).every((r) => r.state === 'skipped')).toBe(true)
+    expect(rows.at(-1)!.reason).toContain('the answer came from the chat')
+    expect(repliesOf(second.id).at(-1)!.body).toContain('the agent that asked has the first answer')
+  })
+
+  it('an answer handed to a waiting agent while another resume runs, then edited, starts no process', async () => {
+    const wait = await import('./answerWait')
+    const { ticket, second, first } = await runningWithSecondCard()
+    const p = wait.waitAndReport({ ticketId: ticket.id, postId: second.id, timeoutSeconds: 60, actor: AGENT })
+    features.decide(second.id, 0, 'first words', HUMAN)
+    expect(await p).toMatchObject({ answered: true, option: 0 })
+    features.decide(second.id, 1, 'edited while it runs', HUMAN)
+    await resumeKill(first.id)
+    hoursLater(ticket.id)
+    features.decide(second.id, 0, 'edited after it ended', HUMAN)
+    const rows = rowsOf(ticket.id)
+    expect(rows.filter((r) => r.pid !== null)).toHaveLength(1)
+    expect(rows.at(-1)!.reason).toContain('delivered to the agent waiting for it')
+    expect(repliesOf(second.id).at(-1)!.body).toContain('the agent has the first answer')
+  })
+
+  it('the delivered mark is on the card: set by the relay, the waiter and the start, never by a skip', async () => {
+    const wait = await import('./answerWait')
+    const markOf = (id: number) =>
+      dbm.db.select().from(dbm.schema.updates).where(eq(dbm.schema.updates.id, id)).get()!.answerDelivered
+    // A skip because a resume runs delivers nothing.
+    const { ticket, second, first } = await runningWithSecondCard()
+    features.decide(second.id, 0, '', HUMAN)
+    expect(markOf(second.id)).toBe('')
+    expect(markOf(first.postId!)).toBe('resume')
+    await resumeKill(first.id)
+    // A relay and a waiter mark their card.
+    const relayed = ask(ticket.id, 'Third?')
+    features.relayDecision(relayed.id, { option: 0, words: 'x' }, 'orch', { agent: true })
+    expect(markOf(relayed.id)).toBe('chat')
+    const waited = ask(ticket.id, 'Fourth?')
+    const p = wait.waitAndReport({ ticketId: ticket.id, postId: waited.id, timeoutSeconds: 60, actor: AGENT })
+    features.decide(waited.id, 0, '', HUMAN)
+    await p
+    expect(markOf(waited.id)).toBe('waiter')
+  })
+
+  it('Resume runs with the newest decided card, not the card of the last run', async () => {
+    const out = outFile()
+    setCommand(commandFor(out))
+    const { ticket, post } = asked('First?')
+    features.decide(post.id, 0, '', HUMAN)
+    await until(() => rowsOf(ticket.id).length > 0 && rowsOf(ticket.id).every((r) => r.state !== 'running'))
+    const second = ask(ticket.id, 'Second?')
+    askedLongAgo(second.id)
+    features.relayDecision(second.id, { option: 1, words: 'postgres, as I said' }, 'orch', { agent: true })
+    features.decide(second.id, 0, 'sqlite after all', HUMAN)
+    const again = outFile()
+    setCommand(commandFor(again))
+    const res = await call('POST', `/api/tickets/${ticket.id}/resume`)
+    expect(res.status).toBe(202)
+    expect(res.body).toMatchObject({ trigger: 'retry', postId: second.id })
+    await until(() => fs.existsSync(again) && fs.readFileSync(again, 'utf8').endsWith('}'))
+    const prompt = read(again).stdin as string
+    expect(prompt).toContain('Second?')
+    expect(prompt).toContain('sqlite after all')
+    expect(prompt).not.toContain('First?')
+    await until(() => rowsOf(ticket.id).every((r) => r.state !== 'running'))
+  })
+
+  it('Resume uses the relayed words of the newest card, and the last run card when no newer one was answered', async () => {
+    const out = outFile()
+    setCommand(commandFor(out))
+    const { ticket, post } = asked('First?')
+    features.decide(post.id, 0, 'sqlite', HUMAN)
+    await until(() => rowsOf(ticket.id).length > 0 && rowsOf(ticket.id).every((r) => r.state !== 'running'))
+    // No newer answer: Resume goes on with the card the last run came from.
+    const same = outFile()
+    setCommand(commandFor(same))
+    expect((await call('POST', `/api/tickets/${ticket.id}/resume`)).body).toMatchObject({ postId: post.id })
+    await until(() => rowsOf(ticket.id).length > 1 && rowsOf(ticket.id).every((r) => r.state !== 'running'))
+    expect(read(same).stdin).toContain('First?')
+    // A newer card answered from the chat: Resume carries its words.
+    const second = ask(ticket.id, 'Second?')
+    askedLongAgo(second.id)
+    features.relayDecision(second.id, { option: 1, words: 'postgres, as I said' }, 'orch', { agent: true })
+    const third = outFile()
+    setCommand(commandFor(third))
+    expect((await call('POST', `/api/tickets/${ticket.id}/resume`)).body).toMatchObject({ postId: second.id })
+    await until(() => fs.existsSync(third) && fs.readFileSync(third, 'utf8').endsWith('}'))
+    expect(read(third).stdin).toContain('postgres, as I said')
+    await until(() => rowsOf(ticket.id).every((r) => r.state !== 'running'))
+  })
+})

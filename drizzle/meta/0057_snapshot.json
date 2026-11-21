@@ -3809,6 +3809,14 @@
           "autoincrement": false,
           "default": "''"
         },
+        "answer_delivered": {
+          "name": "answer_delivered",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
         "archive_tickets": {
           "name": "archive_tickets",
           "type": "text",

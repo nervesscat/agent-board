@@ -116,6 +116,11 @@ export function answerLanded(ticketId: number, postId: number): number {
   if (!answer) return 0
   const all = [...set]
   for (const w of all) w.settle(answer)
+  // The card says it: an edit of this answer starts no second agent (resume.ts). A relayed one keeps its mark.
+  db.update(schema.updates)
+    .set({ answerDelivered: 'waiter' })
+    .where(and(eq(schema.updates.id, postId), eq(schema.updates.answerDelivered, '')))
+    .run()
   return all.length
 }
 

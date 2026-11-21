@@ -2,7 +2,7 @@ import { execFile, execFileSync, spawn as nodeSpawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { and, desc, eq, inArray, isNotNull, or } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { LEASE_TTL_MINUTES } from '#/lib/constants'
@@ -397,8 +397,6 @@ interface Start {
   since?: string | null
   /** The answer on the card was changed after an earlier one. */
   edited?: boolean
-  /** The answer that was changed had been relayed from the chat, to the session that asked. */
-  wasRelayed?: boolean
 }
 
 const SKIP_OFF = 'resuming is off: the project has no resume command (Settings, Resume)'
@@ -425,6 +423,18 @@ function moveTo(ticket: schema.Ticket, key: string) {
 const WAITING = 'an agent is waiting for this answer'
 const FROM_CHAT =
   'the answer came from the chat, so the agent that asked has the first answer: press Resume on the ticket to run the work with the changed one'
+const EDITED_AFTER_WAITER =
+  'the answer was changed after it was delivered to the agent waiting for it: the agent has the first answer, so press Resume on the ticket to run the work with the changed one'
+
+function deliveredOf(postId: number) {
+  return (
+    db
+      .select({ delivered: schema.updates.answerDelivered })
+      .from(schema.updates)
+      .where(eq(schema.updates.id, postId))
+      .get()?.delivered ?? ''
+  )
+}
 
 function skipped(s: Start, reason: string, quiet = false) {
   const row = db
@@ -466,6 +476,12 @@ export function startResume(s: Start): schema.TicketResume {
   }
   if (ticket.archivedAt) return skipped(s, 'the ticket is archived')
   if (!ticket.assignee) return skipped(s, 'no agent holds the ticket: there is nobody to continue it')
+  // One answer, one agent: an answer that already reached an agent (relayed to the session that asked,
+  // handed to a waiting one, or given to a process the board started) is marked on its card, and an edit of
+  // it starts nothing. The mark is read from the card, never inferred from the rows of this table.
+  const delivered = s.edited && s.postId ? deliveredOf(s.postId) : ''
+  if (delivered === 'chat') return skipped(s, FROM_CHAT)
+  if (delivered === 'waiter') return skipped(s, EDITED_AFTER_WAITER)
   const running = db
     .select()
     .from(schema.ticketResumes)
@@ -483,34 +499,11 @@ export function startResume(s: Start): schema.TicketResume {
         ? 'a resume is already running for this ticket; it finds the changed answer in its threads'
         : 'a resume is already running for this ticket; it finds this answer in its threads',
     )
-  if (s.edited && s.wasRelayed) return skipped(s, FROM_CHAT)
-  if (s.edited && s.postId) {
-    // One answer, one agent: the first answer either started a process or was delivered to a waiting agent
-    // (its skipped row says so), and in both the agent has it already.
-    const earlier = db
-      .select({ startedAt: schema.ticketResumes.startedAt, reason: schema.ticketResumes.reason })
-      .from(schema.ticketResumes)
-      .where(
-        and(
-          eq(schema.ticketResumes.postId, s.postId),
-          or(
-            isNotNull(schema.ticketResumes.startedAt),
-            eq(schema.ticketResumes.reason, WAITING),
-            eq(schema.ticketResumes.reason, FROM_CHAT),
-          ),
-        ),
-      )
-      .get()
-    if (earlier)
-      return skipped(
-        s,
-        earlier.startedAt
-          ? 'the answer was changed after the resume started: press Resume on the ticket to run it again'
-          : earlier.reason === FROM_CHAT
-            ? FROM_CHAT
-            : 'the answer was changed after it was delivered to the agent waiting for it: the agent has the first answer, so press Resume on the ticket to run the work with the changed one',
-      )
-  }
+  if (delivered === 'resume')
+    return skipped(
+      s,
+      'the answer was changed after the resume started: press Resume on the ticket to run it again',
+    )
   if (s.trigger === 'answer' && s.postId && hasWaiter(s.ticketId, s.postId)) return skipped(s, WAITING)
   const live = liveAgent(s.ticketId, s.since ?? null)
   if (live) return skipped(s, `${live} is working the ticket: it has a live agent`)
@@ -557,6 +550,12 @@ export function startResume(s: Start): schema.TicketResume {
       .where(eq(schema.ticketResumes.id, row.id))
       .returning()
       .get()!
+    // The process was given this card's answer (in its prompt): an edit of it starts no second one.
+    if (s.postId)
+      db.update(schema.updates)
+        .set({ answerDelivered: 'resume' })
+        .where(eq(schema.updates.id, s.postId))
+        .run()
     reply(
       s.postId ?? null,
       `Continuing: the board started ${row.command}${path.basename(cwd) ? ` in ${path.basename(cwd)}` : ''}.`,
@@ -696,7 +695,6 @@ export function resumeAfterAnswer(
   post: Pick<schema.Update, 'id' | 'ticketId' | 'createdAt'>,
   answer: string,
   edited: boolean,
-  wasRelayed = false,
 ) {
   return guarded(() =>
     startResume({
@@ -706,7 +704,6 @@ export function resumeAfterAnswer(
       answer,
       since: post.createdAt,
       edited,
-      wasRelayed,
     }),
   )
 }
@@ -735,6 +732,39 @@ export function resumeAfterMove(ticketId: number, from: string, to: string) {
   return guarded(() => startResume({ ticketId, trigger: 'move', since: arrived?.at ?? null }))
 }
 
+/** The ticket's newest answered decision card an agent waits on (not a request to the board), or null. */
+function newestAnswered(ticketId: number) {
+  return (
+    db
+      .select()
+      .from(schema.updates)
+      .where(
+        and(
+          eq(schema.updates.ticketId, ticketId),
+          isNotNull(schema.updates.decision),
+          isNotNull(schema.updates.decidedAt),
+          isNull(schema.updates.archiveTickets),
+          isNull(schema.updates.repoRequest),
+        ),
+      )
+      .orderBy(desc(schema.updates.decidedAt), desc(schema.updates.id))
+      .get() ?? null
+  )
+}
+
+/** The answer on a card as the agent gets it: the human's reply under it, or the words relayed from the chat. */
+function answerWords(post: schema.Update): string | undefined {
+  if (post.relayedBy) return `Decided in chat: ${post.relayedText}`
+  const humans = humanNames()
+  return db
+    .select()
+    .from(schema.comments)
+    .where(and(eq(schema.comments.parentType, 'update'), eq(schema.comments.parentId, post.id)))
+    .orderBy(desc(schema.comments.id))
+    .all()
+    .find((c) => humans.has(c.author) && /^(Decided|Changed the decision)/.test(c.body))?.body
+}
+
 /** The Resume / Retry button: starts one run now, the same way the last one was set off. */
 export function retryResume(ticketId: number): schema.TicketResume {
   const ticket = ticketOf(ticketId)
@@ -744,26 +774,29 @@ export function retryResume(ticketId: number): schema.TicketResume {
     .where(and(eq(schema.ticketResumes.ticketId, ticketId), isNotNull(schema.ticketResumes.startedAt)))
     .orderBy(desc(schema.ticketResumes.id))
     .get()
-  const post = last?.postId
+  // The card whose answer the work goes on with: the newest answered question on the ticket, when no run
+  // has gone on with it yet (an answer that was relayed, handed to a waiting agent or skipped leaves no run
+  // behind), else the card the last run came from.
+  const newest = newestAnswered(ticketId)
+  const lastPost = last?.postId
     ? (db.select().from(schema.updates).where(eq(schema.updates.id, last.postId)).get() ?? null)
     : null
-  const humans = humanNames()
-  const answer = post
-    ? db
-        .select()
-        .from(schema.comments)
-        .where(and(eq(schema.comments.parentType, 'update'), eq(schema.comments.parentId, post.id)))
-        .orderBy(desc(schema.comments.id))
-        .all()
-        .find((c) => humans.has(c.author) && /^(Decided|Changed the decision)/.test(c.body))?.body
-    : undefined
+  const post =
+    newest && (!last || newest.id === last.postId || (newest.decidedAt ?? '') > (last.startedAt ?? ''))
+      ? newest
+      : lastPost
+  const answer = post ? answerWords(post) : undefined
+  // Signals of the run that ended are its own, not another agent's; a question asked after it counts from
+  // when it was asked.
+  const ended = last?.endedAt ?? last?.startedAt ?? null
+  const since =
+    post && post.id !== last?.postId && (!ended || post.createdAt > ended) ? post.createdAt : ended
   const row = startResume({
     ticketId,
     trigger: 'retry',
     postId: post?.id ?? null,
     answer,
-    // Signals of the run that ended are its own, not another agent's.
-    since: last?.endedAt ?? last?.startedAt ?? null,
+    since,
   })
   if (row.state === 'skipped') throw new HttpError(409, row.reason)
   // A command that could not start leaves the ticket where it was: still blocked.
