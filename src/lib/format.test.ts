@@ -80,6 +80,16 @@ describe('times, dates and numbers follow the language', () => {
     expect(formatNumber(1234.5)).toBe('1234,5')
   })
 
+  it("keeps a browser's own formats when it speaks no language the board has", async () => {
+    const iso = '2026-03-05T15:30:00'
+    await at('en', ['de-DE', 'fr'])
+    expect(clock(iso)).toMatch(/15:30/)
+    expect(formatNumber(1234.5)).toBe('1.234,5')
+    // A Spanish browser picks Spanish; a pick of English over it keeps English formats.
+    await at('en', ['es-MX'])
+    expect(formatNumber(1234.5)).toBe('1,234.5')
+  })
+
   it("writes numbers with the language's separators", async () => {
     await at('en')
     expect(formatNumber(1234567.5)).toBe('1,234,567.5')

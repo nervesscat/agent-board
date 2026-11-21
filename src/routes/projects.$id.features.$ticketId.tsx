@@ -452,7 +452,9 @@ function TicketPage() {
                 components={{ actor: <Actor name={t.createdBy} short /> }}
               />
             </span>
-            <span>{tr('ticketPage.updated', { when: ago(t.updatedAt) })}</span>
+            <span>
+              {tr('ticketPage.updatedLabel')} {ago(t.updatedAt)}
+            </span>
             <InlineTags key={t.id} t={t} projectId={id} onSave={(tags) => update.mutate({ tags })} />
           </div>
         </div>

@@ -7,6 +7,7 @@ import {
   LANGUAGES,
   languageCookie,
   languageOfTag,
+  matchLanguage,
   type Language,
 } from './languages'
 import en from './locales/en.json' with { type: 'json' }
@@ -52,15 +53,17 @@ export const currentLanguage = (): Language => (shared.language as Language | un
 
 /**
  * The tag `Intl` and `toLocale…String` take: the browser's own locale when it is one of the current language
- * (en-GB keeps its 24-hour clock in English, es-MX its separators in Spanish), else the language itself.
+ * (en-GB keeps its 24-hour clock in English, es-MX its separators in Spanish), and also when the browser speaks
+ * no supported language at all (a German browser on the English interface keeps German formats, as it did
+ * before the interface had languages); else the language itself.
  */
 export const currentLocale = (): string => {
   const language = currentLanguage()
-  const own =
-    typeof navigator === 'undefined'
-      ? undefined
-      : navigator.languages?.find((tag) => languageOfTag(tag) === language)
-  return own ?? language
+  if (typeof navigator === 'undefined') return language
+  const tags = navigator.languages ?? []
+  const own = tags.find((tag) => languageOfTag(tag) === language)
+  if (own) return own
+  return matchLanguage(tags) === undefined && tags[0] ? tags[0] : language
 }
 
 /**

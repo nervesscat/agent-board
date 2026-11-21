@@ -930,7 +930,7 @@
       "worktrees": {
         "row": "Remove worktree + branch",
         "all": "Remove every eligible worktree with its branch",
-        "title_one": "Remove the worktrees of {{count}} branch, and the branch?",
+        "title_one": "Remove the worktrees of {{count}} branch, and the branches?",
         "title_other": "Remove the worktrees of {{count}} branches, and the branches?",
         "confirm_one": "Remove worktrees and delete {{count}} branch",
         "confirm_other": "Remove worktrees and delete {{count}} branches",
@@ -2628,7 +2628,8 @@
     "workspaces": "Workspaces",
     "workspacesDesc": "Worktrees, sub-branches and subagent sandboxes the agents opened for this ticket.",
     "workspacesDescLanes": "Worktrees, sub-branches and subagent sandboxes the agents opened for this ticket and its lanes.",
-    "noneYet": "None yet."
+    "noneYet": "None yet.",
+    "updatedLabel": "updated"
   },
   "complexity": {
     "label": {

@@ -2631,7 +2631,8 @@
     "workspaces": "Workspaces",
     "workspacesDesc": "Worktrees, sub-branches y entornos aislados de subagentes que los agentes abrieron para este ticket.",
     "workspacesDescLanes": "Worktrees, sub-branches y entornos aislados de subagentes que los agentes abrieron para este ticket y sus lanes.",
-    "noneYet": "Ninguno aún."
+    "noneYet": "Ninguno aún.",
+    "updatedLabel": "actualizado"
   },
   "complexity": {
     "label": {
