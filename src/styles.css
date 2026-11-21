@@ -401,3 +401,99 @@ button:focus-visible .trash-icon .trash-icon-lid {
     transform: none;
   }
 }
+
+/*
+ * The pets of the Overview's Agents at work (components/AgentPet.tsx): paws that type in turn, a
+ * raised paw that bobs, a waving one, a "?" and "z z" that drift. Transform and opacity only, from
+ * CSS alone, each shifted by its own --pet-delay so a row of them does not move in step. Without
+ * motion they hold their pose (the "z"s and the "?" just stay where they are).
+ */
+.pet * {
+  transform-box: view-box;
+}
+.pet-paw-l,
+.pet-paw-r {
+  animation: pet-type 0.5s ease-in-out infinite;
+  animation-delay: var(--pet-delay, 0s);
+}
+.pet-paw-r {
+  animation-delay: calc(var(--pet-delay, 0s) - 0.25s);
+}
+.pet-bulb {
+  animation: pet-bulb 1.8s ease-in-out infinite;
+  animation-delay: var(--pet-delay, 0s);
+}
+.pet-raise {
+  transform-origin: 21px 22px;
+  animation: pet-raise 1.4s ease-in-out infinite;
+  animation-delay: var(--pet-delay, 0s);
+}
+.pet-wave {
+  transform-origin: 21px 22px;
+  animation: pet-wave 0.7s ease-in-out infinite alternate;
+  animation-delay: var(--pet-delay, 0s);
+}
+.pet-ask {
+  animation: pet-ask 1.4s ease-in-out infinite;
+  animation-delay: var(--pet-delay, 0s);
+}
+.pet-z {
+  animation: pet-z 2.6s ease-in-out infinite;
+  animation-delay: var(--pet-delay, 0s);
+}
+.pet-z-late {
+  animation-delay: calc(var(--pet-delay, 0s) - 1.3s);
+}
+@keyframes pet-type {
+  50% {
+    transform: translateY(-1.8px);
+  }
+}
+@keyframes pet-bulb {
+  50% {
+    opacity: 0.3;
+  }
+}
+@keyframes pet-raise {
+  50% {
+    transform: translateY(-1.2px) rotate(-4deg);
+  }
+}
+@keyframes pet-wave {
+  from {
+    transform: rotate(-12deg);
+  }
+  to {
+    transform: rotate(14deg);
+  }
+}
+@keyframes pet-ask {
+  50% {
+    transform: translateY(-1px);
+  }
+}
+@keyframes pet-z {
+  0% {
+    transform: translate(0, 2px);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(1.5px, -3px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pet *,
+  .pet-paw-l,
+  .pet-paw-r,
+  .pet-bulb,
+  .pet-raise,
+  .pet-wave,
+  .pet-ask,
+  .pet-z {
+    animation: none;
+  }
+}
