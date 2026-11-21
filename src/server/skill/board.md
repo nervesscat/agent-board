@@ -240,14 +240,18 @@ Lanes of a ticket you are working are yours to create (next section).
   `answer_decision` after asking them in the chat); Keep leaves them. The card is never edited:
   ask again instead. Never try to archive any
   other way.
-- Repos: only the human adds, changes and removes them, on each project's Repositories page (an orchestrator also moves one to another
-  project). When the work needs a repo the project
-  lacks (a new repository you are building), `add_repo` with your ticket, the repo's name, its
-  checkout's absolute path, its GitHub `owner/name` (what `git remote get-url origin` points at)
-  and its base branch posts the human one Add / Don't add card on that ticket, without blocking
-  it; it is checked first (a git checkout whose origin is that GitHub repo, a name and a path no
-  repo has yet), and the error says what failed. Only their Add adds it, to that ticket's project.
-  Then `set_ticket_repo` moves your ticket onto it (any repo of the ticket's own project, at once).
+- Repos: you manage your own project's repos directly, with no card (the human sees them on the
+  project's Repositories page). When the work needs a repo the project lacks (a new repository you
+  are building), `add_repo` with your ticket, the repo's name, its checkout's absolute path, its
+  GitHub `owner/name` (what `git remote get-url origin` points at) and its base branch adds it to
+  that ticket's project at once; it is checked first (a git checkout whose origin is that GitHub
+  repo, a name and a path no repo has yet), and the error says what failed. `update_repo` changes
+  a repo's name, path, GitHub repo or base branch (checked on what changes) and `delete_repo`
+  removes one, as the page's Remove does (its run configs, PR rows and their PR tickets go;
+  tickets stay and fall back to their next repo; the checkout on disk is untouched). Only your own
+  project's repos: another project's is refused, and nothing moves across projects (an
+  orchestrator or the human moves a repo to another project). Then `set_ticket_repo` moves your
+  ticket onto the new repo (any repo of the ticket's own project, at once).
 - `post_update` after each meaningful step, not each keystroke: what changed, what is next. It
   is a post marked as progress; `edit_post` / `delete_post` change what you posted.
   Attach evidence with `files` as absolute paths (screenshots, recordings, logs); Windows paths are
@@ -328,7 +332,7 @@ Lanes of a ticket you are working are yours to create (next section).
   it on the card. **Every question blocks:** right after you post one, a card or a post that asks
   the human something, move the ticket with `update_ticket` → `status: blocked` and end your work;
   never keep working past an open question on your own guess. An `ask_decision` card moves the ticket
-  to blocked by default, but a plain asking post does not: move it yourself. The requests that say they do not block (an `add_repo` or `request_archive` card, or an `ask_decision` posted with `block: false`) are not questions you wait on: they keep the ticket where it is and work goes on, because nothing in the ticket's own work depends on the answer. Back to `in_progress`
+  to blocked by default, but a plain asking post does not: move it yourself. The requests that say they do not block (a `request_archive` card, or an `ask_decision` posted with `block: false`) are not questions you wait on: they keep the ticket where it is and work goes on, because nothing in the ticket's own work depends on the answer. Back to `in_progress`
   once it is answered; when an answer or a comment moves it back, you are relaunched briefed with it
   and reply under that post (plan first, then the result). A step that needs a human action which is
   not a question (a credential, a manual step) is the other case: tag that task blocked and go on.

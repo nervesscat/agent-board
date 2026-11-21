@@ -60,6 +60,8 @@ Who is who: every caller has a name and a role (whoami). The human is the human.
 export const FILES_HIDDEN_TOOLS: ReadonlySet<string> = new Set([
   'find_project',
   'add_repo',
+  'update_repo',
+  'delete_repo',
   'set_ticket_repo',
   'get_ticket_git',
   // the workflow orders the build-and-review cycle of code

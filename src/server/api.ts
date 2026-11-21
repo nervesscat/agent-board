@@ -77,7 +77,7 @@ import { reportsOverview } from './reportsOverview'
 import * as repos from './repos'
 import * as reviews from './reviews'
 import * as runReports from './runReports'
-import { ApiRouter } from './router'
+import { ApiRouter, type Handler } from './router'
 import * as stages from './stages'
 import { fileStore, parseRange } from './storage'
 import * as skillTokens from './skillTokens'
@@ -601,13 +601,14 @@ api.delete('/api/projects/:id/notes/:noteId', ({ request, params }) => {
 })
 
 // --- repos ---
-// Adding, changing and removing repos is the human's: an agent asks for a repo (repo-request, below), and
-// the human's Add on that card adds it. An orchestrator also moves a repo to another project (PATCH).
+// This page's routes are the human's: an agent adds a repo to its ticket's project (POST
+// /api/tickets/:id/repos) and changes or removes one of its own project's (below, under the project),
+// never across projects. An orchestrator also moves a repo to another project (PATCH here).
 const humanRepos = (request: Request) => {
   if (isAgent(request))
     throw new HttpError(
       403,
-      'only the human adds, changes and removes repos; an agent asks with a repo request',
+      "this is the human's route: an agent adds a repo with POST /api/tickets/:id/repos and changes or removes its project's with PATCH or DELETE /api/projects/:id/repos/:repoId",
     )
 }
 api.get('/api/repos', () => json(repos.listRepos()))
@@ -655,6 +656,19 @@ api.delete('/api/repos/:id', ({ request, params, actor }) => {
   repos.deleteRepo(id(params), actor)
   return json({ ok: true })
 })
+// An agent's own: the repos of one project, named by the project in the path (another project's repo is a 403).
+const RepoPatch = z.object({
+  name: z.string().min(1).max(100).optional(),
+  repoPath: z.string().min(1).max(1000).optional(),
+  githubRepo: z.string().min(1).max(200).optional(),
+  baseBranch: z.string().max(200).optional(),
+})
+api.patch('/api/projects/:id/repos/:repoId', async ({ request, params, actor }) =>
+  json(await repos.editRepo(id(params), id(params, 'repoId'), await readJson(request, RepoPatch), actor)),
+)
+api.delete('/api/projects/:id/repos/:repoId', ({ params, actor }) =>
+  json(repos.deleteRepoIn(id(params), id(params, 'repoId'), actor)),
+)
 // --- runs: what the board starts from a ticket's worktree of a repo (previews and jobs) ---
 // A repo's runs, in order: anyone signed in reads and writes them (an agent too: the MCP add_run,
 // update_run and delete_run do the same), each write in the project's activity under the caller's name.
@@ -841,10 +855,9 @@ api.post('/api/projects/:id/tickets/archive-request', async ({ request, params, 
   )
   return json(features.requestArchive(body.ticketIds, { as: body.as, projectId: id(params) }, actor), 201)
 })
-// An agent asks the human to add a repo to the project of this ticket: a decision card (Add / Don't add) on
-// it, posted once the checkout passes the checks; the repo is added only once the human answers Add.
-api.post('/api/tickets/:id/repo-request', async ({ request, params, actor }) => {
-  if (!isAgent(request)) throw new HttpError(403, 'the human adds repos directly; agents ask here')
+// An agent adds a repo to the project of this ticket, at once, once the checkout passes the checks.
+// /repo-request is the route's older name.
+const addRepo: Handler = async ({ request, params, actor }) => {
   const body = await readJson(
     request,
     z.object({
@@ -855,8 +868,10 @@ api.post('/api/tickets/:id/repo-request', async ({ request, params, actor }) => 
       as: AgentName.optional(),
     }),
   )
-  return json(await features.requestRepo(id(params), body, actor), 201)
-})
+  return json(await features.addProjectRepo(id(params), body, actor), 201)
+}
+api.post('/api/tickets/:id/repos', addRepo)
+api.post('/api/tickets/:id/repo-request', addRepo)
 // Moves the ticket onto another repo of its project, at once; its base branch becomes that repo's unless given.
 api.put('/api/tickets/:id/repo', async ({ request, params, actor }) => {
   const body = await readJson(

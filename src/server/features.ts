@@ -29,7 +29,7 @@ import { cancelSupersededPrTickets, prTicketStage } from './prTickets'
 import { prForTicket, prStatus, refreshPrsInBackground, withMergeCheck } from './prs'
 import { NO_PUSH, pushStates } from './push'
 import {
-  checkRepoRequest,
+  addRepoDirect,
   getRepo,
   insertRequestedRepo,
   repoRequestProblem,
@@ -1448,57 +1448,18 @@ function archiveWords(result: ArchiveResult | null) {
   return done + already + not
 }
 
-/** The options of a repo request's card, in order: answering the first adds the repo. */
-const REPO_OPTIONS: schema.DecisionOption[] = [
-  { label: 'Add', detail: 'Register the checkout as a repo of this project' },
-  { label: "Don't add", detail: 'Leave the project as it is' },
-]
-
 /**
- * `text` (one line) as a markdown code span, which shows it literally: its fence is one backtick longer
- * than the longest run of backticks in it, since a span opened by N backticks closes only on N
- * (CommonMark), with a space inside each end when it starts or ends with a backtick or a space (one is
- * stripped from each end).
+ * An agent adds a repo to the project of the ticket it names, at once (`addRepoDirect`: the checks of an
+ * add, nothing added when one fails). `as` must be one of the project's agents.
  */
-function codeSpan(text: string) {
-  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length))
-  const fence = '`'.repeat(longest + 1)
-  const pad = /^[` ]|[` ]$/.test(text) ? ' ' : ''
-  return `${fence}${pad}${text}${pad}${fence}`
-}
-
-/**
- * An agent's request to add a repo to the project of the ticket it names: a decision card for the human,
- * "Add repo shop?" with Add and Don't add, on that ticket (in its Main tab; it does not block). The repo
- * is checked first (`checkRepoRequest`: a git checkout whose origin is `githubRepo` on github.com, a name
- * and a path no repo has yet); one that fails posts no card. Nothing is added until the human answers Add
- * (decide, or the orchestrator's relay of their chat answer), which checks it all again.
- */
-export async function requestRepo(
+export async function addProjectRepo(
   ticketId: number,
   input: { name: string; repoPath: string; githubRepo: string; baseBranch?: string; as?: string },
   actor: string,
 ) {
   const ticket = getTicket(ticketId)
   if (input.as !== undefined) actingAs(ticket.projectId, input.as)
-  const req = await checkRepoRequest(ticket.projectId, input)
-  // Every value is the agent's: each is a code span, so none can close its formatting or add markdown.
-  const body = [
-    `Add repo ${codeSpan(req.name)}?`,
-    '',
-    `- Name: ${codeSpan(req.name)}`,
-    `- GitHub: ${codeSpan(req.githubRepo)}`,
-    `- Path: ${codeSpan(req.repoPath)}`,
-    `- Base branch: ${codeSpan(req.baseBranch)}`,
-    '',
-    `Add registers this checkout as a repo of ${getProject(ticket.projectId).name}, checked again first; Don't add changes nothing.`,
-  ].join('\n')
-  return postDecision(
-    ticketId,
-    { body, options: REPO_OPTIONS, as: input.as, block: false, tab: 'main' },
-    actor,
-    { repoRequest: req, did: `asked to add repo ${req.name} (${req.githubRepo}) at ${req.repoPath}` },
-  )
+  return addRepoDirect(ticket.projectId, input, actor)
 }
 
 /**
@@ -2547,14 +2508,14 @@ type DecisionInput = {
 }
 
 /**
- * askDecision, and an archive or repo request's card: `archiveTickets` are the tickets its first option
- * archives, `repoRequest` the repo it adds, `did` the activity line (asked for a decision, by default).
+ * askDecision, and an archive request's card: `archiveTickets` are the tickets its first option
+ * archives, `did` the activity line (asked for a decision, by default).
  */
 function postDecision(
   ticketId: number,
   input: DecisionInput,
   actor: string,
-  extra: { archiveTickets?: number[]; repoRequest?: schema.RepoRequest; did?: string } = {},
+  extra: { archiveTickets?: number[]; did?: string } = {},
 ) {
   const options = input.options
     .map((o) => ({ ...o, label: o.label.trim(), detail: o.detail?.trim() || undefined }))
@@ -2573,7 +2534,6 @@ function postDecision(
     .set({
       decision: options,
       archiveTickets: extra.archiveTickets ?? null,
-      repoRequest: extra.repoRequest ?? null,
     })
     .where(eq(schema.updates.id, post.id))
     .returning()
@@ -2634,7 +2594,7 @@ export function decide(
   // and again on a card already answered Archive (a ticket restored since goes back to the archive).
   // Changing it to Keep restores nothing (the human restores from the Archived tab).
   const archive = row.archiveTickets && option === 0 ? archiveRequested(row, actor) : null
-  // A repo request answered Add adds the repo, every time it is (`opts.origin`: answerOrigin).
+  // A repo request's card (one an agent posted before it added repos itself) answered Add adds the repo, every time it is (`opts.origin`: answerOrigin).
   const repo = row.repoRequest && option === 0 ? repoRequested(row, actor, opts.origin) : null
   const words = `${changed ? 'Changed the decision to' : 'Decided'}: **${picked.label}**${note.trim() ? `\n\n${note.trim()}` : ''}${archiveWords(archive)}${repoWords(repo)}`
   settleDecision(row, actor, words, `decided "${picked.label}"`)
@@ -2803,7 +2763,7 @@ export function editPost(
   if (patch.body !== undefined && before.repoRequest)
     throw new HttpError(
       409,
-      "a repo request's card names the repo it adds and is not edited: ask again with add_repo instead",
+      "a repo request's card names the repo it adds and is not edited: add the repo with add_repo instead",
     )
   const edited = patch.body !== undefined && patch.body !== before.body
   const row = db
