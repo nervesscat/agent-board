@@ -1513,11 +1513,6 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
 const BLOCKED_CHIP =
   'shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] leading-none font-medium text-amber-700 dark:text-amber-400'
 
-const VERDICT_LABEL: Record<LaneVerdict, string> = {
-  approved: 'Approved',
-  disapproved: 'Disapproved',
-  none: 'No call',
-}
 const VERDICT_TAG: Record<LaneVerdict, string> = {
   approved: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
   disapproved: 'bg-red-500/15 text-red-700 dark:text-red-400',
@@ -1538,9 +1533,10 @@ function FilterRow<K extends string>({
   onToggle: (key: K) => void
   onClear: () => void
 }) {
+  const { t: tr } = useTranslation()
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-xs">
-      <span className="w-12 shrink-0 text-muted-foreground">{label}</span>
+      <span className="w-16 shrink-0 text-muted-foreground">{label}</span>
       <button
         type="button"
         onClick={onClear}
@@ -1548,7 +1544,7 @@ function FilterRow<K extends string>({
           active.length ? 'text-muted-foreground hover:text-foreground' : 'border-foreground/40 bg-muted'
         }`}
       >
-        All
+        {tr('ticketPage.all')}
       </button>
       {chips.map((c) => {
         const on = active.includes(c.key)
@@ -1583,12 +1579,19 @@ function LaneNav({
   id: number
   filter: LaneFilter
 }) {
+  const { t: tr } = useTranslation()
   const stages = useStages(projectId)
   const { prev, next, index, count, filtered } = laneNeighbours(lanes, stages, id, filter)
   return (
-    <StepNav projectId={projectId} prev={prev} next={next} search={laneSearch(filter)} noun="lane">
-      {index >= 0 ? `lane ${index + 1} of ${count}` : `${count} lane${count === 1 ? '' : 's'}`}
-      {filtered && ' (filtered)'}
+    <StepNav
+      projectId={projectId}
+      prev={prev}
+      next={next}
+      search={laneSearch(filter)}
+      noun={tr('ticketPage.nounLane')}
+    >
+      {index >= 0 ? tr('ticketPage.laneOf', { n: index + 1, count }) : tr('ticketBoard.lanes', { count })}
+      {filtered && ` ${tr('ticketPage.filtered')}`}
     </StepNav>
   )
 }
@@ -1620,6 +1623,7 @@ function StageNav({
   t: TicketFull
   pageIsNewer: boolean
 }) {
+  const { t: tr } = useTranslation()
   const stages = useStages(projectId)
   const stepped = useLocation({ select: (l) => l.state.stepList })
   // The list as this page last had it (the page is keyed by ticket), so moving this ticket keeps it.
@@ -1641,9 +1645,9 @@ function StageNav({
       prev={around.prev}
       next={around.next}
       state={{ stepList: list }}
-      noun={`ticket in ${stage.name}`}
+      noun={tr('ticketPage.nounTicketIn', { stage: stage.name })}
     >
-      {around.index + 1} of {around.count} in {stage.name}
+      {tr('ticketPage.stageOf', { n: around.index + 1, count: around.count, stage: stage.name })}
     </StepNav>
   )
 }
@@ -1683,6 +1687,7 @@ function StepNav({
   children: ReactNode
 }) {
   const navigate = useNavigate()
+  const { t: tr } = useTranslation()
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.repeat || e.ctrlKey || e.metaKey || e.altKey || keepsKeys(e.target)) return
@@ -1709,7 +1714,7 @@ function StepNav({
           search={search}
           state={state}
           className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border hover:bg-muted hover:text-foreground"
-          aria-label={`${dir === 'prev' ? 'Previous' : 'Next'} ${noun}`}
+          aria-label={tr(dir === 'prev' ? 'ticketPage.previousNoun' : 'ticketPage.nextNoun', { noun })}
           aria-keyshortcuts={dir === 'prev' ? '[' : ']'}
         >
           {icon}
@@ -1724,7 +1729,7 @@ function StepNav({
   return (
     <span className="ml-auto inline-flex min-w-0 items-center gap-2 text-xs">
       {step(prev, 'prev')}
-      <Tip content="[ and ] step back and forward">
+      <Tip content={tr('ticketPage.stepKeysTip')}>
         <span className="min-w-0 tabular-nums wrap-anywhere">{children}</span>
       </Tip>
       {step(next, 'next')}
@@ -1745,6 +1750,7 @@ function Lanes({
   onVerdict: (lane: TicketFull['lanes'][number], verdict: Verdict) => void
   judging: boolean
 }) {
+  const { t: tr } = useTranslation()
   const stages = useStages(t.projectId)
   const kindOf = (l: { status: string }) => stageOf(stages, l.status).kind
   const done = t.lanes.filter((l) => kindOf(l) === 'done').length
@@ -1779,7 +1785,7 @@ function Lanes({
     key: v,
     label: (
       <span className={`rounded-full px-1.5 py-px text-[11px] font-medium ${VERDICT_TAG[v]}`}>
-        {VERDICT_LABEL[v]}
+        {v === 'none' ? tr('ticketPage.noCall') : tr(`verdict.${v}`)}
       </span>
     ),
     count: t.lanes.filter((l) => laneVerdict(l) === v && stageOk(l, filter) && tagOk(l, filter)).length,
@@ -1793,14 +1799,15 @@ function Lanes({
     <section className="rounded-lg border p-4">
       <div className="mb-3 flex items-center gap-3">
         <h2 className="inline-flex items-center gap-1.5 text-sm font-medium">
-          <Layers className="size-4 text-muted-foreground" /> Lanes
+          <Layers className="size-4 text-muted-foreground" /> {tr('layoutEditor.element.ticket.lanes')}
         </h2>
         {t.lanes.length > 0 && (
           <span className="text-xs tabular-nums text-muted-foreground">
-            {done}/{t.lanes.length - cancelled} done · {approved} approved
-            {disapproved > 0 && ` · ${disapproved} disapproved`}
-            {cancelled > 0 && ` · ${cancelled} cancelled`}
-            {t.rollup.total > t.progress.total && ` · all tasks ${t.rollup.done}/${t.rollup.total}`}
+            {tr('ticketPage.lanesDone', { done, total: t.lanes.length - cancelled, approved })}
+            {disapproved > 0 && ` · ${tr('ticketPage.lanesDisapproved', { count: disapproved })}`}
+            {cancelled > 0 && ` · ${tr('ticketPage.lanesCancelled', { count: cancelled })}`}
+            {t.rollup.total > t.progress.total &&
+              ` · ${tr('ticketPage.allTasks', { done: t.rollup.done, total: t.rollup.total })}`}
           </span>
         )}
         <div className="ml-auto">
@@ -1809,14 +1816,13 @@ function Lanes({
       </div>
       {t.lanes.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No lanes. Split this ticket into lanes when parts of it run in parallel: each lane gets its own
-          branch, assignee, tasks and updates.
+          {tr('ticketPage.noLanes')}
         </p>
       ) : (
         <>
           <div className="mb-3 space-y-1.5">
             <FilterRow
-              label="Stage"
+              label={tr('ticketPage.filterStage')}
               chips={stageChips}
               active={filter.stages}
               onToggle={(s) => onFilter({ ...filter, stages: toggled(filter.stages, s) })}
@@ -1824,7 +1830,7 @@ function Lanes({
             />
             {verdictChips.length > 1 && (
               <FilterRow
-                label="Verdict"
+                label={tr('ticketPage.filterVerdict')}
                 chips={verdictChips}
                 active={filter.verdicts}
                 onToggle={(v) => onFilter({ ...filter, verdicts: toggled(filter.verdicts, v) })}
@@ -1833,7 +1839,7 @@ function Lanes({
             )}
             {tags.length > 0 && (
               <FilterRow
-                label="Tags"
+                label={tr('ticketPage.filterTags')}
                 chips={tags.map(({ tag, count }) => ({
                   key: tag.toLowerCase(),
                   label: <Tag tag={tag} className="rounded-full" />,
@@ -1846,13 +1852,13 @@ function Lanes({
             )}
             {filtering && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                showing {lanes.length} of {t.lanes.length}
+                {tr('ticketPage.showing', { shown: lanes.length, total: t.lanes.length })}
                 <button
                   type="button"
                   className="underline underline-offset-2 hover:text-foreground"
                   onClick={() => onFilter(NO_FILTER)}
                 >
-                  clear filters
+                  {tr('ticketPage.clearFilters')}
                 </button>
               </div>
             )}
@@ -1908,7 +1914,7 @@ function Lanes({
                       )}
                       {l.lanes.total > 0 && (
                         <span className="inline-flex items-center gap-1">
-                          <Layers className="size-3" /> {l.lanes.total} lane{l.lanes.total === 1 ? '' : 's'}
+                          <Layers className="size-3" /> {tr('ticketBoard.lanes', { count: l.lanes.total })}
                         </span>
                       )}
                       {l.lastUpdate && (
@@ -1994,6 +2000,7 @@ function Activity({
   laneFeed: boolean
   onLaneFeed: (v: boolean) => void
 }) {
+  const { t: tr } = useTranslation()
   const [body, setBody] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [tab, setTab] = useState<FeedTab>('main')
@@ -2047,20 +2054,20 @@ function Activity({
   return (
     <section>
       <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h2 className="text-sm font-medium">Activity</h2>
+        <h2 className="text-sm font-medium">{tr('ticketPage.activity')}</h2>
         <Tabs value={tab} onValueChange={(v) => setTab(v as FeedTab)}>
-          <TabsList aria-label="Feed">
-            <Tip content="For you: your posts with the replies under them, decisions and questions">
+          <TabsList aria-label={tr('ticketPage.feed')}>
+            <Tip content={tr('ticketPage.mainTip')}>
               <TabsTrigger value="main" className="after:hidden">
-                Main
+                {tr('ticketPage.main')}
               </TabsTrigger>
             </Tip>
-            <Tip content="The agents' working record: progress, review phases, builder notes">
+            <Tip content={tr('ticketPage.agentsTip')}>
               <TabsTrigger value="agents" className="after:hidden">
-                Agents
+                {tr('ticketPage.agents')}
                 {fresh > 0 && (
                   <span
-                    aria-label={`${fresh} new`}
+                    aria-label={tr('ticketPage.newCount', { count: fresh })}
                     className="ml-1 rounded-full bg-primary px-1.5 text-xs text-primary-foreground tabular-nums"
                   >
                     {fresh}
@@ -2072,7 +2079,7 @@ function Activity({
         </Tabs>
         {t.lanes.length > 0 && (
           <label className="ml-auto inline-flex items-center gap-2 text-xs text-muted-foreground">
-            <Switch size="sm" checked={laneFeed} onCheckedChange={onLaneFeed} /> include lane posts
+            <Switch size="sm" checked={laneFeed} onCheckedChange={onLaneFeed} /> {tr('ticketPage.includeLanePosts')}
           </label>
         )}
       </div>
