@@ -595,7 +595,14 @@ function TicketPage() {
           </div>
         )}
         {side.length > 0 && (
-          <aside data-ticket-column="side" className="min-w-0 space-y-4">
+          // Side by side, the column stays under the stuck header while the main column scrolls with the
+          // page, and scrolls by itself when it is taller than what is left of the window. Stacked, it is
+          // part of the page's one scroll. The padding and the negative margin keep the focus rings of
+          // its cards inside the box the scroll clips to.
+          <aside
+            data-ticket-column="side"
+            className="min-w-0 space-y-4 lg:sticky lg:top-[calc(var(--ticket-header,4rem)+1rem)] lg:max-h-[calc(100dvh-var(--ticket-header,4rem)-1.5rem)] lg:self-start lg:overflow-y-auto lg:-m-1 lg:p-1"
+          >
             {side.map((s) => (
               <Fragment key={s}>{sections[s]}</Fragment>
             ))}
