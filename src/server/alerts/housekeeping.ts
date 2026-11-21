@@ -33,6 +33,8 @@ export const CLEANUP_CACHE_MS = 5 * MINUTE_MS
 interface CleanupCount {
   at: number
   branches: number
+  remote: number
+  workspaces: number
   worktrees: number
   previews: number
 }
@@ -44,17 +46,26 @@ async function leftovers(projectId: number, now: number): Promise<CleanupCount> 
   if (kept && now - kept.at >= 0 && now - kept.at < CLEANUP_CACHE_MS) return kept
   // Without the reach of each branch: the quick count the Cleanup page's header starts from.
   const { counts } = await cleanupReport(projectId, { reach: false })
-  const fresh = { at: now, branches: counts.branches, worktrees: counts.worktrees, previews: counts.previews }
+  const fresh = {
+    at: now,
+    branches: counts.branches,
+    remote: counts.remote,
+    workspaces: counts.workspaces,
+    worktrees: counts.worktrees,
+    previews: counts.previews,
+  }
   cleanupCounts.set(projectId, fresh)
   return fresh
 }
 
 export async function checkCleanup(ctx: AlertContext): Promise<AlertCandidate[]> {
   const projectId = projectOf(ctx)
-  const { branches, worktrees, previews } = await leftovers(projectId, ctx.now())
-  if (!branches && !worktrees && !previews) return []
+  const { branches, remote, workspaces, worktrees, previews } = await leftovers(projectId, ctx.now())
+  if (!branches && !remote && !workspaces && !worktrees && !previews) return []
   const parts = [
-    branches && plural(branches, 'branch', 'branches'),
+    branches && `${plural(branches, 'branch', 'branches')} here`,
+    remote && `${remote} on origin`,
+    workspaces && plural(workspaces, 'workspace'),
     worktrees && plural(worktrees, 'worktree'),
     previews && plural(previews, 'preview'),
   ].filter(Boolean)

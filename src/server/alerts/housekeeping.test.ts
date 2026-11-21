@@ -111,7 +111,7 @@ describe('cleanup ready (14)', () => {
     const [found] = await housekeeping.checkCleanup(ctxOf(projectId, later))
     expect(found).toMatchObject({
       severity: 'info',
-      body: expect.stringContaining('2 branches, 1 worktree'),
+      body: expect.stringContaining('2 branches here, 1 workspace, 1 worktree'),
       buttons: [{ id: 'open', label: 'Open Cleanup', kind: 'link', href: `/projects/${projectId}/cleanup` }],
     })
     expect(found!.subject).toBeUndefined()
@@ -130,15 +130,40 @@ describe('cleanup ready (14)', () => {
       snoozeOptions: [86_400_000, 604_800_000],
     })
 
-    // Cleaned up: the branches and the worktree go, and once the count is read again the alert resolves.
+    // Cleaned up: the branches, the worktree and the workspace go, and once the count is read again the alert resolves.
     git(repo, 'worktree', 'remove', '--force', tree)
     git(repo, 'branch', '-D', 'feat/done', 'feat/tree')
+    dbm.db.delete(dbm.schema.workspaces).where(eq(dbm.schema.workspaces.ticketId, closed.id)).run()
     const resolved = await evaluate.evaluateAlerts({
       projectId,
       type: 'cleanup-ready',
       now: () => later.getTime() + housekeeping.CLEANUP_CACHE_MS + 1,
     })
     expect(resolved.resolved.map((a) => a.type)).toEqual(['cleanup-ready'])
+  })
+
+  it('is raised for a branch that only origin has, and for a workspace that is all a finished ticket left', async () => {
+    const { projectId, repo } = projectWithRepo('origin only')
+    const origin = path.join(tmp, `origin-${count}.git`)
+    git(tmp, 'init', '-q', '--bare', origin)
+    git(repo, 'remote', 'add', 'origin', origin)
+    git(repo, 'branch', 'feat/pushed', 'dev')
+    git(repo, 'push', '-q', 'origin', 'feat/pushed')
+    git(repo, 'fetch', '-q', 'origin')
+    git(repo, 'branch', '-D', 'feat/pushed')
+    features.createTicket(projectId, { title: 'pushed', branch: 'feat/pushed', status: 'done' }, 'claude')
+    const now = at('2026-10-06')
+    const [found] = await housekeeping.checkCleanup(ctxOf(projectId, now))
+    expect(found!.body).toContain('still have 1 on origin.')
+
+    // Only a registered workspace: no branch anywhere.
+    const lone = projectWithRepo('workspace only')
+    const t = features.createTicket(lone.projectId, { title: 'lone', status: 'cancelled' }, 'claude')
+    expect(await housekeeping.checkCleanup(ctxOf(lone.projectId, now))).toEqual([])
+    features.addWorkspace(t.id, { name: 'wt', path: path.join(tmp, 'nowhere') }, 'claude')
+    const later = new Date(now.getTime() + housekeeping.CLEANUP_CACHE_MS + 1)
+    const [w] = await housekeeping.checkCleanup(ctxOf(lone.projectId, later))
+    expect(w!.body).toContain('still have 1 workspace.')
   })
 
   it('is not raised in a project whose repo has nothing left by finished tickets', async () => {
