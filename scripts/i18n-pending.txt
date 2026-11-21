@@ -8,7 +8,6 @@ src/components/Attachments.tsx
 src/components/BranchSelect.tsx
 src/components/CommandPalette.tsx
 src/components/CopyImage.tsx
-src/components/DailyView.tsx
 src/components/DatePicker.tsx
 src/components/FileGallery.tsx
 src/components/Gallery.tsx
@@ -25,7 +24,6 @@ src/components/Preview.tsx
 src/components/PreviewWindow.tsx
 src/components/ProjectSwitcher.tsx
 src/components/PushDot.tsx
-src/components/ReportDueBanner.tsx
 src/components/ReviewResult.tsx
 src/components/RichEditor.tsx
 src/components/RunReport.tsx
@@ -36,18 +34,6 @@ src/components/TicketBoard.tsx
 src/components/WorkStatus.tsx
 src/components/WorkTimeline.tsx
 src/components/WorkTimelineCard.tsx
-src/components/daily/ActivityLog.tsx
-src/components/daily/GenerateReportButton.tsx
-src/components/daily/PushedToday.tsx
-src/components/daily/ReportCalendar.tsx
-src/components/daily/ReportCard.tsx
-src/components/daily/ReportPromptSettings.tsx
-src/components/daily/ReportSettingsPanel.tsx
-src/components/daily/SettingsChangeDiff.tsx
-src/components/daily/SettingsChangeNotice.tsx
-src/components/daily/ShiftClock.tsx
-src/components/daily/ShiftSettings.tsx
-src/routes/daily.tsx
 src/routes/index.tsx
 src/routes/projects.$id.agents.tsx
 src/routes/projects.$id.cleanup.tsx

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 
 import { Badge } from '#/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '#/components/ui/dialog'
@@ -8,12 +9,6 @@ import { errorMessage, get, type ReportSettingsChange } from '#/lib/api'
 import { lineDiff } from '#/lib/diff'
 import { stamp } from '#/lib/format'
 import { cn } from '#/lib/utils'
-
-const STATE: Record<ReportSettingsChange['state'], string> = {
-  pending: 'waiting on you',
-  accepted: 'kept',
-  reverted: 'reverted',
-}
 
 /**
  * Old against new, line by line: removed lines in red marked −, added ones in green marked +, the rest as
@@ -28,17 +23,25 @@ export function ChangeDiff({
   label?: string
   className?: string
 }) {
+  const { t } = useTranslation()
   const lines = lineDiff(change.oldValue, change.newValue)
   return (
     <div
       role="group"
-      aria-label={label ?? `What changed in the report ${change.field}`}
+      aria-label={
+        label ??
+        (change.field
+          ? t('reportSettings.diffGroup', { field: t(`reportSettings.field.${change.field}`) })
+          : undefined)
+      }
       className={cn(
         'max-h-[60vh] overflow-auto rounded-md border bg-muted/20 py-1 font-mono text-xs',
         className,
       )}
     >
-      {lines.length === 0 && <p className="px-3 py-1 text-muted-foreground">Both are empty.</p>}
+      {lines.length === 0 && (
+        <p className="px-3 py-1 text-muted-foreground">{t('reportSettings.bothEmpty')}</p>
+      )}
       {lines.map((l, i) =>
         l.op === 'same' ? (
           <div key={i} className="px-3 whitespace-pre-wrap wrap-anywhere text-muted-foreground">
@@ -75,6 +78,7 @@ export function ChangeDiff({
 
 /** One change in a dialog, loaded by id; `changeId` null keeps it closed. */
 function ChangeDialog({ changeId, onClose }: { changeId: number | null; onClose: () => void }) {
+  const { t } = useTranslation()
   // Keeps showing the last change while the dialog animates closed.
   const [last, setLast] = useState(changeId)
   if (changeId !== null && changeId !== last) setLast(changeId)
@@ -89,7 +93,9 @@ function ChangeDialog({ changeId, onClose }: { changeId: number | null; onClose:
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>
-            {data ? `Change of the report ${data.field}` : 'Change of the report settings'}
+            {data
+              ? t('reportSettings.dialogTitle', { field: t(`reportSettings.field.${data.field}`) })
+              : t('reportSettings.dialogTitleGeneric')}
           </DialogTitle>
         </DialogHeader>
         {error ? (
@@ -98,21 +104,29 @@ function ChangeDialog({ changeId, onClose }: { changeId: number | null; onClose:
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
               <span>
-                by <span className="font-medium text-foreground">{data.changedBy}</span>
-                {data.byAgent && ' (an agent)'} · {stamp(data.createdAt)}
+                <Trans
+                  i18nKey={data.byAgent ? 'reportSettings.byAgent' : 'reportSettings.by'}
+                  values={{ name: data.changedBy }}
+                  components={{ who: <span className="font-medium text-foreground" /> }}
+                />{' '}
+                · {stamp(data.createdAt)}
               </span>
-              <Badge variant={data.state === 'pending' ? 'default' : 'secondary'}>{STATE[data.state]}</Badge>
+              <Badge variant={data.state === 'pending' ? 'default' : 'secondary'}>
+                {t(`reportSettings.state.${data.state}`)}
+              </Badge>
               {data.resolvedBy && data.resolvedAt && (
                 <span>
-                  {data.state === 'reverted' ? 'reverted' : 'kept'} by {data.resolvedBy} ·{' '}
-                  {stamp(data.resolvedAt)}
+                  {t(data.state === 'reverted' ? 'reportSettings.revertedBy' : 'reportSettings.keptBy', {
+                    name: data.resolvedBy,
+                  })}{' '}
+                  · {stamp(data.resolvedAt)}
                 </span>
               )}
             </div>
             <ChangeDiff change={data} />
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">{t('reportSettings.loading')}</p>
         )}
       </DialogContent>
     </Dialog>
@@ -124,10 +138,11 @@ function ChangeDialog({ changeId, onClose }: { changeId: number | null; onClose:
  * change's diff, old against new.
  */
 export function SettingsChangeDiff({ changeId, children }: { changeId: number; children: ReactNode }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   return (
     <>
-      <Tip content="Show what changed">
+      <Tip content={t('reportSettings.showChange')}>
         <button
           type="button"
           className="min-w-0 cursor-pointer text-left wrap-anywhere hover:underline"

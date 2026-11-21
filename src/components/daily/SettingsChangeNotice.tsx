@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { ChangeDiff } from '#/components/daily/SettingsChangeDiff'
@@ -15,6 +16,7 @@ import { ago, stamp } from '#/lib/format'
  * <agent>, revert?", with Accept and Revert.
  */
 export function SettingsChangeNotice({ projectId }: { projectId: number }) {
+  const { t } = useTranslation()
   const { data: settings } = useQuery({
     queryKey: ['report-settings', projectId],
     queryFn: () => get<ReportSettingsView>(`/api/projects/${projectId}/report-settings`),
@@ -24,7 +26,7 @@ export function SettingsChangeNotice({ projectId }: { projectId: number }) {
   if (!settings?.pending.length) return null
 
   return (
-    <section aria-label="Changes by agents to review" className="space-y-2">
+    <section aria-label={t('reportSettings.noticesRegion')} className="space-y-2">
       {settings.pending.map((change) => (
         <Notice key={change.id} projectId={projectId} change={change} />
       ))}
@@ -33,13 +35,17 @@ export function SettingsChangeNotice({ projectId }: { projectId: number }) {
 }
 
 function Notice({ projectId, change }: { projectId: number; change: ReportSettingsView['pending'][number] }) {
+  const { t } = useTranslation()
+  const field = t(`reportSettings.field.${change.field}`)
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const settle = useMutation({
     mutationFn: (action: 'accept' | 'revert') => post(`/api/report-settings/changes/${change.id}/${action}`),
     onSuccess: (_, action) => {
       toast.success(
-        action === 'accept' ? `Kept the new report ${change.field}` : `Reverted the report ${change.field}`,
+        action === 'accept'
+          ? t('reportSettings.keptToast', { field })
+          : t('reportSettings.revertedToast', { field }),
       )
       void qc.invalidateQueries({ queryKey: ['report-settings-change', change.id] })
       refreshReports(qc, projectId)
@@ -51,21 +57,24 @@ function Notice({ projectId, change }: { projectId: number; change: ReportSettin
 
   return (
     <article
-      aria-label={`The report ${change.field} changed by ${change.changedBy}`}
+      aria-label={t('reportSettings.noticeLabel', { field, name: change.changedBy })}
       className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm"
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <TriangleAlert className="size-4 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden />
         <p className="min-w-0 flex-1 basis-48">
-          The report {change.field} was changed by <span className="font-medium">{change.changedBy}</span>,
-          revert?{' '}
+          <Trans
+            i18nKey="reportSettings.noticeText"
+            values={{ field, name: change.changedBy }}
+            components={{ who: <span className="font-medium" /> }}
+          />{' '}
           <Tip content={stamp(change.createdAt)}>
             <span className="text-xs text-muted-foreground">{ago(change.createdAt)}</span>
           </Tip>
         </p>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="ghost" size="sm" aria-expanded={open} onClick={() => setOpen(!open)}>
-            {open ? 'Hide the change' : 'Show the change'}
+            {open ? t('reportSettings.hideChange') : t('reportSettings.showTheChange')}
           </Button>
           <Button
             type="button"
@@ -74,11 +83,9 @@ function Notice({ projectId, change }: { projectId: number; change: ReportSettin
             disabled={settle.isPending}
             onClick={() => settle.mutate('accept')}
           >
-            Accept
+            {t('reportSettings.accept')}
           </Button>
-          <Tip
-            content={later ? `The ${change.field} changed again since: revert that change first` : undefined}
-          >
+          <Tip content={later ? t('reportSettings.laterChange', { field }) : undefined}>
             <span className="inline-flex">
               <Button
                 type="button"
@@ -87,7 +94,7 @@ function Notice({ projectId, change }: { projectId: number; change: ReportSettin
                 disabled={settle.isPending || later}
                 onClick={() => settle.mutate('revert')}
               >
-                Revert
+                {t('reportSettings.revert')}
               </Button>
             </span>
           </Tip>

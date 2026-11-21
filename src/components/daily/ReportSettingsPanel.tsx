@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { ReportPromptSettings } from '#/components/daily/ReportPromptSettings'
 import { ShiftSettings } from '#/components/daily/ShiftSettings'
@@ -12,6 +13,7 @@ import { describeSchedule } from '#/lib/reports'
  * template) and when they are due (the cadence and the shift). Each part saves on its own.
  */
 export function ReportSettingsPanel({ projectId }: { projectId: number }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const { data: settings } = useQuery({
     queryKey: ['report-settings', projectId],
@@ -20,7 +22,7 @@ export function ReportSettingsPanel({ projectId }: { projectId: number }) {
   if (!settings) return null
 
   return (
-    <section className="rounded-lg border" aria-label="Report settings">
+    <section className="rounded-lg border" aria-label={t('reportSettings.region')}>
       <button
         type="button"
         aria-expanded={open}
@@ -32,8 +34,8 @@ export function ReportSettingsPanel({ projectId }: { projectId: number }) {
         ) : (
           <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
         )}
-        <span className="text-sm font-medium">Report settings</span>
-        <span className="text-xs text-muted-foreground">{describeSchedule(settings)}</span>
+        <span className="text-sm font-medium">{t('reportSettings.title')}</span>
+        <span className="text-xs text-muted-foreground">{describeSchedule(settings, t)}</span>
       </button>
       {open && (
         <div className="space-y-6 border-t p-4">

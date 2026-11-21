@@ -1,12 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { SkipForward } from 'lucide-react'
 import { useState, type ComponentProps } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { DayButton } from 'react-day-picker'
 
-import { REPORT_STATUS } from '#/components/daily/status'
+import { REPORT_STATUS, statusLabel } from '#/components/daily/status'
 import { Button } from '#/components/ui/button'
 import { Calendar, CalendarDayButton } from '#/components/ui/calendar'
 import { Tip } from '#/components/ui/tooltip'
+import { currentLocale } from '#/i18n'
 import { get, type ReportList, type ReportSettingsView, type ReportStatus } from '#/lib/api'
 import { localDate } from '#/lib/format'
 import { periodOf } from '#/lib/reports'
@@ -28,6 +30,7 @@ export function ReportCalendar({
   date: string
   onDate: (date: string) => void
 }) {
+  const { t } = useTranslation()
   const { data: settings } = useQuery({
     queryKey: ['report-settings', projectId],
     queryFn: () => get<ReportSettingsView>(`/api/projects/${projectId}/report-settings`),
@@ -77,7 +80,7 @@ export function ReportCalendar({
       .at(-1)
 
   return (
-    <section className="min-w-0 rounded-lg border p-3" aria-label="Report calendar">
+    <section className="min-w-0 rounded-lg border p-3" aria-label={t('reportCalendar.region')}>
       <Calendar
         mode="single"
         required
@@ -96,8 +99,8 @@ export function ReportCalendar({
         labels={{
           labelDayButton: (d) => {
             const s = statusOf(d)
-            const day = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
-            return s ? `${day}: ${REPORT_STATUS[s].label}` : day
+            const day = d.toLocaleDateString(currentLocale(), { month: 'long', day: 'numeric' })
+            return s ? t('reportCalendar.dayLabel', { day, status: statusLabel(s, t) }) : day
           },
         }}
         components={{ DayButton: StatusDay }}
@@ -105,10 +108,16 @@ export function ReportCalendar({
       />
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground" aria-live="polite">
-          {list ? `${counts.done} done · ${counts.missing} missing` : '…'}
+          {list ? t('reportCalendar.counts', { done: counts.done, missing: counts.missing }) : '…'}
         </p>
         {/* On a wrapper: with nothing missing the button is disabled, and its tooltip says why. */}
-        <Tip content={nextMissing ? `Open ${nextMissing}, the nearest missing report` : 'Nothing is missing'}>
+        <Tip
+          content={
+            nextMissing
+              ? t('reportCalendar.openMissing', { period: nextMissing })
+              : t('reportCalendar.nothingMissing')
+          }
+        >
           <span className="inline-flex">
             <Button
               type="button"
@@ -117,7 +126,7 @@ export function ReportCalendar({
               disabled={!nextMissing}
               onClick={() => nextMissing && onDate(nextMissing)}
             >
-              <SkipForward data-icon="inline-start" /> Next missing
+              <SkipForward data-icon="inline-start" /> {t('reportCalendar.nextMissing')}
             </Button>
           </span>
         </Tip>
@@ -126,7 +135,7 @@ export function ReportCalendar({
         {STATUSES.map((s) => (
           <li key={s} className="flex items-center gap-1">
             <span className={cn('size-2 rounded-full', MARK[s])} />
-            {REPORT_STATUS[s].label}
+            {statusLabel(s, t)}
           </li>
         ))}
       </ul>

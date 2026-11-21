@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { formatTime, useHour12 } from '#/components/AnalogClock'
 import { Tip } from '#/components/ui/tooltip'
@@ -17,6 +18,7 @@ export function ShiftClock({ projectId }: { projectId: number }) {
     queryKey: ['report-settings', projectId],
     queryFn: () => get<ReportSettingsView>(`/api/projects/${projectId}/report-settings`),
   })
+  const { t } = useTranslation()
   const hour12 = useHour12()
   const now = useMinuteClock()
   if (!settings || settings.cadence === 'off' || !now) return null
@@ -25,23 +27,16 @@ export function ShiftClock({ projectId }: { projectId: number }) {
   const end = minutesOf(settings.shiftEnd)
   const current = now.getHours() * 60 + now.getMinutes()
   const working = isWorkday(settings, localDate(now))
-  const where = !working
-    ? 'not a workday'
-    : current < start
-      ? 'before the shift'
-      : current < end
-        ? 'on shift'
-        : 'after the shift'
+  const phase = !working ? 'notWorkday' : current < start ? 'before' : current < end ? 'on' : 'after'
+  const where = t(`shift.${phase}`)
   const span = `${formatTime(start, hour12)}–${formatTime(end, hour12)}`
   const [nx, ny] = at(current, 15)
 
   return (
-    <Tip
-      content={`Today's shift ${span}; now ${formatTime(current, hour12)}, ${where}. The report is due at its end.`}
-    >
+    <Tip content={t('shift.tip', { span, now: formatTime(current, hour12), where })}>
       <div
         role="img"
-        aria-label={`Shift ${span}, now ${formatTime(current, hour12)}: ${where}`}
+        aria-label={t('shift.label', { span, now: formatTime(current, hour12), where })}
         className="flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs text-muted-foreground"
       >
         <svg viewBox="0 0 40 40" className="size-7 shrink-0" aria-hidden>
@@ -66,7 +61,7 @@ export function ShiftClock({ projectId }: { projectId: number }) {
           />
           <circle cx={20} cy={20} r={2} className="fill-foreground" />
         </svg>
-        <span className={cn('tabular-nums', where === 'on shift' && 'text-foreground')}>{span}</span>
+        <span className={cn('tabular-nums', phase === 'on' && 'text-foreground')}>{span}</span>
       </div>
     </Tip>
   )
