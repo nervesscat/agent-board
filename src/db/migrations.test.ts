@@ -62,6 +62,17 @@ function ticketsWithClosedFlag(rows: Record<string, unknown>[]) {
   return rows.map(({ closed_by_approval: _c, ...rest }) => rest)
 }
 
+/**
+ * Posts gained answer_delivered in 0057: no answer had reached an agent by it, so the column is '' on every
+ * one, and the other columns are compared as they were.
+ */
+function updatesWithDelivered(rows: Record<string, unknown>[]) {
+  // Before 0057 the table has no such column: the rows are compared as they are.
+  if (!rows.length || !('answer_delivered' in rows[0]!)) return rows
+  expect(rows.map((r) => r.answer_delivered)).toEqual(rows.map(() => ''))
+  return rows.map(({ answer_delivered: _d, ...rest }) => rest)
+}
+
 describe('0023_daily_reports_and_shifts', () => {
   it('turns the daily summaries into report versions and the due time into the shift end', () => {
     const sqlite = databaseAt('0022_pr_review_stages')
@@ -391,7 +402,9 @@ describe('0029_ticket_pr_link', () => {
     const rows = () => ({
       tickets: sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[],
       tasks: sqlite.prepare('SELECT * FROM tasks ORDER BY id').all(),
-      updates: sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+      updates: updatesWithDelivered(
+        sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+      ),
     })
     const before = rows()
     expect(before.tickets).toHaveLength(3)
@@ -489,7 +502,9 @@ describe('0030_post_tabs_and_summary', () => {
         "INSERT INTO attachments (update_id, name, mime, size, stored_as, uploaded_by) VALUES (?, 'a.png', 'image/png', 1, 'x', 'claude')",
       )
       .run(progress)
-    const before = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
+    const before = updatesWithDelivered(
+      sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+    )
 
     migrate(drizzle(sqlite), { migrationsFolder: folder })
 
@@ -516,7 +531,9 @@ describe('0030_post_tabs_and_summary', () => {
     })
     // Every other column reads as it did (later migrations add the archive and repo request ones); no post
     // is a summary.
-    const after = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
+    const after = updatesWithDelivered(
+      sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+    )
     expect(
       after.map(
         ({ tab: _t, summary: _s, summary_change: _c, archive_tickets: _a, repo_request: _r, ...rest }) =>
@@ -597,11 +614,15 @@ describe('0033_archive_requests', () => {
         "INSERT INTO attachments (update_id, name, mime, size, stored_as, uploaded_by) VALUES (?, 'a.png', 'image/png', 1, 'x', 'claude')",
       )
       .run(card)
-    const before = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
+    const before = updatesWithDelivered(
+      sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+    )
 
     migrate(drizzle(sqlite), { migrationsFolder: folder })
 
-    const after = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
+    const after = updatesWithDelivered(
+      sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+    )
     // A later migration adds the repo request column.
     expect(after.map(({ archive_tickets: _a, repo_request: _r, ...rest }) => withoutDropped(rest))).toEqual(
       before.map(withoutDropped),
@@ -1046,11 +1067,15 @@ describe('0041_repo_requests', () => {
         "INSERT INTO attachments (update_id, name, mime, size, stored_as, uploaded_by) VALUES (?, 'a.png', 'image/png', 1, 'x', 'claude')",
       )
       .run(card)
-    const before = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
+    const before = updatesWithDelivered(
+      sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+    )
 
     migrate(drizzle(sqlite), { migrationsFolder: folder })
 
-    const after = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
+    const after = updatesWithDelivered(
+      sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+    )
     expect(after.map(({ repo_request: _r, ...rest }) => withoutDropped(rest))).toEqual(
       before.map(withoutDropped),
     )
@@ -1490,7 +1515,9 @@ describe('0050_widen_ticket_complexity', () => {
     const rows = () => ({
       tickets: sqlite.prepare('SELECT * FROM tickets ORDER BY id').all(),
       tasks: sqlite.prepare('SELECT * FROM tasks ORDER BY id').all(),
-      updates: sqlite.prepare('SELECT * FROM updates ORDER BY id').all(),
+      updates: updatesWithDelivered(
+        sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+      ),
       attachments: sqlite.prepare('SELECT * FROM attachments ORDER BY id').all(),
       comments: sqlite.prepare('SELECT * FROM comments ORDER BY id').all(),
       ticket_repos: sqlite.prepare('SELECT * FROM ticket_repos ORDER BY ticket_id, position').all(),
@@ -1564,19 +1591,21 @@ describe('0051_agent_cards', () => {
       projects: sqlite.prepare('SELECT * FROM projects ORDER BY id').all(),
       tickets: sqlite.prepare('SELECT * FROM tickets ORDER BY id').all(),
       tasks: sqlite.prepare('SELECT * FROM tasks ORDER BY id').all(),
-      updates: sqlite.prepare('SELECT * FROM updates ORDER BY id').all(),
+      updates: updatesWithDelivered(
+        sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+      ),
     }
 
     migrate(drizzle(sqlite), { migrationsFolder: folder })
 
-    // The existing tables are exactly what they were. Projects gained a column later (0055 kinds): every
-    // project that existed is software now, and every column 0050 had is unchanged.
+    // The existing tables are exactly what they were. Projects gained columns later (0055 kinds, 0057 the
+    // resume command): every project that existed is software now, and every column 0050 had is unchanged.
     expect(before.projects.length).toBeGreaterThan(0)
     const projects = sqlite.prepare('SELECT * FROM projects ORDER BY id').all() as Record<string, unknown>[]
     expect(projects.map((row) => row.kinds)).toEqual(before.projects.map(() => '["software"]'))
     expect(
       projects.map((row) => {
-        const { kinds: _kinds, ...kept } = row
+        const { kinds: _kinds, resume_command: _command, resume_timeout_minutes: _timeout, ...kept } = row
         return kept
       }),
     ).toEqual(before.projects)
@@ -1586,7 +1615,11 @@ describe('0051_agent_cards', () => {
       ),
     ).toEqual(before.tickets)
     expect(sqlite.prepare('SELECT * FROM tasks ORDER BY id').all()).toEqual(before.tasks)
-    expect(sqlite.prepare('SELECT * FROM updates ORDER BY id').all()).toEqual(before.updates)
+    expect(
+      updatesWithDelivered(
+        sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+      ),
+    ).toEqual(before.updates)
 
     expect(columns(sqlite, 'agent_cards')).toEqual([
       'id',
@@ -1734,5 +1767,71 @@ describe('0051_agent_cards', () => {
     expect(sqlite.prepare('SELECT count(*) AS n FROM agent_cards').get()).toEqual({ n: 0 })
     expect([tracked, notice].every((id) => Number.isInteger(id))).toBe(true)
     sqlite.close()
+  })
+})
+
+describe('0057_ticket_resumes', () => {
+  it('adds the resume table and the project settings, off for every project that existed', () => {
+    const sqlite = databaseAt('0056_closed_by_approval')
+    const project = Number(
+      sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('resumes').lastInsertRowid,
+    )
+    const ticket = Number(
+      sqlite
+        .prepare('INSERT INTO tickets (project_id, title, created_by) VALUES (?, ?, ?)')
+        .run(project, 'Kept', 'claude').lastInsertRowid,
+    )
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+    expect(
+      sqlite.prepare('SELECT resume_command, resume_timeout_minutes FROM projects WHERE id = ?').get(project),
+    ).toEqual({ resume_command: '', resume_timeout_minutes: 240 })
+    sqlite
+      .prepare(
+        "INSERT INTO ticket_resumes (ticket_id, trigger, state, reason) VALUES (?, 'answer', 'skipped', 'off')",
+      )
+      .run(ticket)
+    expect(() =>
+      sqlite
+        .prepare("INSERT INTO ticket_resumes (ticket_id, trigger, state) VALUES (?, 'answer', 'lost')")
+        .run(ticket),
+    ).toThrow(/CHECK/)
+    // The process identity is optional: a row without one is as it was.
+    sqlite
+      .prepare(
+        "INSERT INTO ticket_resumes (ticket_id, trigger, state, pid, pid_identity) VALUES (?, 'move', 'running', 1, '12345')",
+      )
+      .run(ticket)
+    expect(sqlite.prepare('SELECT pid_identity FROM ticket_resumes ORDER BY id').all()).toEqual([
+      { pid_identity: null },
+      { pid_identity: '12345' },
+    ])
+    // A ticket that goes takes its resumes with it.
+    sqlite.prepare('DELETE FROM tickets WHERE id = ?').run(ticket)
+    expect(sqlite.prepare('SELECT count(*) AS n FROM ticket_resumes').get()).toEqual({ n: 0 })
+    sqlite.close()
+  })
+})
+
+describe('0057_ticket_resumes', () => {
+  it('adds the delivered mark to the posts as empty, and the resume settings and table, keeping every row', () => {
+    const sqlite = databaseAt('0056_closed_by_approval')
+    sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('shop')
+    sqlite
+      .prepare("INSERT INTO tickets (project_id, title, created_by) VALUES (1, 'A ticket', 'enrique')")
+      .run()
+    sqlite
+      .prepare(
+        "INSERT INTO updates (ticket_id, author, body, decision, decided_option, decided_at) VALUES (1, 'claude', 'Which?', '[{\"label\":\"A\"}]', 0, '2026-01-01T00:00:00.000Z')",
+      )
+      .run()
+    const before = sqlite.prepare('SELECT * FROM updates').all() as Record<string, unknown>[]
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+    const after = sqlite.prepare('SELECT * FROM updates').all() as Record<string, unknown>[]
+    expect(after.map((r) => r.answer_delivered)).toEqual([''])
+    expect(updatesWithDelivered(after)).toEqual(before)
+    expect(sqlite.prepare('SELECT resume_command, resume_timeout_minutes FROM projects').all()).toEqual([
+      { resume_command: '', resume_timeout_minutes: 240 },
+    ])
+    expect(sqlite.prepare('SELECT COUNT(*) AS n FROM ticket_resumes').get()).toEqual({ n: 0 })
   })
 })

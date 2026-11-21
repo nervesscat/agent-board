@@ -290,6 +290,8 @@ export function updateProject(
       | 'layout'
       | 'workStage'
       | 'kinds'
+      | 'resumeCommand'
+      | 'resumeTimeoutMinutes'
     >
   >,
   actor: string,

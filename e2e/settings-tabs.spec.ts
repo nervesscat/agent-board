@@ -21,6 +21,7 @@ const PROJECT_IDS = [
   'stalled-tickets',
   'stages',
   'runs',
+  'resume',
   'layout',
 ]
 
