@@ -47,7 +47,7 @@ import {
 import { ago, clock } from '#/lib/format'
 import { needKeys, undismissed, useDismissedNeeds } from '#/lib/needsYou'
 import { projectTabSearch } from '#/lib/settingsTabs'
-import { stageBadge, stageOf } from '#/lib/stages'
+import { carryingOverStages, stageBadge, stageOf } from '#/lib/stages'
 import { useServerOffset } from '#/lib/useNow'
 import { lastHeard, onServerClock, type WorkTimelineLike } from '#/lib/workStatus'
 import type { Stalled } from '#/lib/workTimeline'
@@ -893,7 +893,9 @@ function Next({ p }: { p: ProjectSummary }) {
 }
 
 function CarryingOver({ p, now }: CardProps) {
-  const items = p.carryingOver
+  // The summary carries every ticket from before today; Overview lists the Blocked and In review ones.
+  const shown = carryingOverStages(p.stages)
+  const items = p.carryingOver.filter((t) => shown.has(t.status))
   return (
     <Section
       icon={Clock}
@@ -903,7 +905,7 @@ function CarryingOver({ p, now }: CardProps) {
       scroll
     >
       {!items.length ? (
-        <Quiet>Nothing carried over from before today.</Quiet>
+        <Quiet>Nothing blocked or in review from before today.</Quiet>
       ) : (
         <Rows>
           {items.map((t) => {
