@@ -35,6 +35,10 @@ import type { Gallery, GalleryFile } from '#/server/gallery'
 import type { HostTool, HostTools } from '#/server/hostTools'
 import type { JobState } from '#/server/jobs'
 import type { AgentCard, NoticeCard, TrackedCard } from '#/server/agentCards'
+import type { AlertTypeView } from '#/server/alerts/actions'
+import type { FeedItem } from '#/server/alerts/feed'
+import type { AlertGroup, AlertSeverity } from '#/lib/alerts'
+import type { AlertButton } from '#/server/alerts/registry'
 import type { ManagedPreview } from '#/server/managedPreview'
 import type { OpencodeConfig } from '#/server/opencodeConfig'
 import type { RunState } from '#/server/runs'
@@ -122,6 +126,11 @@ export type {
 
 export type {
   AgentCard,
+  AlertButton,
+  AlertGroup,
+  AlertSeverity,
+  AlertTypeView,
+  FeedItem,
   NoticeCard,
   TrackedCard,
   Attachment,

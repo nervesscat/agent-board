@@ -300,6 +300,13 @@ const PROJECT_SETTINGS: Section[] = [
     hash: 'stalled-tickets',
   },
   {
+    key: 'notifications',
+    title: 'Notifications',
+    subtitle: 'Which alerts this project shows',
+    keywords: ['alerts', 'mute', 'bell', 'reminders'],
+    hash: 'notifications',
+  },
+  {
     key: 'stages',
     title: 'Stages',
     subtitle: 'The board columns and what they mean',
