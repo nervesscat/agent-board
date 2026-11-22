@@ -92,7 +92,8 @@
         "title": "Idioma",
         "text": "El idioma de toda la interfaz, con fechas y números. Se guarda en el tablero, así que te sigue a cada dispositivo desde el que inicies sesión. Lo que escriben las personas y los agentes se queda como se escribió.",
         "search": "Buscar idioma",
-        "none": "Ningún idioma coincide"
+        "none": "Ningún idioma coincide",
+        "failed": "No se pudo cargar ese idioma. Recarga la página e inténtalo de nuevo."
       }
     }
   },

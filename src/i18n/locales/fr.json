@@ -92,7 +92,8 @@
         "title": "Langue",
         "text": "La langue de toute l’interface, dates et nombres compris. Elle est conservée sur le tableau, donc elle vous suit sur chaque appareil depuis lequel vous vous connectez. Ce que les gens et les agents écrivent reste tel qu’il a été écrit.",
         "search": "Rechercher une langue",
-        "none": "Aucune langue ne correspond"
+        "none": "Aucune langue ne correspond",
+        "failed": "Impossible de charger cette langue. Rechargez la page et réessayez."
       }
     }
   },

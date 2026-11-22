@@ -92,7 +92,8 @@
         "title": "Idioma",
         "text": "O idioma de toda a interface, com datas e números. Fica salvo no quadro, então acompanha você em cada dispositivo em que entrar. O que pessoas e agentes escrevem permanece como foi escrito.",
         "search": "Buscar idioma",
-        "none": "Nenhum idioma encontrado"
+        "none": "Nenhum idioma encontrado",
+        "failed": "Não foi possível carregar esse idioma. Recarregue a página e tente de novo."
       }
     }
   },
@@ -605,7 +606,7 @@
       "nav": {
         "overview": "Visão geral",
         "prs": "Fila de PRs",
-        "features": "Funcionalidades em andamento",
+        "features": "Funcionalidades atuais",
         "roadmap": "Roadmap",
         "previews": "Previews",
         "gallery": "Galeria",
@@ -2117,7 +2118,7 @@
     "statusMerged": "Depende de #{{id}} · mesclado",
     "statusNotMerged": "Depende de #{{id}} · ainda não mesclado",
     "removeNeed": "Remover a dependência de #{{id}}",
-    "addPlaceholder": "Adicione um ticket que precisa ser mesclado antes…",
+    "addPlaceholder": "Adicionar ticket…",
     "noOthers": "Nenhum outro ticket",
     "includes": "Inclui trabalho não mesclado de <goto>{{ref}}</goto>",
     "cannotBeDone": "#{{id}} não pode ser concluído até o branch de #{{need}} ser mesclado na base dele",

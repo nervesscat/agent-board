@@ -28,4 +28,16 @@ describe("the day picker's locale follows the interface language", () => {
     expect(format(day, 'PPPP', { locale })).not.toMatch(/\d(st|nd|rd|th)\b/)
     expect(format(day, 'PPPP', { locale })).toContain(day.toLocaleDateString('mr', { month: 'long' }))
   })
+
+  it("reads Marathi's day buttons in Marathi: the day in full, and what it is", () => {
+    const labels = calendarLocale('mr')!.labels as unknown as Record<
+      string,
+      (date: Date, modifiers: object) => string
+    >
+    const day = new Date(2026, 10, 22)
+    const full = day.toLocaleDateString('mr', { dateStyle: 'full' })
+    expect(labels.labelDayButton(day, { today: true, selected: true })).toBe(`आज, ${full}, निवडलेला`)
+    expect(labels.labelGridcell(day, { selected: true })).toBe(`${full}, निवडलेला`)
+    expect(labels.labelDayButton(day, {})).toBe(full)
+  })
 })

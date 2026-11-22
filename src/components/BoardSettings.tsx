@@ -21,8 +21,9 @@ import {
   ComboboxValue,
 } from '#/components/ui/combobox'
 import { LANGUAGES, LANGUAGE_ENGLISH_NAME, LANGUAGE_NAME, setLanguage, shared, type Language } from '#/i18n'
+import { loadTranslation } from '#/i18n/locales'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
-import { errorMessage, get, type Me, patch } from '#/lib/api'
+import { ApiError, errorMessage, get, type Me, patch } from '#/lib/api'
 import { useAnchor, useReveal } from '#/lib/reveal'
 import { THEMES, readTheme, setTheme, type Theme } from '#/lib/theme'
 import type { Settings } from '#/server/agents'
@@ -137,6 +138,10 @@ function LanguagePicker() {
     // Switched at once, kept on the board meanwhile; the confirmation waits for both, so it is in the new language.
     mutationFn: async (language: Language) => {
       asked.current = language
+      // First the language's file: when it cannot come (offline), nothing changes and nothing is saved.
+      await loadTranslation(language)
+      // A later pick took over while it loaded: only the last one is applied and kept.
+      if (asked.current !== language) return { language }
       const [saved] = await Promise.all([
         patch<{ language: Language }>('/api/me', { language }),
         setLanguage(language),
@@ -149,7 +154,11 @@ function LanguagePicker() {
       // The page was drawn again in the new language: this render's `t` is the old one.
       toast.success(shared.t('common.saved'))
     },
-    onError: (err) => toast.error(errorMessage(err)),
+    onError: (err) => {
+      // The pick did not happen: the dropdown goes back to the language on screen.
+      setPicked(i18n.language as Language)
+      toast.error(err instanceof ApiError ? errorMessage(err) : shared.t('settings.board.language.failed'))
+    },
   })
   const showing = i18n.language as Language
   // The last language picked, which can be one whose file is still loading (`showing` is the one on screen): the

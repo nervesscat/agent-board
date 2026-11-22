@@ -233,3 +233,45 @@ test('two quick picks: the last one wins, even the language that was showing', a
   const me = await page.request.get('/api/me').then((r) => r.json())
   expect(me.language).toBe('en')
 })
+
+test('a language whose file cannot be fetched changes nothing, and says so', async ({ page }) => {
+  await page.goto('/settings')
+  await page.route('**/assets/de-*.js', (route) => route.abort())
+  await choose(page, 'Language', 'Deutsch')
+  await expect(
+    page.locator('[data-sonner-toast]').filter({ hasText: 'Could not load that language' }),
+  ).toBeVisible()
+  // The page, the dropdown, <html lang> and what is kept on the board all stay as they were.
+  await expect(html(page)).toHaveAttribute('lang', 'en')
+  await expect(picker(page, 'Language')).toContainText('English')
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
+  const me = await page.request.get('/api/me').then((r) => r.json())
+  expect(me.language).not.toBe('de')
+  // Back on line, after a reload (a browser keeps a failed module's failure until then), the same pick works.
+  await page.unroute('**/assets/de-*.js')
+  await page.reload()
+  await choose(page, 'Language', 'Deutsch')
+  await expect(html(page)).toHaveAttribute('lang', 'de')
+})
+
+test.describe('long translations keep the phone layout', () => {
+  for (const [locale, language] of [
+    ['ru-RU', 'ru'],
+    ['pt-BR', 'pt'],
+    ['pl-PL', 'pl'],
+    ['ta-IN', 'ta'],
+  ] as const) {
+    test.describe(`a phone in ${language}`, () => {
+      test.use({ locale, viewport: { width: 390, height: 800 } })
+      test("the Roadmap's filter tabs do not widen the page", async ({ page, project }) => {
+        await page.goto(`/projects/${project.id}/roadmap`)
+        await expect(html(page)).toHaveAttribute('lang', language)
+        await expect
+          .poll(() =>
+            page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
+          )
+          .toBeLessThanOrEqual(0)
+      })
+    })
+  }
+})

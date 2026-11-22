@@ -92,7 +92,8 @@
         "title": "Lingua",
         "text": "La lingua di tutta l'interfaccia, date e numeri compresi. Viene salvata sulla bacheca, quindi ti segue su ogni dispositivo da cui accedi. Ciò che scrivono persone e agenti resta com'è stato scritto.",
         "search": "Cerca lingue",
-        "none": "Nessuna lingua corrisponde"
+        "none": "Nessuna lingua corrisponde",
+        "failed": "Impossibile caricare quella lingua. Ricarica la pagina e riprova."
       }
     }
   },

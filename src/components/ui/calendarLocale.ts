@@ -27,6 +27,14 @@ import type { Language } from '#/i18n/languages'
  * Marathi: neither date-fns nor react-day-picker ship it, so its month and weekday names come from `Intl`, and the
  * few labels the calendar reads out are written here.
  */
+/** "आज, बुधवार, ६ मार्च २०२४, निवडलेला": the day in full, with what the picker says about it. */
+const dayLabel = (date: Date, modifiers: { today?: boolean; selected?: boolean }) => {
+  let label = date.toLocaleDateString('mr', { dateStyle: 'full' })
+  if (modifiers.today) label = `आज, ${label}`
+  if (modifiers.selected) label = `${label}, निवडलेला`
+  return label
+}
+
 const marathi: Locale = {
   ...enUS,
   code: 'mr',
@@ -54,6 +62,12 @@ const marathi: Locale = {
     labelNav: 'नेव्हिगेशन बार',
     labelWeekNumberHeader: 'आठवडा क्रमांक',
     labelWeekNumber: (weekNumber: number) => `आठवडा ${weekNumber}`,
+    labelGrid: (date: Date) => date.toLocaleDateString('mr', { month: 'long', year: 'numeric' }),
+    labelWeekday: (date: Date) => date.toLocaleDateString('mr', { weekday: 'long' }),
+    labelDayButton: (date: Date, modifiers: { today?: boolean; selected?: boolean }) =>
+      dayLabel(date, modifiers),
+    labelGridcell: (date: Date, modifiers?: { today?: boolean; selected?: boolean }) =>
+      dayLabel(date, modifiers ?? {}),
   },
 }
 

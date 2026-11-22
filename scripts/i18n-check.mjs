@@ -156,7 +156,11 @@ export function compareLocales(en, other, name, language = name) {
   for (const [key, text] of Object.entries(b)) {
     const model = a[key] ?? a[`${base(key)}_other`] ?? a[base(key)]
     if (model === undefined || typeof text !== 'string' || text.trim() === '') continue
-    if (placeholders(model).join() !== placeholders(text).join())
+    // A plural form may show the number its English text leaves out ("decision needed"): Russian's `one` is also 21.
+    const extra = placeholders(text).filter((x) => !placeholders(model).includes(x))
+    const countOnly = PLURAL.test(key) && extra.length > 0 && extra.every((x) => x === 'count')
+    const without = (list) => (countOnly ? list.filter((x) => x !== 'count') : list)
+    if (without(placeholders(model)).join() !== without(placeholders(text)).join())
       problems.push(`${name}: ${key} uses other {{placeholders}} than the English text`)
     if (tags(model).join() !== tags(text).join())
       problems.push(`${name}: ${key} uses other <tags> than the English text`)

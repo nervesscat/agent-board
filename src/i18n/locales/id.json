@@ -88,7 +88,8 @@
         "title": "Bahasa",
         "text": "Bahasa seluruh antarmuka, termasuk tanggal dan angka. Disimpan di papan, jadi ikut ke setiap perangkat tempat Anda masuk. Tulisan manusia dan agen tetap seperti aslinya.",
         "search": "Cari bahasa",
-        "none": "Tidak ada bahasa yang cocok"
+        "none": "Tidak ada bahasa yang cocok",
+        "failed": "Tidak dapat memuat bahasa itu. Muat ulang halaman, lalu coba lagi."
       }
     }
   },

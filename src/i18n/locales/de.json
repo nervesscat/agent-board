@@ -92,7 +92,8 @@
         "title": "Sprache",
         "text": "Die Sprache der gesamten Oberfläche, einschließlich Datums- und Zahlenformaten. Sie wird im Board gespeichert und folgt dir auf jedes Gerät, auf dem du dich anmeldest. Was Menschen und Agents schreiben, bleibt unverändert.",
         "search": "Sprachen suchen",
-        "none": "Keine passende Sprache"
+        "none": "Keine passende Sprache",
+        "failed": "Diese Sprache konnte nicht geladen werden. Lade die Seite neu und versuch es erneut."
       }
     }
   },

@@ -100,7 +100,8 @@
         "title": "Język",
         "text": "Język całego interfejsu, wraz z datami i liczbami. Jest zapisany na tablicy, więc podąża za tobą na każde urządzenie, z którego się logujesz. To, co piszą ludzie i agenci, zostaje bez zmian.",
         "search": "Szukaj języków",
-        "none": "Brak pasujących języków"
+        "none": "Brak pasujących języków",
+        "failed": "Nie udało się wczytać tego języka. Przeładuj stronę i spróbuj ponownie."
       }
     }
   },
@@ -2247,7 +2248,7 @@
     "statusMerged": "Wymaga #{{id}} · scalone",
     "statusNotMerged": "Wymaga #{{id}} · jeszcze nie scalone",
     "removeNeed": "Usuń zależność od #{{id}}",
-    "addPlaceholder": "Dodaj zgłoszenie, które trzeba najpierw scalić…",
+    "addPlaceholder": "Dodaj zgłoszenie…",
     "noOthers": "Brak innych zgłoszeń",
     "includes": "Zawiera niescaloną pracę z <goto>{{ref}}</goto>",
     "cannotBeDone": "#{{id}} nie może być gotowe, dopóki gałąź #{{need}} nie zostanie scalona do swojej bazy",

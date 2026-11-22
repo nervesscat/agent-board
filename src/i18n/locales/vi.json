@@ -88,7 +88,8 @@
         "title": "Ngôn ngữ",
         "text": "Ngôn ngữ của toàn bộ giao diện, gồm cả ngày tháng và số. Lựa chọn được lưu trên board nên đi theo bạn trên mọi thiết bị đăng nhập. Nội dung do người và agent viết giữ nguyên như đã viết.",
         "search": "Tìm ngôn ngữ",
-        "none": "Không có ngôn ngữ nào khớp"
+        "none": "Không có ngôn ngữ nào khớp",
+        "failed": "Không thể tải ngôn ngữ đó. Hãy tải lại trang rồi thử lại."
       }
     }
   },

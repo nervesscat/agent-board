@@ -92,7 +92,8 @@
         "title": "Dil",
         "text": "Tarih ve sayılar dahil tüm arayüzün dili. Panoda saklanır, böylece oturum açtığın her cihazda seni izler. İnsanların ve ajanların yazdıkları olduğu gibi kalır.",
         "search": "Dil ara",
-        "none": "Eşleşen dil yok"
+        "none": "Eşleşen dil yok",
+        "failed": "Bu dil yüklenemedi. Sayfayı yeniden yükle ve yeniden dene."
       }
     }
   },

@@ -42,6 +42,20 @@ describe('every language has every text', () => {
     ])
   })
 
+  it('lets a plural form show the number its English text leaves out, and nothing else', () => {
+    const en = { d_one: 'decision needed', d_other: '{{count}} decisions needed' }
+    const ru = {
+      d_one: 'нужно {{count}} решение',
+      d_few: 'нужно {{count}} решения',
+      d_many: 'нужно {{count}} решений',
+      d_other: 'нужно {{count}} решения',
+    }
+    expect(compareLocales(en, ru, 'ru')).toEqual([])
+    expect(compareLocales(en, { ...ru, d_one: 'нужно {{n}} решение' }, 'ru')).toEqual([
+      'ru: d_one uses other {{placeholders}} than the English text',
+    ])
+  })
+
   it('refuses a literal backslash-n where English has a line break', () => {
     const model = { a: 'First:\nsecond' }
     expect(compareLocales(model, { a: 'Primero:\nsegundo' }, 'es')).toEqual([])
