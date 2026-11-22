@@ -42,6 +42,7 @@ export const LAYOUT_ICONS: Record<LayoutId, typeof Home> = {
   'nav.repositories': FolderGit2,
   'nav.instructions': ScrollText,
   'overview.needsYou': Inbox,
+  'overview.agents': Bot,
   'overview.inProgress': Play,
   'overview.doneToday': CheckCircle2,
   'overview.next': ListTodo,
