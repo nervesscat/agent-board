@@ -3,6 +3,42 @@
     "saved": "Enregistré",
     "close": "Fermer"
   },
+  "loading": {
+    "ticket": "Chargement du ticket…",
+    "tickets": "Chargement des tickets…",
+    "agents": "Chargement des agents…",
+    "branches": "Chargement des branches…",
+    "recentTickets": "Chargement des tickets récents…",
+    "folders": "Chargement des dossiers…",
+    "projectPhases": "Chargement des phases du projet…",
+    "stages": "Chargement des étapes…",
+    "preview": "Chargement de la preview…",
+    "file": "Chargement du fichier…",
+    "files": "Chargement des fichiers…",
+    "instructionsHistory": "Chargement de l’historique des instructions…",
+    "instructions": "Chargement des instructions…",
+    "notes": "Chargement des notes…",
+    "reviewResult": "Chargement du résultat de la revue…",
+    "changes": "Chargement des changements…",
+    "replies": "Chargement des réponses…",
+    "timeline": "Chargement de la chronologie…",
+    "activity": "Chargement de l’activité…",
+    "pushedToday": "Chargement des envois du jour…",
+    "calendar": "Chargement du calendrier…",
+    "report": "Chargement du rapport…",
+    "reportSettings": "Chargement des paramètres de rapport…",
+    "shift": "Chargement du planning…",
+    "cleanup": "Chargement du nettoyage…",
+    "runs": "Chargement des exécutions…",
+    "branchState": "Chargement de l’état de la branche…",
+    "tags": "Chargement des tags…",
+    "previews": "Chargement des previews…",
+    "repositories": "Chargement des dépôts…",
+    "roadmap": "Chargement de la roadmap…",
+    "runReports": "Chargement des rapports d’exécution…",
+    "earlierVersions": "Chargement des versions antérieures…",
+    "workspaces": "Chargement des workspaces…"
+  },
   "shell": {
     "home": "Accueil",
     "pages": "Pages",
@@ -310,7 +346,6 @@
   },
   "skillDiff": {
     "description": "Ce que la ligne d’installation changerait : les lignes marquées - sont dans la copie installée et disparaissent, les lignes marquées + viennent de la copie que sert le tableau. Fins de ligne mises à part.",
-    "loading": "Chargement…",
     "unreadable": "La copie installée ne peut pas être lue comme du texte ({{reason}}) : <code>{{path}}</code>",
     "noChanges": "Aucun changement : la copie installée est à jour par rapport à celle du tableau.",
     "changes": "Changements"
@@ -1170,7 +1205,6 @@
       "fit": "Ajuster (0)",
       "zoomIn": "Zoom avant (+)",
       "loadFailed": "Impossible de charger ce fichier.",
-      "loading": "Chargement…",
       "empty": "(fichier vide)",
       "cut": "Affichage des {{limit}} premiers caractères. Téléchargez le fichier pour le reste."
     }
@@ -1602,7 +1636,6 @@
     "title": "Notes",
     "manageAll": "Tout gérer ({{count}})",
     "add": "Ajouter une note",
-    "loading": "Chargement des notes…",
     "dialogTitle": "Notes ({{count}})",
     "dialogDescription": "Un fait court chacune, épinglées en premier. L’auteur d’une note, un orchestrateur ou l’humain peut la modifier.",
     "empty": "Une note est un fait court que la prochaine session ne doit pas redécouvrir — une commande, un chemin, une règle, un rappel. Un seul fait par note, jamais un document.",
@@ -1656,7 +1689,6 @@
     "reserved": "{{name}} (réservé)",
     "projectAgents": "Agents du projet : eux seuls le traitent",
     "connectedAgents": "Agents connectés : partagé",
-    "loadingBranches": "chargement des branches…",
     "noBranchYet": "— aucune pour l’instant —",
     "clear": "Effacer {{what}}"
   },
@@ -2103,8 +2135,7 @@
   "reviewResult": {
     "pr": "PR #{{number}}",
     "counts": "{{confirmed}} confirmés · {{plausible}} plausibles · {{unverified}} non vérifiés",
-    "title": "Résultat de revue",
-    "loading": "Chargement…"
+    "title": "Résultat de revue"
   },
   "thread": {
     "replyActions": "Actions de réponse",
@@ -2308,7 +2339,6 @@
     },
     "card": {
       "title": "Chronologie",
-      "loading": "Chargement…",
       "showMore": "Afficher plus",
       "showLess": "Afficher moins",
       "story": "Récit de la chronologie"

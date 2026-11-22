@@ -6,6 +6,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { InstructionsHistory, instructionChangesKey } from '#/components/InstructionsHistory'
+import { DelayedLoading, SkeletonText } from '#/components/Loading'
 import { Markdown } from '#/components/Markdown'
 import { RichEditor } from '#/components/RichEditor'
 import {
@@ -30,10 +31,9 @@ export const Route = createFileRoute('/projects/$id/instructions')({ component: 
 function InstructionsPage() {
   const { t } = useTranslation()
   const { id } = Route.useParams()
-  const { data: p } = useProject(id)
+  const { data: p, error } = useProject(id)
   // A link into the history (#instructions-history) lands on it on an in-app navigation too.
   useReveal(useAnchor(), { page: id, ready: p !== undefined })
-  if (!p) return null
   return (
     <div className="max-w-3xl space-y-5">
       <div>
@@ -41,10 +41,21 @@ function InstructionsPage() {
         <p className="text-sm text-muted-foreground">{t('instructions.pageDescription')}</p>
       </div>
       {/* A new editor per project: an edit never follows the page to another one. */}
-      <Instructions key={id} projectId={id} saved={p.instructions} />
+      {p ? (
+        <Instructions key={id} projectId={id} saved={p.instructions} />
+      ) : (
+        !error && (
+          <DelayedLoading label={t('loading.instructions')} className="space-y-2">
+            <div className="h-5" />
+            <div className="rounded-md border p-4">
+              <SkeletonText lines={8} />
+            </div>
+          </DelayedLoading>
+        )
+      )}
       <div className="space-y-1 text-right text-sm">
         <ul className="space-y-0.5">
-          {p.repos.map((r) => (
+          {p?.repos.map((r) => (
             <Tip key={r.id} content={r.repoPath}>
               <li className="flex items-center justify-end gap-1.5 text-muted-foreground">
                 <FolderGit2 className="size-3.5 shrink-0" />

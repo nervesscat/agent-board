@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Fragment, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 
+import { DelayedLoading, SkeletonText } from '#/components/Loading'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '#/components/ui/dialog'
 import { errorMessage, get } from '#/lib/api'
 import type { DiffLine } from '#/lib/hunks'
@@ -55,7 +56,9 @@ export function SkillFileDiffDialog({
         {error ? (
           <p className="text-sm text-destructive">{errorMessage(error)}</p>
         ) : !data ? (
-          <p className="text-sm text-muted-foreground">{t('skillDiff.loading')}</p>
+          <DelayedLoading label={t('loading.changes')}>
+            <SkeletonText lines={8} />
+          </DelayedLoading>
         ) : (
           <DiffView diff={data} />
         )}

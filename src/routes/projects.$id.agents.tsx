@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { Empty } from '#/components/Empty'
+import { DelayedLoading, SkeletonCard } from '#/components/Loading'
 import { Markdown } from '#/components/Markdown'
 import { TrashIcon } from '#/components/TrashIcon'
 import {
@@ -39,9 +40,9 @@ export const Route = createFileRoute('/projects/$id/agents')({
 function Agents() {
   const { t: tr } = useTranslation()
   const { id } = Route.useParams()
-  const { data: project } = useProject(id)
+  const { data: project, error: projectError } = useProject(id)
   // Every ticket, lanes included: an agent can hold a lane as much as a top-level ticket.
-  const { data: tickets = [] } = useQuery(ticketsQuery(id, 'all'))
+  const { data: tickets } = useQuery(ticketsQuery(id, 'all'))
   const [adding, setAdding] = useState(false)
   // What a new agent's report template starts as: the common part every template carries.
   const { data: commonTemplate } = useQuery({
@@ -49,9 +50,9 @@ function Agents() {
     queryFn: () => get<{ template: string }>('/api/run-reports/template'),
     enabled: adding,
   })
-  if (!project) return null
+  // Unknown until the tickets are read: no "reserved" count is shown before then.
   const reservedFor = (a: ProjectAgent) =>
-    tickets.filter((t) => t.assignee.toLowerCase() === a.name.toLowerCase())
+    tickets?.filter((t) => t.assignee.toLowerCase() === a.name.toLowerCase())
   return (
     <div className="max-w-3xl space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -65,7 +66,7 @@ function Agents() {
           </Button>
         )}
       </div>
-      <DefaultAgents projectId={id} agents={project.agents} kinds={project.kinds} />
+      {project && <DefaultAgents projectId={id} agents={project.agents} kinds={project.kinds} />}
       {adding && (
         <AgentForm
           projectId={id}
@@ -73,7 +74,14 @@ function Agents() {
           onDone={() => setAdding(false)}
         />
       )}
-      {project.agents.length === 0 && !adding ? (
+      {!project ? (
+        !projectError && (
+          <DelayedLoading label={tr('loading.agents')} className="space-y-3">
+            <SkeletonCard lines={4} />
+            <SkeletonCard lines={4} />
+          </DelayedLoading>
+        )
+      ) : project.agents.length === 0 && !adding ? (
         <Empty>{tr('projectAgents.empty')}</Empty>
       ) : (
         <ul className="space-y-3">
@@ -166,7 +174,8 @@ function AgentCard({
 }: {
   projectId: string
   agent: ProjectAgent
-  reserved: TicketRow[]
+  /** Undefined until the tickets are read. */
+  reserved: TicketRow[] | undefined
 }) {
   const { t } = useTranslation()
   const qc = useQueryClient()
@@ -189,7 +198,9 @@ function AgentCard({
             <span className="font-medium">{agent.name}</span>
             <code className="rounded bg-muted px-1 text-xs text-muted-foreground">@{agent.name}</code>
           </div>
-          {reserved.length > 0 ? (
+          {reserved === undefined ? (
+            <div className="mt-1 h-4" />
+          ) : reserved.length > 0 ? (
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
               <Lock className="size-3" />
               {reserved.map((tk) => (
@@ -235,7 +246,7 @@ function AgentCard({
             <AlertDialogHeader>
               <AlertDialogTitle>{t('projectAgents.removeTitle', { name: agent.name })}</AlertDialogTitle>
               <AlertDialogDescription>
-                {reserved.length ? `${t('projectAgents.removeReserved', { count: reserved.length })} ` : ''}
+                {reserved?.length ? `${t('projectAgents.removeReserved', { count: reserved.length })} ` : ''}
                 {t('projectAgents.removeKept')}
               </AlertDialogDescription>
             </AlertDialogHeader>

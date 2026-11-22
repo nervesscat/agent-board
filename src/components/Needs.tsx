@@ -5,6 +5,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { cn } from 'cn'
 
+import { ControlSkeleton } from '#/components/ControlSkeleton'
 import { Button } from '#/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
@@ -91,7 +92,7 @@ export function NeedsField({
 }) {
   const { t: tr } = useTranslation()
   // Every ticket of the project, lanes too: a branch can stand on any of them.
-  const { data: tickets = [] } = useQuery({
+  const { data: tickets = [], isPending } = useQuery({
     queryKey: ['tickets', String(t.projectId), 'all'],
     queryFn: () => get<TicketRow[]>(`/api/projects/${t.projectId}/tickets`),
     staleTime: 30_000,
@@ -141,10 +142,20 @@ export function NeedsField({
         value={null}
         onValueChange={(v) => v && onSave([...ids, Number(v)])}
         items={items}
-        disabled={!options.length}
+        disabled={isPending || !options.length}
       >
         <SelectTrigger id="needs" size="sm" className="w-full">
-          <SelectValue placeholder={options.length ? tr('needs.addPlaceholder') : tr('needs.noOthers')} />
+          <SelectValue
+            placeholder={
+              isPending ? (
+                <ControlSkeleton label={tr('loading.tickets')} />
+              ) : options.length ? (
+                tr('needs.addPlaceholder')
+              ) : (
+                tr('needs.noOthers')
+              )
+            }
+          />
         </SelectTrigger>
         <SelectContent>
           {options.map((x) => (

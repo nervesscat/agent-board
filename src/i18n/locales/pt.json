@@ -3,6 +3,42 @@
     "saved": "Salvo",
     "close": "Fechar"
   },
+  "loading": {
+    "ticket": "Carregando ticket…",
+    "tickets": "Carregando tickets…",
+    "agents": "Carregando agentes…",
+    "branches": "Carregando branches…",
+    "recentTickets": "Carregando tickets recentes…",
+    "folders": "Carregando pastas…",
+    "projectPhases": "Carregando fases do projeto…",
+    "stages": "Carregando etapas…",
+    "preview": "Carregando preview…",
+    "file": "Carregando arquivo…",
+    "files": "Carregando arquivos…",
+    "instructionsHistory": "Carregando histórico das instruções…",
+    "instructions": "Carregando instruções…",
+    "notes": "Carregando notas…",
+    "reviewResult": "Carregando resultado da revisão…",
+    "changes": "Carregando alterações…",
+    "replies": "Carregando respostas…",
+    "timeline": "Carregando linha do tempo…",
+    "activity": "Carregando atividade…",
+    "pushedToday": "Carregando o que foi enviado hoje…",
+    "calendar": "Carregando calendário…",
+    "report": "Carregando relatório…",
+    "reportSettings": "Carregando configurações de relatório…",
+    "shift": "Carregando periodicidade…",
+    "cleanup": "Carregando limpeza…",
+    "runs": "Carregando execuções…",
+    "branchState": "Carregando estado da branch…",
+    "tags": "Carregando tags…",
+    "previews": "Carregando previews…",
+    "repositories": "Carregando repositórios…",
+    "roadmap": "Carregando roadmap…",
+    "runReports": "Carregando relatórios de execução…",
+    "earlierVersions": "Carregando versões anteriores…",
+    "workspaces": "Carregando workspaces…"
+  },
   "shell": {
     "home": "Início",
     "pages": "Páginas",
@@ -310,7 +346,6 @@
   },
   "skillDiff": {
     "description": "O que a linha de instalação alteraria: as linhas marcadas com - estão na cópia instalada e saem, as marcadas com + vêm da cópia que o quadro serve. Fora as quebras de linha.",
-    "loading": "Carregando…",
     "unreadable": "Não é possível ler a cópia instalada como texto ({{reason}}): <code>{{path}}</code>",
     "noChanges": "Sem alterações: a cópia instalada está em dia com a do quadro.",
     "changes": "Alterações"
@@ -1170,7 +1205,6 @@
       "fit": "Ajustar (0)",
       "zoomIn": "Ampliar (+)",
       "loadFailed": "Não foi possível carregar este arquivo.",
-      "loading": "Carregando…",
       "empty": "(arquivo vazio)",
       "cut": "Mostrando os primeiros {{limit}} caracteres. Baixe o arquivo para ver o resto."
     }
@@ -1602,7 +1636,6 @@
     "title": "Notas",
     "manageAll": "Gerenciar todas ({{count}})",
     "add": "Adicionar nota",
-    "loading": "Carregando notas…",
     "dialogTitle": "Notas ({{count}})",
     "dialogDescription": "Um fato curto em cada, as fixadas primeiro. O autor da nota, um orquestrador ou a pessoa pode alterá-la.",
     "empty": "Uma nota é um fato curto que a próxima sessão não deve redescobrir — um comando, um caminho, uma regra, um lembrete. Um fato por nota, nunca um documento.",
@@ -1656,7 +1689,6 @@
     "reserved": "{{name}} (reservado)",
     "projectAgents": "Agentes do projeto: só eles trabalham nele",
     "connectedAgents": "Agentes conectados: compartilhado",
-    "loadingBranches": "carregando branches…",
     "noBranchYet": "— nenhum ainda —",
     "clear": "Limpar {{what}}"
   },
@@ -2103,8 +2135,7 @@
   "reviewResult": {
     "pr": "PR #{{number}}",
     "counts": "{{confirmed}} confirmados · {{plausible}} plausíveis · {{unverified}} não verificados",
-    "title": "Resultado da revisão",
-    "loading": "Carregando…"
+    "title": "Resultado da revisão"
   },
   "thread": {
     "replyActions": "Ações da resposta",
@@ -2308,7 +2339,6 @@
     },
     "card": {
       "title": "Linha do tempo",
-      "loading": "Carregando…",
       "showMore": "Mostrar mais",
       "showLess": "Mostrar menos",
       "story": "História da linha do tempo"

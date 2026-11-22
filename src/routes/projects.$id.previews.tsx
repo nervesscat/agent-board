@@ -8,6 +8,7 @@ import type { TFunction } from 'i18next'
 import { z } from 'zod'
 
 import { Empty } from '#/components/Empty'
+import { Loading } from '#/components/Loading'
 import {
   ManagedLine,
   PreviewActions,
@@ -33,6 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, post, type ProjectPreview, type ProjectPreviews, type StopAll } from '#/lib/api'
+import { useDelayedFlag } from '#/lib/useDelayedFlag'
 import { previewOpenLinks } from '#/lib/previewLinks'
 import { useProject } from '#/lib/project'
 import { recall, remember, whenArrived } from '#/lib/remembered'
@@ -90,6 +92,8 @@ function Previews() {
         : 15_000,
   })
   const previews = data?.previews ?? []
+  // A refresh that is quick, or one that keeps the rows, shows no spinner.
+  const spinning = useDelayedFlag(isFetching)
 
   // The stages come with the project, after mount (no loader), and storage is read only after mount
   // (src/lib/remembered.ts): the filter is known once the stages are and, unless the URL names one of
@@ -145,7 +149,7 @@ function Previews() {
             <Skeleton className="h-7 w-48" />
           )}
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-            <RefreshCw data-icon="inline-start" className={isFetching ? 'animate-spin' : ''} />{' '}
+            <RefreshCw data-icon="inline-start" className={spinning ? 'motion-safe:animate-spin' : ''} />{' '}
             {t('cleanup.refresh')}
           </Button>
         </div>
@@ -161,7 +165,7 @@ function Previews() {
       )}
       {error && <p className="text-sm text-destructive">{errorMessage(error)}</p>}
       {isLoading || !known ? (
-        <Skeleton className="h-64" />
+        <PreviewsLoading />
       ) : !previews.length ? (
         !error && <Empty>{t('previews.empty')}</Empty>
       ) : !shown.length ? (
@@ -197,6 +201,35 @@ function Previews() {
         })
       )}
     </div>
+  )
+}
+
+/** Rows shaped like the previews' (a title line, the link, the branch), after a slow load only. */
+function PreviewsLoading() {
+  const { t } = useTranslation()
+  const slow = useDelayedFlag(true)
+  if (!slow) return null
+  return (
+    <Loading label={t('loading.previews')} className="space-y-1.5">
+      <div aria-hidden className="space-y-1.5">
+        <Skeleton className="h-5 w-24" />
+        <Skeleton className="h-4 w-2/3" />
+        <ul className="space-y-2">
+          {Array.from({ length: 3 }, (_, i) => (
+            <li key={i} className="space-y-2 rounded-lg border p-3">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-5 w-1/3" />
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="ml-auto h-5 w-20" />
+              </div>
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-7 w-24" />
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Loading>
   )
 }
 

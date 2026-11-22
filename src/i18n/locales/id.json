@@ -3,6 +3,42 @@
     "saved": "Tersimpan",
     "close": "Tutup"
   },
+  "loading": {
+    "ticket": "Memuat tiket…",
+    "tickets": "Memuat tiket…",
+    "agents": "Memuat agen…",
+    "branches": "Memuat branch…",
+    "recentTickets": "Memuat tiket terbaru…",
+    "folders": "Memuat folder…",
+    "projectPhases": "Memuat fase proyek…",
+    "stages": "Memuat tahap…",
+    "preview": "Memuat preview…",
+    "file": "Memuat file…",
+    "files": "Memuat file…",
+    "instructionsHistory": "Memuat riwayat instruksi…",
+    "instructions": "Memuat instruksi…",
+    "notes": "Memuat catatan…",
+    "reviewResult": "Memuat hasil tinjauan…",
+    "changes": "Memuat perubahan…",
+    "replies": "Memuat balasan…",
+    "timeline": "Memuat linimasa…",
+    "activity": "Memuat aktivitas…",
+    "pushedToday": "Memuat yang di-push hari ini…",
+    "calendar": "Memuat kalender…",
+    "report": "Memuat laporan…",
+    "reportSettings": "Memuat pengaturan laporan…",
+    "shift": "Memuat shift…",
+    "cleanup": "Memuat pembersihan…",
+    "runs": "Memuat eksekusi…",
+    "branchState": "Memuat status branch…",
+    "tags": "Memuat tag…",
+    "previews": "Memuat preview…",
+    "repositories": "Memuat repositori…",
+    "roadmap": "Memuat roadmap…",
+    "runReports": "Memuat laporan eksekusi…",
+    "earlierVersions": "Memuat versi sebelumnya…",
+    "workspaces": "Memuat workspace…"
+  },
   "shell": {
     "home": "Beranda",
     "pages": "Halaman",
@@ -302,7 +338,6 @@
   },
   "skillDiff": {
     "description": "Yang akan diubah baris pemasangan: baris bertanda - ada di salinan terpasang dan dihapus, baris bertanda + berasal dari salinan yang dilayani papan. Akhir baris diabaikan.",
-    "loading": "Memuat…",
     "unreadable": "Salinan terpasang tidak bisa dibaca sebagai teks ({{reason}}): <code>{{path}}</code>",
     "noChanges": "Tanpa perubahan: salinan terpasang sama dengan milik papan.",
     "changes": "Perubahan"
@@ -1129,7 +1164,6 @@
       "fit": "Pas (0)",
       "zoomIn": "Perbesar (+)",
       "loadFailed": "Tidak bisa memuat file ini.",
-      "loading": "Memuat…",
       "empty": "(file kosong)",
       "cut": "Menampilkan {{limit}} karakter pertama. Unduh file untuk sisanya."
     }
@@ -1552,7 +1586,6 @@
     "title": "Catatan",
     "manageAll": "Kelola semua ({{count}})",
     "add": "Tambah catatan",
-    "loading": "Memuat catatan…",
     "dialogTitle": "Catatan ({{count}})",
     "dialogDescription": "Satu fakta singkat masing-masing, yang disematkan di atas. Penulis catatan, orkestrator, atau manusia bisa mengubahnya.",
     "empty": "Catatan adalah satu fakta singkat yang tidak boleh ditemukan ulang sesi berikutnya — perintah, path, aturan, pengingat. Jadikan satu fakta tiap catatan, jangan dokumen.",
@@ -1606,7 +1639,6 @@
     "reserved": "{{name}} (dipesan)",
     "projectAgents": "Agen proyek: hanya mereka yang mengerjakannya",
     "connectedAgents": "Agen terhubung: dibagi",
-    "loadingBranches": "memuat branch…",
     "noBranchYet": "— belum ada —",
     "clear": "Hapus {{what}}"
   },
@@ -2038,8 +2070,7 @@
   "reviewResult": {
     "pr": "PR #{{number}}",
     "counts": "{{confirmed}} terkonfirmasi · {{plausible}} masuk akal · {{unverified}} belum diverifikasi",
-    "title": "Hasil tinjauan",
-    "loading": "Memuat…"
+    "title": "Hasil tinjauan"
   },
   "thread": {
     "replyActions": "Aksi balasan",
@@ -2241,7 +2272,6 @@
     },
     "card": {
       "title": "Linimasa",
-      "loading": "Memuat…",
       "showMore": "Tampilkan lebih banyak",
       "showLess": "Tampilkan lebih sedikit",
       "story": "Kisah linimasa"

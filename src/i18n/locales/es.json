@@ -3,6 +3,42 @@
     "saved": "Guardado",
     "close": "Cerrar"
   },
+  "loading": {
+    "ticket": "Cargando ticket…",
+    "tickets": "Cargando tickets…",
+    "agents": "Cargando agentes…",
+    "branches": "Cargando branches…",
+    "recentTickets": "Cargando tickets recientes…",
+    "folders": "Cargando carpetas…",
+    "projectPhases": "Cargando las fases del proyecto…",
+    "stages": "Cargando etapas…",
+    "preview": "Cargando preview…",
+    "file": "Cargando archivo…",
+    "files": "Cargando archivos…",
+    "instructionsHistory": "Cargando el historial de instrucciones…",
+    "instructions": "Cargando instrucciones…",
+    "notes": "Cargando notas…",
+    "reviewResult": "Cargando resultado de la revisión…",
+    "changes": "Cargando cambios…",
+    "replies": "Cargando respuestas…",
+    "timeline": "Cargando cronología…",
+    "activity": "Cargando actividad…",
+    "pushedToday": "Cargando lo subido hoy…",
+    "calendar": "Cargando calendario…",
+    "report": "Cargando informe…",
+    "reportSettings": "Cargando ajustes del informe…",
+    "shift": "Cargando jornada…",
+    "cleanup": "Cargando limpieza…",
+    "runs": "Cargando ejecuciones…",
+    "branchState": "Cargando estado del branch…",
+    "tags": "Cargando etiquetas…",
+    "previews": "Cargando previews…",
+    "repositories": "Cargando repositorios…",
+    "roadmap": "Cargando hoja de ruta…",
+    "runReports": "Cargando informes de ejecución…",
+    "earlierVersions": "Cargando versiones anteriores…",
+    "workspaces": "Cargando workspaces…"
+  },
   "shell": {
     "home": "Inicio",
     "pages": "Páginas",
@@ -310,7 +346,6 @@
   },
   "skillDiff": {
     "description": "Lo que cambiaría la línea de instalación: las líneas marcadas con - están en la copia instalada y se van, las marcadas con + vienen de la copia que sirve el tablero. Sin contar los finales de línea.",
-    "loading": "Cargando…",
     "unreadable": "La copia instalada no se puede leer como texto ({{reason}}): <code>{{path}}</code>",
     "noChanges": "Sin cambios: la copia instalada está al día con la del tablero.",
     "changes": "Cambios"
@@ -1170,7 +1205,6 @@
       "fit": "Ajustar (0)",
       "zoomIn": "Acercar (+)",
       "loadFailed": "No se pudo cargar este archivo.",
-      "loading": "Cargando…",
       "empty": "(archivo vacío)",
       "cut": "Se muestran los primeros {{limit}} caracteres. Descarga el archivo para ver el resto."
     }
@@ -1602,7 +1636,6 @@
     "title": "Notas",
     "manageAll": "Gestionar todas ({{count}})",
     "add": "Añadir nota",
-    "loading": "Cargando notas…",
     "dialogTitle": "Notas ({{count}})",
     "dialogDescription": "Un hecho breve cada una, las fijadas primero. Su autor, un orquestador o la persona pueden cambiar una nota.",
     "empty": "Una nota es un hecho breve que la próxima sesión no debe volver a descubrir: un comando, una ruta, una regla, un recordatorio. Un solo hecho en cada una, nunca un documento.",
@@ -1656,7 +1689,6 @@
     "reserved": "{{name}} (reservado)",
     "projectAgents": "Agentes del proyecto: solo ellos lo trabajan",
     "connectedAgents": "Agentes conectados: compartido",
-    "loadingBranches": "cargando branches…",
     "noBranchYet": "— ninguno aún —",
     "clear": "Quitar {{what}}"
   },
@@ -2103,8 +2135,7 @@
   "reviewResult": {
     "pr": "PR #{{number}}",
     "counts": "{{confirmed}} confirmados · {{plausible}} plausibles · {{unverified}} sin verificar",
-    "title": "Resultado de la revisión",
-    "loading": "Cargando…"
+    "title": "Resultado de la revisión"
   },
   "thread": {
     "replyActions": "Acciones de la respuesta",
@@ -2308,7 +2339,6 @@
     },
     "card": {
       "title": "Cronología",
-      "loading": "Cargando…",
       "showMore": "Mostrar más",
       "showLess": "Mostrar menos",
       "story": "Historia de la cronología"

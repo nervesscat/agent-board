@@ -64,6 +64,10 @@ import { hasGitSide } from '#/lib/kinds'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { RunsCard, useTicketRuns } from '#/components/RunsCard'
+import { DelayedLoading, SkeletonCard, SkeletonText } from '#/components/Loading'
+import { TicketSkeleton } from '#/components/TicketSkeleton'
+import { isOtherTicket } from '#/lib/delayedFlag'
+import { useDelayedFlag } from '#/lib/useDelayedFlag'
 import { PrState } from '#/components/PrState'
 import type { FeedTab } from '#/lib/constants'
 import { PushBadge, PushDot, RefreshPush } from '#/components/PushDot'
@@ -192,7 +196,7 @@ function TicketPage() {
     placeholderData: keepPreviousData,
     refetchInterval: 10_000,
   })
-  const { data: ticketGit } = useQuery({
+  const { data: ticketGit, error: ticketGitError } = useQuery({
     queryKey: ['ticket-git', ticketId],
     queryFn: () => get<TicketGit>(`/api/tickets/${ticketId}/git`),
     refetchInterval: 30_000,
@@ -322,7 +326,12 @@ function TicketPage() {
   // Here, not only in the Runs card: with none to show the card is left out, and its column with it.
   const runs = useTicketRuns(t, git)
 
+  // The ticket asked for is not on screen yet: after a short wait, placeholders take the place of the
+  // previous ticket (or of nothing), never its data under the next one's number.
+  const slow = useDelayedFlag(isOtherTicket(t, ticketId) && !error)
+
   if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
+  if (slow) return <TicketSkeleton layout={layout ?? defaultLayout()} />
   if (!t) return null
 
   /**
@@ -393,12 +402,21 @@ function TicketPage() {
         </ShownAnchor>
       </div>
     ),
-    'ticket.runs': gitSide && runs.shown ? <RunsCard t={t} git={git} onChange={invalidate} /> : null,
+    'ticket.runs':
+      gitSide && runs.shown ? (
+        <RunsCard t={t} git={git} onChange={invalidate} />
+      ) : gitSide && runs.loading ? (
+        <DelayedLoading label={tr('loading.runs')}>
+          <SkeletonCard className="p-3" lines={2} />
+        </DelayedLoading>
+      ) : null,
     'ticket.details': (
       <Details key={t.id} t={t} git={gitSide} includes={git?.includes} onSave={(p) => update.mutate(p)} />
     ),
-    'ticket.branch': gitSide ? <BranchPanel t={t} git={git} /> : null,
-    'ticket.workspaces': gitSide ? <WorkspacesPanel t={t} git={git} onChange={invalidate} /> : null,
+    'ticket.branch': gitSide ? <BranchPanel t={t} git={git} gitFailed={Boolean(ticketGitError)} /> : null,
+    'ticket.workspaces': gitSide ? (
+      <WorkspacesPanel t={t} git={git} gitFailed={Boolean(ticketGitError)} onChange={invalidate} />
+    ) : null,
   }
   const main = layout ? shownIn(layout, 'ticket.main').filter((s) => sections[s] != null) : []
   const side = layout ? shownIn(layout, 'ticket.side').filter((s) => sections[s] != null) : []
@@ -2391,7 +2409,13 @@ function SummaryCard({ t }: { t: TicketFull }) {
       {!s.fallback && <SummaryReplies key={s.postId} postId={s.postId} count={replies(s.postId)} />}
       {history && (
         <ol aria-label={tr('ticketPage.earlierVersions')} className="mt-3 space-y-3 border-t pt-3">
-          {!data && <li className="text-xs text-muted-foreground">{tr('files.viewer.loading')}</li>}
+          {!data && (
+            <li>
+              <DelayedLoading label={tr('loading.earlierVersions')}>
+                <SkeletonText lines={2} />
+              </DelayedLoading>
+            </li>
+          )}
           {earlier.map((v) => (
             <li
               key={v.postId}
@@ -2859,7 +2883,7 @@ function PrLine({ pr }: { pr: NonNullable<TicketFull['pr']> }) {
 }
 
 /** The ticket's branch: its git state and its PR; one panel per repo when it spans several. */
-function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
+function BranchPanel({ t, git, gitFailed }: { t: TicketFull; git?: TicketGit; gitFailed?: boolean }) {
   const { t: tr } = useTranslation()
   if ((git?.repos.length ?? 0) > 1)
     return (
@@ -2920,6 +2944,11 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
             </div>
           )}
           {git && <Info info={git.info} />}
+          {!git && !gitFailed && (
+            <DelayedLoading label={tr('loading.branchState')} className="mt-1">
+              <SkeletonText lines={2} />
+            </DelayedLoading>
+          )}
         </>
       ) : (
         <p className="text-xs text-muted-foreground">{tr('ticketPage.noBranch')}</p>
@@ -2931,7 +2960,17 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
 }
 
 /** The worktrees, sub-branches and sandboxes opened for the ticket and its lanes. */
-function WorkspacesPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
+function WorkspacesPanel({
+  t,
+  git,
+  gitFailed,
+  onChange,
+}: {
+  t: TicketFull
+  git?: TicketGit
+  gitFailed?: boolean
+  onChange: () => void
+}) {
   const { t: tr } = useTranslation()
   const remove = useMutation({
     mutationFn: (id: number) => del(`/api/workspaces/${id}`),
@@ -2941,6 +2980,11 @@ function WorkspacesPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
   return (
     <section className="rounded-lg border p-3">
       <h2 className="mb-2 text-sm font-medium">{tr('ticketPage.workspaces')}</h2>
+      {!git && !gitFailed && (
+        <DelayedLoading label={tr('loading.workspaces')} className="mb-2">
+          <SkeletonText lines={1} />
+        </DelayedLoading>
+      )}
       <p className="mb-2 text-xs text-muted-foreground">
         {tr(t.lanes.length > 0 ? 'ticketPage.workspacesDescLanes' : 'ticketPage.workspacesDesc')}
       </p>

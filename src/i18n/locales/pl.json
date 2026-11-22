@@ -3,6 +3,42 @@
     "saved": "Zapisano",
     "close": "Zamknij"
   },
+  "loading": {
+    "ticket": "Wczytywanie: zgłoszenie…",
+    "tickets": "Wczytywanie: zgłoszenia…",
+    "agents": "Wczytywanie: agenci…",
+    "branches": "Wczytywanie: gałęzie…",
+    "recentTickets": "Wczytywanie: ostatnie zgłoszenia…",
+    "folders": "Wczytywanie: foldery…",
+    "projectPhases": "Wczytywanie: fazy projektu…",
+    "stages": "Wczytywanie: etapy…",
+    "preview": "Wczytywanie: podgląd…",
+    "file": "Wczytywanie: plik…",
+    "files": "Wczytywanie: pliki…",
+    "instructionsHistory": "Wczytywanie: historia instrukcji…",
+    "instructions": "Wczytywanie: instrukcje…",
+    "notes": "Wczytywanie: notatki…",
+    "reviewResult": "Wczytywanie: wynik przeglądu…",
+    "changes": "Wczytywanie: zmiany…",
+    "replies": "Wczytywanie: odpowiedzi…",
+    "timeline": "Wczytywanie: oś czasu…",
+    "activity": "Wczytywanie: aktywność…",
+    "pushedToday": "Wczytywanie: dzisiejsze pushe…",
+    "calendar": "Wczytywanie: kalendarz…",
+    "report": "Wczytywanie: raport…",
+    "reportSettings": "Wczytywanie: ustawienia raportu…",
+    "shift": "Wczytywanie: zmiana…",
+    "cleanup": "Wczytywanie: porządki…",
+    "runs": "Wczytywanie: uruchomienia…",
+    "branchState": "Wczytywanie: stan gałęzi…",
+    "tags": "Wczytywanie: tagi…",
+    "previews": "Wczytywanie: podglądy…",
+    "repositories": "Wczytywanie: repozytoria…",
+    "roadmap": "Wczytywanie: roadmapa…",
+    "runReports": "Wczytywanie: raporty z uruchomień…",
+    "earlierVersions": "Wczytywanie: wcześniejsze wersje…",
+    "workspaces": "Wczytywanie: workspace'y…"
+  },
   "shell": {
     "home": "Start",
     "pages": "Strony",
@@ -326,7 +362,6 @@
   },
   "skillDiff": {
     "description": "Co zmieniłoby polecenie instalacji: linie z - są w zainstalowanej kopii i znikną, linie z + pochodzą z kopii serwowanej przez tablicę. Z pominięciem zakończeń linii.",
-    "loading": "Wczytywanie…",
     "unreadable": "Zainstalowanej kopii nie da się odczytać jako tekstu ({{reason}}): <code>{{path}}</code>",
     "noChanges": "Bez zmian: zainstalowana kopia jest zgodna z kopią tablicy.",
     "changes": "Zmiany"
@@ -1252,7 +1287,6 @@
       "fit": "Dopasuj (0)",
       "zoomIn": "Powiększ (+)",
       "loadFailed": "Nie udało się wczytać tego pliku.",
-      "loading": "Wczytywanie…",
       "empty": "(pusty plik)",
       "cut": "Pokazano pierwsze {{limit}} znaków. Pobierz plik, aby zobaczyć resztę."
     }
@@ -1702,7 +1736,6 @@
     "title": "Notatki",
     "manageAll": "Zarządzaj wszystkimi ({{count}})",
     "add": "Dodaj notatkę",
-    "loading": "Wczytywanie notatek…",
     "dialogTitle": "Notatki ({{count}})",
     "dialogDescription": "Po jednym krótkim fakcie, przypięte na początku. Notatkę może zmienić jej autor, orkiestrator lub człowiek.",
     "empty": "Notatka to jeden krótki fakt, którego następna sesja nie może odkrywać na nowo — polecenie, ścieżka, reguła, przypomnienie. Jeden fakt na notatkę, nigdy dokument.",
@@ -1756,7 +1789,6 @@
     "reserved": "{{name}} (zarezerwowane)",
     "projectAgents": "Agenci projektu: tylko oni nad tym pracują",
     "connectedAgents": "Połączeni agenci: wspólne",
-    "loadingBranches": "wczytywanie gałęzi…",
     "noBranchYet": "— brak —",
     "clear": "Wyczyść: {{what}}"
   },
@@ -2233,8 +2265,7 @@
   "reviewResult": {
     "pr": "PR #{{number}}",
     "counts": "potwierdzone: {{confirmed}} · prawdopodobne: {{plausible}} · niezweryfikowane: {{unverified}}",
-    "title": "Wynik recenzji",
-    "loading": "Wczytywanie…"
+    "title": "Wynik recenzji"
   },
   "thread": {
     "replyActions": "Akcje odpowiedzi",
@@ -2442,7 +2473,6 @@
     },
     "card": {
       "title": "Oś czasu",
-      "loading": "Wczytywanie…",
       "showMore": "Pokaż więcej",
       "showLess": "Pokaż mniej",
       "story": "Historia osi czasu"

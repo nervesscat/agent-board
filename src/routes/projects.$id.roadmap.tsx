@@ -7,6 +7,7 @@ import { z } from 'zod'
 
 import { Actor } from '#/components/Actor'
 import { ChipTabs } from '#/components/Chips'
+import { DelayedLoading } from '#/components/Loading'
 import { Empty } from '#/components/Empty'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
@@ -65,7 +66,7 @@ function Roadmap() {
     queryFn: () => get<RoadmapTicket[]>(`/api/projects/${id}/roadmap`),
     refetchInterval: 10_000,
   })
-  const { data: work } = useQuery({
+  const { data: work, isPending: workPending } = useQuery({
     queryKey: ['work', id],
     queryFn: () => get<ProjectWork>(`/api/projects/${id}/work`),
     refetchInterval: 10_000,
@@ -83,6 +84,8 @@ function Roadmap() {
   const review = tickets.filter((t) => t.stage.kind === 'review')
   const shown = show === 'blocked' ? blocked : show === 'review' ? review : tickets
   const every = tickets.flatMap((t) => [t, ...t.lanes])
+  // An en dash, not a 0, until the tickets are known.
+  const n = (count: number) => (isLoading ? '–' : count)
   // The one time axis for every row shown: computed here, from the shown rows' work, and ending now.
   const range = windowFor(
     parseWindowChoice(windowParam),
@@ -103,9 +106,9 @@ function Roadmap() {
         </div>
         <ChipTabs
           chips={[
-            { key: 'all', label: tr('roadmap.filter.all'), count: tickets.length },
-            { key: 'blocked', label: tr('roadmap.filter.blocked'), count: blocked.length },
-            { key: 'review', label: tr('roadmap.filter.review'), count: review.length },
+            { key: 'all', label: tr('roadmap.filter.all'), count: n(tickets.length) },
+            { key: 'blocked', label: tr('roadmap.filter.blocked'), count: n(blocked.length) },
+            { key: 'review', label: tr('roadmap.filter.review'), count: n(review.length) },
           ]}
           value={show}
           onChange={(v: Filter) =>
@@ -135,15 +138,19 @@ function Roadmap() {
       </div>
       <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2 text-xs text-muted-foreground">
         <div className="flex flex-wrap gap-4">
-          <Stat n={tickets.length} label={tr('roadmap.stat.tickets', { count: tickets.length })} />
+          <Stat n={n(tickets.length)} label={tr('roadmap.stat.tickets', { count: tickets.length })} />
           <Stat
-            n={every.length - tickets.length}
+            n={n(every.length - tickets.length)}
             label={tr('roadmap.stat.lanes', { count: every.length - tickets.length })}
           />
-          <Stat n={every.filter((b) => hasState(b, 'now')).length} label={tr('roadmap.stat.workingNow')} />
-          <Stat n={every.filter(isBlocked).length} label={tr('roadmap.stat.blocked')} amber />
-          <Stat n={review.length} label={tr('roadmap.stat.inReview')} />
-          <Stat n={every.filter((b) => b.row.work.stalled).length} label={tr('roadmap.stat.noWord')} amber />
+          <Stat n={n(every.filter((b) => hasState(b, 'now')).length)} label={tr('roadmap.stat.workingNow')} />
+          <Stat n={n(every.filter(isBlocked).length)} label={tr('roadmap.stat.blocked')} amber />
+          <Stat n={n(review.length)} label={tr('roadmap.stat.inReview')} />
+          <Stat
+            n={n(every.filter((b) => b.row.work.stalled).length)}
+            label={tr('roadmap.stat.noWord')}
+            amber
+          />
         </div>
       </div>
       {work && (
@@ -155,7 +162,30 @@ function Roadmap() {
       {error ? (
         <p className="text-sm text-destructive">{errorMessage(error)}</p>
       ) : isLoading ? (
-        <Skeleton className="h-64" />
+        <DelayedLoading label={tr('loading.roadmap')}>
+          <div className="overflow-hidden rounded-lg border bg-card" aria-hidden>
+            <div className="hidden h-8 items-center gap-6 border-b px-5 md:flex md:pl-[316px]">
+              {Array.from({ length: 5 }, (_, i) => (
+                <Skeleton key={i} className="h-3 w-12" />
+              ))}
+            </div>
+            {Array.from({ length: 4 }, (_, i) => (
+              <div
+                key={i}
+                className="grid grid-cols-1 border-b last:border-b-0 md:grid-cols-[300px_minmax(0,1fr)]"
+              >
+                <div className="space-y-2 px-4 py-3.5 md:border-r">
+                  <Skeleton className="h-4 w-2/3" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+                <div className="space-y-2 px-5 py-3.5">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-3 w-3/4" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </DelayedLoading>
       ) : shown.length === 0 ? (
         <Empty>
           {show === 'all'
@@ -165,7 +195,11 @@ function Roadmap() {
               : tr('roadmap.empty.review')}
         </Empty>
       ) : (
-        <div className="overflow-hidden rounded-lg border bg-card" data-testid="roadmap">
+        <div
+          className="overflow-hidden rounded-lg border bg-card"
+          data-testid="roadmap"
+          aria-busy={workPending || undefined}
+        >
           {shown.map((t) => (
             <TicketRows
               key={t.row.id}
@@ -182,11 +216,11 @@ function Roadmap() {
   )
 }
 
-function Stat({ n, label, amber = false }: { n: number; label: string; amber?: boolean }) {
+function Stat({ n, label, amber = false }: { n: number | string; label: string; amber?: boolean }) {
   return (
     <span>
       <b
-        className={`font-semibold tabular-nums ${amber && n ? 'text-amber-700 dark:text-amber-400' : 'text-foreground'}`}
+        className={`font-semibold tabular-nums ${amber && typeof n === 'number' && n ? 'text-amber-700 dark:text-amber-400' : 'text-foreground'}`}
       >
         {n}
       </b>{' '}

@@ -3,6 +3,42 @@
     "saved": "Salvato",
     "close": "Chiudi"
   },
+  "loading": {
+    "ticket": "Caricamento di ticket…",
+    "tickets": "Caricamento di ticket…",
+    "agents": "Caricamento di agenti…",
+    "branches": "Caricamento di branch…",
+    "recentTickets": "Caricamento di ticket recenti…",
+    "folders": "Caricamento di cartelle…",
+    "projectPhases": "Caricamento di fasi del progetto…",
+    "stages": "Caricamento di colonne…",
+    "preview": "Caricamento di preview…",
+    "file": "Caricamento di file…",
+    "files": "Caricamento di file…",
+    "instructionsHistory": "Caricamento della cronologia delle istruzioni…",
+    "instructions": "Caricamento di istruzioni…",
+    "notes": "Caricamento di note…",
+    "reviewResult": "Caricamento di risultato della revisione…",
+    "changes": "Caricamento di modifiche…",
+    "replies": "Caricamento di risposte…",
+    "timeline": "Caricamento di timeline…",
+    "activity": "Caricamento dell’attività…",
+    "pushedToday": "Caricamento di ciò che è stato inviato oggi…",
+    "calendar": "Caricamento di calendario…",
+    "report": "Caricamento di report…",
+    "reportSettings": "Caricamento di impostazioni dei report…",
+    "shift": "Caricamento di pianificazione…",
+    "cleanup": "Caricamento di pulizia…",
+    "runs": "Caricamento di esecuzioni…",
+    "branchState": "Caricamento di stato del branch…",
+    "tags": "Caricamento di tag…",
+    "previews": "Caricamento di preview…",
+    "repositories": "Caricamento di repository…",
+    "roadmap": "Caricamento di roadmap…",
+    "runReports": "Caricamento di report delle esecuzioni…",
+    "earlierVersions": "Caricamento di versioni precedenti…",
+    "workspaces": "Caricamento di workspace…"
+  },
   "shell": {
     "home": "Home",
     "pages": "Pagine",
@@ -310,7 +346,6 @@
   },
   "skillDiff": {
     "description": "Cosa cambierebbe la riga di installazione: le righe con - sono nella copia installata e vengono tolte, quelle con + vengono dalla copia servita dalla bacheca. Terminatori di riga esclusi.",
-    "loading": "Caricamento…",
     "unreadable": "Impossibile leggere la copia installata come testo ({{reason}}): <code>{{path}}</code>",
     "noChanges": "Nessuna modifica: la copia installata è aggiornata rispetto a quella della bacheca.",
     "changes": "Modifiche"
@@ -1170,7 +1205,6 @@
       "fit": "Adatta (0)",
       "zoomIn": "Ingrandisci (+)",
       "loadFailed": "Impossibile caricare questo file.",
-      "loading": "Caricamento…",
       "empty": "(file vuoto)",
       "cut": "Vengono mostrati i primi {{limit}} caratteri. Scarica il file per il resto."
     }
@@ -1602,7 +1636,6 @@
     "title": "Note",
     "manageAll": "Gestisci tutte ({{count}})",
     "add": "Aggiungi nota",
-    "loading": "Caricamento note…",
     "dialogTitle": "Note ({{count}})",
     "dialogDescription": "Un breve fatto ciascuna, quelle fissate per prime. Una nota può essere modificata dal suo autore, da un orchestratore o dall'utente.",
     "empty": "Una nota è un breve fatto che la sessione successiva non deve riscoprire: un comando, un percorso, una regola, un promemoria. Un solo fatto per nota, mai un documento.",
@@ -1656,7 +1689,6 @@
     "reserved": "{{name}} (riservato)",
     "projectAgents": "Agenti del progetto: solo loro ci lavorano",
     "connectedAgents": "Agenti connessi: condiviso",
-    "loadingBranches": "caricamento branch…",
     "noBranchYet": "— ancora nessuno —",
     "clear": "Azzera {{what}}"
   },
@@ -2103,8 +2135,7 @@
   "reviewResult": {
     "pr": "PR #{{number}}",
     "counts": "{{confirmed}} confermati · {{plausible}} plausibili · {{unverified}} non verificati",
-    "title": "Risultato della revisione",
-    "loading": "Caricamento…"
+    "title": "Risultato della revisione"
   },
   "thread": {
     "replyActions": "Azioni della risposta",
@@ -2308,7 +2339,6 @@
     },
     "card": {
       "title": "Cronologia",
-      "loading": "Caricamento…",
       "showMore": "Mostra altro",
       "showLess": "Mostra meno",
       "story": "Storia della cronologia"

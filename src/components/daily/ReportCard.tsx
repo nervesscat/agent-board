@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { History, Paperclip, Pencil } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
 import { Attachments } from '#/components/Attachments'
+import { DelayedLoading, SkeletonCard, SkeletonText } from '#/components/Loading'
 import { Markdown } from '#/components/Markdown'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { RichEditor } from '#/components/RichEditor'
@@ -35,24 +36,43 @@ import { cn } from '#/lib/utils'
  */
 export function ReportCard({ projectId, date }: { projectId: number; date: string }) {
   const { t } = useTranslation()
-  const { data: settings } = useQuery({
+  const { data: settings, error: settingsError } = useQuery({
     queryKey: ['report-settings', projectId],
     queryFn: () => get<ReportSettingsView>(`/api/projects/${projectId}/report-settings`),
   })
-  const { data: list } = useQuery({
+  const {
+    data: list,
+    error: listError,
+    isPlaceholderData,
+  } = useQuery({
     queryKey: ['reports', projectId, 'card', date],
     queryFn: () => get<ReportList>(`/api/projects/${projectId}/reports?from=${date}&to=${date}`),
     // A period turns red when its due time passes, without anyone posting; while claude writes the
     // report, its arrival is waited for closely.
+    // Another day's report stays (dimmed) until this one's arrives; another project's never does.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === projectId ? keepPreviousData(previous) : undefined,
     refetchInterval: (q) => (q.state.data?.generating ? 2_000 : 60_000),
   })
 
-  if (!settings) return null
+  if (!settings)
+    return settingsError ? null : (
+      <DelayedLoading label={t('loading.report')}>
+        <SkeletonCard lines={5} className="min-w-0" />
+      </DelayedLoading>
+    )
   const cadence = settings.cadence === 'off' ? null : settings.cadence
   const period = cadence ? (list?.periods[0] ?? null) : null
 
   return (
-    <section className="relative min-w-0 rounded-lg border p-4" aria-label={t('reportCard.region')}>
+    <section
+      className={cn(
+        'relative min-w-0 rounded-lg border p-4',
+        isPlaceholderData && 'opacity-60 transition-opacity',
+      )}
+      aria-label={t('reportCard.region')}
+      aria-busy={isPlaceholderData || undefined}
+    >
       {/* pr-9 keeps the header's line clear of the history button, floating in the card's top-right. */}
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 pr-9">
         <h2 className="text-sm font-medium">{t('reportCard.title')}</h2>
@@ -63,7 +83,13 @@ export function ReportCard({ projectId, date }: { projectId: number; date: strin
       </div>
       {!cadence ? (
         <p className="text-sm text-muted-foreground">{t('reportCard.off')}</p>
-      ) : !list ? null : period ? (
+      ) : !list || (isPlaceholderData && !period) ? (
+        !listError && (
+          <DelayedLoading label={t('loading.report')}>
+            <SkeletonText lines={4} />
+          </DelayedLoading>
+        )
+      ) : period ? (
         <PeriodReport
           key={period.period}
           projectId={projectId}

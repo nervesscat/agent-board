@@ -3,6 +3,42 @@
     "saved": "저장됨",
     "close": "닫기"
   },
+  "loading": {
+    "ticket": "티켓 불러오는 중…",
+    "tickets": "티켓 불러오는 중…",
+    "agents": "에이전트 불러오는 중…",
+    "branches": "브랜치 불러오는 중…",
+    "recentTickets": "최근 티켓 불러오는 중…",
+    "folders": "폴더 불러오는 중…",
+    "projectPhases": "프로젝트 단계 불러오는 중…",
+    "stages": "단계 불러오는 중…",
+    "preview": "미리보기 불러오는 중…",
+    "file": "파일 불러오는 중…",
+    "files": "파일 불러오는 중…",
+    "instructionsHistory": "지침 기록 불러오는 중…",
+    "instructions": "지침 불러오는 중…",
+    "notes": "메모 불러오는 중…",
+    "reviewResult": "리뷰 결과 불러오는 중…",
+    "changes": "변경 사항 불러오는 중…",
+    "replies": "답글 불러오는 중…",
+    "timeline": "타임라인 불러오는 중…",
+    "activity": "활동 불러오는 중…",
+    "pushedToday": "오늘 푸시 불러오는 중…",
+    "calendar": "달력 불러오는 중…",
+    "report": "보고서 불러오는 중…",
+    "reportSettings": "보고서 설정 불러오는 중…",
+    "shift": "근무 불러오는 중…",
+    "cleanup": "정리 불러오는 중…",
+    "runs": "실행 불러오는 중…",
+    "branchState": "브랜치 상태 불러오는 중…",
+    "tags": "태그 불러오는 중…",
+    "previews": "미리보기 불러오는 중…",
+    "repositories": "저장소 불러오는 중…",
+    "roadmap": "로드맵 불러오는 중…",
+    "runReports": "실행 보고서 불러오는 중…",
+    "earlierVersions": "이전 버전 불러오는 중…",
+    "workspaces": "워크스페이스 불러오는 중…"
+  },
   "shell": {
     "home": "홈",
     "pages": "페이지",
@@ -302,7 +338,6 @@
   },
   "skillDiff": {
     "description": "설치 명령이 바꿀 내용이에요. -로 표시된 줄은 설치된 사본에 있고 사라지며, +로 표시된 줄은 보드가 제공하는 사본에서 와요. 줄 끝 문자는 제외해요.",
-    "loading": "불러오는 중…",
     "unreadable": "설치된 사본을 텍스트로 읽을 수 없어요({{reason}}): <code>{{path}}</code>",
     "noChanges": "변경 없음: 설치된 사본이 보드의 사본과 같아요.",
     "changes": "변경 사항"
@@ -1129,7 +1164,6 @@
       "fit": "맞춤(0)",
       "zoomIn": "확대(+)",
       "loadFailed": "이 파일을 불러오지 못했어요.",
-      "loading": "불러오는 중…",
       "empty": "(빈 파일)",
       "cut": "처음 {{limit}}자만 표시해요. 나머지는 파일을 다운로드하세요."
     }
@@ -1552,7 +1586,6 @@
     "title": "메모",
     "manageAll": "모두 관리({{count}})",
     "add": "메모 추가",
-    "loading": "메모 불러오는 중…",
     "dialogTitle": "메모({{count}})",
     "dialogDescription": "각각 짧은 사실 하나이며 고정된 것이 먼저 나와요. 메모의 작성자, 오케스트레이터, 사람이 바꿀 수 있어요.",
     "empty": "메모는 다음 세션이 다시 알아내지 않아도 되는 짧은 사실 하나예요. 명령, 경로, 규칙, 알림 같은 것이죠. 문서가 아니라 사실 하나만 적으세요.",
@@ -1606,7 +1639,6 @@
     "reserved": "{{name}}(전용)",
     "projectAgents": "프로젝트 에이전트: 이들만 작업해요",
     "connectedAgents": "연결된 에이전트: 공용",
-    "loadingBranches": "브랜치 불러오는 중…",
     "noBranchYet": "— 아직 없음 —",
     "clear": "{{what}} 지우기"
   },
@@ -2038,8 +2070,7 @@
   "reviewResult": {
     "pr": "PR #{{number}}",
     "counts": "확인됨 {{confirmed}} · 가능성 있음 {{plausible}} · 미검증 {{unverified}}",
-    "title": "리뷰 결과",
-    "loading": "불러오는 중…"
+    "title": "리뷰 결과"
   },
   "thread": {
     "replyActions": "답글 동작",
@@ -2241,7 +2272,6 @@
     },
     "card": {
       "title": "타임라인",
-      "loading": "불러오는 중…",
       "showMore": "더 보기",
       "showLess": "간단히 보기",
       "story": "타임라인 이야기"

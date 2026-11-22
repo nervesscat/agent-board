@@ -3,6 +3,42 @@
     "saved": "Saved",
     "close": "Close"
   },
+  "loading": {
+    "ticket": "Loading ticket…",
+    "tickets": "Loading tickets…",
+    "agents": "Loading agents…",
+    "branches": "Loading branches…",
+    "recentTickets": "Loading recent tickets…",
+    "folders": "Loading folders…",
+    "projectPhases": "Loading the project's phases…",
+    "stages": "Loading stages…",
+    "preview": "Loading preview…",
+    "file": "Loading file…",
+    "files": "Loading files…",
+    "instructionsHistory": "Loading instructions history…",
+    "instructions": "Loading instructions…",
+    "notes": "Loading notes…",
+    "reviewResult": "Loading review result…",
+    "changes": "Loading changes…",
+    "replies": "Loading replies…",
+    "timeline": "Loading timeline…",
+    "activity": "Loading activity…",
+    "pushedToday": "Loading pushed today…",
+    "calendar": "Loading calendar…",
+    "report": "Loading report…",
+    "reportSettings": "Loading report settings…",
+    "shift": "Loading shift…",
+    "cleanup": "Loading cleanup…",
+    "runs": "Loading runs…",
+    "branchState": "Loading branch state…",
+    "tags": "Loading tags…",
+    "previews": "Loading previews…",
+    "repositories": "Loading repositories…",
+    "roadmap": "Loading roadmap…",
+    "runReports": "Loading run reports…",
+    "earlierVersions": "Loading earlier versions…",
+    "workspaces": "Loading workspaces…"
+  },
   "shell": {
     "home": "Home",
     "pages": "Pages",
@@ -310,7 +346,6 @@
   },
   "skillDiff": {
     "description": "What the install line would change: lines marked - are in the installed copy and go, lines marked + come from the copy the board serves. Line endings aside.",
-    "loading": "Loading…",
     "unreadable": "The installed copy can't be read as text ({{reason}}): <code>{{path}}</code>",
     "noChanges": "No changes: the installed copy is up to date with the board's.",
     "changes": "Changes"
@@ -1170,7 +1205,6 @@
       "fit": "Fit (0)",
       "zoomIn": "Zoom in (+)",
       "loadFailed": "Could not load this file.",
-      "loading": "Loading…",
       "empty": "(empty file)",
       "cut": "Showing the first {{limit}} characters. Download the file for the rest."
     }
@@ -1602,7 +1636,6 @@
     "title": "Notes",
     "manageAll": "Manage all ({{count}})",
     "add": "Add note",
-    "loading": "Loading notes…",
     "dialogTitle": "Notes ({{count}})",
     "dialogDescription": "One short fact each, pinned first. A note's author, an orchestrator or the human can change it.",
     "empty": "A note is one short fact the next session must not rediscover — a command, a path, a rule, a reminder. Keep each to one fact, never a document.",
@@ -1656,7 +1689,6 @@
     "reserved": "{{name}} (reserved)",
     "projectAgents": "Project agents: only they work it",
     "connectedAgents": "Connected agents: shared",
-    "loadingBranches": "loading branches…",
     "noBranchYet": "— none yet —",
     "clear": "Clear {{what}}"
   },
@@ -2103,8 +2135,7 @@
   "reviewResult": {
     "pr": "PR #{{number}}",
     "counts": "{{confirmed}} confirmed · {{plausible}} plausible · {{unverified}} unverified",
-    "title": "Review result",
-    "loading": "Loading…"
+    "title": "Review result"
   },
   "thread": {
     "replyActions": "Reply actions",
@@ -2308,7 +2339,6 @@
     },
     "card": {
       "title": "Timeline",
-      "loading": "Loading…",
       "showMore": "Show more",
       "showLess": "Show less",
       "story": "Timeline story"

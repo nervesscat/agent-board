@@ -74,7 +74,7 @@ function statusOf(s: RunState | null, t: TFunction): { label: string; className:
  * has neither and the card is left out. The page asks it too, to know whether the card shows.
  */
 export function useTicketRuns(t: TicketFull | undefined, git?: TicketGit) {
-  const { data, refetch } = useQuery({
+  const { data, refetch, isPending } = useQuery({
     queryKey: ['ticket-runs', t?.id],
     queryFn: () => get<TicketRuns>(`/api/tickets/${t!.id}/runs`),
     enabled: !!t,
@@ -104,7 +104,7 @@ export function useTicketRuns(t: TicketFull | undefined, git?: TicketGit) {
     (data?.repos ?? []).some((r) => r.runs.length) ||
     (data?.orphaned ?? []).length > 0 ||
     (data?.alsoRunning ?? []).length > 0
-  return { data, refetch, links, anyRuns, shown: anyRuns || links.length > 0 }
+  return { data, refetch, links, anyRuns, shown: anyRuns || links.length > 0, loading: !!t && isPending }
 }
 
 export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 
 import { COPY_IMAGE_OVERLAY, CopyImageButton } from '#/components/CopyImage'
 import { galleryItem } from '#/components/Gallery'
+import { ImageWithPlaceholder } from '#/components/ImageWithPlaceholder'
 import { Tip } from '#/components/ui/tooltip'
 import type { GalleryFile } from '#/lib/api'
 import { annotationNotes } from '#/lib/annotations'
@@ -107,7 +108,7 @@ function FileTile({ projectId, file: f }: { projectId: string; file: GalleryFile
 
 function Thumb({ file: f }: { file: GalleryFile }) {
   if (f.kind === 'image')
-    return <img src={f.url} alt={f.name} loading="lazy" className="size-full object-cover" />
+    return <ImageWithPlaceholder src={f.url} alt={f.name} className="size-full object-cover" />
   if (f.kind === 'video')
     return (
       <>

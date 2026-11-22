@@ -3,6 +3,42 @@
     "saved": "Kaydedildi",
     "close": "Kapat"
   },
+  "loading": {
+    "ticket": "ticket yükleniyor…",
+    "tickets": "ticket'lar yükleniyor…",
+    "agents": "ajanlar yükleniyor…",
+    "branches": "branch'ler yükleniyor…",
+    "recentTickets": "son ticket'lar yükleniyor…",
+    "folders": "klasörler yükleniyor…",
+    "projectPhases": "projenin fazları yükleniyor…",
+    "stages": "aşamalar yükleniyor…",
+    "preview": "preview yükleniyor…",
+    "file": "dosya yükleniyor…",
+    "files": "dosyalar yükleniyor…",
+    "instructionsHistory": "talimat geçmişi yükleniyor…",
+    "instructions": "talimatlar yükleniyor…",
+    "notes": "notlar yükleniyor…",
+    "reviewResult": "inceleme sonucu yükleniyor…",
+    "changes": "değişiklikler yükleniyor…",
+    "replies": "yanıtlar yükleniyor…",
+    "timeline": "zaman çizelgesi yükleniyor…",
+    "activity": "etkinlik yükleniyor…",
+    "pushedToday": "bugün push edilenler yükleniyor…",
+    "calendar": "takvim yükleniyor…",
+    "report": "rapor yükleniyor…",
+    "reportSettings": "rapor ayarları yükleniyor…",
+    "shift": "vardiya yükleniyor…",
+    "cleanup": "temizlik yükleniyor…",
+    "runs": "run'lar yükleniyor…",
+    "branchState": "branch durumu yükleniyor…",
+    "tags": "etiketler yükleniyor…",
+    "previews": "preview'lar yükleniyor…",
+    "repositories": "repolar yükleniyor…",
+    "roadmap": "yol haritası yükleniyor…",
+    "runReports": "run raporları yükleniyor…",
+    "earlierVersions": "önceki sürümler yükleniyor…",
+    "workspaces": "workspace'ler yükleniyor…"
+  },
   "shell": {
     "home": "Ana sayfa",
     "pages": "Sayfalar",
@@ -310,7 +346,6 @@
   },
   "skillDiff": {
     "description": "Kurulum satırının neyi değiştireceği: - ile işaretli satırlar kurulu kopyadadır ve gider, + ile işaretli satırlar panonun sunduğu kopyadan gelir. Satır sonları hariç.",
-    "loading": "Yükleniyor…",
     "unreadable": "Kurulu kopya metin olarak okunamıyor ({{reason}}): <code>{{path}}</code>",
     "noChanges": "Değişiklik yok: kurulu kopya panonunkiyle güncel.",
     "changes": "Değişiklikler"
@@ -1170,7 +1205,6 @@
       "fit": "Sığdır (0)",
       "zoomIn": "Yakınlaştır (+)",
       "loadFailed": "Bu dosya yüklenemedi.",
-      "loading": "Yükleniyor…",
       "empty": "(boş dosya)",
       "cut": "İlk {{limit}} karakter gösteriliyor. Gerisi için dosyayı indir."
     }
@@ -1602,7 +1636,6 @@
     "title": "Notlar",
     "manageAll": "Tümünü yönet ({{count}})",
     "add": "Not ekle",
-    "loading": "Notlar yükleniyor…",
     "dialogTitle": "Notlar ({{count}})",
     "dialogDescription": "Her biri kısa bir bilgi, sabitlenenler önde. Bir notu yazarı, bir orchestrator ya da insan değiştirebilir.",
     "empty": "Not, sonraki oturumun yeniden keşfetmemesi gereken kısa bir bilgidir: bir komut, bir yol, bir kural, bir hatırlatma. Her birini tek bilgiyle sınırla, asla belge yazma.",
@@ -1656,7 +1689,6 @@
     "reserved": "{{name}} (ayrılmış)",
     "projectAgents": "Proje ajanları: yalnızca onlar çalışır",
     "connectedAgents": "Bağlı ajanlar: ortak",
-    "loadingBranches": "branch'ler yükleniyor…",
     "noBranchYet": "— henüz yok —",
     "clear": "Temizle: {{what}}"
   },
@@ -2103,8 +2135,7 @@
   "reviewResult": {
     "pr": "PR #{{number}}",
     "counts": "{{confirmed}} doğrulandı · {{plausible}} olası · {{unverified}} doğrulanmadı",
-    "title": "İnceleme sonucu",
-    "loading": "Yükleniyor…"
+    "title": "İnceleme sonucu"
   },
   "thread": {
     "replyActions": "Yanıt eylemleri",
@@ -2308,7 +2339,6 @@
     },
     "card": {
       "title": "Zaman çizelgesi",
-      "loading": "Yükleniyor…",
       "showMore": "Daha fazla göster",
       "showLess": "Daha az göster",
       "story": "Zaman çizelgesi öyküsü"

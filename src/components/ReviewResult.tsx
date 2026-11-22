@@ -3,6 +3,7 @@ import { type ReactNode, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Actor } from '#/components/Actor'
+import { DelayedLoading, SkeletonText } from '#/components/Loading'
 import { Markdown } from '#/components/Markdown'
 import { Thread } from '#/components/Thread'
 import { Badge } from '#/components/ui/badge'
@@ -93,7 +94,9 @@ export function ReviewResultDialog({ resultId, onClose }: { resultId: number | n
         ) : data ? (
           <ReviewResultView r={data} />
         ) : (
-          <p className="text-sm text-muted-foreground">{t('reviewResult.loading')}</p>
+          <DelayedLoading label={t('loading.reviewResult')}>
+            <SkeletonText lines={8} />
+          </DelayedLoading>
         )}
       </DialogContent>
     </Dialog>

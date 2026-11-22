@@ -3,8 +3,10 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { DelayedLoading } from '#/components/Loading'
 import { ReportPromptSettings } from '#/components/daily/ReportPromptSettings'
 import { ShiftSettings } from '#/components/daily/ShiftSettings'
+import { Skeleton } from '#/components/ui/skeleton'
 import { get, type ReportSettingsView } from '#/lib/api'
 import { describeSchedule } from '#/lib/reports'
 
@@ -15,11 +17,16 @@ import { describeSchedule } from '#/lib/reports'
 export function ReportSettingsPanel({ projectId }: { projectId: number }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  const { data: settings } = useQuery({
+  const { data: settings, error } = useQuery({
     queryKey: ['report-settings', projectId],
     queryFn: () => get<ReportSettingsView>(`/api/projects/${projectId}/report-settings`),
   })
-  if (!settings) return null
+  if (!settings)
+    return error ? null : (
+      <DelayedLoading label={t('loading.reportSettings')} className="rounded-lg border px-4 py-3">
+        <Skeleton className="h-5 w-48" />
+      </DelayedLoading>
+    )
 
   return (
     <section className="rounded-lg border" aria-label={t('reportSettings.region')}>

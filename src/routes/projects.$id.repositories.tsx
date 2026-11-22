@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 
 import { Empty } from '#/components/Empty'
+import { DelayedLoading } from '#/components/Loading'
 import { RepoDialog } from '#/components/RepoDialog'
 import { Button } from '#/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '#/components/ui/card'
@@ -36,11 +37,13 @@ function Repositories() {
         </Button>
       </div>
       {!hydrated || isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-28" />
-          ))}
-        </div>
+        <DelayedLoading label={t('loading.repositories')}>
+          <div aria-hidden className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-28" />
+            ))}
+          </div>
+        </DelayedLoading>
       ) : repos.length ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {repos.map((r) => (

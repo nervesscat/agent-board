@@ -3,6 +3,42 @@
     "saved": "已保存",
     "close": "关闭"
   },
+  "loading": {
+    "ticket": "正在加载ticket…",
+    "tickets": "正在加载ticket…",
+    "agents": "正在加载智能体…",
+    "branches": "正在加载分支…",
+    "recentTickets": "正在加载最近的 ticket…",
+    "folders": "正在加载文件夹…",
+    "projectPhases": "正在加载项目的环节…",
+    "stages": "正在加载阶段…",
+    "preview": "正在加载Preview…",
+    "file": "正在加载文件…",
+    "files": "正在加载文件…",
+    "instructionsHistory": "正在加载说明历史…",
+    "instructions": "正在加载说明…",
+    "notes": "正在加载笔记…",
+    "reviewResult": "正在加载评审结果…",
+    "changes": "正在加载更改…",
+    "replies": "正在加载回复…",
+    "timeline": "正在加载时间线…",
+    "activity": "正在加载活动…",
+    "pushedToday": "正在加载今日已推送…",
+    "calendar": "正在加载日历…",
+    "report": "正在加载报告…",
+    "reportSettings": "正在加载报告设置…",
+    "shift": "正在加载班次…",
+    "cleanup": "正在加载清理…",
+    "runs": "正在加载运行项…",
+    "branchState": "正在加载分支状态…",
+    "tags": "正在加载标签…",
+    "previews": "正在加载Previews…",
+    "repositories": "正在加载仓库…",
+    "roadmap": "正在加载路线图…",
+    "runReports": "正在加载运行报告…",
+    "earlierVersions": "正在加载更早的版本…",
+    "workspaces": "正在加载Workspace…"
+  },
   "shell": {
     "home": "首页",
     "pages": "页面",
@@ -302,7 +338,6 @@
   },
   "skillDiff": {
     "description": "这条安装命令将带来的变化：以 - 标记的行在已安装的副本中，会被移除；以 + 标记的行来自看板提供的副本。不计行尾差异。",
-    "loading": "加载中…",
     "unreadable": "无法将已安装的副本读取为文本（{{reason}}）：<code>{{path}}</code>",
     "noChanges": "没有变化：已安装的副本与看板上的一致。",
     "changes": "变化"
@@ -1129,7 +1164,6 @@
       "fit": "适应（0）",
       "zoomIn": "放大（+）",
       "loadFailed": "无法加载此文件。",
-      "loading": "加载中…",
       "empty": "（空文件）",
       "cut": "显示前 {{limit}} 个字符。下载文件可查看其余部分。"
     }
@@ -1552,7 +1586,6 @@
     "title": "笔记",
     "manageAll": "管理全部（{{count}}）",
     "add": "添加笔记",
-    "loading": "正在加载笔记…",
     "dialogTitle": "笔记（{{count}}）",
     "dialogDescription": "每条一个简短事实，置顶的在前。笔记的作者、编排者或人都可以修改它。",
     "empty": "笔记就是下一次会话不必重新摸索的一个简短事实：一条命令、一个路径、一条规则、一个提醒。每条只记一个事实，不要写成文档。",
@@ -1606,7 +1639,6 @@
     "reserved": "{{name}}（专属）",
     "projectAgents": "项目智能体：仅它们处理",
     "connectedAgents": "已连接的智能体：共享",
-    "loadingBranches": "正在加载分支…",
     "noBranchYet": "— 暂无 —",
     "clear": "清除 {{what}}"
   },
@@ -2038,8 +2070,7 @@
   "reviewResult": {
     "pr": "PR #{{number}}",
     "counts": "已确认{{confirmed}} · 可能{{plausible}} · 未验证{{unverified}}",
-    "title": "评审结果",
-    "loading": "加载中…"
+    "title": "评审结果"
   },
   "thread": {
     "replyActions": "回复操作",
@@ -2241,7 +2272,6 @@
     },
     "card": {
       "title": "时间线",
-      "loading": "加载中…",
       "showMore": "显示更多",
       "showLess": "收起",
       "story": "时间线记录"

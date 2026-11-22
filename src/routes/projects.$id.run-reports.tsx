@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { ClipboardList, X } from 'lucide-react'
 import { useState } from 'react'
@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
 
 import { Empty } from '#/components/Empty'
+import { DelayedLoading } from '#/components/Loading'
 import { RunReportDialog, runReportDuration } from '#/components/RunReport'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
@@ -15,6 +16,7 @@ import { Skeleton } from '#/components/ui/skeleton'
 import { errorMessage, get, type RunReportRow } from '#/lib/api'
 import { ago } from '#/lib/format'
 import { RUN_REPORT_AGENTS, type RunReport } from '#/lib/runReports'
+import { cn } from '#/lib/utils'
 
 // ?agent= and ?ticket= narrow the list: one kind of run across tickets, and further to one ticket. A
 // value the board does not know is dropped, and the list shows unfiltered on that count.
@@ -38,10 +40,13 @@ function RunReportsPage() {
   const params = new URLSearchParams()
   if (agent) params.set('agent', agent)
   if (ticket) params.set('ticketId', String(ticket))
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isPlaceholderData, error } = useQuery({
     queryKey: ['run-reports', id, agent ?? '', ticket ?? ''],
     queryFn: () => get<RunReportRow[]>(`/api/projects/${id}/run-reports?${params}`),
     refetchInterval: 30_000,
+    // A filter keeps the rows it replaces on show, dimmed; another project's rows never do.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === id ? keepPreviousData(previous) : undefined,
   })
   const filter = (patch: { agent?: string; ticket?: number }) =>
     navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true })
@@ -104,15 +109,25 @@ function RunReportsPage() {
       </div>
       {error ? (
         <p className="text-sm text-destructive">{errorMessage(error)}</p>
-      ) : isLoading ? (
-        <div className="space-y-2">
-          <Skeleton className="h-12 w-full" />
-          <Skeleton className="h-12 w-full" />
-        </div>
+      ) : isLoading || (isPlaceholderData && !data?.length) ? (
+        <DelayedLoading label={t('loading.runReports')} className="space-y-2">
+          {Array.from({ length: 3 }, (_, i) => (
+            <div key={i} className="flex items-center gap-2 rounded-lg border px-3 py-2" aria-hidden>
+              <Skeleton className="h-4 w-4" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-1/3" />
+              <Skeleton className="ml-auto h-4 w-16" />
+            </div>
+          ))}
+        </DelayedLoading>
       ) : !data?.length ? (
         <Empty>{agent || ticket ? t('runReport.emptyFiltered') : t('runReport.empty')}</Empty>
       ) : (
-        <ul className="space-y-2" aria-label={t('runReport.panelTitle')}>
+        <ul
+          className={cn('space-y-2', isPlaceholderData && 'opacity-60 transition-opacity')}
+          aria-label={t('runReport.panelTitle')}
+          aria-busy={isPlaceholderData || undefined}
+        >
           {data.map((r) => (
             <li key={r.id} className="rounded-lg border">
               <div className="flex items-center gap-2 px-3 py-2">

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { DelayedLoading, SkeletonText } from '#/components/Loading'
 import { TrashIcon } from '#/components/TrashIcon'
 import { Button } from '#/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
@@ -101,7 +102,9 @@ export function Notes({ p }: { p: ProjectSummary }) {
       </CardHeader>
       <CardContent className="space-y-3">
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">{t('notes.loading')}</p>
+          <DelayedLoading label={t('loading.notes')}>
+            <SkeletonText lines={3} />
+          </DelayedLoading>
         ) : error && !data ? (
           // A first load that failed says so; a later failed refetch keeps the notes already shown.
           <p className="text-sm text-destructive">{errorMessage(error)}</p>

@@ -3,6 +3,42 @@
     "saved": "Đã lưu",
     "close": "Đóng"
   },
+  "loading": {
+    "ticket": "Đang tải ticket…",
+    "tickets": "Đang tải ticket…",
+    "agents": "Đang tải agent…",
+    "branches": "Đang tải branch…",
+    "recentTickets": "Đang tải ticket gần đây…",
+    "folders": "Đang tải thư mục…",
+    "projectPhases": "Đang tải giai đoạn của dự án…",
+    "stages": "Đang tải cột…",
+    "preview": "Đang tải preview…",
+    "file": "Đang tải tệp…",
+    "files": "Đang tải tệp…",
+    "instructionsHistory": "Đang tải lịch sử hướng dẫn…",
+    "instructions": "Đang tải hướng dẫn…",
+    "notes": "Đang tải ghi chú…",
+    "reviewResult": "Đang tải kết quả review…",
+    "changes": "Đang tải thay đổi…",
+    "replies": "Đang tải phản hồi…",
+    "timeline": "Đang tải dòng thời gian…",
+    "activity": "Đang tải hoạt động…",
+    "pushedToday": "Đang tải đã push hôm nay…",
+    "calendar": "Đang tải lịch…",
+    "report": "Đang tải báo cáo…",
+    "reportSettings": "Đang tải cài đặt báo cáo…",
+    "shift": "Đang tải ca làm việc…",
+    "cleanup": "Đang tải dọn dẹp…",
+    "runs": "Đang tải lượt chạy…",
+    "branchState": "Đang tải trạng thái branch…",
+    "tags": "Đang tải tag…",
+    "previews": "Đang tải preview…",
+    "repositories": "Đang tải repo…",
+    "roadmap": "Đang tải lộ trình…",
+    "runReports": "Đang tải báo cáo lượt chạy…",
+    "earlierVersions": "Đang tải phiên bản cũ hơn…",
+    "workspaces": "Đang tải workspace…"
+  },
   "shell": {
     "home": "Trang chủ",
     "pages": "Trang",
@@ -302,7 +338,6 @@
   },
   "skillDiff": {
     "description": "Những gì dòng lệnh cài đặt sẽ thay đổi: dòng đánh dấu - có trong bản đã cài và sẽ bị bỏ, dòng đánh dấu + đến từ bản board phục vụ. Không tính kiểu xuống dòng.",
-    "loading": "Đang tải…",
     "unreadable": "Không đọc được bản đã cài dưới dạng văn bản ({{reason}}): <code>{{path}}</code>",
     "noChanges": "Không có thay đổi: bản đã cài đã khớp với bản của board.",
     "changes": "Thay đổi"
@@ -1129,7 +1164,6 @@
       "fit": "Vừa khung (0)",
       "zoomIn": "Phóng to (+)",
       "loadFailed": "Không tải được tệp này.",
-      "loading": "Đang tải…",
       "empty": "(tệp trống)",
       "cut": "Đang hiện {{limit}} ký tự đầu. Hãy tải tệp xuống để xem phần còn lại."
     }
@@ -1552,7 +1586,6 @@
     "title": "Ghi chú",
     "manageAll": "Quản lý tất cả ({{count}})",
     "add": "Thêm ghi chú",
-    "loading": "Đang tải ghi chú…",
     "dialogTitle": "Ghi chú ({{count}})",
     "dialogDescription": "Mỗi ghi chú một sự việc ngắn, ghim lên đầu. Tác giả của ghi chú, orchestrator hoặc con người có thể sửa nó.",
     "empty": "Ghi chú là một sự việc ngắn mà phiên sau không được phải khám phá lại — một lệnh, một đường dẫn, một quy tắc, một lời nhắc. Mỗi ghi chú chỉ một sự việc, không bao giờ là một tài liệu.",
@@ -1606,7 +1639,6 @@
     "reserved": "{{name}} (dành riêng)",
     "projectAgents": "Agent của dự án: chỉ họ làm",
     "connectedAgents": "Agent đã kết nối: dùng chung",
-    "loadingBranches": "đang tải branch…",
     "noBranchYet": "— chưa có —",
     "clear": "Xóa {{what}}"
   },
@@ -2038,8 +2070,7 @@
   "reviewResult": {
     "pr": "PR #{{number}}",
     "counts": "{{confirmed}} đã xác nhận · {{plausible}} có khả năng · {{unverified}} chưa kiểm chứng",
-    "title": "Kết quả review",
-    "loading": "Đang tải…"
+    "title": "Kết quả review"
   },
   "thread": {
     "replyActions": "Hành động phản hồi",
@@ -2241,7 +2272,6 @@
     },
     "card": {
       "title": "Dòng thời gian",
-      "loading": "Đang tải…",
       "showMore": "Hiện thêm",
       "showLess": "Hiện ít hơn",
       "story": "Câu chuyện dòng thời gian"

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -22,9 +22,12 @@ import { localDate, shiftDate } from '#/lib/format'
 export function DailyView({ projectId }: { projectId: number }) {
   const { t } = useTranslation()
   const [date, setDate] = useState(localDate())
-  const { data } = useQuery({
+  const { data, error, isPlaceholderData } = useQuery({
     queryKey: ['daily', date, projectId],
     queryFn: () => get<DailyPayload>(`/api/daily?date=${date}&projectId=${projectId}`),
+    // Another day's activity stays (dimmed) until this one's arrives; another project's never does.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[2] === projectId ? keepPreviousData(previous) : undefined,
     refetchInterval: 15_000,
   })
 
@@ -71,7 +74,13 @@ export function DailyView({ projectId }: { projectId: number }) {
       </div>
       <ReportSettingsPanel projectId={projectId} />
 
-      <ActivityLog activity={data?.activity} projectId={projectId} date={date} />
+      <ActivityLog
+        activity={data?.activity}
+        stale={isPlaceholderData}
+        failed={Boolean(error)}
+        projectId={projectId}
+        date={date}
+      />
     </div>
   )
 }

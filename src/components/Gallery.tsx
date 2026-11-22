@@ -13,9 +13,11 @@ import { type PointerEvent, type RefObject, useEffect, useRef, useState } from '
 import { useTranslation } from 'react-i18next'
 
 import { CopyImageButton } from '#/components/CopyImage'
+import { Loading, SkeletonText } from '#/components/Loading'
 import { Tip } from '#/components/ui/tooltip'
 import { viewKind } from '#/lib/fileKinds'
 import { formatNumber } from '#/lib/format'
+import { useDelayedFlag } from '#/lib/useDelayedFlag'
 
 /**
  * Anything on the page marked with `data-gallery-src` opens in a full-screen viewer on click, and the
@@ -470,12 +472,17 @@ function TextViewer({ item }: { item: GalleryItem }) {
     return () => ctrl.abort()
   }, [item.src])
 
-  if (failed || text === null)
-    return (
-      <div className="text-sm text-white/60">
-        {failed ? t('files.viewer.loadFailed') : t('files.viewer.loading')}
-      </div>
-    )
+  const slow = useDelayedFlag(!failed && text === null)
+  if (failed) return <div className="text-sm text-white/60">{t('files.viewer.loadFailed')}</div>
+  if (text === null)
+    return slow ? (
+      <Loading
+        label={t('loading.file')}
+        className="h-full w-full max-w-5xl rounded-md bg-neutral-900 p-4 ring-1 ring-white/10 [&_[data-slot=skeleton]]:bg-white/10"
+      >
+        <SkeletonText lines={10} />
+      </Loading>
+    ) : null
   const cut = text.length > TEXT_LIMIT
   return (
     <pre className="h-full w-full max-w-5xl overflow-auto rounded-md bg-neutral-900 p-4 font-mono text-[13px] leading-relaxed break-words whitespace-pre-wrap text-neutral-100 ring-1 ring-white/10 select-text">

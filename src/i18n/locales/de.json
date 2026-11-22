@@ -3,6 +3,42 @@
     "saved": "Gespeichert",
     "close": "Schließen"
   },
+  "loading": {
+    "ticket": "Lade Ticket…",
+    "tickets": "Lade Tickets…",
+    "agents": "Lade Agents…",
+    "branches": "Lade Branches…",
+    "recentTickets": "Lade letzte Tickets…",
+    "folders": "Lade Ordner…",
+    "projectPhases": "Lade die Phasen des Projekts…",
+    "stages": "Lade Stufen…",
+    "preview": "Lade Preview…",
+    "file": "Lade Datei…",
+    "files": "Lade Dateien…",
+    "instructionsHistory": "Lade Anweisungsverlauf…",
+    "instructions": "Lade Anweisungen…",
+    "notes": "Lade Notizen…",
+    "reviewResult": "Lade Review-Ergebnis…",
+    "changes": "Lade Änderungen…",
+    "replies": "Lade Antworten…",
+    "timeline": "Lade Verlauf…",
+    "activity": "Lade Aktivität…",
+    "pushedToday": "Lade heute Gepushtes…",
+    "calendar": "Lade Kalender…",
+    "report": "Lade Bericht…",
+    "reportSettings": "Lade Berichtseinstellungen…",
+    "shift": "Lade Schicht…",
+    "cleanup": "Lade Aufräumen…",
+    "runs": "Lade Runs…",
+    "branchState": "Lade Branch-Stand…",
+    "tags": "Lade Tags…",
+    "previews": "Lade Previews…",
+    "repositories": "Lade Repositories…",
+    "roadmap": "Lade Roadmap…",
+    "runReports": "Lade Run-Berichte…",
+    "earlierVersions": "Lade frühere Versionen…",
+    "workspaces": "Lade Workspaces…"
+  },
   "shell": {
     "home": "Start",
     "pages": "Seiten",
@@ -310,7 +346,6 @@
   },
   "skillDiff": {
     "description": "Was die Installationszeile ändern würde: Mit - markierte Zeilen stehen in der installierten Kopie und fallen weg, mit + markierte kommen aus der Kopie, die das Board bereitstellt. Zeilenenden ausgenommen.",
-    "loading": "Lade…",
     "unreadable": "Die installierte Kopie lässt sich nicht als Text lesen ({{reason}}): <code>{{path}}</code>",
     "noChanges": "Keine Änderungen: Die installierte Kopie entspricht der des Boards.",
     "changes": "Änderungen"
@@ -1170,7 +1205,6 @@
       "fit": "Einpassen (0)",
       "zoomIn": "Vergrößern (+)",
       "loadFailed": "Diese Datei konnte nicht geladen werden.",
-      "loading": "Lade…",
       "empty": "(leere Datei)",
       "cut": "Die ersten {{limit}} Zeichen werden gezeigt. Lade die Datei herunter für den Rest."
     }
@@ -1602,7 +1636,6 @@
     "title": "Notizen",
     "manageAll": "Alle verwalten ({{count}})",
     "add": "Notiz hinzufügen",
-    "loading": "Lade Notizen…",
     "dialogTitle": "Notizen ({{count}})",
     "dialogDescription": "Je ein kurzer Fakt, Angepinntes zuerst. Der Autor einer Notiz, ein Orchestrator oder der Mensch kann sie ändern.",
     "empty": "Eine Notiz ist ein kurzer Fakt, den die nächste Sitzung nicht neu entdecken soll — ein Befehl, ein Pfad, eine Regel, eine Erinnerung. Halte jede auf einen Fakt, nie ein Dokument.",
@@ -1656,7 +1689,6 @@
     "reserved": "{{name}} (reserviert)",
     "projectAgents": "Projekt-Agents: nur sie bearbeiten es",
     "connectedAgents": "Verbundene Agents: geteilt",
-    "loadingBranches": "lade Branches…",
     "noBranchYet": "— noch keiner —",
     "clear": "{{what}} zurücksetzen"
   },
@@ -2103,8 +2135,7 @@
   "reviewResult": {
     "pr": "PR #{{number}}",
     "counts": "{{confirmed}} bestätigt · {{plausible}} plausibel · {{unverified}} ungeprüft",
-    "title": "Review-Ergebnis",
-    "loading": "Lade…"
+    "title": "Review-Ergebnis"
   },
   "thread": {
     "replyActions": "Antwortaktionen",
@@ -2308,7 +2339,6 @@
     },
     "card": {
       "title": "Verlauf",
-      "loading": "Lade…",
       "showMore": "Mehr zeigen",
       "showLess": "Weniger zeigen",
       "story": "Verlaufsgeschichte"

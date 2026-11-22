@@ -1,4 +1,4 @@
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import {
   ArrowDownAZ,
@@ -20,6 +20,7 @@ import { ChipToggles } from '#/components/Chips'
 import { DatePicker } from '#/components/DatePicker'
 import { Empty } from '#/components/Empty'
 import { FileGrid } from '#/components/FileGallery'
+import { DelayedLoading } from '#/components/Loading'
 import { Button } from '#/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Skeleton } from '#/components/ui/skeleton'
@@ -103,16 +104,20 @@ function GalleryPage() {
   const filters = params.toString()
   const filtered = Boolean(kinds.length || search.from || search.to)
 
-  const { data, error, isPending, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: ['gallery', id, filters],
-    queryFn: ({ pageParam }) => {
-      const q = new URLSearchParams(params)
-      if (pageParam) q.set('cursor', pageParam)
-      return get<Gallery>(`/api/projects/${id}/gallery?${q}`)
-    },
-    initialPageParam: '',
-    getNextPageParam: (last) => last.next ?? undefined,
-  })
+  const { data, error, isPending, isPlaceholderData, hasNextPage, fetchNextPage, isFetchingNextPage } =
+    useInfiniteQuery({
+      queryKey: ['gallery', id, filters],
+      queryFn: ({ pageParam }) => {
+        const q = new URLSearchParams(params)
+        if (pageParam) q.set('cursor', pageParam)
+        return get<Gallery>(`/api/projects/${id}/gallery?${q}`)
+      },
+      initialPageParam: '',
+      getNextPageParam: (last) => last.next ?? undefined,
+      // A filter keeps the tiles it replaces on show, dimmed; another project's never stay.
+      placeholderData: (previous, previousQuery) =>
+        previousQuery?.queryKey[1] === id ? keepPreviousData(previous) : undefined,
+    })
   const files = data?.pages.flatMap((p) => p.items) ?? []
 
   return (
@@ -190,16 +195,26 @@ function GalleryPage() {
 
       {error ? (
         <Empty>{t('gallery.page.loadError', { error: errorMessage(error) })}</Empty>
-      ) : isPending ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {Array.from({ length: 8 }, (_, i) => (
-            <Skeleton key={i} className="aspect-[4/5]" />
-          ))}
-        </div>
+      ) : isPending || (isPlaceholderData && !files.length) ? (
+        <DelayedLoading label={t('loading.files')}>
+          <div aria-hidden className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {Array.from({ length: 10 }, (_, i) => (
+              <div key={i} className="overflow-hidden rounded-lg border bg-card">
+                <Skeleton className="aspect-[4/3] rounded-none" />
+                <div className="space-y-1.5 p-2">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </DelayedLoading>
       ) : files.length ? (
-        <>
-          <FileGrid projectId={id} files={files} />
-          {hasNextPage && (
+        <div className="space-y-4" aria-busy={isPlaceholderData || undefined}>
+          <div className={isPlaceholderData ? 'opacity-60 transition-opacity' : undefined}>
+            <FileGrid projectId={id} files={files} />
+          </div>
+          {hasNextPage && !isPlaceholderData && (
             <MoreFiles
               loading={isFetchingNextPage}
               onNear={() => {
@@ -207,7 +222,7 @@ function GalleryPage() {
               }}
             />
           )}
-        </>
+        </div>
       ) : (
         <Empty>{filtered ? t('gallery.page.noMatch') : t('gallery.page.none')}</Empty>
       )}
