@@ -28,6 +28,23 @@ toast.success(t('common.saved'))
 - A literal that is not language (a command, a file name, an id) is marked `// i18n-ignore: why` on its line or the
   one above. `pnpm check:i18n` checks every language has every key and no English is left in a component.
 
+## Every language, and what a new text needs
+
+There are twenty languages (`src/i18n/languages.ts`); `en.json` is the model and every other file has exactly its
+keys, placeholders, `<tags>` and the plural forms its language writes (`pnpm check:i18n`, also in `pnpm test`).
+No language falls back to English for a key it lacks. A new text goes into all twenty files, and the desktop app's
+into `desktop/app/strings/<code>.mjs`. Plural forms by language (`Intl.PluralRules`): Chinese, Japanese, Korean,
+Vietnamese and Indonesian have `_other` only; English, Spanish, French, Portuguese, Italian, German, Hindi, Bengali,
+Marathi, Telugu, Tamil and Turkish `_one` and `_other`; Russian, Ukrainian and Polish `_one`, `_few`, `_many`,
+`_other`. A text English says the same for every count (`{{count}} blocked`) may become plural forms in a
+language whose grammar changes with the number. Each language's glossary (the terms it keeps in English, the
+register it uses, the words it chose) is `docs/translations/<code>.md`: read it before adding a text, and keep
+to it. The Spanish one is below. Add a language: a file in `src/i18n/locales/`, its code, own name, English name
+and `Intl` locale in `languages.ts`, a table in `desktop/app/strings/` and its line in `desktop/app/strings.mjs`,
+and a glossary; the dropdown, the browser's detection and the checks follow from the list.
+
+Right-to-left languages (Arabic, Hebrew, Persian, Urdu) are not offered: the layout is not mirrored yet.
+
 ## Spanish: how it is written
 
 Natural Spanish for a software tool, addressed informally (tú, imperative: "Guarda", "Elige"), neutral between
