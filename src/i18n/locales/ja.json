@@ -349,7 +349,7 @@
     "saving": "保存中…"
   },
   "projectSettings": {
-    "intro": "このプロジェクトの動作を決めます。新しいチケットの初期内容、提案するタグ、チケットを停滞とみなす時間、ステージ、実行、各ページの表示内容です。エージェントへの指示は専用のページにあります。",
+    "intro": "このプロジェクトの動作を決めます。新しいチケットの初期内容、提案するタグ、チケットを停滞とみなす時間、表示するアラート、ステージ、実行、各ページの表示内容です。エージェントへの指示は専用のページにあります。",
     "save": "保存",
     "saving": "保存中…",
     "unsaved": "未保存の変更があります。",
@@ -1860,6 +1860,11 @@
         "subtitle": "チケットを停滞と表示する条件",
         "keywords": "停滞, 分, アイドル, stall"
       },
+      "notifications": {
+        "title": "通知",
+        "subtitle": "このプロジェクトで表示するアラート",
+        "keywords": "アラート, ミュート, ベル, リマインダー, 通知, alerts, mute"
+      },
       "stages": {
         "title": "ステージ",
         "subtitle": "ボードの列とその意味",
@@ -2162,7 +2167,6 @@
     "noWork": "記録された作業はまだありません。",
     "now": "現在",
     "board": "ボード",
-    "blocked": "ブロック",
     "unnamed": "名前なし",
     "work": "作業",
     "theHuman": "人間",
@@ -2173,6 +2177,8 @@
     "delegatedTo": "{{on}} に委任",
     "subAgentOf": "{{name}}({{parent}}のサブエージェント)",
     "created": "作業の{{count}}分前に作成",
+    "notToScaleNote": "この時間は実際の長さではなく、短いブロックで表示しています。",
+    "alsoThenItem": "{{name}}、{{time}}",
     "duration": {
       "seconds": "{{count}}秒",
       "minutes": "{{count}}分",
@@ -2181,6 +2187,7 @@
     },
     "spoken": {
       "underMinute": "1分未満",
+      "days": "{{count}}日",
       "minutes": "{{count}}分",
       "hours": "{{count}}時間",
       "hoursMinutes": "{{h}}時間{{m}}分"
@@ -2200,7 +2207,7 @@
       "delegation": "{{agent}}が{{on}}に委任、{{from}}から{{to}}、{{duration}}{{open}}{{note}}",
       "handoff": "{{from}}が{{to}}に作業を引き渡し、{{time}}{{note}}",
       "mark": "{{name}}{{note}}、{{time}}",
-      "blockedStage": "ブロック中のステージ、{{from}}から{{to}}、{{duration}}"
+      "collapsed": "{{label}}、{{from}}から{{to}}、{{duration}}、縮尺は実際と異なります"
     },
     "fact": {
       "delegatedTo": "委任先",
@@ -2209,6 +2216,7 @@
       "ended": "終了",
       "note": "メモ",
       "waiting": "待機",
+      "waitingFor": "待機先",
       "on": "対象",
       "duration": "所要時間",
       "who": "誰が",
@@ -2216,8 +2224,9 @@
       "from": "開始",
       "to": "終了",
       "at": "時刻",
-      "stage": "ステージ",
-      "event": "イベント"
+      "event": "イベント",
+      "notToScale": "縮尺は実際と異なる",
+      "alsoThen": "同時に"
     },
     "summary": {
       "noAgentWork": "記録されたエージェントの作業はありません。",
@@ -2225,18 +2234,16 @@
       "waited": "{{target}}を{{duration}}待機",
       "delegated": "{{on}}に委任",
       "clause": "{{agent}}: {{parts}}",
-      "workBy_other": "{{over}}の間に{{count}}エージェントが作業: {{clauses}}。{{live}}",
-      "activityBy_other": "{{over}}の間に{{count}}エージェントが活動: {{clauses}}。{{live}}",
-      "stillGoing": "継続中です。"
+      "workBy_other": "{{over}}の間に{{count}}エージェントが作業: {{clauses}}。{{live}}{{scale}}",
+      "activityBy_other": "{{over}}の間に{{count}}エージェントが活動: {{clauses}}。{{live}}{{scale}}",
+      "stillGoing": "継続中です。",
+      "notToScale": " 縮尺は実際と異なります: {{skipped}}。"
     },
     "card": {
       "title": "タイムライン",
       "loading": "読み込み中…",
       "showMore": "もっと見る",
       "showLess": "閉じる",
-      "showHeartbeats": "ハートビートを表示",
-      "hideHeartbeats": "ハートビートを隠す",
-      "heartbeats_other": "ハートビート{{count}}件、最後は{{time}}",
       "story": "タイムラインのあらすじ"
     },
     "story": {
@@ -2249,7 +2256,6 @@
       "someone": "誰か",
       "waiting": "{{who}}を待機中",
       "stoppedWaiting": "{{who}}の待機を終了{{note}}",
-      "heartbeat": "ハートビート{{note}}",
       "movedTo": "{{stage}} に移動",
       "createdIn": "{{stage}} で作成",
       "pushed": "プッシュ",
@@ -2266,6 +2272,21 @@
       "minutesSeconds": "{{m}}分{{s}}秒",
       "hours": "{{count}}時間",
       "hoursMinutes": "{{h}}時間{{m}}分"
+    },
+    "stretch": {
+      "start": "開始待ち",
+      "blocked": "ブロック",
+      "human": "人の対応待ち",
+      "review": "レビュー中",
+      "merge": "マージ待ち",
+      "decision": "判断待ち"
+    },
+    "skipped": {
+      "start": "開始待ち{{duration}}",
+      "blocked": "ブロック{{duration}}",
+      "human": "人の対応待ち{{duration}}",
+      "review": "レビュー中{{duration}}",
+      "merge": "マージ待ち{{duration}}"
     }
   },
   "roadmap": {
@@ -2407,11 +2428,23 @@
     "succeeded": "成功",
     "notice": "お知らせ",
     "cannotWait": "待機できません: {{reason}}",
+    "muted": "このプロジェクトで「{{name}}」をミュートしました",
+    "new": "新着",
+    "snooze": "スヌーズ",
+    "snoozeFor": "スヌーズ時間",
+    "mute": "このプロジェクトでこの種類をミュート",
+    "copied": "コピーしました",
+    "copyFailed": "コピーできませんでした。テキストを選択してください",
     "unit": {
       "s": "{{value}}秒",
       "min": "{{value}}分",
       "h": "{{value}}時間",
       "d": "{{value}}日"
+    },
+    "severity": {
+      "info": "情報",
+      "warning": "警告",
+      "problem": "問題"
     }
   },
   "ticketPage": {
@@ -2612,6 +2645,25 @@
       "working": "作業中",
       "waiting": "待機中",
       "asleep": "休止中"
+    }
+  },
+  "notificationSettings": {
+    "title": "通知",
+    "intro": "このプロジェクトでベルに表示できるアラートです。オフにするとここには表示されません。ボードは引き続き監視し、他のプロジェクトはそれぞれの設定を保ちます。",
+    "none": "アラートはまだありません",
+    "show": "{{label}}を表示"
+  },
+  "alerts": {
+    "group": {
+      "setup": "セットアップとバージョン",
+      "work": "作業",
+      "machine": "このマシン",
+      "housekeeping": "整理"
+    },
+    "snooze": {
+      "minutes_other": "{{count}}分",
+      "hours_other": "{{count}}時間",
+      "days_other": "{{count}}日"
     }
   }
 }

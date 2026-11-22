@@ -357,7 +357,7 @@
     "saving": "Kaydediliyor…"
   },
   "projectSettings": {
-    "intro": "Bu projenin işleyişi: yeni ticket'ların neyle başladığı, sunduğu etiketler, bir ticket'ın ne zaman durmuş sayıldığı, aşamaları, çalıştırmaları ve sayfalarının gösterdikleri. Ajanlarının talimatları kendi sayfasındadır.",
+    "intro": "Bu projenin işleyişi: yeni ticket'ların neyle başladığı, sunduğu etiketler, bir ticket'ın ne zaman durmuş sayıldığı, gösterdiği uyarılar, aşamaları, çalıştırmaları ve sayfalarının gösterdikleri. Ajanlarının talimatları kendi sayfasındadır.",
     "save": "Kaydet",
     "saving": "Kaydediliyor…",
     "unsaved": "Kaydedilmemiş değişiklikler.",
@@ -1915,6 +1915,11 @@
         "subtitle": "Bir ticket'ın ne zaman durmuş göründüğü",
         "keywords": "durma, dakika, boşta, stall, minutes, idle"
       },
+      "notifications": {
+        "title": "Bildirimler",
+        "subtitle": "Bu projenin gösterdiği uyarılar",
+        "keywords": "uyarılar, sessize al, zil, hatırlatmalar, alerts, mute, bell, reminders"
+      },
       "stages": {
         "title": "Aşamalar",
         "subtitle": "Pano sütunları ve anlamları",
@@ -2227,7 +2232,6 @@
     "noWork": "Henüz kayıtlı iş yok.",
     "now": "şimdi",
     "board": "Pano",
-    "blocked": "engelli",
     "unnamed": "adsız",
     "work": "iş",
     "theHuman": "insan",
@@ -2238,6 +2242,8 @@
     "delegatedTo": "devredilen: {{on}}",
     "subAgentOf": "{{name}}, {{parent}} ajanının alt ajanı",
     "created": "işten {{count}} dk önce oluşturuldu",
+    "notToScaleNote": "Bu süre gerçek uzunluğunda değil, kısa bir blok olarak gösterilir.",
+    "alsoThenItem": "{{name}}, {{time}}",
     "duration": {
       "seconds": "{{count}}sn",
       "minutes": "{{count}}dk",
@@ -2246,6 +2252,7 @@
     },
     "spoken": {
       "underMinute": "bir dakikadan az",
+      "days": "{{count}} g",
       "minutes": "{{count}} dk",
       "hours": "{{count}} sa",
       "hoursMinutes": "{{h}} sa {{m}} dk"
@@ -2265,7 +2272,7 @@
       "delegation": "devir: {{agent}} → {{on}}, {{from}} - {{to}}, {{duration}}{{open}}{{note}}",
       "handoff": "devir: {{from}} → {{to}}, {{time}}{{note}}",
       "mark": "{{name}}{{note}}, {{time}}",
-      "blockedStage": "engelli aşama, {{from}} - {{to}}, {{duration}}"
+      "collapsed": "{{label}}, {{from}} - {{to}}, {{duration}}, ölçeksiz çizildi"
     },
     "fact": {
       "delegatedTo": "Devredilen",
@@ -2274,6 +2281,7 @@
       "ended": "Bitti",
       "note": "Not",
       "waiting": "Bekleyen",
+      "waitingFor": "Beklenen",
       "on": "Beklenen",
       "duration": "Süre",
       "who": "Kim",
@@ -2281,8 +2289,9 @@
       "from": "Kimden",
       "to": "Kime",
       "at": "Zaman",
-      "stage": "Aşama",
-      "event": "Olay"
+      "event": "Olay",
+      "notToScale": "Ölçeksiz",
+      "alsoThen": "Aynı anda"
     },
     "summary": {
       "noAgentWork": "Kayıtlı ajan işi yok.",
@@ -2290,21 +2299,18 @@
       "waited": "{{target}} için {{duration}} bekledi",
       "delegated": "devretti: {{on}}",
       "clause": "{{agent}}: {{parts}}",
-      "workBy_one": "{{over}} içinde {{count}} ajanın işi: {{clauses}}.{{live}}",
-      "workBy_other": "{{over}} içinde {{count}} ajanın işi: {{clauses}}.{{live}}",
-      "activityBy_one": "{{over}} içinde {{count}} ajanın etkinliği: {{clauses}}.{{live}}",
-      "activityBy_other": "{{over}} içinde {{count}} ajanın etkinliği: {{clauses}}.{{live}}",
-      "stillGoing": " Hâlâ sürüyor."
+      "workBy_one": "{{over}} içinde {{count}} ajanın işi: {{clauses}}.{{live}}{{scale}}",
+      "workBy_other": "{{over}} içinde {{count}} ajanın işi: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_one": "{{over}} içinde {{count}} ajanın etkinliği: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_other": "{{over}} içinde {{count}} ajanın etkinliği: {{clauses}}.{{live}}{{scale}}",
+      "stillGoing": " Hâlâ sürüyor.",
+      "notToScale": " Ölçeksiz: {{skipped}}."
     },
     "card": {
       "title": "Zaman çizelgesi",
       "loading": "Yükleniyor…",
       "showMore": "Daha fazla göster",
       "showLess": "Daha az göster",
-      "showHeartbeats": "Heartbeat'leri göster",
-      "hideHeartbeats": "Heartbeat'leri gizle",
-      "heartbeats_one": "{{count}} heartbeat, sonuncusu {{time}}",
-      "heartbeats_other": "{{count}} heartbeat, sonuncusu {{time}}",
       "story": "Zaman çizelgesi öyküsü"
     },
     "story": {
@@ -2317,7 +2323,6 @@
       "someone": "biri",
       "waiting": "bekleme: {{who}}",
       "stoppedWaiting": "beklemeyi bıraktı: {{who}}{{note}}",
-      "heartbeat": "heartbeat{{note}}",
       "movedTo": "{{stage}} aşamasına taşındı",
       "createdIn": "{{stage}} aşamasında oluşturuldu",
       "pushed": "push edildi",
@@ -2334,6 +2339,21 @@
       "minutesSeconds": "{{m}} dk {{s}} sn",
       "hours": "{{count}} sa",
       "hoursMinutes": "{{h}} sa {{m}} dk"
+    },
+    "stretch": {
+      "start": "Başlamayı bekliyor",
+      "blocked": "Engelli",
+      "human": "İnsanı bekliyor",
+      "review": "İncelemede",
+      "merge": "Merge bekliyor",
+      "decision": "Karar bekliyor"
+    },
+    "skipped": {
+      "start": "başlamayı bekledi, {{duration}}",
+      "blocked": "engelli, {{duration}}",
+      "human": "insanı bekledi, {{duration}}",
+      "review": "incelemede, {{duration}}",
+      "merge": "merge bekledi, {{duration}}"
     }
   },
   "roadmap": {
@@ -2482,11 +2502,23 @@
     "succeeded": "Başarılı",
     "notice": "Bildirim",
     "cannotWait": "Beklenemiyor: {{reason}}",
+    "muted": "Bu projede \"{{name}}\" sessize alındı",
+    "new": "Yeni",
+    "snooze": "Ertele",
+    "snoozeFor": "Erteleme süresi",
+    "mute": "Bu türü bu projede sessize al",
+    "copied": "Kopyalandı",
+    "copyFailed": "Kopyalanamadı: metni seç",
     "unit": {
       "s": "{{value}} sn",
       "min": "{{value}} dk",
       "h": "{{value}} sa",
       "d": "{{value}} g"
+    },
+    "severity": {
+      "info": "Bilgi",
+      "warning": "Uyarı",
+      "problem": "Sorun"
     }
   },
   "ticketPage": {
@@ -2693,6 +2725,28 @@
       "working": "çalışıyor",
       "waiting": "bekliyor",
       "asleep": "uykuda"
+    }
+  },
+  "notificationSettings": {
+    "title": "Bildirimler",
+    "intro": "Zilin bu proje için gösterebileceği uyarılar. Birini kapatırsan burada görünmez; pano onu izlemeye devam eder, diğer projeler kendi seçimini korur.",
+    "none": "Henüz uyarı yok",
+    "show": "Göster: {{label}}"
+  },
+  "alerts": {
+    "group": {
+      "setup": "Kurulum ve sürümler",
+      "work": "İş",
+      "machine": "Bu bilgisayar",
+      "housekeeping": "Temizlik"
+    },
+    "snooze": {
+      "minutes_one": "{{count}} dakika",
+      "minutes_other": "{{count}} dakika",
+      "hours_one": "{{count}} saat",
+      "hours_other": "{{count}} saat",
+      "days_one": "{{count}} gün",
+      "days_other": "{{count}} gün"
     }
   }
 }

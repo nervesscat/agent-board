@@ -20,6 +20,7 @@ export const SETTINGS_SECTIONS: Record<SettingsTab, readonly string[]> = {
     'default-phases',
     'tag-suggestions',
     'stalled-tickets',
+    'notifications',
     'stages',
     'runs',
     'layout',

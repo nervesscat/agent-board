@@ -349,7 +349,7 @@
     "saving": "저장 중…"
   },
   "projectSettings": {
-    "intro": "이 프로젝트의 작동 방식이에요. 새 티켓의 시작 값, 제공하는 태그, 티켓이 정체된 것으로 보는 기준, 단계, 실행, 페이지에 표시할 내용을 정해요. 에이전트 지침은 별도 페이지에 있어요.",
+    "intro": "이 프로젝트의 작동 방식이에요. 새 티켓의 시작 값, 제공하는 태그, 티켓이 정체된 것으로 보는 기준, 표시할 알림, 단계, 실행, 페이지에 표시할 내용을 정해요. 에이전트 지침은 별도 페이지에 있어요.",
     "save": "저장",
     "saving": "저장 중…",
     "unsaved": "저장하지 않은 변경 사항이 있어요.",
@@ -1860,6 +1860,11 @@
         "subtitle": "티켓이 정체로 표시되는 시점",
         "keywords": "정체, 분, 유휴"
       },
+      "notifications": {
+        "title": "알림",
+        "subtitle": "이 프로젝트에 표시할 알림",
+        "keywords": "알림, 음소거, 벨, 리마인더, alerts, mute"
+      },
       "stages": {
         "title": "단계",
         "subtitle": "보드의 열과 그 의미",
@@ -2162,7 +2167,6 @@
     "noWork": "아직 기록된 작업이 없어요.",
     "now": "지금",
     "board": "보드",
-    "blocked": "차단됨",
     "unnamed": "이름 없음",
     "work": "작업",
     "theHuman": "사람",
@@ -2173,6 +2177,8 @@
     "delegatedTo": "{{on}}에게 위임",
     "subAgentOf": "{{name}}, {{parent}}의 서브에이전트",
     "created": "작업 {{count}}분 전에 생성됨",
+    "notToScaleNote": "이 시간은 실제 길이가 아니라 짧은 블록으로 표시돼요.",
+    "alsoThenItem": "{{name}}, {{time}}",
     "duration": {
       "seconds": "{{count}}초",
       "minutes": "{{count}}분",
@@ -2181,6 +2187,7 @@
     },
     "spoken": {
       "underMinute": "1분 미만",
+      "days": "{{count}}일",
       "minutes": "{{count}}분",
       "hours": "{{count}}시간",
       "hoursMinutes": "{{h}}시간 {{m}}분"
@@ -2200,7 +2207,7 @@
       "delegation": "위임({{agent}}): {{on}}, {{from}}~{{to}}, {{duration}}{{open}}{{note}}",
       "handoff": "{{from}} → {{to}} 작업 인계, {{time}}{{note}}",
       "mark": "{{name}}{{note}}, {{time}}",
-      "blockedStage": "차단된 단계, {{from}}~{{to}}, {{duration}}"
+      "collapsed": "{{label}}, {{from}}~{{to}}, {{duration}}, 실제 비율이 아님"
     },
     "fact": {
       "delegatedTo": "위임 대상",
@@ -2209,6 +2216,7 @@
       "ended": "종료",
       "note": "메모",
       "waiting": "대기",
+      "waitingFor": "대기 대상",
       "on": "대상",
       "duration": "소요 시간",
       "who": "담당",
@@ -2216,8 +2224,9 @@
       "from": "보낸 쪽",
       "to": "받는 쪽",
       "at": "시각",
-      "stage": "단계",
-      "event": "이벤트"
+      "event": "이벤트",
+      "notToScale": "실제 비율이 아님",
+      "alsoThen": "같은 시간"
     },
     "summary": {
       "noAgentWork": "기록된 에이전트 작업이 없어요.",
@@ -2225,18 +2234,16 @@
       "waited": "{{target}} 대기 {{duration}}",
       "delegated": "{{on}} 위임됨",
       "clause": "{{agent}} {{parts}}",
-      "workBy_other": "{{over}} 동안 에이전트 {{count}}개의 작업: {{clauses}}.{{live}}",
-      "activityBy_other": "{{over}} 동안 에이전트 {{count}}개의 활동: {{clauses}}.{{live}}",
-      "stillGoing": " 아직 진행 중이에요."
+      "workBy_other": "{{over}} 동안 에이전트 {{count}}개의 작업: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_other": "{{over}} 동안 에이전트 {{count}}개의 활동: {{clauses}}.{{live}}{{scale}}",
+      "stillGoing": " 아직 진행 중이에요.",
+      "notToScale": " 실제 비율이 아님: {{skipped}}."
     },
     "card": {
       "title": "타임라인",
       "loading": "불러오는 중…",
       "showMore": "더 보기",
       "showLess": "간단히 보기",
-      "showHeartbeats": "하트비트 표시",
-      "hideHeartbeats": "하트비트 숨기기",
-      "heartbeats_other": "하트비트 {{count}}개, 마지막 {{time}}",
       "story": "타임라인 이야기"
     },
     "story": {
@@ -2249,7 +2256,6 @@
       "someone": "누군가",
       "waiting": "{{who}} 대기 중",
       "stoppedWaiting": "{{who}} 대기 중단{{note}}",
-      "heartbeat": "하트비트{{note}}",
       "movedTo": "이동: {{stage}}",
       "createdIn": "{{stage}}에서 생성",
       "pushed": "푸시함",
@@ -2266,6 +2272,21 @@
       "minutesSeconds": "{{m}}분 {{s}}초",
       "hours": "{{count}}시간",
       "hoursMinutes": "{{h}}시간 {{m}}분"
+    },
+    "stretch": {
+      "start": "시작 대기",
+      "blocked": "차단됨",
+      "human": "사람 확인 대기",
+      "review": "리뷰 중",
+      "merge": "병합 대기",
+      "decision": "결정 대기"
+    },
+    "skipped": {
+      "start": "시작 대기 {{duration}}",
+      "blocked": "차단됨 {{duration}}",
+      "human": "사람 확인 대기 {{duration}}",
+      "review": "리뷰 중 {{duration}}",
+      "merge": "병합 대기 {{duration}}"
     }
   },
   "roadmap": {
@@ -2407,11 +2428,23 @@
     "succeeded": "성공",
     "notice": "공지",
     "cannotWait": "기다릴 수 없어요: {{reason}}",
+    "muted": "이 프로젝트에서 \"{{name}}\" 알림을 음소거했어요",
+    "new": "새 알림",
+    "snooze": "다시 알림",
+    "snoozeFor": "다시 알림 시간",
+    "mute": "이 프로젝트에서 이 종류 음소거",
+    "copied": "복사됨",
+    "copyFailed": "복사할 수 없어요. 대신 텍스트를 선택하세요",
     "unit": {
       "s": "{{value}}초",
       "min": "{{value}}분",
       "h": "{{value}}시간",
       "d": "{{value}}일"
+    },
+    "severity": {
+      "info": "정보",
+      "warning": "경고",
+      "problem": "문제"
     }
   },
   "ticketPage": {
@@ -2612,6 +2645,25 @@
       "working": "작업 중",
       "waiting": "대기 중",
       "asleep": "휴면"
+    }
+  },
+  "notificationSettings": {
+    "title": "알림",
+    "intro": "이 프로젝트에서 벨이 보여줄 수 있는 알림이에요. 끄면 여기에 표시되지 않아요. 보드는 계속 감시하고, 다른 프로젝트는 각자의 설정을 유지해요.",
+    "none": "아직 알림이 없어요",
+    "show": "{{label}} 표시"
+  },
+  "alerts": {
+    "group": {
+      "setup": "설정 및 버전",
+      "work": "작업",
+      "machine": "이 컴퓨터",
+      "housekeeping": "정리"
+    },
+    "snooze": {
+      "minutes_other": "{{count}}분",
+      "hours_other": "{{count}}시간",
+      "days_other": "{{count}}일"
     }
   }
 }

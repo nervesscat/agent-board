@@ -357,7 +357,7 @@
     "saving": "సేవ్ అవుతోంది…"
   },
   "projectSettings": {
-    "intro": "ఈ ప్రాజెక్ట్ ఎలా పనిచేస్తుంది: కొత్త ticketsతో ఏమి మొదలవుతుంది, అది ఇచ్చే ట్యాగ్‌లు, ticket ఎప్పుడు నిలిచిపోయినట్లు లెక్క, దాని దశలు, రన్‌లు, దాని పేజీలు ఏమి చూపుతాయి. దాని ఏజెంట్ల సూచనలు వాటి సొంత పేజీలో ఉంటాయి.",
+    "intro": "ఈ ప్రాజెక్ట్ ఎలా పనిచేస్తుంది: కొత్త ticketsతో ఏమి మొదలవుతుంది, అది ఇచ్చే ట్యాగ్‌లు, ticket ఎప్పుడు నిలిచిపోయినట్లు లెక్క, అది చూపే అలర్ట్‌లు, దాని దశలు, రన్‌లు, పేజీలు ఏమి చూపుతాయి. దాని ఏజెంట్ల సూచనలు వాటి స్వంత పేజీలో ఉన్నాయి.",
     "save": "సేవ్",
     "saving": "సేవ్ అవుతోంది…",
     "unsaved": "సేవ్ కాని మార్పులు.",
@@ -1915,6 +1915,11 @@
         "subtitle": "ticket ఎప్పుడు నిలిచినట్లు కనిపిస్తుంది",
         "keywords": "నిలిచింది, నిమిషాలు, ఖాళీ, stall, minutes, idle, stalled"
       },
+      "notifications": {
+        "title": "నోటిఫికేషన్‌లు",
+        "subtitle": "ఈ ప్రాజెక్ట్ ఏ అలర్ట్‌లను చూపుతుంది",
+        "keywords": "అలర్ట్‌లు, మ్యూట్, బెల్, రిమైండర్‌లు, alerts, mute, bell, reminders"
+      },
       "stages": {
         "title": "దశలు",
         "subtitle": "బోర్డ్ నిలువు వరుసలు, వాటి అర్థం",
@@ -2227,7 +2232,6 @@
     "noWork": "ఇంకా పని నమోదు కాలేదు.",
     "now": "ఇప్పుడు",
     "board": "బోర్డ్",
-    "blocked": "బ్లాక్",
     "unnamed": "పేరు లేదు",
     "work": "పని",
     "theHuman": "మనిషి",
@@ -2238,6 +2242,8 @@
     "delegatedTo": "{{on}}కు అప్పగించింది",
     "subAgentOf": "{{name}}, {{parent}} సబ్‌ఏజెంట్",
     "created": "పనికి {{count}} నిమి. ముందు సృష్టించబడింది",
+    "notToScaleNote": "ఈ సమయం అసలు నిడివిలో కాకుండా చిన్న బ్లాక్‌గా చూపబడింది.",
+    "alsoThenItem": "{{name}}, {{time}}",
     "duration": {
       "seconds": "{{count}}సె",
       "minutes": "{{count}}ని",
@@ -2246,6 +2252,7 @@
     },
     "spoken": {
       "underMinute": "ఒక నిమిషం లోపు",
+      "days": "{{count}} రో.",
       "minutes": "{{count}} నిమి.",
       "hours": "{{count}} గం.",
       "hoursMinutes": "{{h}} గం. {{m}} నిమి."
@@ -2265,7 +2272,7 @@
       "delegation": "{{agent}} {{on}}కు అప్పగించింది, {{from}} నుండి {{to}}, {{duration}}{{open}}{{note}}",
       "handoff": "{{from}} పనిని {{to}}కు అప్పగించింది, {{time}}{{note}}",
       "mark": "{{name}}{{note}}, {{time}}",
-      "blockedStage": "బ్లాక్ దశ, {{from}} నుండి {{to}}, {{duration}}"
+      "collapsed": "{{label}}, {{from}} నుండి {{to}}, {{duration}}, స్కేల్ ప్రకారం గీయలేదు"
     },
     "fact": {
       "delegatedTo": "అప్పగించినది",
@@ -2274,6 +2281,7 @@
       "ended": "ముగింపు",
       "note": "నోట్",
       "waiting": "వేచి ఉంది",
+      "waitingFor": "వేచి ఉన్నది",
       "on": "దేనిపై",
       "duration": "వ్యవధి",
       "who": "ఎవరు",
@@ -2281,8 +2289,9 @@
       "from": "నుండి",
       "to": "వరకు",
       "at": "సమయం",
-      "stage": "దశ",
-      "event": "ఈవెంట్"
+      "event": "ఈవెంట్",
+      "notToScale": "స్కేల్ ప్రకారం కాదు",
+      "alsoThen": "అప్పుడే ఇంకా"
     },
     "summary": {
       "noAgentWork": "ఏజెంట్ పని నమోదు కాలేదు.",
@@ -2290,21 +2299,18 @@
       "waited": "{{target}} కోసం {{duration}} వేచి ఉంది",
       "delegated": "{{on}}, అప్పగించింది",
       "clause": "{{agent}} {{parts}}",
-      "workBy_one": "{{over}}లో {{count}} ఏజెంట్ పని: {{clauses}}.{{live}}",
-      "workBy_other": "{{over}}లో {{count}} ఏజెంట్ల పని: {{clauses}}.{{live}}",
-      "activityBy_one": "{{over}}లో {{count}} ఏజెంట్ కార్యకలాపం: {{clauses}}.{{live}}",
-      "activityBy_other": "{{over}}లో {{count}} ఏజెంట్ల కార్యకలాపం: {{clauses}}.{{live}}",
-      "stillGoing": " ఇంకా కొనసాగుతోంది."
+      "workBy_one": "{{over}}లో {{count}} ఏజెంట్ పని: {{clauses}}.{{live}}{{scale}}",
+      "workBy_other": "{{over}}లో {{count}} ఏజెంట్ల పని: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_one": "{{over}}లో {{count}} ఏజెంట్ కార్యకలాపం: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_other": "{{over}}లో {{count}} ఏజెంట్ల కార్యకలాపం: {{clauses}}.{{live}}{{scale}}",
+      "stillGoing": " ఇంకా కొనసాగుతోంది.",
+      "notToScale": " స్కేల్ ప్రకారం కాదు: {{skipped}}."
     },
     "card": {
       "title": "టైమ్‌లైన్",
       "loading": "లోడ్ అవుతోంది…",
       "showMore": "మరిన్ని చూపు",
       "showLess": "తక్కువ చూపు",
-      "showHeartbeats": "హార్ట్‌బీట్‌లు చూపు",
-      "hideHeartbeats": "హార్ట్‌బీట్‌లు దాచు",
-      "heartbeats_one": "{{count}} హార్ట్‌బీట్, చివరిది {{time}}",
-      "heartbeats_other": "{{count}} హార్ట్‌బీట్‌లు, చివరిది {{time}}",
       "story": "టైమ్‌లైన్ కథనం"
     },
     "story": {
@@ -2317,7 +2323,6 @@
       "someone": "ఎవరో",
       "waiting": "{{who}} కోసం వేచి ఉంది",
       "stoppedWaiting": "{{who}} కోసం వేచి ఉండటం ఆపింది{{note}}",
-      "heartbeat": "హార్ట్‌బీట్{{note}}",
       "movedTo": "{{stage}}కు వెళ్లింది",
       "createdIn": "{{stage}}లో సృష్టించబడింది",
       "pushed": "పుష్ చేసింది",
@@ -2334,6 +2339,21 @@
       "minutesSeconds": "{{m}} నిమి. {{s}} సె.",
       "hours": "{{count}} గం.",
       "hoursMinutes": "{{h}} గం. {{m}} నిమి."
+    },
+    "stretch": {
+      "start": "మొదలు కోసం వేచి ఉంది",
+      "blocked": "బ్లాక్",
+      "human": "మనిషి కోసం వేచి ఉంది",
+      "review": "రివ్యూలో",
+      "merge": "merge కోసం వేచి ఉంది",
+      "decision": "నిర్ణయం కోసం వేచి ఉంది"
+    },
+    "skipped": {
+      "start": "మొదలు కోసం {{duration}} వేచి ఉంది",
+      "blocked": "{{duration}} బ్లాక్",
+      "human": "మనిషి కోసం {{duration}} వేచి ఉంది",
+      "review": "{{duration}} రివ్యూలో",
+      "merge": "merge కోసం {{duration}} వేచి ఉంది"
     }
   },
   "roadmap": {
@@ -2482,11 +2502,23 @@
     "succeeded": "విజయవంతం",
     "notice": "నోటీసు",
     "cannotWait": "వేచి ఉండలేము: {{reason}}",
+    "muted": "ఈ ప్రాజెక్ట్‌లో \"{{name}}\" మ్యూట్ చేయబడింది",
+    "new": "కొత్త",
+    "snooze": "తర్వాత గుర్తుచేయి",
+    "snoozeFor": "ఎంతసేపు వాయిదా",
+    "mute": "ఈ ప్రాజెక్ట్‌లో ఈ రకాన్ని మ్యూట్ చేయి",
+    "copied": "కాపీ అయింది",
+    "copyFailed": "కాపీ చేయలేకపోయాం: బదులుగా టెక్స్ట్‌ను ఎంచుకోండి",
     "unit": {
       "s": "{{value}} సె.",
       "min": "{{value}} నిమి.",
       "h": "{{value}} గం.",
       "d": "{{value}} రో."
+    },
+    "severity": {
+      "info": "సమాచారం",
+      "warning": "హెచ్చరిక",
+      "problem": "సమస్య"
     }
   },
   "ticketPage": {
@@ -2693,6 +2725,28 @@
       "working": "పనిలో",
       "waiting": "వేచి ఉంది",
       "asleep": "నిద్రలో"
+    }
+  },
+  "notificationSettings": {
+    "title": "నోటిఫికేషన్‌లు",
+    "intro": "ఈ ప్రాజెక్ట్ కోసం బెల్ చూపగల అలర్ట్‌లు. ఒకదాన్ని ఆఫ్ చేస్తే ఇక్కడ కనిపించదు; బోర్డ్ దాన్ని ఇంకా గమనిస్తూనే ఉంటుంది, ఇతర ప్రాజెక్ట్‌లకు వాటి స్వంత ఎంపిక ఉంటుంది.",
+    "none": "ఇంకా అలర్ట్‌లు లేవు",
+    "show": "{{label}} చూపు"
+  },
+  "alerts": {
+    "group": {
+      "setup": "సెటప్, వెర్షన్‌లు",
+      "work": "పని",
+      "machine": "ఈ కంప్యూటర్",
+      "housekeeping": "నిర్వహణ"
+    },
+    "snooze": {
+      "minutes_one": "{{count}} నిమిషం",
+      "minutes_other": "{{count}} నిమిషాలు",
+      "hours_one": "{{count}} గంట",
+      "hours_other": "{{count}} గంటలు",
+      "days_one": "{{count}} రోజు",
+      "days_other": "{{count}} రోజులు"
     }
   }
 }

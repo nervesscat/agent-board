@@ -373,7 +373,7 @@
     "saving": "Збереження…"
   },
   "projectSettings": {
-    "intro": "Як працює цей проєкт: з чого починаються нові тікети, які теги він пропонує, коли тікет вважається завмерлим, його етапи, запуски та що показують його сторінки. Інструкції його агентів — на окремій сторінці.",
+    "intro": "Як працює цей проєкт: з чого починаються нові тікети, які теги він пропонує, коли тікет вважається завмерлим, які сповіщення він показує, його етапи, запуски та що показують його сторінки. Інструкції його агентів — на окремій сторінці.",
     "save": "Зберегти",
     "saving": "Збереження…",
     "unsaved": "Є незбережені зміни.",
@@ -2025,6 +2025,11 @@
         "subtitle": "Коли тікет має вигляд завмерлого",
         "keywords": "завмер, хвилини, простій"
       },
+      "notifications": {
+        "title": "Сповіщення",
+        "subtitle": "Які сповіщення показує цей проєкт",
+        "keywords": "сповіщення, вимкнути звук, дзвіночок, нагадування, alerts, mute, bell"
+      },
       "stages": {
         "title": "Етапи",
         "subtitle": "Стовпці дошки і що вони означають",
@@ -2357,7 +2362,6 @@
     "noWork": "Роботи ще не зафіксовано.",
     "now": "зараз",
     "board": "Дошка",
-    "blocked": "заблоковано",
     "unnamed": "без імені",
     "work": "робота",
     "theHuman": "людина",
@@ -2368,6 +2372,8 @@
     "delegatedTo": "делеговано {{on}}",
     "subAgentOf": "{{name}}, субагент {{parent}}",
     "created": "створено за {{count}} хв до роботи",
+    "notToScaleNote": "Цей час показано коротким блоком, а не в справжню довжину.",
+    "alsoThenItem": "{{name}}, {{time}}",
     "duration": {
       "seconds": "{{count}} с",
       "minutes": "{{count}} хв",
@@ -2376,6 +2382,7 @@
     },
     "spoken": {
       "underMinute": "менше хвилини",
+      "days": "{{count}} дн",
       "minutes": "{{count}} хв",
       "hours": "{{count}} год",
       "hoursMinutes": "{{h}} год {{m}} хв"
@@ -2395,7 +2402,7 @@
       "delegation": "делеговано {{on}} агентом {{agent}}, від {{from}} до {{to}}, {{duration}}{{open}}{{note}}",
       "handoff": "{{from}} передав роботу {{to}}, {{time}}{{note}}",
       "mark": "{{name}}{{note}}, {{time}}",
-      "blockedStage": "заблокований етап, від {{from}} до {{to}}, {{duration}}"
+      "collapsed": "{{label}}, від {{from}} до {{to}}, {{duration}}, не в масштабі"
     },
     "fact": {
       "delegatedTo": "Делеговано",
@@ -2404,6 +2411,7 @@
       "ended": "Кінець",
       "note": "Нотатка",
       "waiting": "Очікування",
+      "waitingFor": "Чекає на",
       "on": "На",
       "duration": "Тривалість",
       "who": "Хто",
@@ -2411,8 +2419,9 @@
       "from": "Від",
       "to": "До",
       "at": "О",
-      "stage": "Етап",
-      "event": "Подія"
+      "event": "Подія",
+      "notToScale": "Не в масштабі",
+      "alsoThen": "Також тоді"
     },
     "summary": {
       "noAgentWork": "Роботи агентів не зафіксовано.",
@@ -2420,27 +2429,22 @@
       "waited": "чекав {{duration}} на {{target}}",
       "delegated": "{{on}}, делеговано",
       "clause": "{{agent}} {{parts}}",
-      "workBy_one": "Робота {{count}} агента за {{over}}: {{clauses}}.{{live}}",
-      "workBy_few": "Робота {{count}} агентів за {{over}}: {{clauses}}.{{live}}",
-      "workBy_many": "Робота {{count}} агентів за {{over}}: {{clauses}}.{{live}}",
-      "workBy_other": "Робота {{count}} агента за {{over}}: {{clauses}}.{{live}}",
-      "activityBy_one": "Активність {{count}} агента за {{over}}: {{clauses}}.{{live}}",
-      "activityBy_few": "Активність {{count}} агентів за {{over}}: {{clauses}}.{{live}}",
-      "activityBy_many": "Активність {{count}} агентів за {{over}}: {{clauses}}.{{live}}",
-      "activityBy_other": "Активність {{count}} агента за {{over}}: {{clauses}}.{{live}}",
-      "stillGoing": " Ще триває."
+      "workBy_one": "Робота {{count}} агента за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "workBy_few": "Робота {{count}} агентів за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "workBy_many": "Робота {{count}} агентів за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "workBy_other": "Робота {{count}} агента за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_one": "Активність {{count}} агента за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_few": "Активність {{count}} агентів за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_many": "Активність {{count}} агентів за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_other": "Активність {{count}} агента за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "stillGoing": " Ще триває.",
+      "notToScale": " Не в масштабі: {{skipped}}."
     },
     "card": {
       "title": "Хронологія",
       "loading": "Завантаження…",
       "showMore": "Показати більше",
       "showLess": "Показати менше",
-      "showHeartbeats": "Показати сигнали",
-      "hideHeartbeats": "Сховати сигнали",
-      "heartbeats_one": "{{count}} сигнал, останній {{time}}",
-      "heartbeats_few": "{{count}} сигнали, останній {{time}}",
-      "heartbeats_many": "{{count}} сигналів, останній {{time}}",
-      "heartbeats_other": "{{count}} сигналу, останній {{time}}",
       "story": "Історія хронології"
     },
     "story": {
@@ -2453,7 +2457,6 @@
       "someone": "хтось",
       "waiting": "чекає на {{who}}",
       "stoppedWaiting": "перестав чекати на {{who}}{{note}}",
-      "heartbeat": "сигнал{{note}}",
       "movedTo": "переміщено в {{stage}}",
       "createdIn": "створено в {{stage}}",
       "pushed": "надіслано",
@@ -2470,6 +2473,21 @@
       "minutesSeconds": "{{m}} хв {{s}} с",
       "hours": "{{count}} год",
       "hoursMinutes": "{{h}} год {{m}} хв"
+    },
+    "stretch": {
+      "start": "Чекає початку",
+      "blocked": "Заблоковано",
+      "human": "Чекає на людину",
+      "review": "На рев’ю",
+      "merge": "Чекає на злиття",
+      "decision": "Чекає на рішення"
+    },
+    "skipped": {
+      "start": "чекає початку {{duration}}",
+      "blocked": "заблоковано {{duration}}",
+      "human": "чекає на людину {{duration}}",
+      "review": "на рев’ю {{duration}}",
+      "merge": "чекає на злиття {{duration}}"
     }
   },
   "roadmap": {
@@ -2635,11 +2653,23 @@
     "succeeded": "Успішно",
     "notice": "Повідомлення",
     "cannotWait": "Не вдається чекати: {{reason}}",
+    "muted": "«{{name}}» вимкнено в цьому проєкті",
+    "new": "Нове",
+    "snooze": "Відкласти",
+    "snoozeFor": "Відкласти на",
+    "mute": "Вимкнути цей вид у проєкті",
+    "copied": "Скопійовано",
+    "copyFailed": "Не вдалося скопіювати: виділіть текст вручну",
     "unit": {
       "s": "{{value}} с",
       "min": "{{value}} хв",
       "h": "{{value}} год",
       "d": "{{value}} дн"
+    },
+    "severity": {
+      "info": "Інформація",
+      "warning": "Попередження",
+      "problem": "Проблема"
     }
   },
   "ticketPage": {
@@ -2858,6 +2888,34 @@
       "working": "працює",
       "waiting": "чекає",
       "asleep": "спить"
+    }
+  },
+  "notificationSettings": {
+    "title": "Сповіщення",
+    "intro": "Сповіщення, які дзвіночок може показувати для цього проєкту. Вимкніть зайве, щоб не бачити його тут; дошка й надалі стежить за ним, а інші проєкти зберігають свій вибір.",
+    "none": "Сповіщень поки немає",
+    "show": "Показувати: {{label}}"
+  },
+  "alerts": {
+    "group": {
+      "setup": "Налаштування та версії",
+      "work": "Робота",
+      "machine": "Цей комп’ютер",
+      "housekeeping": "Очищення"
+    },
+    "snooze": {
+      "minutes_one": "{{count}} хвилина",
+      "minutes_few": "{{count}} хвилини",
+      "minutes_many": "{{count}} хвилин",
+      "minutes_other": "{{count}} хвилини",
+      "hours_one": "{{count}} година",
+      "hours_few": "{{count}} години",
+      "hours_many": "{{count}} годин",
+      "hours_other": "{{count}} години",
+      "days_one": "{{count}} день",
+      "days_few": "{{count}} дні",
+      "days_many": "{{count}} днів",
+      "days_other": "{{count}} дня"
     }
   }
 }

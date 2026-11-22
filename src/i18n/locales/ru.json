@@ -373,7 +373,7 @@
     "saving": "Сохранение…"
   },
   "projectSettings": {
-    "intro": "Как работает этот проект: с чего начинаются новые тикеты, какие теги он предлагает, когда тикет считается застрявшим, его этапы, запуски и что показывают его страницы. Инструкции его агентов — на отдельной странице.",
+    "intro": "Как работает этот проект: с чего начинаются новые тикеты, какие теги он предлагает, когда тикет считается застрявшим, какие оповещения он показывает, его этапы, запуски и что показывают его страницы. Инструкции его агентов — на отдельной странице.",
     "save": "Сохранить",
     "saving": "Сохранение…",
     "unsaved": "Есть несохранённые изменения.",
@@ -2025,6 +2025,11 @@
         "subtitle": "Когда тикет считается застрявшим",
         "keywords": "застрял, минуты, простой, stall, idle"
       },
+      "notifications": {
+        "title": "Уведомления",
+        "subtitle": "Какие оповещения показывает этот проект",
+        "keywords": "оповещения, без звука, колокольчик, напоминания, alerts, mute, bell"
+      },
       "stages": {
         "title": "Этапы",
         "subtitle": "Колонки доски и что они значат",
@@ -2357,7 +2362,6 @@
     "noWork": "Работа пока не записана.",
     "now": "сейчас",
     "board": "Доска",
-    "blocked": "заблокировано",
     "unnamed": "без имени",
     "work": "работа",
     "theHuman": "человек",
@@ -2368,6 +2372,8 @@
     "delegatedTo": "делегировано: {{on}}",
     "subAgentOf": "{{name}}, субагент {{parent}}",
     "created": "создан за {{count}} мин до работы",
+    "notToScaleNote": "Это время показано коротким блоком, а не в реальную длину.",
+    "alsoThenItem": "{{name}}, {{time}}",
     "duration": {
       "seconds": "{{count}} с",
       "minutes": "{{count}} мин",
@@ -2376,6 +2382,7 @@
     },
     "spoken": {
       "underMinute": "меньше минуты",
+      "days": "{{count}} д",
       "minutes": "{{count}} мин",
       "hours": "{{count}} ч",
       "hoursMinutes": "{{h}} ч {{m}} мин"
@@ -2395,7 +2402,7 @@
       "delegation": "делегировано: {{on}}, от {{agent}}, с {{from}} до {{to}}, {{duration}}{{open}}{{note}}",
       "handoff": "{{from}} передал работу: {{to}}, {{time}}{{note}}",
       "mark": "{{name}}{{note}}, {{time}}",
-      "blockedStage": "заблокированный этап, с {{from}} до {{to}}, {{duration}}"
+      "collapsed": "{{label}}, с {{from}} до {{to}}, {{duration}}, не в масштабе"
     },
     "fact": {
       "delegatedTo": "Делегировано",
@@ -2404,6 +2411,7 @@
       "ended": "Конец",
       "note": "Заметка",
       "waiting": "Ждёт",
+      "waitingFor": "Ждёт",
       "on": "Чего",
       "duration": "Длительность",
       "who": "Кто",
@@ -2411,8 +2419,9 @@
       "from": "От",
       "to": "Кому",
       "at": "В",
-      "stage": "Этап",
-      "event": "Событие"
+      "event": "Событие",
+      "notToScale": "Не в масштабе",
+      "alsoThen": "Также в это время"
     },
     "summary": {
       "noAgentWork": "Работа агентов не записана.",
@@ -2420,27 +2429,22 @@
       "waited": "ждал {{duration}}: {{target}}",
       "delegated": "{{on}}, делегировано",
       "clause": "{{agent}} {{parts}}",
-      "workBy_one": "Работа {{count}} агента за {{over}}: {{clauses}}.{{live}}",
-      "workBy_few": "Работа {{count}} агентов за {{over}}: {{clauses}}.{{live}}",
-      "workBy_many": "Работа {{count}} агентов за {{over}}: {{clauses}}.{{live}}",
-      "workBy_other": "Работа {{count}} агентов за {{over}}: {{clauses}}.{{live}}",
-      "activityBy_one": "Активность {{count}} агента за {{over}}: {{clauses}}.{{live}}",
-      "activityBy_few": "Активность {{count}} агентов за {{over}}: {{clauses}}.{{live}}",
-      "activityBy_many": "Активность {{count}} агентов за {{over}}: {{clauses}}.{{live}}",
-      "activityBy_other": "Активность {{count}} агентов за {{over}}: {{clauses}}.{{live}}",
-      "stillGoing": " Продолжается."
+      "workBy_one": "Работа {{count}} агента за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "workBy_few": "Работа {{count}} агентов за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "workBy_many": "Работа {{count}} агентов за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "workBy_other": "Работа {{count}} агентов за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_one": "Активность {{count}} агента за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_few": "Активность {{count}} агентов за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_many": "Активность {{count}} агентов за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_other": "Активность {{count}} агентов за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "stillGoing": " Продолжается.",
+      "notToScale": " Не в масштабе: {{skipped}}."
     },
     "card": {
       "title": "Хронология",
       "loading": "Загрузка…",
       "showMore": "Показать больше",
       "showLess": "Показать меньше",
-      "showHeartbeats": "Показать пульс",
-      "hideHeartbeats": "Скрыть пульс",
-      "heartbeats_one": "{{count}} пульс, последний {{time}}",
-      "heartbeats_few": "{{count}} пульса, последний {{time}}",
-      "heartbeats_many": "{{count}} пульсов, последний {{time}}",
-      "heartbeats_other": "{{count}} пульса, последний {{time}}",
       "story": "История хронологии"
     },
     "story": {
@@ -2453,7 +2457,6 @@
       "someone": "кто-то",
       "waiting": "ждёт: {{who}}",
       "stoppedWaiting": "перестал ждать: {{who}}{{note}}",
-      "heartbeat": "пульс{{note}}",
       "movedTo": "перенесён в {{stage}}",
       "createdIn": "создан в {{stage}}",
       "pushed": "отправлено",
@@ -2470,6 +2473,21 @@
       "minutesSeconds": "{{m}} мин {{s}} с",
       "hours": "{{count}} ч",
       "hoursMinutes": "{{h}} ч {{m}} мин"
+    },
+    "stretch": {
+      "start": "Ждёт начала",
+      "blocked": "Заблокировано",
+      "human": "Ждёт человека",
+      "review": "На ревью",
+      "merge": "Ждёт слияния",
+      "decision": "Ждёт решения"
+    },
+    "skipped": {
+      "start": "ждёт начала {{duration}}",
+      "blocked": "заблокировано {{duration}}",
+      "human": "ждёт человека {{duration}}",
+      "review": "на ревью {{duration}}",
+      "merge": "ждёт слияния {{duration}}"
     }
   },
   "roadmap": {
@@ -2635,11 +2653,23 @@
     "succeeded": "Успешно",
     "notice": "Уведомление",
     "cannotWait": "Ждать нельзя: {{reason}}",
+    "muted": "«{{name}}» отключено в этом проекте",
+    "new": "Новое",
+    "snooze": "Отложить",
+    "snoozeFor": "Отложить на",
+    "mute": "Отключить этот вид в проекте",
+    "copied": "Скопировано",
+    "copyFailed": "Не удалось скопировать: выделите текст вручную",
     "unit": {
       "s": "{{value}} с",
       "min": "{{value}} мин",
       "h": "{{value}} ч",
       "d": "{{value}} д"
+    },
+    "severity": {
+      "info": "Информация",
+      "warning": "Предупреждение",
+      "problem": "Проблема"
     }
   },
   "ticketPage": {
@@ -2858,6 +2888,34 @@
       "working": "работает",
       "waiting": "ждёт",
       "asleep": "спит"
+    }
+  },
+  "notificationSettings": {
+    "title": "Уведомления",
+    "intro": "Оповещения, которые колокольчик может показывать для этого проекта. Выключите ненужное, чтобы не видеть его здесь; доска по-прежнему следит за ним, а другие проекты хранят свой выбор.",
+    "none": "Оповещений пока нет",
+    "show": "Показывать: {{label}}"
+  },
+  "alerts": {
+    "group": {
+      "setup": "Настройка и версии",
+      "work": "Работа",
+      "machine": "Этот компьютер",
+      "housekeeping": "Уборка"
+    },
+    "snooze": {
+      "minutes_one": "{{count}} минута",
+      "minutes_few": "{{count}} минуты",
+      "minutes_many": "{{count}} минут",
+      "minutes_other": "{{count}} минуты",
+      "hours_one": "{{count}} час",
+      "hours_few": "{{count}} часа",
+      "hours_many": "{{count}} часов",
+      "hours_other": "{{count}} часа",
+      "days_one": "{{count}} день",
+      "days_few": "{{count}} дня",
+      "days_many": "{{count}} дней",
+      "days_other": "{{count}} дня"
     }
   }
 }

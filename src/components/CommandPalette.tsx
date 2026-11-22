@@ -96,6 +96,7 @@ type SettingText =
   | 'defaultPhases'
   | 'tagSuggestions'
   | 'stalledTickets'
+  | 'notifications'
   | 'stages'
   | 'runs'
   | 'layout'
@@ -273,6 +274,11 @@ const PROJECT_SETTINGS: Section[] = [
     key: 'stalled-tickets',
     id: 'stalledTickets',
     hash: 'stalled-tickets',
+  },
+  {
+    key: 'notifications',
+    id: 'notifications',
+    hash: 'notifications',
   },
   {
     key: 'stages',

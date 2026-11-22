@@ -349,7 +349,7 @@
     "saving": "Menyimpan…"
   },
   "projectSettings": {
-    "intro": "Cara proyek ini bekerja: awalan tiket baru, tag yang ditawarkan, kapan tiket dianggap macet, tahapnya, eksekusinya, dan isi halamannya. Instruksi agennya ada di halaman tersendiri.",
+    "intro": "Cara proyek ini bekerja: awalan tiket baru, tag yang ditawarkan, kapan tiket dianggap macet, peringatan yang ditampilkan, tahapnya, eksekusinya, dan isi halamannya. Instruksi agennya ada di halaman tersendiri.",
     "save": "Simpan",
     "saving": "Menyimpan…",
     "unsaved": "Ada perubahan belum disimpan.",
@@ -1860,6 +1860,11 @@
         "subtitle": "Kapan tiket tampil macet",
         "keywords": "macet, menit, diam, stall, minutes, idle"
       },
+      "notifications": {
+        "title": "Notifikasi",
+        "subtitle": "Peringatan yang ditampilkan proyek ini",
+        "keywords": "peringatan, bisukan, lonceng, pengingat, alerts, mute, bell, reminders"
+      },
       "stages": {
         "title": "Tahap",
         "subtitle": "Kolom papan dan artinya",
@@ -2162,7 +2167,6 @@
     "noWork": "Belum ada pekerjaan tercatat.",
     "now": "sekarang",
     "board": "Papan",
-    "blocked": "terblokir",
     "unnamed": "tanpa nama",
     "work": "pekerjaan",
     "theHuman": "manusia",
@@ -2173,6 +2177,8 @@
     "delegatedTo": "didelegasikan ke {{on}}",
     "subAgentOf": "{{name}}, subagen dari {{parent}}",
     "created": "dibuat {{count}} mnt sebelum pekerjaan",
+    "notToScaleNote": "Waktu ini ditampilkan sebagai blok pendek, bukan sepanjang aslinya.",
+    "alsoThenItem": "{{name}}, {{time}}",
     "duration": {
       "seconds": "{{count}}d",
       "minutes": "{{count}}mnt",
@@ -2181,6 +2187,7 @@
     },
     "spoken": {
       "underMinute": "kurang dari semenit",
+      "days": "{{count}} h",
       "minutes": "{{count}} mnt",
       "hours": "{{count}} j",
       "hoursMinutes": "{{h}} j {{m}} mnt"
@@ -2200,7 +2207,7 @@
       "delegation": "didelegasikan ke {{on}} oleh {{agent}}, {{from}} sampai {{to}}, {{duration}}{{open}}{{note}}",
       "handoff": "{{from}} menyerahkan pekerjaan ke {{to}}, {{time}}{{note}}",
       "mark": "{{name}}{{note}}, {{time}}",
-      "blockedStage": "tahap terblokir, {{from}} sampai {{to}}, {{duration}}"
+      "collapsed": "{{label}}, {{from}} sampai {{to}}, {{duration}}, tidak digambar sesuai skala"
     },
     "fact": {
       "delegatedTo": "Didelegasikan ke",
@@ -2209,6 +2216,7 @@
       "ended": "Selesai",
       "note": "Catatan",
       "waiting": "Menunggu",
+      "waitingFor": "Menunggu",
       "on": "Pada",
       "duration": "Durasi",
       "who": "Siapa",
@@ -2216,8 +2224,9 @@
       "from": "Dari",
       "to": "Ke",
       "at": "Pada",
-      "stage": "Tahap",
-      "event": "Peristiwa"
+      "event": "Peristiwa",
+      "notToScale": "Tidak sesuai skala",
+      "alsoThen": "Juga saat itu"
     },
     "summary": {
       "noAgentWork": "Tidak ada pekerjaan agen tercatat.",
@@ -2225,18 +2234,16 @@
       "waited": "menunggu {{duration}} untuk {{target}}",
       "delegated": "{{on}}, didelegasikan",
       "clause": "{{agent}} {{parts}}",
-      "workBy_other": "Pekerjaan oleh {{count}} agen selama {{over}}: {{clauses}}.{{live}}",
-      "activityBy_other": "Aktivitas oleh {{count}} agen selama {{over}}: {{clauses}}.{{live}}",
-      "stillGoing": " Masih berlangsung."
+      "workBy_other": "Pekerjaan oleh {{count}} agen selama {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_other": "Aktivitas oleh {{count}} agen selama {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "stillGoing": " Masih berlangsung.",
+      "notToScale": " Tidak sesuai skala: {{skipped}}."
     },
     "card": {
       "title": "Linimasa",
       "loading": "Memuat…",
       "showMore": "Tampilkan lebih banyak",
       "showLess": "Tampilkan lebih sedikit",
-      "showHeartbeats": "Tampilkan heartbeat",
-      "hideHeartbeats": "Sembunyikan heartbeat",
-      "heartbeats_other": "{{count}} heartbeat, terakhir {{time}}",
       "story": "Kisah linimasa"
     },
     "story": {
@@ -2249,7 +2256,6 @@
       "someone": "seseorang",
       "waiting": "menunggu {{who}}",
       "stoppedWaiting": "berhenti menunggu {{who}}{{note}}",
-      "heartbeat": "heartbeat{{note}}",
       "movedTo": "dipindahkan ke {{stage}}",
       "createdIn": "dibuat di {{stage}}",
       "pushed": "di-push",
@@ -2266,6 +2272,21 @@
       "minutesSeconds": "{{m}} mnt {{s}} dtk",
       "hours": "{{count}} j",
       "hoursMinutes": "{{h}} j {{m}} mnt"
+    },
+    "stretch": {
+      "start": "Menunggu dimulai",
+      "blocked": "Terblokir",
+      "human": "Menunggu manusia",
+      "review": "Dalam tinjauan",
+      "merge": "Menunggu di-merge",
+      "decision": "Menunggu keputusan"
+    },
+    "skipped": {
+      "start": "menunggu dimulai {{duration}}",
+      "blocked": "terblokir {{duration}}",
+      "human": "menunggu manusia {{duration}}",
+      "review": "dalam tinjauan {{duration}}",
+      "merge": "menunggu di-merge {{duration}}"
     }
   },
   "roadmap": {
@@ -2407,11 +2428,23 @@
     "succeeded": "Berhasil",
     "notice": "Pemberitahuan",
     "cannotWait": "Tidak bisa menunggu: {{reason}}",
+    "muted": "\"{{name}}\" dibisukan di proyek ini",
+    "new": "Baru",
+    "snooze": "Tunda",
+    "snoozeFor": "Tunda selama",
+    "mute": "Bisukan jenis ini di proyek ini",
+    "copied": "Disalin",
+    "copyFailed": "Tidak bisa menyalin: pilih teksnya saja",
     "unit": {
       "s": "{{value}} dtk",
       "min": "{{value}} mnt",
       "h": "{{value}} j",
       "d": "{{value}} h"
+    },
+    "severity": {
+      "info": "Info",
+      "warning": "Peringatan",
+      "problem": "Masalah"
     }
   },
   "ticketPage": {
@@ -2612,6 +2645,25 @@
       "working": "bekerja",
       "waiting": "menunggu",
       "asleep": "tidur"
+    }
+  },
+  "notificationSettings": {
+    "title": "Notifikasi",
+    "intro": "Peringatan yang bisa ditampilkan lonceng untuk proyek ini. Matikan satu untuk berhenti melihatnya di sini; papan tetap mengawasinya, dan proyek lain punya pilihan sendiri.",
+    "none": "Belum ada peringatan",
+    "show": "Tampilkan {{label}}"
+  },
+  "alerts": {
+    "group": {
+      "setup": "Penyiapan dan versi",
+      "work": "Pekerjaan",
+      "machine": "Mesin ini",
+      "housekeeping": "Pemeliharaan"
+    },
+    "snooze": {
+      "minutes_other": "{{count}} menit",
+      "hours_other": "{{count}} jam",
+      "days_other": "{{count}} hari"
     }
   }
 }

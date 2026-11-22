@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next'
-import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useId, useState, type CSSProperties, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { shared } from '#/i18n'
@@ -9,10 +9,12 @@ import { nameParts, parentName, shortName } from '#/lib/actorName'
 import { clock, stamp } from '#/lib/format'
 import {
   buildChart,
-  PX_PER_MINUTE,
+  longDuration,
+  axisFor,
   share,
   spokenDuration,
   type AgentRow,
+  type Band,
   type Chart,
   type ChartWait,
   type Handoff,
@@ -26,8 +28,7 @@ import { onServerClock } from '#/lib/workStatus'
 import {
   ARROW,
   ARROW_ICON,
-  BLOCKED_BAND,
-  BLOCKED_CHIP,
+  BREAK_MARK,
   DELEGATION,
   GRID_LINE,
   HANDOFF_LINE,
@@ -41,6 +42,7 @@ import {
   PHASE,
   PLAIN_WAIT,
   waitIcon,
+  BAND_STYLE,
   boxStyle,
 } from './WorkTimelineStyle'
 
@@ -123,6 +125,15 @@ const markLabel = (m: TimelineMark, tr: TFunction) =>
     time: clock(m.at),
   })
 
+/** A collapsed period's story: its real start, end and length, and that it is not drawn to scale. */
+export const collapsedLabel = (b: Pick<Band, 'label' | 'start' | 'end' | 'open'>, tr: TFunction = shared.t) =>
+  tr('workTimeline.label.collapsed', {
+    label: b.label,
+    from: stamp(new Date(b.start).toISOString()),
+    to: b.open ? tr('workTimeline.now') : stamp(new Date(b.end).toISOString()),
+    duration: longDuration(b.end - b.start, tr),
+  })
+
 /** The pieces of the popover: a definition list of facts. */
 function Facts({ items }: { items: [string, ReactNode][] }) {
   return (
@@ -175,7 +186,7 @@ function Segment({
 }
 
 const SEG_BASE =
-  'absolute flex min-w-0 items-center gap-1 overflow-hidden rounded-sm px-1 text-left leading-none whitespace-nowrap outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring'
+  'absolute flex min-w-0 items-center gap-1 overflow-hidden rounded-sm px-1 data-[narrow=true]:px-0 text-left leading-none whitespace-nowrap outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring'
 
 /** Lane height in pixels: the compact chart (a lane of a Roadmap ticket) is shorter. */
 const lanePx = (compact: boolean) => (compact ? 16 : 20)
@@ -215,24 +226,27 @@ function RowLabel({ name, depth, parent }: { name: string; depth: number; parent
   )
 }
 
-/** One row of the chart: the label on the left from sm up, above the track on a phone; the track scrolls. */
+/**
+ * One row of the chart: the label on the left when the chart is wide enough, above the track when it is not. The track takes the
+ * width that is left, and never more: the chart does not scroll sideways.
+ */
 function Row({
   label,
   height,
-  minWidth,
+  trackRef,
   children,
 }: {
   label: ReactNode
   height: number
-  minWidth: number
+  trackRef?: (el: HTMLDivElement | null) => void
   children: ReactNode
 }) {
   return (
-    <div className="flex flex-col sm:flex-row">
-      <div className="sticky left-0 z-10 w-max max-w-full shrink-0 bg-card pb-0.5 pr-2 text-[11px] sm:w-40 sm:pb-0">
+    <div className="flex flex-col @md:flex-row">
+      <div className="max-w-full min-w-0 shrink-0 bg-card pb-0.5 pr-2 text-[11px] @md:w-32 @md:pb-0 @xl:w-40">
         {label}
       </div>
-      <div className="relative min-w-0 sm:flex-1" style={{ height, minWidth }}>
+      <div ref={trackRef} className="relative min-w-0 @md:flex-1" style={{ height }}>
         {children}
       </div>
     </div>
@@ -258,14 +272,14 @@ function WaitSegment({
     const on = w.on as string
     return (
       <Segment
-        label={delegationLabel(w, chart.live, tr)}
+        label={delegationLabel(w, chart.going, tr)}
         details={
           <Facts
             items={[
               [tr('workTimeline.fact.delegatedTo'), on],
               [tr('workTimeline.fact.by'), w.agent],
               [tr('workTimeline.fact.started'), stamp(w.start)],
-              [tr('workTimeline.fact.ended'), endedWhen(w, chart.live, tr)],
+              [tr('workTimeline.fact.ended'), endedWhen(w, chart.going, tr)],
               [tr('workTimeline.fact.note'), w.note || '—'],
             ]}
           />
@@ -287,14 +301,14 @@ function WaitSegment({
   const Icon = human ? HUMAN_ICON : waitIcon(w.reason)
   return (
     <Segment
-      label={waitLabel(w, chart.live, tr)}
+      label={waitLabel(w, chart.going, tr)}
       details={
         <Facts
           items={[
             [tr('workTimeline.fact.waiting'), w.agent],
             [tr('workTimeline.fact.on'), w.reason === 'human' ? tr('workTimeline.theHuman') : w.reason],
             [tr('workTimeline.fact.started'), stamp(w.start)],
-            [tr('workTimeline.fact.ended'), endedWhen(w, chart.live, tr)],
+            [tr('workTimeline.fact.ended'), endedWhen(w, chart.going, tr)],
             [tr('workTimeline.fact.duration'), spokenDuration(Date.parse(w.end) - Date.parse(w.start), tr)],
             [tr('workTimeline.fact.note'), w.note || '—'],
           ]}
@@ -335,7 +349,7 @@ function SpanSegment({
   const text = compact ? 'text-[10px]' : 'text-[11px]'
   return (
     <Segment
-      label={spanLabel(s, chart.live, tr)}
+      label={spanLabel(s, chart.going, tr)}
       details={
         <Facts
           items={[
@@ -345,7 +359,7 @@ function SpanSegment({
             ],
             [tr('workTimeline.fact.work'), phaseName(s, tr)],
             [tr('workTimeline.fact.started'), stamp(s.start)],
-            [tr('workTimeline.fact.ended'), endedWhen(s, chart.live, tr)],
+            [tr('workTimeline.fact.ended'), endedWhen(s, chart.going, tr)],
             [tr('workTimeline.fact.duration'), spokenDuration(Date.parse(s.end) - Date.parse(s.start), tr)],
           ]}
         />
@@ -384,7 +398,7 @@ function HandoffMarker({ h }: { h: Handoff }) {
         />
       }
       className={`absolute top-1/2 grid size-4 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring ${ARROW}`}
-      style={{ left: `${h.left * 100}%` }}
+      style={{ left: keepInside(h.left, 8) }}
       attrs={{ 'data-kind': 'handoff' }}
     >
       <ARROW_ICON className="size-2.5" aria-hidden />
@@ -392,7 +406,20 @@ function HandoffMarker({ h }: { h: Handoff }) {
   )
 }
 
-/** The chart: the rail of board events, a row per agent, and the axis, all on one scrolling track. */
+/** The track's width before it is measured (the server's render and the first paint). */
+const FIRST_WIDTH = 640
+
+/** A marker's centre on the track, kept so that the whole marker (`half` px each side) stays inside it. */
+const keepInside = (left: number, half: number) => `clamp(${half}px, ${left * 100}%, calc(100% - ${half}px))`
+
+/** A tick label's width in px, as the thinning of the axis counts it (its characters at the axis's font size). */
+const labelPx = (label: string) => label.length * 6.4 + 6
+
+/**
+ * The chart: the rail of board events, a row per agent, and the axis. It always fits the width it is given:
+ * it measures its track and draws the time to that width (src/lib/timelineCollapse.ts), the collapsed
+ * blocks staying a fixed few pixels; labels, ticks and markers give way where the width is short.
+ */
 export function WorkTimelineBar({
   timeline,
   compact = false,
@@ -407,15 +434,19 @@ export function WorkTimelineBar({
   // The axis's now is the server's, so a browser clock behind it does not cut the live segments short.
   const now = onServerClock(useNow(30_000), useServerOffset(timeline.now))
   const summaryId = useId()
-  const scroller = useRef<HTMLDivElement>(null)
-  // Whether the reader is at the track's right end (where now is); only then does a live track follow the time.
-  const atNow = useRef(true)
-  const live = timeline.live
-  // A live ticket opens at its right end, and stays there as the track grows, unless the reader has scrolled back.
+  // The track's own width, so the chart is drawn to it: measured when it is there and as it changes.
+  const [track, setTrack] = useState<HTMLDivElement | null>(null)
+  const [width, setWidth] = useState(FIRST_WIDTH)
   useEffect(() => {
-    const el = scroller.current
-    if (el && live && atNow.current) el.scrollLeft = el.scrollWidth
-  }, [live, now, timeline.end])
+    if (!track) return
+    const read = () => setWidth(Math.max(1, Math.round(track.getBoundingClientRect().width)))
+    read()
+    const watch = new ResizeObserver(read)
+    watch.observe(track)
+    return () => watch.disconnect()
+  }, [track])
+  // The chart follows the time only while its axis runs to now: not when it ends at a pinned merge.
+  const live = timeline.live && axisFor(timeline, now, win).pinned === null
   if (!timeline.start || !timeline.end || !hasWork(timeline))
     return (
       <p data-testid="work-timeline" className="text-xs text-muted-foreground">
@@ -423,10 +454,28 @@ export function WorkTimelineBar({
       </p>
     )
 
-  const chart = buildChart(timeline, now, win, tr)
+  const chart = buildChart(timeline, now, win, width, tr)
   const { axis, rows, marks, bands } = chart
   const h = lanePx(compact)
-  const minWidth = Math.max(1, Math.round((axis.end - axis.start) / 60_000)) * PX_PER_MINUTE
+  // Where now is on the track: its right end, or earlier when the axis ends in empty track (nothing but collapsed blocks).
+  const nowLeft = share(axis, axis.end)
+  const shownBreaks = chart.breaks.filter((k) => !(live && k.left > nowLeft * 0.92))
+  // The labels that fit: not within reach of the now label, a break mark or the track's edge, nor of the
+  // label before them (a long one, with its date, takes room for more). A dropped label keeps its gridline.
+  const tickLabels: typeof axis.ticks = []
+  let taken = -Infinity
+  for (const t of axis.ticks) {
+    const first = t === axis.ticks[0]
+    const need = labelPx(t.label)
+    const x = share(axis, t.at) * width
+    const from = first ? x : x - need / 2
+    const to = first ? x + need : x + need / 2
+    if (to > (live ? nowLeft * width - 30 : width) || from < 0 || from < taken + 8) continue
+    // A break mark is about 10 px wide: no label runs under it, whichever way the label extends from its tick.
+    if (shownBreaks.some((k) => from < k.left * width + 9 && to > k.left * width - 9)) continue
+    tickLabels.push(t)
+    taken = to
+  }
   const gridLines = (
     <>
       {axis.ticks.map((t) => (
@@ -434,14 +483,14 @@ export function WorkTimelineBar({
           key={t.at}
           aria-hidden
           className={`pointer-events-none absolute inset-y-0 w-px ${GRID_LINE}`}
-          style={{ left: `${share(axis, t.at) * 100}%` }}
+          style={{ left: `min(${share(axis, t.at) * 100}%, calc(100% - 1px))` }}
         />
       ))}
       {bands.map((b) => (
         <span
           key={b.key}
           aria-hidden
-          className={`pointer-events-none absolute inset-y-0 ${BLOCKED_BAND}`}
+          className={`pointer-events-none absolute inset-y-0 ${BAND_STYLE[b.kind].band}`}
           style={{ left: `${b.seg.left * 100}%`, width: `${b.seg.width * 100}%` }}
         />
       ))}
@@ -449,154 +498,171 @@ export function WorkTimelineBar({
         <span
           aria-hidden
           data-kind="now"
-          className={`pointer-events-none absolute inset-y-0 right-0 w-0.5 ${NOW_LINE}`}
+          className={`pointer-events-none absolute inset-y-0 w-0.5 ${NOW_LINE}`}
+          style={{ right: `${(1 - nowLeft) * 100}%` }}
         />
       )}
     </>
   )
-  const atSec = (t: number) => clock(new Date(t).toISOString())
 
   return (
     <div
       data-testid="work-timeline"
-      data-live={live ? 'true' : 'false'}
+      data-live={timeline.live ? 'true' : 'false'}
       aria-describedby={summaryId}
-      // Isolated, so the rows' sticky labels (z-10, to sit over the track as it scrolls sideways) stay
-      // under the page's own sticky headers instead of painting over them as they scroll past.
-      className="isolate space-y-1 text-xs"
+      // A container, so the labels stand beside the rows or above them by the chart's own width, not the screen's.
+      className="@container space-y-1 text-xs"
     >
       <p id={summaryId} className="sr-only">
         {chart.summary}
       </p>
-      <div
-        ref={scroller}
-        data-testid="work-timeline-scroll"
-        className="overflow-x-auto pb-1"
-        onScroll={(e) => {
-          const el = e.currentTarget
-          atNow.current = el.scrollWidth - el.clientWidth - el.scrollLeft < 8
-        }}
-      >
-        <div className="w-max min-w-full">
-          {marks.length > 0 || bands.length > 0 || chart.created ? (
-            <Row
-              label={<span className="text-muted-foreground">{tr('workTimeline.board')}</span>}
-              height={RAIL_PX}
-              minWidth={minWidth}
-            >
-              {chart.created && (
-                <Tip content={tr('workTimeline.created', { count: chart.created.minutes })}>
-                  <button
-                    type="button"
-                    aria-label={tr('workTimeline.created', { count: chart.created.minutes })}
-                    data-kind="created"
-                    className={`absolute top-1/2 size-2.5 -translate-y-1/2 rounded-full border border-card bg-foreground outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring ${chart.created.left > 0 ? '-translate-x-1/2' : ''}`}
-                    style={{ left: `${chart.created.left * 100}%` }}
+      <div className="pb-1">
+        {marks.length > 0 || bands.length > 0 || chart.created ? (
+          <Row
+            label={<span className="text-muted-foreground">{tr('workTimeline.board')}</span>}
+            height={RAIL_PX}
+          >
+            {chart.created && (
+              <Tip content={tr('workTimeline.created', { count: chart.created.minutes })}>
+                <button
+                  type="button"
+                  aria-label={tr('workTimeline.created', { count: chart.created.minutes })}
+                  data-kind="created"
+                  className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-card bg-foreground outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
+                  style={{ left: keepInside(chart.created.left, 5) }}
+                />
+              </Tip>
+            )}
+            {bands.map((b) => (
+              <Segment
+                key={b.key}
+                label={collapsedLabel(b, tr)}
+                details={
+                  <Facts
+                    items={[
+                      [tr('workTimeline.fact.waitingFor'), b.label],
+                      [tr('workTimeline.fact.from'), stamp(new Date(b.start).toISOString())],
+                      [
+                        tr('workTimeline.fact.to'),
+                        b.open ? tr('workTimeline.now') : stamp(new Date(b.end).toISOString()),
+                      ],
+                      [tr('workTimeline.fact.duration'), longDuration(b.end - b.start, tr)],
+                      [tr('workTimeline.fact.notToScale'), tr('workTimeline.notToScaleNote')],
+                      ...(b.marks.length
+                        ? [
+                            [
+                              tr('workTimeline.fact.alsoThen'),
+                              b.marks
+                                .map((m) =>
+                                  tr('workTimeline.alsoThenItem', {
+                                    name: markName(m.kind, tr),
+                                    time: stamp(m.at),
+                                  }),
+                                )
+                                .join('; '),
+                            ] as [string, ReactNode],
+                          ]
+                        : []),
+                    ]}
                   />
-                </Tip>
-              )}
-              {bands.map((b) => (
+                }
+                className={`${SEG_BASE} justify-center ${compact ? 'text-[10px]' : 'text-[11px]'} ${BAND_STYLE[b.kind].chip}`}
+                style={boxStyle(b.seg.left, b.seg.width, 2, RAIL_PX - 4)}
+                attrs={{ 'data-kind': b.kind }}
+              >
+                <span className="min-w-0 truncate">{b.label}</span>
+              </Segment>
+            ))}
+            {marks.map(({ mark: m, left }) => {
+              const meta = MARK[m.kind] ?? OTHER_MARK
+              const Icon = meta.icon
+              return (
                 <Segment
-                  key={b.key}
-                  label={tr('workTimeline.label.blockedStage', {
-                    from: atSec(b.start),
-                    to: atSec(b.end),
-                    duration: spokenDuration(b.end - b.start, tr),
-                  })}
+                  key={m.id}
+                  label={markLabel(m, tr)}
                   details={
                     <Facts
                       items={[
-                        [tr('workTimeline.fact.stage'), tr('workTimeline.blocked')],
-                        [tr('workTimeline.fact.from'), stamp(new Date(b.start).toISOString())],
-                        [tr('workTimeline.fact.duration'), spokenDuration(b.end - b.start, tr)],
+                        [tr('workTimeline.fact.event'), markName(m.kind, tr)],
+                        [tr('workTimeline.fact.at'), stamp(m.at)],
+                        [tr('workTimeline.fact.note'), m.note || '—'],
                       ]}
                     />
                   }
-                  className={`${SEG_BASE} ${compact ? 'text-[10px]' : 'text-[11px]'} ${BLOCKED_CHIP}`}
-                  style={boxStyle(b.seg.left, b.seg.width, 2, RAIL_PX - 4)}
-                  attrs={{ 'data-kind': 'blocked', 'data-narrow': b.seg.narrow ? 'true' : undefined }}
+                  className="absolute top-1/2 grid size-4 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-card text-foreground outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
+                  style={{ left: keepInside(left, 8) }}
+                  attrs={{ 'data-kind': 'mark', 'data-mark': m.kind }}
                 >
-                  {!b.seg.narrow && tr('workTimeline.blocked')}
+                  <Icon className="size-3" aria-hidden />
                 </Segment>
-              ))}
-              {marks.map(({ mark: m, left }) => {
-                const meta = MARK[m.kind] ?? OTHER_MARK
-                const Icon = meta.icon
-                return (
-                  <Segment
-                    key={m.id}
-                    label={markLabel(m, tr)}
-                    details={
-                      <Facts
-                        items={[
-                          [tr('workTimeline.fact.event'), markName(m.kind, tr)],
-                          [tr('workTimeline.fact.at'), stamp(m.at)],
-                          [tr('workTimeline.fact.note'), m.note || '—'],
-                        ]}
-                      />
-                    }
-                    className="absolute top-1/2 grid size-4 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-card text-foreground outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
-                    style={{ left: `${left * 100}%` }}
-                    attrs={{ 'data-kind': 'mark', 'data-mark': m.kind }}
-                  >
-                    <Icon className="size-3" aria-hidden />
-                  </Segment>
-                )
-              })}
-            </Row>
-          ) : null}
-          {rows.map((row: AgentRow) => (
-            <Row
-              key={row.agent}
-              minWidth={minWidth}
-              height={row.lanes * h}
-              label={<RowLabel name={row.agent} depth={row.depth} parent={row.parent} />}
-            >
-              {gridLines}
-              {row.connectors.map((c) => (
-                <span
-                  key={`${c.key}-${row.agent}`}
-                  aria-hidden
-                  data-kind="handoff-line"
-                  className={`pointer-events-none absolute w-0 border-l border-dashed ${HANDOFF_LINE}`}
-                  style={{ left: `${c.left * 100}%`, top: `${c.top}%`, bottom: `${c.bottom}%` }}
-                />
-              ))}
-              {row.items.map((item) =>
-                item.kind === 'span' ? (
-                  <SpanSegment key={item.key} item={item} chart={chart} compact={compact} />
-                ) : (
-                  <WaitSegment key={item.key} item={item} chart={chart} compact={compact} />
-                ),
-              )}
-              {row.arrows.map((a) => (
-                <HandoffMarker key={a.handoff.id} h={a} />
-              ))}
-            </Row>
-          ))}
-          <Row label={null} height={AXIS_PX} minWidth={minWidth}>
-            {axis.ticks
-              .filter((t) => !(live && share(axis, t.at) > 0.92))
-              .map((t, i) => (
-                <span
-                  key={t.at}
-                  aria-hidden
-                  className="absolute top-0 whitespace-nowrap text-[10.5px] text-muted-foreground tabular-nums"
-                  style={{
-                    left: `${share(axis, t.at) * 100}%`,
-                    transform: i === 0 ? 'none' : 'translateX(-50%)',
-                  }}
-                >
-                  {t.label}
-                </span>
-              ))}
-            {live && (
-              <span aria-hidden className="absolute top-0 right-0 text-[10.5px] text-muted-foreground">
-                {tr('workTimeline.now')}
-              </span>
-            )}
+              )
+            })}
           </Row>
-        </div>
+        ) : null}
+        {rows.map((row: AgentRow) => (
+          <Row
+            key={row.agent}
+            height={row.lanes * h}
+            label={<RowLabel name={row.agent} depth={row.depth} parent={row.parent} />}
+          >
+            {gridLines}
+            {row.connectors.map((c) => (
+              <span
+                key={`${c.key}-${row.agent}`}
+                aria-hidden
+                data-kind="handoff-line"
+                className={`pointer-events-none absolute w-0 border-l border-dashed ${HANDOFF_LINE}`}
+                style={{ left: keepInside(c.left, 8), top: `${c.top}%`, bottom: `${c.bottom}%` }}
+              />
+            ))}
+            {row.items.map((item) =>
+              item.kind === 'span' ? (
+                <SpanSegment key={item.key} item={item} chart={chart} compact={compact} />
+              ) : (
+                <WaitSegment key={item.key} item={item} chart={chart} compact={compact} />
+              ),
+            )}
+            {row.arrows.map((a) => (
+              <HandoffMarker key={a.handoff.id} h={a} />
+            ))}
+          </Row>
+        ))}
+        <Row label={null} height={AXIS_PX} trackRef={setTrack}>
+          {tickLabels.map((t) => (
+            <span
+              key={t.at}
+              aria-hidden
+              className="absolute top-0 whitespace-nowrap text-[10.5px] text-muted-foreground tabular-nums"
+              style={{
+                left: `${share(axis, t.at) * 100}%`,
+                transform: t === axis.ticks[0] ? 'none' : 'translateX(-50%)',
+              }}
+            >
+              {t.label}
+            </span>
+          ))}
+          {shownBreaks.map((k) => (
+            <span
+              key={k.key}
+              aria-hidden
+              data-kind="axis-break"
+              className={`absolute top-0 -translate-x-1/2 text-[10.5px] leading-[14px] font-medium ${BREAK_MARK}`}
+              style={{ left: `${k.left * 100}%` }}
+            >
+              {/* i18n-ignore: the skip mark */}
+              //
+            </span>
+          ))}
+          {live && (
+            <span
+              aria-hidden
+              className="absolute top-0 text-[10.5px] text-muted-foreground"
+              style={{ right: `${(1 - nowLeft) * 100}%` }}
+            >
+              {tr('workTimeline.now')}
+            </span>
+          )}
+        </Row>
       </div>
       {chart.created && (
         <p className="text-[10.5px] text-muted-foreground">
@@ -607,6 +673,13 @@ export function WorkTimelineBar({
   )
 }
 
-/** Whether there is something to draw: a span, a wait, a hand-off, a board event or time in a blocked stage. */
+/** Whether there is something to draw: a span, a wait, a hand-off, a board event or time the ticket waited on the human (a blocked or review stage, a wait, a decision card). */
 export const hasWork = (t: WorkTimeline) =>
-  t.spans.length + t.waits.length + t.handoffs.length + t.marks.length + t.blockedStretches.length > 0
+  t.spans.length +
+    t.waits.length +
+    t.handoffs.length +
+    t.marks.length +
+    t.blockedStretches.length +
+    t.reviewStretches.length +
+    t.humanStretches.length >
+  0

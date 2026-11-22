@@ -349,7 +349,7 @@
     "saving": "Đang lưu…"
   },
   "projectSettings": {
-    "intro": "Cách dự án này hoạt động: ticket mới bắt đầu với gì, các tag nó gợi ý, khi nào ticket bị coi là đình trệ, các cột, các lượt chạy và những gì trang của nó hiển thị. Hướng dẫn cho agent của dự án nằm ở trang riêng.",
+    "intro": "Cách dự án này hoạt động: ticket mới bắt đầu với gì, các tag nó gợi ý, khi nào ticket bị coi là đình trệ, các cảnh báo nó hiển thị, các cột, các lượt chạy và những gì trang của nó hiển thị. Hướng dẫn cho agent của dự án nằm ở trang riêng.",
     "save": "Lưu",
     "saving": "Đang lưu…",
     "unsaved": "Có thay đổi chưa lưu.",
@@ -1860,6 +1860,11 @@
         "subtitle": "Khi nào ticket bị coi là đình trệ",
         "keywords": "đình trệ, phút, nhàn rỗi, stall, idle"
       },
+      "notifications": {
+        "title": "Thông báo",
+        "subtitle": "Các cảnh báo dự án này hiển thị",
+        "keywords": "cảnh báo, tắt tiếng, chuông, nhắc nhở, alerts, mute, bell, reminders"
+      },
       "stages": {
         "title": "Cột",
         "subtitle": "Các cột của board và ý nghĩa",
@@ -2162,7 +2167,6 @@
     "noWork": "Chưa ghi nhận công việc nào.",
     "now": "bây giờ",
     "board": "Board",
-    "blocked": "bị chặn",
     "unnamed": "chưa đặt tên",
     "work": "công việc",
     "theHuman": "con người",
@@ -2173,6 +2177,8 @@
     "delegatedTo": "giao cho {{on}}",
     "subAgentOf": "{{name}}, subagent của {{parent}}",
     "created": "tạo {{count}} phút trước khi làm",
+    "notToScaleNote": "Khoảng thời gian này được hiển thị bằng một khối ngắn, không theo độ dài thật.",
+    "alsoThenItem": "{{name}}, {{time}}",
     "duration": {
       "seconds": "{{count}}s",
       "minutes": "{{count}}ph",
@@ -2181,6 +2187,7 @@
     },
     "spoken": {
       "underMinute": "dưới một phút",
+      "days": "{{count}} ngày",
       "minutes": "{{count}} phút",
       "hours": "{{count}} giờ",
       "hoursMinutes": "{{h}} giờ {{m}} phút"
@@ -2200,7 +2207,7 @@
       "delegation": "giao cho {{on}} bởi {{agent}}, {{from}} đến {{to}}, {{duration}}{{open}}{{note}}",
       "handoff": "{{from}} chuyển công việc cho {{to}}, {{time}}{{note}}",
       "mark": "{{name}}{{note}}, {{time}}",
-      "blockedStage": "cột bị chặn, {{from}} đến {{to}}, {{duration}}"
+      "collapsed": "{{label}}, {{from}} đến {{to}}, {{duration}}, không vẽ theo tỷ lệ"
     },
     "fact": {
       "delegatedTo": "Giao cho",
@@ -2209,6 +2216,7 @@
       "ended": "Kết thúc",
       "note": "Ghi chú",
       "waiting": "Đang chờ",
+      "waitingFor": "Đang chờ",
       "on": "Ở",
       "duration": "Thời lượng",
       "who": "Ai",
@@ -2216,8 +2224,9 @@
       "from": "Từ",
       "to": "Đến",
       "at": "Lúc",
-      "stage": "Cột",
-      "event": "Sự kiện"
+      "event": "Sự kiện",
+      "notToScale": "Không theo tỷ lệ",
+      "alsoThen": "Cùng lúc"
     },
     "summary": {
       "noAgentWork": "Chưa ghi nhận công việc của agent.",
@@ -2225,18 +2234,16 @@
       "waited": "đã chờ {{duration}} {{target}}",
       "delegated": "{{on}}, đã giao",
       "clause": "{{agent}} {{parts}}",
-      "workBy_other": "Công việc của {{count}} agent trong {{over}}: {{clauses}}.{{live}}",
-      "activityBy_other": "Hoạt động của {{count}} agent trong {{over}}: {{clauses}}.{{live}}",
-      "stillGoing": " Vẫn đang tiếp diễn."
+      "workBy_other": "Công việc của {{count}} agent trong {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_other": "Hoạt động của {{count}} agent trong {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "stillGoing": " Vẫn đang tiếp diễn.",
+      "notToScale": " Không theo tỷ lệ: {{skipped}}."
     },
     "card": {
       "title": "Dòng thời gian",
       "loading": "Đang tải…",
       "showMore": "Hiện thêm",
       "showLess": "Hiện ít hơn",
-      "showHeartbeats": "Hiện heartbeat",
-      "hideHeartbeats": "Ẩn heartbeat",
-      "heartbeats_other": "{{count}} heartbeat, cuối {{time}}",
       "story": "Câu chuyện dòng thời gian"
     },
     "story": {
@@ -2249,7 +2256,6 @@
       "someone": "ai đó",
       "waiting": "đang chờ {{who}}",
       "stoppedWaiting": "đã ngừng chờ {{who}}{{note}}",
-      "heartbeat": "heartbeat{{note}}",
       "movedTo": "đã chuyển sang {{stage}}",
       "createdIn": "đã tạo trong {{stage}}",
       "pushed": "đã push",
@@ -2266,6 +2272,21 @@
       "minutesSeconds": "{{m}} phút {{s}} giây",
       "hours": "{{count}} giờ",
       "hoursMinutes": "{{h}} giờ {{m}} phút"
+    },
+    "stretch": {
+      "start": "Chờ bắt đầu",
+      "blocked": "Bị chặn",
+      "human": "Chờ con người",
+      "review": "Đang review",
+      "merge": "Chờ merge",
+      "decision": "Chờ quyết định"
+    },
+    "skipped": {
+      "start": "chờ bắt đầu {{duration}}",
+      "blocked": "bị chặn {{duration}}",
+      "human": "chờ con người {{duration}}",
+      "review": "đang review {{duration}}",
+      "merge": "chờ merge {{duration}}"
     }
   },
   "roadmap": {
@@ -2407,11 +2428,23 @@
     "succeeded": "Thành công",
     "notice": "Lưu ý",
     "cannotWait": "Không thể chờ: {{reason}}",
+    "muted": "Đã tắt \"{{name}}\" trong dự án này",
+    "new": "Mới",
+    "snooze": "Hoãn",
+    "snoozeFor": "Hoãn trong",
+    "mute": "Tắt loại này trong dự án này",
+    "copied": "Đã sao chép",
+    "copyFailed": "Không sao chép được: hãy chọn văn bản",
     "unit": {
       "s": "{{value}} giây",
       "min": "{{value}} phút",
       "h": "{{value}} giờ",
       "d": "{{value}} ngày"
+    },
+    "severity": {
+      "info": "Thông tin",
+      "warning": "Cảnh báo",
+      "problem": "Sự cố"
     }
   },
   "ticketPage": {
@@ -2612,6 +2645,25 @@
       "working": "đang làm",
       "waiting": "đang chờ",
       "asleep": "đang ngủ"
+    }
+  },
+  "notificationSettings": {
+    "title": "Thông báo",
+    "intro": "Các cảnh báo mà chuông có thể hiển thị cho dự án này. Tắt một mục để không thấy nó ở đây; board vẫn theo dõi, và các dự án khác giữ lựa chọn riêng.",
+    "none": "Chưa có cảnh báo",
+    "show": "Hiện {{label}}"
+  },
+  "alerts": {
+    "group": {
+      "setup": "Thiết lập và phiên bản",
+      "work": "Công việc",
+      "machine": "Máy này",
+      "housekeeping": "Dọn dẹp"
+    },
+    "snooze": {
+      "minutes_other": "{{count}} phút",
+      "hours_other": "{{count}} giờ",
+      "days_other": "{{count}} ngày"
     }
   }
 }

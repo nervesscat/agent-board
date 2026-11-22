@@ -4,6 +4,17 @@ import { currentLocale, shared } from '#/i18n'
 import { shortName } from '#/lib/actorName'
 import { clock } from '#/lib/format'
 import {
+  clipPieces,
+  fitPieces,
+  planPieces,
+  position,
+  spanOf,
+  windowStart,
+  type Piece,
+  type Stretch,
+  type StretchKind,
+} from '#/lib/timelineCollapse'
+import {
   type Interval,
   type TimelineHandoff,
   type TimelineMark,
@@ -26,12 +37,26 @@ export type ChartWait = TimelineWait
 
 export type Window = { start: string; end: string }
 export type Tick = { at: number; label: string }
-export type Axis = { start: number; end: number; ticks: Tick[] }
+/**
+ * The axis: real `start` and `end`, the `pieces` of real time drawn at a fixed length (blocked and review
+ * periods, the gap before a merge), and `span`, its length in ms once they are. Without pieces the span is
+ * `end - start`.
+ */
+export type Axis = {
+  start: number
+  end: number
+  ticks: Tick[]
+  span: number
+  pieces: Piece[]
+  /** The merge the axis ends at , null otherwise. */
+  pinned: number | null
+}
 
 /** A segment narrower than this share of the axis is a cap: its label is in its tooltip and popover. */
 export const NARROW_SHARE = 0.06
-/** The track's width per minute of axis; a narrow screen's track scrolls sideways past the screen. */
-export const PX_PER_MINUTE = 3
+/** The most ticks on the axis, on a track wide enough for them: one per this many pixels of it, from 2 up to 5. */
+const MAX_TICKS = 5
+const TICK_PX = 100
 
 /** A segment's place on the axis, as shares of the axis length. */
 export type Seg = { left: number; width: number; narrow: boolean }
@@ -65,14 +90,32 @@ export type AgentRow = {
   connectors: Connector[]
 }
 export type Mark = { mark: TimelineMark; left: number }
-export type Band = { key: string; start: number; end: number; seg: Seg }
+/** A blocked or review period: its real start and end, whether it is still going, and its fixed block. */
+export type Band = {
+  key: string
+  kind: StretchKind
+  /** What the block says: the kind's words, or the review stage's own name. */
+  label: string
+  start: number
+  end: number
+  open: boolean
+  seg: Seg
+  /** The board's events (push, preview, ...) that fall inside the period: not drawn on the rail, listed with it. */
+  marks: TimelineMark[]
+}
+/** A break in the axis: where a piece of time was skipped, as a share of the axis. */
+export type AxisBreak = { key: string; left: number }
 export type Chart = {
   axis: Axis
+  /** Whether the chart follows the time: the ticket is live and its axis runs to now. */
   live: boolean
+  /** Whether the ticket itself is still going, for the words about its open segments. */
+  going: boolean
   now: number
   rows: AgentRow[]
   marks: Mark[]
   bands: Band[]
+  breaks: AxisBreak[]
   /**
    * The ticket was created this many whole minutes before its first agent event. `left` is the creation's
    * share of the axis: 0 when it is before the window (the mark then sits on the left edge).
@@ -91,31 +134,69 @@ export function spokenDuration(ms: number, tr: TFunction = shared.t): string {
   return m ? tr('workTimeline.spoken.hoursMinutes', { h, m }) : tr('workTimeline.spoken.hours', { count: h })
 }
 
+/** A duration that can run to days, for a collapsed period: `4 d 23 h 30 min`, `2 d 3 h`; hours and minutes as spokenDuration below a day. */
+export function longDuration(ms: number, tr: TFunction = shared.t): string {
+  const minutes = Math.round(ms / MIN)
+  if (minutes < 24 * 60) return spokenDuration(ms, tr)
+  const d = Math.floor(minutes / (24 * 60))
+  const h = Math.floor((minutes % (24 * 60)) / 60)
+  const m = minutes % 60
+  return [
+    tr('workTimeline.spoken.days', { count: d }),
+    h ? tr('workTimeline.spoken.hours', { count: h }) : '',
+    m ? tr('workTimeline.spoken.minutes', { count: m }) : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
 /** A row's label: the name's leaf, shortened at a word boundary when long (`builder-832` for `opencode/builder-832`). */
 export { shortName }
 
 /** The axis tick steps: 1 to 30 minutes, 1 to 12 hours, a day. */
 const STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440].map((m) => m * MIN)
 
-/** The smallest step that puts at most five ticks in the span. */
-export function tickStep(span: number): number {
-  return STEPS.find((s) => span / s <= 5) ?? STEPS[STEPS.length - 1]!
+/** The smallest step that puts at most `most` ticks in the span. */
+export function tickStep(span: number, most = MAX_TICKS): number {
+  return STEPS.find((s) => span / s <= most) ?? STEPS[STEPS.length - 1]!
 }
 
-/** Ticks on round times (local), at the step tickStep picks, from the start to the end. */
-export function ticksFor(start: number, end: number): Tick[] {
-  const step = tickStep(end - start)
+/** How many ticks a track `width` px wide has room for: none of the labels crowd on a phone. */
+export const ticksFit = (width: number) => Math.max(2, Math.min(MAX_TICKS, Math.floor(width / TICK_PX)))
+
+/**
+ * Ticks on round times (local), at the step tickStep picks for the axis length, from the start to the end.
+ * Time inside a piece is skipped; a tick after one carries its date when its day differs from the tick before.
+ */
+export function ticksFor(
+  start: number,
+  end: number,
+  pieces: Piece[] = [],
+  span = end - start,
+  most = MAX_TICKS,
+): Tick[] {
+  const step = tickStep(span, most)
   const offset = -new Date(start).getTimezoneOffset() * MIN
   const ticks: Tick[] = []
+  let dated = false
   for (let at = Math.ceil((start + offset) / step) * step - offset; at <= end; at += step) {
     if (at < start) continue
+    if (pieces.some((p) => at > p.start && (at < p.end || p.kind === 'tail'))) {
+      dated = true
+      continue
+    }
     const day = new Date(at)
+    const prev = ticks.at(-1)
+    const newDay = dated && prev !== undefined && new Date(prev.at).toDateString() !== day.toDateString()
+    dated = false
     ticks.push({
       at,
       label:
         step >= DAY
           ? day.toLocaleDateString(currentLocale(), { month: 'short', day: 'numeric' })
-          : clock(day.toISOString()),
+          : newDay
+            ? `${day.toLocaleDateString(currentLocale(), { month: 'short', day: 'numeric' })} ${clock(day.toISOString())}`
+            : clock(day.toISOString()),
     })
   }
   return ticks
@@ -128,36 +209,152 @@ const agentStarts = (t: WorkTimeline): number[] => [
   ...t.handoffs.map((h) => Date.parse(h.at)),
 ]
 
+/** The worker steps as real intervals: a span or wait from its start to its end (open ones to now while live), a hand-off a point. */
+const agentWork = (t: WorkTimeline, now: number): Ms[] => {
+  const endOf = (end: string, open: boolean) =>
+    open && t.live ? Math.max(Date.parse(end), now) : Date.parse(end)
+  return [
+    ...t.spans.map((s) => ({ start: Date.parse(s.start), end: endOf(s.end, s.open) })),
+    ...t.waits.map((w) => ({ start: Date.parse(w.start), end: endOf(w.end, w.open) })),
+    ...t.handoffs.map((h) => ({ start: Date.parse(h.at), end: Date.parse(h.at) })),
+  ]
+}
+
+/**
+ * The steps that keep their real scale inside a blocked or review period: closed spans and closed waits
+ * that are not on the human. An open one (it runs to the ticket's last event) or a wait on the human (it is
+ * the very time the ticket is blocked) would erase the period, so it is stretched over the block instead.
+ */
+const agentCarve = (t: WorkTimeline): Ms[] => [
+  ...t.spans.filter((s) => !s.open).map((s) => ({ start: Date.parse(s.start), end: Date.parse(s.end) })),
+  ...t.waits
+    .filter((w) => !w.open && w.reason !== 'human')
+    .map((w) => ({ start: Date.parse(w.start), end: Date.parse(w.end) })),
+]
+
+/** An interval minus the ones in `taken`: what is left of it, in order. */
+const without = (from: Ms, taken: Ms[]): Ms[] => {
+  const left: Ms[] = []
+  let cursor = from.start
+  for (const t of [...taken].sort((a, b) => a.start - b.start)) {
+    if (t.end <= cursor) continue
+    if (t.start >= from.end) break
+    if (t.start > cursor) left.push({ start: cursor, end: t.start })
+    cursor = Math.max(cursor, t.end)
+  }
+  if (cursor < from.end) left.push({ start: cursor, end: from.end })
+  return left
+}
+
+/**
+ * The periods the ticket waited on the human, as real times: before work started, in a blocked stage, on
+ * the human or a decision card, in a review stage; one still going runs to now on a live ticket. Where two
+ * overlap the stage wins over the human's wait, and both over the wait to start.
+ */
+function stretchesOf(t: WorkTimeline, now: number): Stretch[] {
+  const open = t.end ? Date.parse(t.end) : null
+  const make =
+    (kind: Stretch['kind'], label?: (s: { card?: boolean; name?: string }) => string | undefined) =>
+    (b: { start: string; end: string; card?: boolean; name?: string }): Stretch => {
+      const end = Date.parse(b.end)
+      return {
+        kind,
+        start: Date.parse(b.start),
+        end: t.live && open !== null && end >= open ? Math.max(end, now) : end,
+        label: label?.(b),
+      }
+    }
+  const stages = [
+    ...t.blockedStretches.map(make('blocked')),
+    ...t.reviewStretches.map(make('review', (b) => b.name)),
+  ]
+  const taken = (list: Stretch[]) => list.map((s) => ({ start: s.start, end: s.end }))
+  const around = (list: Stretch[], by: Ms[]) =>
+    list.flatMap((s) => without(s, by).map((m) => ({ ...s, start: m.start, end: m.end })))
+  const human = around(
+    (t.humanStretches ?? []).map(
+      make('human', (b) => (b.card ? shared.t('workTimeline.stretch.decision') : undefined)),
+    ),
+    taken(stages),
+  )
+  // From the ticket's creation to its first worker step: it was waiting to be started.
+  const first = agentStarts(t)
+  const begun = first.length ? Math.min(...first) : null
+  const lead =
+    t.start && begun !== null && begun - Date.parse(t.start) >= MIN
+      ? [{ kind: 'start' as const, start: Date.parse(t.start), end: begun }]
+      : []
+  return [...stages, ...human, ...around(lead, taken([...stages, ...human]))]
+}
+
 /**
  * The axis: from the first agent event (a span, a wait or a hand-off) to the end, now while the ticket is
- * live, or the window given. Without agent events it starts at the timeline's first event.
+ * live, or the window given. Without agent events it starts at the timeline's first event. Blocked and
+ * review periods are fixed blocks of it, and a merge after the last work sits right after it
+ * (src/lib/timelineCollapse.ts); the axis then ends at the merge.
  */
-export function axisFor(t: WorkTimeline, now: number, win?: Window): Axis {
+export function axisFor(t: WorkTimeline, now: number, win?: Window, width?: number): Axis {
   let start: number
   let end: number
+  const agentAt = agentStarts(t)
+  const stretches = stretchesOf(t, now)
+  // Waiting to start is part of the axis: it begins at the ticket's creation, not at its first worker step.
   if (win) {
     start = Date.parse(win.start)
     end = Date.parse(win.end)
   } else {
-    const agentAt = agentStarts(t)
-    start = agentAt.length ? Math.min(...agentAt) : t.start ? Date.parse(t.start) : now
+    // From the first worker step, or earlier where the ticket was waiting before it: waiting to start, and
+    // a stage it sat in from its creation.
+    start = Math.min(
+      agentAt.length ? Math.min(...agentAt) : t.start ? Date.parse(t.start) : now,
+      ...stretches.map((s) => s.start),
+    )
     end = t.end ? Date.parse(t.end) : now
     if (t.live) end = Math.max(end, now)
   }
+  const merges = t.marks.filter((m) => m.kind === 'merge').map((m) => Date.parse(m.at))
+  const latest = merges.length ? Math.max(...merges) : null
+  // A window reaches back over what the ticket waited, so a merge counts when it is after the ticket's first
+  // event, not only after the window's own start.
+  const floor = win && t.start ? Math.min(start, Date.parse(t.start)) : start
+  const plan = planPieces({
+    stretches,
+    merge: latest !== null && latest > floor && latest <= end ? latest : null,
+    work: agentWork(t, now),
+    carve: agentCarve(t),
+  })
+  // A window is so much agent time: what the ticket waited on the human takes none of it, so it reaches
+  // back past those periods (never before the ticket's first event).
+  if (win) start = windowStart(plan.pieces, start, end, t.start ? Date.parse(t.start) : null)
+  if (plan.pinned !== null) end = plan.pinned
   if (end <= start) end = start + MIN
-  return { start, end, ticks: ticksFor(start, end) }
+  const clipped = clipPieces(plan.pieces, start, end)
+  // With the track's width known, the blocks are a fixed number of pixels and the real time fills the rest.
+  const fit = width === undefined ? { pieces: clipped, slackMs: 0 } : fitPieces(clipped, start, end, width)
+  const pieces = fit.pieces
+  const span = spanOf(start, end, pieces) + fit.slackMs
+  return {
+    start,
+    end,
+    ticks: ticksFor(start, end, pieces, span, width === undefined ? MAX_TICKS : ticksFit(width)),
+    span,
+    pieces,
+    pinned: plan.pinned,
+  }
 }
 
-/** A time's share of the axis, 0 at its start and 1 at its end. */
-export const share = (axis: Axis, at: number) => (at - axis.start) / (axis.end - axis.start)
+/** A time's share of the axis, 0 at its start and 1 at its end; a piece's time is spread over its block. */
+export const share = (axis: Axis, at: number) =>
+  (axis.pieces.length ? position(axis.start, axis.pieces, at) : at - axis.start) / axis.span
 
 /** Where an interval sits on the axis, or null when none of it does. */
 export function place(ms: Ms, axis: Axis): Seg | null {
   const a = Math.max(ms.start, axis.start)
   const b = Math.min(ms.end, axis.end)
   if (a > b) return null
-  const width = (b - a) / (axis.end - axis.start)
-  return { left: share(axis, a), width, narrow: width < NARROW_SHARE }
+  const left = share(axis, a)
+  const width = share(axis, b) - left
+  return { left, width, narrow: width < NARROW_SHARE }
 }
 
 /** Lanes for intervals: each takes the first lane free at its start, so overlapping ones sit apart. */
@@ -230,6 +427,15 @@ export function agentTree(t: WorkTimeline): { agent: string; parent: string | nu
   return out
 }
 
+/** The kinds of skipped time the summary names (their words are `workTimeline.skipped.<kind>`). */
+const SKIPPED: Record<StretchKind, true> = {
+  start: true,
+  blocked: true,
+  human: true,
+  review: true,
+  merge: true,
+}
+
 /** The chart's one-sentence summary for screen readers. */
 export function summarize(t: WorkTimeline, rows: AgentRow[], axis: Axis, tr: TFunction = shared.t): string {
   if (!t.start) return tr('workTimeline.noWork')
@@ -260,20 +466,62 @@ export function summarize(t: WorkTimeline, rows: AgentRow[], axis: Axis, tr: TFu
   const doers = working.filter((r) => r.items.some((i) => i.kind === 'span')).length
   const n = doers || working.length
   const over = spokenDuration(axis.end - axis.start, tr)
+  const skipped = (Object.keys(SKIPPED) as StretchKind[]).flatMap((k) => {
+    const ms = axis.pieces.filter((p) => p.skips === k).reduce((n, p) => n + p.end - p.start, 0)
+    return ms > 0 ? [tr(`workTimeline.skipped.${k}`, { duration: longDuration(ms, tr) })] : []
+  })
   return tr(doers ? 'workTimeline.summary.workBy' : 'workTimeline.summary.activityBy', {
     count: n,
     over,
     clauses: clauses.join('; '),
     live: t.live ? tr('workTimeline.summary.stillGoing') : '',
+    scale: skipped.length ? tr('workTimeline.summary.notToScale', { skipped: skipped.join(', ') }) : '',
   })
 }
 
+/**
+ * The timeline with one name per agent: an agent recorded under its short name in one event and its full
+ * name (`team/ticket/intent`) in another is one row. A full name is the short one when its last segment is
+ * a name the timeline also uses. Only the grouping changes, never what an event says.
+ */
+export function unifyAgents(t: WorkTimeline): WorkTimeline {
+  const names = new Set<string>()
+  for (const s of t.spans) names.add(s.agent).add(s.by)
+  for (const w of t.waits) {
+    names.add(w.agent)
+    if (w.on) names.add(w.on)
+  }
+  for (const h of t.handoffs) names.add(h.from).add(h.to)
+  const canon = (name: string) => {
+    const leaf = name.split('/').at(-1) ?? name
+    return leaf !== name && names.has(leaf) ? leaf : name
+  }
+  const map = new Map([...names].map((n) => [n, canon(n)] as const))
+  if ([...map].every(([a, b]) => a === b)) return t
+  const of = (n: string) => map.get(n) ?? n
+  return {
+    ...t,
+    spans: t.spans.map((s) => ({ ...s, agent: of(s.agent), by: of(s.by) })),
+    waits: t.waits.map((w) => ({ ...w, agent: of(w.agent), on: w.on ? of(w.on) : w.on })),
+    handoffs: t.handoffs.map((h) => ({ ...h, from: of(h.from), to: of(h.to) })),
+  }
+}
+
 /** The whole chart as the view draws it: rows, marks, blocked bands, the creation mark and the summary. */
-export function buildChart(t: WorkTimeline, now: number, win?: Window, tr: TFunction = shared.t): Chart {
-  const axis = axisFor(t, now, win)
-  const live = t.live
+export function buildChart(
+  timeline: WorkTimeline,
+  now: number,
+  win?: Window,
+  width?: number,
+  tr: TFunction = shared.t,
+): Chart {
+  const t = unifyAgents(timeline)
+  const axis = axisFor(t, now, win, width)
+  const going = t.live
+  // Not live for drawing once the axis ends at a pinned merge: now is days past its right edge.
+  const live = going && axis.pinned === null
   const endOf = (end: string, open: boolean) =>
-    open && live ? Math.max(Date.parse(end), now) : Date.parse(end)
+    open && going ? Math.max(Date.parse(end), now) : Date.parse(end)
 
   const tree = agentTree(t)
   const index = new Map(tree.map((r, i) => [r.agent, i]))
@@ -339,16 +587,42 @@ export function buildChart(t: WorkTimeline, now: number, win?: Window, tr: TFunc
       })
   }
 
+  // A block per blocked or review period (its fixed place on the axis), with the period's own real times.
+  const bands: Band[] = []
+  const breaks: AxisBreak[] = []
+  const openAt = t.end ? Date.parse(t.end) : null
+  axis.pieces.forEach((p, i) => {
+    const mid = (position(axis.start, axis.pieces, p.start) + p.virtualMs / 2) / axis.span
+    if (p.kind !== 'tail') breaks.push({ key: `break-${i}`, left: mid })
+    if (p.kind === 'gap' || p.kind === 'tail' || !p.stretch) return
+    const seg = place({ start: p.start, end: p.end }, axis)
+    if (seg)
+      bands.push({
+        key: `${p.kind}-${i}`,
+        kind: p.kind,
+        label: p.stretch.label,
+        start: p.stretch.start,
+        end: p.stretch.end,
+        open: going && openAt !== null && p.stretch.end >= openAt,
+        marks: t.marks.filter(
+          (m) => m.kind !== 'merge' && Date.parse(m.at) > p.start && Date.parse(m.at) < p.end,
+        ),
+        seg,
+      })
+  })
+  // A board event strictly inside a block is listed with the block, not drawn over its chip.
+  const hidden = new Set(bands.flatMap((b) => b.marks.map((m) => m.id)))
   const marks: Mark[] = []
   for (const m of t.marks) {
     const at = Date.parse(m.at)
-    if (at >= axis.start && at <= axis.end) marks.push({ mark: m, left: share(axis, at) })
+    if (at < axis.start || at > axis.end || hidden.has(m.id)) continue
+    // A merge is never hidden: inside a block it is drawn at the block's end edge, not on its chip.
+    const block =
+      m.kind === 'merge'
+        ? axis.pieces.find((p) => p.kind !== 'gap' && p.kind !== 'tail' && at > p.start && at < p.end)
+        : undefined
+    marks.push({ mark: m, left: share(axis, block ? block.end : at) })
   }
-  const bands: Band[] = []
-  t.blockedStretches.forEach((b, i) => {
-    const seg = place({ start: Date.parse(b.start), end: Date.parse(b.end) }, axis)
-    if (seg) bands.push({ key: `blocked-${i}`, start: Date.parse(b.start), end: Date.parse(b.end), seg })
-  })
   // The creation mark: from the ticket's first event (its creation) to its first agent event, drawn at the
   // creation's place on the axis, and on the left edge only when the creation is before the window.
   const agentAt = agentStarts(t)
@@ -358,12 +632,14 @@ export function buildChart(t: WorkTimeline, now: number, win?: Window, tr: TFunc
   return {
     axis,
     live,
+    going,
     now,
     rows,
     marks,
     bands,
+    breaks,
     created:
-      createdAt !== null && lead >= 1 && createdShare <= 1
+      createdAt !== null && lead >= 1 && createdShare < 0 && !bands.some((b) => b.kind === 'start')
         ? { minutes: lead, left: Math.max(0, createdShare) }
         : null,
     summary: summarize(t, rows, axis, tr),

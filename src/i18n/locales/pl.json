@@ -373,7 +373,7 @@
     "saving": "Zapisywanie…"
   },
   "projectSettings": {
-    "intro": "Jak działa ten projekt: z czym zaczynają nowe zgłoszenia, jakie tagi proponuje, kiedy zgłoszenie uznaje się za zastałe, jego etapy, uruchomienia i to, co pokazują jego strony. Instrukcje jego agentów są na osobnej stronie.",
+    "intro": "Jak działa ten projekt: z czym zaczynają nowe zgłoszenia, jakie tagi proponuje, kiedy zgłoszenie uznaje się za zastałe, jakie alerty pokazuje, jego etapy, uruchomienia i to, co pokazują jego strony. Instrukcje jego agentów są na osobnej stronie.",
     "save": "Zapisz",
     "saving": "Zapisywanie…",
     "unsaved": "Niezapisane zmiany.",
@@ -2025,6 +2025,11 @@
         "subtitle": "Kiedy zgłoszenie wygląda na zastałe",
         "keywords": "zastałe, minuty, bezczynne"
       },
+      "notifications": {
+        "title": "Powiadomienia",
+        "subtitle": "Jakie alerty pokazuje ten projekt",
+        "keywords": "alerty, wyciszenie, dzwonek, przypomnienia"
+      },
       "stages": {
         "title": "Etapy",
         "subtitle": "Kolumny tablicy i co oznaczają",
@@ -2357,7 +2362,6 @@
     "noWork": "Brak zarejestrowanej pracy.",
     "now": "teraz",
     "board": "Tablica",
-    "blocked": "zablokowane",
     "unnamed": "bez nazwy",
     "work": "praca",
     "theHuman": "człowiek",
@@ -2368,6 +2372,8 @@
     "delegatedTo": "delegowano do {{on}}",
     "subAgentOf": "{{name}}, subagent {{parent}}",
     "created": "utworzono {{count}} min przed pracą",
+    "notToScaleNote": "Ten czas pokazano jako krótki blok, a nie w rzeczywistej długości.",
+    "alsoThenItem": "{{name}}, {{time}}",
     "duration": {
       "seconds": "{{count}}s",
       "minutes": "{{count}}min",
@@ -2376,6 +2382,7 @@
     },
     "spoken": {
       "underMinute": "poniżej minuty",
+      "days": "{{count}} d.",
       "minutes": "{{count}} min",
       "hours": "{{count}} godz.",
       "hoursMinutes": "{{h}} godz. {{m}} min"
@@ -2395,7 +2402,7 @@
       "delegation": "delegowano do {{on}} przez {{agent}}, od {{from}} do {{to}}, {{duration}}{{open}}{{note}}",
       "handoff": "{{from}}: praca przekazana do {{to}}, {{time}}{{note}}",
       "mark": "{{name}}{{note}}, {{time}}",
-      "blockedStage": "zablokowany etap, od {{from}} do {{to}}, {{duration}}"
+      "collapsed": "{{label}}, od {{from}} do {{to}}, {{duration}}, poza skalą"
     },
     "fact": {
       "delegatedTo": "Delegowano do",
@@ -2404,6 +2411,7 @@
       "ended": "Koniec",
       "note": "Notatka",
       "waiting": "Oczekiwanie",
+      "waitingFor": "Czeka na",
       "on": "Na",
       "duration": "Czas trwania",
       "who": "Kto",
@@ -2411,8 +2419,9 @@
       "from": "Od",
       "to": "Do",
       "at": "O",
-      "stage": "Etap",
-      "event": "Zdarzenie"
+      "event": "Zdarzenie",
+      "notToScale": "Poza skalą",
+      "alsoThen": "Także wtedy"
     },
     "summary": {
       "noAgentWork": "Brak zarejestrowanej pracy agentów.",
@@ -2420,27 +2429,22 @@
       "waited": "czekał {{duration}} na {{target}}",
       "delegated": "{{on}}, delegowano",
       "clause": "{{agent}} {{parts}}",
-      "workBy_one": "Praca {{count}} agenta w ciągu {{over}}: {{clauses}}.{{live}}",
-      "workBy_few": "Praca {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}",
-      "workBy_many": "Praca {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}",
-      "workBy_other": "Praca {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}",
-      "activityBy_one": "Aktywność {{count}} agenta w ciągu {{over}}: {{clauses}}.{{live}}",
-      "activityBy_few": "Aktywność {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}",
-      "activityBy_many": "Aktywność {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}",
-      "activityBy_other": "Aktywność {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}",
-      "stillGoing": " Wciąż trwa."
+      "workBy_one": "Praca {{count}} agenta w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "workBy_few": "Praca {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "workBy_many": "Praca {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "workBy_other": "Praca {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_one": "Aktywność {{count}} agenta w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_few": "Aktywność {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_many": "Aktywność {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_other": "Aktywność {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "stillGoing": " Wciąż trwa.",
+      "notToScale": " Poza skalą: {{skipped}}."
     },
     "card": {
       "title": "Oś czasu",
       "loading": "Wczytywanie…",
       "showMore": "Pokaż więcej",
       "showLess": "Pokaż mniej",
-      "showHeartbeats": "Pokaż heartbeaty",
-      "hideHeartbeats": "Ukryj heartbeaty",
-      "heartbeats_one": "{{count}} heartbeat, ostatni {{time}}",
-      "heartbeats_few": "{{count}} heartbeaty, ostatni {{time}}",
-      "heartbeats_many": "{{count}} heartbeatów, ostatni {{time}}",
-      "heartbeats_other": "{{count}} heartbeatu, ostatni {{time}}",
       "story": "Historia osi czasu"
     },
     "story": {
@@ -2453,7 +2457,6 @@
       "someone": "ktoś",
       "waiting": "czeka na {{who}}",
       "stoppedWaiting": "przestał czekać na {{who}}{{note}}",
-      "heartbeat": "heartbeat{{note}}",
       "movedTo": "przeniesiono do {{stage}}",
       "createdIn": "utworzono w {{stage}}",
       "pushed": "wypchnięto",
@@ -2470,6 +2473,21 @@
       "minutesSeconds": "{{m}} min {{s}} s",
       "hours": "{{count}} godz.",
       "hoursMinutes": "{{h}} godz. {{m}} min"
+    },
+    "stretch": {
+      "start": "Czeka na start",
+      "blocked": "Zablokowane",
+      "human": "Czeka na człowieka",
+      "review": "W recenzji",
+      "merge": "Czeka na scalenie",
+      "decision": "Czeka na decyzję"
+    },
+    "skipped": {
+      "start": "czeka na start {{duration}}",
+      "blocked": "zablokowane {{duration}}",
+      "human": "czeka na człowieka {{duration}}",
+      "review": "w recenzji {{duration}}",
+      "merge": "czeka na scalenie {{duration}}"
     }
   },
   "roadmap": {
@@ -2635,11 +2653,23 @@
     "succeeded": "Powodzenie",
     "notice": "Uwaga",
     "cannotWait": "Nie można czekać: {{reason}}",
+    "muted": "Wyciszono „{{name}}” w tym projekcie",
+    "new": "Nowe",
+    "snooze": "Odłóż",
+    "snoozeFor": "Odłóż na",
+    "mute": "Wycisz ten rodzaj w tym projekcie",
+    "copied": "Skopiowano",
+    "copyFailed": "Nie udało się skopiować: zaznacz tekst ręcznie",
     "unit": {
       "s": "{{value}} s",
       "min": "{{value}} min",
       "h": "{{value}} godz.",
       "d": "{{value}} d"
+    },
+    "severity": {
+      "info": "Informacja",
+      "warning": "Ostrzeżenie",
+      "problem": "Problem"
     }
   },
   "ticketPage": {
@@ -2858,6 +2888,34 @@
       "working": "pracuje",
       "waiting": "czeka",
       "asleep": "śpi"
+    }
+  },
+  "notificationSettings": {
+    "title": "Powiadomienia",
+    "intro": "Alerty, które dzwonek może pokazywać dla tego projektu. Wyłącz alert, aby nie widzieć go tutaj; tablica nadal go śledzi, a inne projekty zachowują własny wybór.",
+    "none": "Brak alertów",
+    "show": "Pokazuj: {{label}}"
+  },
+  "alerts": {
+    "group": {
+      "setup": "Konfiguracja i wersje",
+      "work": "Praca",
+      "machine": "Ten komputer",
+      "housekeeping": "Porządki"
+    },
+    "snooze": {
+      "minutes_one": "{{count}} minuta",
+      "minutes_few": "{{count}} minuty",
+      "minutes_many": "{{count}} minut",
+      "minutes_other": "{{count}} minuty",
+      "hours_one": "{{count}} godzina",
+      "hours_few": "{{count}} godziny",
+      "hours_many": "{{count}} godzin",
+      "hours_other": "{{count}} godziny",
+      "days_one": "{{count}} dzień",
+      "days_few": "{{count}} dni",
+      "days_many": "{{count}} dni",
+      "days_other": "{{count}} dnia"
     }
   }
 }

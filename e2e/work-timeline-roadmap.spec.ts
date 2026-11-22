@@ -115,16 +115,23 @@ test('a lost run reads Lost contact on the Roadmap, and a working one does not',
   await expect(turnRow.getByTestId('work-line').first()).toHaveAccessibleName(/Your turn · waiting 2d/)
 })
 
-test('changing the Roadmap time axis keeps a live track at now', async ({ page, project, human, agent }) => {
+test('changing the Roadmap time axis keeps a live chart fitted, with now at its right edge', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
   await workedTicket(human, agent, project)
   await page.goto(`/projects/${project.id}/roadmap`)
-  const scroller = page.getByTestId('work-timeline-scroll').first()
-  await expect(scroller).toBeVisible()
+  const chart = page.getByTestId('work-timeline').first()
+  await expect(chart).toBeVisible()
   await page.getByRole('tab', { name: '7 d' }).click()
-  // Now stays in view on the new axis: the track sits at its right end, where now is.
-  await expect
-    .poll(() => scroller.evaluate((el) => el.scrollWidth - el.clientWidth - el.scrollLeft))
-    .toBeLessThan(8)
+  // Now stays in view on the new axis, and the chart never scrolls: it is drawn to its width.
+  const now = chart.locator('[data-kind="now"]').first()
+  await expect(now).toBeAttached()
+  const [c, n] = await Promise.all([chart.boundingBox(), now.boundingBox()])
+  expect(n!.x + n!.width).toBeLessThanOrEqual(c!.x + c!.width + 1)
+  expect(await chart.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
 })
 
 test('a stalled ticket in another active stage names that stage in its why on the Roadmap', async ({

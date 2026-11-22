@@ -357,7 +357,7 @@
     "saving": "সংরক্ষণ হচ্ছে…"
   },
   "projectSettings": {
-    "intro": "এই প্রজেক্ট কীভাবে কাজ করে: নতুন ticket কী নিয়ে শুরু হয়, কোন ট্যাগ দেওয়া হয়, কখন ticket থেমে আছে গণ্য হয়, এর ধাপ, এর রান এবং এর পাতাগুলো কী দেখায়। এর এজেন্টদের নির্দেশনা আলাদা পাতায়।",
+    "intro": "এই প্রজেক্ট কীভাবে কাজ করে: নতুন ticket কী নিয়ে শুরু হয়, কোন ট্যাগ দেওয়া হয়, কখন ticket থেমে আছে গণ্য হয়, কোন সতর্কতা দেখায়, এর ধাপ, এর রান এবং এর পাতাগুলো কী দেখায়। এর এজেন্টদের নির্দেশনা আলাদা পাতায়।",
     "save": "সংরক্ষণ",
     "saving": "সংরক্ষণ হচ্ছে…",
     "unsaved": "অসংরক্ষিত পরিবর্তন আছে।",
@@ -1915,6 +1915,11 @@
         "subtitle": "কখন ticket থেমে আছে দেখায়",
         "keywords": "থেমে, মিনিট, নিষ্ক্রিয়, stall, idle"
       },
+      "notifications": {
+        "title": "বিজ্ঞপ্তি",
+        "subtitle": "এই প্রজেক্টে কোন সতর্কতা দেখায়",
+        "keywords": "সতর্কতা, মিউট, ঘণ্টা, অনুস্মারক, alerts, mute, bell, reminders"
+      },
       "stages": {
         "title": "ধাপ",
         "subtitle": "বোর্ডের কলাম ও তাদের মানে",
@@ -2227,7 +2232,6 @@
     "noWork": "এখনও কোনো কাজ রেকর্ড হয়নি।",
     "now": "এখন",
     "board": "বোর্ড",
-    "blocked": "আটকে আছে",
     "unnamed": "নামহীন",
     "work": "কাজ",
     "theHuman": "মানুষ",
@@ -2238,6 +2242,8 @@
     "delegatedTo": "{{on}}-কে দেওয়া হয়েছে",
     "subAgentOf": "{{name}}, {{parent}}-এর সাব-এজেন্ট",
     "created": "কাজের {{count}} মিনিট আগে তৈরি",
+    "notToScaleNote": "এই সময় ছোট ব্লকে দেখানো হয়েছে, আসল দৈর্ঘ্যে নয়।",
+    "alsoThenItem": "{{name}}, {{time}}",
     "duration": {
       "seconds": "{{count}}সে",
       "minutes": "{{count}}মি",
@@ -2246,6 +2252,7 @@
     },
     "spoken": {
       "underMinute": "এক মিনিটেরও কম",
+      "days": "{{count}} দিন",
       "minutes": "{{count}} মিনিট",
       "hours": "{{count}} ঘণ্টা",
       "hoursMinutes": "{{h}} ঘণ্টা {{m}} মিনিট"
@@ -2265,7 +2272,7 @@
       "delegation": "{{agent}} {{on}}-কে দিয়েছে, {{from}} থেকে {{to}}, {{duration}}{{open}}{{note}}",
       "handoff": "{{from}} কাজ {{to}}-কে দিয়েছে, {{time}}{{note}}",
       "mark": "{{name}}{{note}}, {{time}}",
-      "blockedStage": "আটকে থাকা ধাপ, {{from}} থেকে {{to}}, {{duration}}"
+      "collapsed": "{{label}}, {{from}} থেকে {{to}}, {{duration}}, মাপমতো আঁকা নয়"
     },
     "fact": {
       "delegatedTo": "যাকে দেওয়া",
@@ -2274,6 +2281,7 @@
       "ended": "শেষ",
       "note": "নোট",
       "waiting": "অপেক্ষা",
+      "waitingFor": "যার অপেক্ষায়",
       "on": "কার",
       "duration": "সময়কাল",
       "who": "কে",
@@ -2281,8 +2289,9 @@
       "from": "কার কাছ থেকে",
       "to": "কার কাছে",
       "at": "কখন",
-      "stage": "ধাপ",
-      "event": "ঘটনা"
+      "event": "ঘটনা",
+      "notToScale": "মাপমতো নয়",
+      "alsoThen": "একই সময়ে"
     },
     "summary": {
       "noAgentWork": "এজেন্টের কোনো কাজ রেকর্ড হয়নি।",
@@ -2290,21 +2299,18 @@
       "waited": "{{target}}-এর জন্য {{duration}} অপেক্ষা করেছে",
       "delegated": "{{on}}, দেওয়া হয়েছে",
       "clause": "{{agent}} {{parts}}",
-      "workBy_one": "{{count}} জন এজেন্টের কাজ {{over}} জুড়ে: {{clauses}}।{{live}}",
-      "workBy_other": "{{count}} জন এজেন্টের কাজ {{over}} জুড়ে: {{clauses}}।{{live}}",
-      "activityBy_one": "{{count}} জন এজেন্টের কার্যকলাপ {{over}} জুড়ে: {{clauses}}।{{live}}",
-      "activityBy_other": "{{count}} জন এজেন্টের কার্যকলাপ {{over}} জুড়ে: {{clauses}}।{{live}}",
-      "stillGoing": " এখনও চলছে।"
+      "workBy_one": "{{count}} জন এজেন্টের কাজ {{over}} জুড়ে: {{clauses}}।{{live}}{{scale}}",
+      "workBy_other": "{{count}} জন এজেন্টের কাজ {{over}} জুড়ে: {{clauses}}।{{live}}{{scale}}",
+      "activityBy_one": "{{count}} জন এজেন্টের কার্যকলাপ {{over}} জুড়ে: {{clauses}}।{{live}}{{scale}}",
+      "activityBy_other": "{{count}} জন এজেন্টের কার্যকলাপ {{over}} জুড়ে: {{clauses}}।{{live}}{{scale}}",
+      "stillGoing": " এখনও চলছে।",
+      "notToScale": " মাপমতো নয়: {{skipped}}।"
     },
     "card": {
       "title": "টাইমলাইন",
       "loading": "লোড হচ্ছে…",
       "showMore": "আরও দেখান",
       "showLess": "কম দেখান",
-      "showHeartbeats": "হার্টবিট দেখান",
-      "hideHeartbeats": "হার্টবিট লুকান",
-      "heartbeats_one": "{{count}}টি হার্টবিট, শেষ {{time}}",
-      "heartbeats_other": "{{count}}টি হার্টবিট, শেষ {{time}}",
       "story": "টাইমলাইনের গল্প"
     },
     "story": {
@@ -2317,7 +2323,6 @@
       "someone": "কেউ একজন",
       "waiting": "{{who}}-এর অপেক্ষায়",
       "stoppedWaiting": "{{who}}-এর অপেক্ষা থামিয়েছে{{note}}",
-      "heartbeat": "হার্টবিট{{note}}",
       "movedTo": "{{stage}}-এ গেছে",
       "createdIn": "{{stage}}-এ তৈরি হয়েছে",
       "pushed": "push করেছে",
@@ -2334,6 +2339,21 @@
       "minutesSeconds": "{{m}} মিনিট {{s}} সে",
       "hours": "{{count}} ঘণ্টা",
       "hoursMinutes": "{{h}} ঘণ্টা {{m}} মিনিট"
+    },
+    "stretch": {
+      "start": "শুরুর অপেক্ষায়",
+      "blocked": "আটকে আছে",
+      "human": "মানুষের অপেক্ষায়",
+      "review": "রিভিউতে",
+      "merge": "merge-এর অপেক্ষায়",
+      "decision": "সিদ্ধান্তের অপেক্ষায়"
+    },
+    "skipped": {
+      "start": "{{duration}} শুরুর অপেক্ষায়",
+      "blocked": "{{duration}} আটকে ছিল",
+      "human": "{{duration}} মানুষের অপেক্ষায়",
+      "review": "{{duration}} রিভিউতে",
+      "merge": "{{duration}} merge-এর অপেক্ষায়"
     }
   },
   "roadmap": {
@@ -2482,11 +2502,23 @@
     "succeeded": "সফল",
     "notice": "বিজ্ঞপ্তি",
     "cannotWait": "অপেক্ষা করা যায় না: {{reason}}",
+    "muted": "এই প্রজেক্টে \"{{name}}\" মিউট করা হয়েছে",
+    "new": "নতুন",
+    "snooze": "স্নুজ করুন",
+    "snoozeFor": "স্নুজ করুন:",
+    "mute": "এই প্রজেক্টে এই ধরন মিউট করুন",
+    "copied": "কপি হয়েছে",
+    "copyFailed": "কপি করা যায়নি: বরং লেখাটি নির্বাচন করুন",
     "unit": {
       "s": "{{value}} সে",
       "min": "{{value}} মিনিট",
       "h": "{{value}} ঘণ্টা",
       "d": "{{value}} দিন"
+    },
+    "severity": {
+      "info": "তথ্য",
+      "warning": "সতর্কতা",
+      "problem": "সমস্যা"
     }
   },
   "ticketPage": {
@@ -2693,6 +2725,28 @@
       "working": "কাজ করছে",
       "waiting": "অপেক্ষায়",
       "asleep": "ঘুমিয়ে"
+    }
+  },
+  "notificationSettings": {
+    "title": "বিজ্ঞপ্তি",
+    "intro": "এই প্রজেক্টের জন্য ঘণ্টা যেসব সতর্কতা দেখাতে পারে। একটি বন্ধ করলে এখানে আর দেখা যাবে না; বোর্ড তবুও সেটির দিকে নজর রাখে, আর অন্য প্রজেক্টের নিজস্ব পছন্দ থাকে।",
+    "none": "এখনও কোনো সতর্কতা নেই",
+    "show": "{{label}} দেখান"
+  },
+  "alerts": {
+    "group": {
+      "setup": "সেটআপ ও ভার্সন",
+      "work": "কাজ",
+      "machine": "এই মেশিন",
+      "housekeeping": "পরিচ্ছন্নতা"
+    },
+    "snooze": {
+      "minutes_one": "{{count}} মিনিট",
+      "minutes_other": "{{count}} মিনিট",
+      "hours_one": "{{count}} ঘণ্টা",
+      "hours_other": "{{count}} ঘণ্টা",
+      "days_one": "{{count}} দিন",
+      "days_other": "{{count}} দিন"
     }
   }
 }

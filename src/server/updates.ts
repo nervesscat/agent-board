@@ -168,6 +168,9 @@ async function desktopApp(): Promise<DesktopChannel | null> {
   return kept.desktop
 }
 
+/** Whether the desktop app has said hello: this board runs inside it. False for a checkout's board. */
+export const insideDesktopApp = (): boolean => kept.desktop !== null
+
 const CHECKOUT: UpdatesState = { mode: 'checkout' }
 
 /** The checkout's answer to a check, an install or a change of the update settings. */

@@ -357,7 +357,7 @@
     "saving": "Salvataggio…"
   },
   "projectSettings": {
-    "intro": "Come funziona questo progetto: con cosa partono i nuovi ticket, i tag che offre, quando un ticket è considerato fermo, le sue colonne, le sue esecuzioni e cosa mostrano le sue pagine. Le istruzioni dei suoi agenti hanno una pagina propria.",
+    "intro": "Come funziona questo progetto: con cosa partono i nuovi ticket, i tag che offre, quando un ticket è considerato fermo, gli avvisi che mostra, le sue colonne, le sue esecuzioni e cosa mostrano le sue pagine. Le istruzioni dei suoi agenti hanno una pagina propria.",
     "save": "Salva",
     "saving": "Salvataggio…",
     "unsaved": "Modifiche non salvate.",
@@ -1915,6 +1915,11 @@
         "subtitle": "Quando un ticket risulta fermo",
         "keywords": "fermo, minuti, inattivo, stall"
       },
+      "notifications": {
+        "title": "Notifiche",
+        "subtitle": "Quali avvisi mostra questo progetto",
+        "keywords": "avvisi, silenzia, campanella, promemoria, alerts, mute"
+      },
       "stages": {
         "title": "Colonne",
         "subtitle": "Le colonne della bacheca e cosa significano",
@@ -2227,7 +2232,6 @@
     "noWork": "Ancora nessun lavoro registrato.",
     "now": "ora",
     "board": "Bacheca",
-    "blocked": "bloccato",
     "unnamed": "senza nome",
     "work": "lavoro",
     "theHuman": "l'utente",
@@ -2238,6 +2242,8 @@
     "delegatedTo": "delegato a {{on}}",
     "subAgentOf": "{{name}}, subagente di {{parent}}",
     "created": "creato {{count}} min prima del lavoro",
+    "notToScaleNote": "Questo tempo è mostrato come un blocco breve, non alla sua lunghezza reale.",
+    "alsoThenItem": "{{name}}, {{time}}",
     "duration": {
       "seconds": "{{count}} s",
       "minutes": "{{count}} m",
@@ -2246,6 +2252,7 @@
     },
     "spoken": {
       "underMinute": "meno di un minuto",
+      "days": "{{count}} g",
       "minutes": "{{count}} min",
       "hours": "{{count}} h",
       "hoursMinutes": "{{h}} h {{m}} min"
@@ -2265,7 +2272,7 @@
       "delegation": "delegato a {{on}} da {{agent}}, da {{from}} a {{to}}, {{duration}}{{open}}{{note}}",
       "handoff": "{{from}} ha passato il lavoro a {{to}}, {{time}}{{note}}",
       "mark": "{{name}}{{note}}, {{time}}",
-      "blockedStage": "colonna bloccata, da {{from}} a {{to}}, {{duration}}"
+      "collapsed": "{{label}}, da {{from}} a {{to}}, {{duration}}, fuori scala"
     },
     "fact": {
       "delegatedTo": "Delegato a",
@@ -2274,6 +2281,7 @@
       "ended": "Terminato",
       "note": "Nota",
       "waiting": "In attesa",
+      "waitingFor": "In attesa di",
       "on": "Di",
       "duration": "Durata",
       "who": "Chi",
@@ -2281,8 +2289,9 @@
       "from": "Da",
       "to": "A",
       "at": "Alle",
-      "stage": "Colonna",
-      "event": "Evento"
+      "event": "Evento",
+      "notToScale": "Fuori scala",
+      "alsoThen": "Anche in quel momento"
     },
     "summary": {
       "noAgentWork": "Nessun lavoro di agenti registrato.",
@@ -2290,21 +2299,18 @@
       "waited": "ha atteso {{duration}} {{target}}",
       "delegated": "{{on}}, delegato",
       "clause": "{{agent}} {{parts}}",
-      "workBy_one": "Lavoro di {{count}} agente in {{over}}: {{clauses}}.{{live}}",
-      "workBy_other": "Lavoro di {{count}} agenti in {{over}}: {{clauses}}.{{live}}",
-      "activityBy_one": "Attività di {{count}} agente in {{over}}: {{clauses}}.{{live}}",
-      "activityBy_other": "Attività di {{count}} agenti in {{over}}: {{clauses}}.{{live}}",
-      "stillGoing": " Ancora in corso."
+      "workBy_one": "Lavoro di {{count}} agente in {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "workBy_other": "Lavoro di {{count}} agenti in {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_one": "Attività di {{count}} agente in {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_other": "Attività di {{count}} agenti in {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "stillGoing": " Ancora in corso.",
+      "notToScale": " Fuori scala: {{skipped}}."
     },
     "card": {
       "title": "Cronologia",
       "loading": "Caricamento…",
       "showMore": "Mostra altro",
       "showLess": "Mostra meno",
-      "showHeartbeats": "Mostra gli heartbeat",
-      "hideHeartbeats": "Nascondi gli heartbeat",
-      "heartbeats_one": "{{count}} heartbeat, ultimo {{time}}",
-      "heartbeats_other": "{{count}} heartbeat, ultimo {{time}}",
       "story": "Storia della cronologia"
     },
     "story": {
@@ -2317,7 +2323,6 @@
       "someone": "qualcuno",
       "waiting": "in attesa di {{who}}",
       "stoppedWaiting": "ha smesso di attendere {{who}}{{note}}",
-      "heartbeat": "heartbeat{{note}}",
       "movedTo": "spostato in {{stage}}",
       "createdIn": "creato in {{stage}}",
       "pushed": "pushato",
@@ -2334,6 +2339,21 @@
       "minutesSeconds": "{{m}} min {{s}} s",
       "hours": "{{count}} h",
       "hoursMinutes": "{{h}} h {{m}} min"
+    },
+    "stretch": {
+      "start": "In attesa di partire",
+      "blocked": "Bloccato",
+      "human": "In attesa di una persona",
+      "review": "In revisione",
+      "merge": "In attesa del merge",
+      "decision": "In attesa di una decisione"
+    },
+    "skipped": {
+      "start": "in attesa di partire {{duration}}",
+      "blocked": "bloccato {{duration}}",
+      "human": "in attesa della persona {{duration}}",
+      "review": "in revisione {{duration}}",
+      "merge": "in attesa del merge {{duration}}"
     }
   },
   "roadmap": {
@@ -2482,11 +2502,23 @@
     "succeeded": "Riuscito",
     "notice": "Avviso",
     "cannotWait": "Impossibile attendere: {{reason}}",
+    "muted": "“{{name}}” silenziato in questo progetto",
+    "new": "Nuovo",
+    "snooze": "Posticipa",
+    "snoozeFor": "Posticipa di",
+    "mute": "Silenzia questo tipo in questo progetto",
+    "copied": "Copiato",
+    "copyFailed": "Impossibile copiare: seleziona il testo",
     "unit": {
       "s": "{{value}} s",
       "min": "{{value}} min",
       "h": "{{value}} h",
       "d": "{{value}} g"
+    },
+    "severity": {
+      "info": "Info",
+      "warning": "Avviso",
+      "problem": "Problema"
     }
   },
   "ticketPage": {
@@ -2693,6 +2725,28 @@
       "working": "al lavoro",
       "waiting": "in attesa",
       "asleep": "dormiente"
+    }
+  },
+  "notificationSettings": {
+    "title": "Notifiche",
+    "intro": "Gli avvisi che la campanella può mostrare per questo progetto. Disattivane uno per non vederlo più qui; la bacheca continua a tenerlo d’occhio, e gli altri progetti mantengono la propria scelta.",
+    "none": "Ancora nessun avviso",
+    "show": "Mostra {{label}}"
+  },
+  "alerts": {
+    "group": {
+      "setup": "Configurazione e versioni",
+      "work": "Lavoro",
+      "machine": "Questa macchina",
+      "housekeeping": "Manutenzione"
+    },
+    "snooze": {
+      "minutes_one": "{{count}} minuto",
+      "minutes_other": "{{count}} minuti",
+      "hours_one": "{{count}} ora",
+      "hours_other": "{{count}} ore",
+      "days_one": "{{count}} giorno",
+      "days_other": "{{count}} giorni"
     }
   }
 }

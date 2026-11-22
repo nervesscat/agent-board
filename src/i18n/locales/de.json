@@ -357,7 +357,7 @@
     "saving": "Speichere…"
   },
   "projectSettings": {
-    "intro": "Wie dieses Projekt arbeitet: womit neue Tickets starten, welche Tags es anbietet, wann ein Ticket als stockend gilt, seine Stufen, seine Runs und was seine Seiten zeigen. Die Anweisungen für seine Agents haben eine eigene Seite.",
+    "intro": "Wie dieses Projekt arbeitet: womit neue Tickets starten, welche Tags es anbietet, wann ein Ticket als stockend gilt, welche Hinweise es zeigt, seine Stufen, seine Runs und was seine Seiten zeigen. Die Anweisungen für seine Agents haben eine eigene Seite.",
     "save": "Speichern",
     "saving": "Speichere…",
     "unsaved": "Ungespeicherte Änderungen.",
@@ -1915,6 +1915,11 @@
         "subtitle": "Wann ein Ticket als stockend gilt",
         "keywords": "stall, stockt, minuten, untätig, minutes, idle"
       },
+      "notifications": {
+        "title": "Benachrichtigungen",
+        "subtitle": "Welche Hinweise dieses Projekt zeigt",
+        "keywords": "hinweise, stumm, glocke, erinnerungen, alerts, mute, bell, reminders"
+      },
       "stages": {
         "title": "Stufen",
         "subtitle": "Die Board-Spalten und ihre Bedeutung",
@@ -2227,7 +2232,6 @@
     "noWork": "Noch keine Arbeit erfasst.",
     "now": "jetzt",
     "board": "Board",
-    "blocked": "blockiert",
     "unnamed": "unbenannt",
     "work": "Arbeit",
     "theHuman": "der Mensch",
@@ -2238,6 +2242,8 @@
     "delegatedTo": "delegiert an {{on}}",
     "subAgentOf": "{{name}}, Subagent von {{parent}}",
     "created": "{{count}} Min. vor der Arbeit erstellt",
+    "notToScaleNote": "Diese Zeit ist als kurzer Block gezeigt, nicht in ihrer echten Länge.",
+    "alsoThenItem": "{{name}}, {{time}}",
     "duration": {
       "seconds": "{{count}} s",
       "minutes": "{{count}} Min.",
@@ -2246,6 +2252,7 @@
     },
     "spoken": {
       "underMinute": "unter einer Minute",
+      "days": "{{count}} T.",
       "minutes": "{{count}} Min.",
       "hours": "{{count}} Std.",
       "hoursMinutes": "{{h}} Std. {{m}} Min."
@@ -2265,7 +2272,7 @@
       "delegation": "delegiert an {{on}} von {{agent}}, {{from}} bis {{to}}, {{duration}}{{open}}{{note}}",
       "handoff": "{{from}} gab die Arbeit an {{to}} weiter, {{time}}{{note}}",
       "mark": "{{name}}{{note}}, {{time}}",
-      "blockedStage": "blockierte Stufe, {{from}} bis {{to}}, {{duration}}"
+      "collapsed": "{{label}}, {{from}} bis {{to}}, {{duration}}, nicht maßstabsgetreu"
     },
     "fact": {
       "delegatedTo": "Delegiert an",
@@ -2274,6 +2281,7 @@
       "ended": "Beendet",
       "note": "Notiz",
       "waiting": "Wartet",
+      "waitingFor": "Wartet auf",
       "on": "Auf",
       "duration": "Dauer",
       "who": "Wer",
@@ -2281,8 +2289,9 @@
       "from": "Von",
       "to": "An",
       "at": "Um",
-      "stage": "Stufe",
-      "event": "Ereignis"
+      "event": "Ereignis",
+      "notToScale": "Nicht maßstabsgetreu",
+      "alsoThen": "Außerdem"
     },
     "summary": {
       "noAgentWork": "Keine Agent-Arbeit erfasst.",
@@ -2290,21 +2299,18 @@
       "waited": "wartete {{duration}} auf {{target}}",
       "delegated": "{{on}}, delegiert",
       "clause": "{{agent}} {{parts}}",
-      "workBy_one": "Arbeit von {{count}} Agent über {{over}}: {{clauses}}.{{live}}",
-      "workBy_other": "Arbeit von {{count}} Agents über {{over}}: {{clauses}}.{{live}}",
-      "activityBy_one": "Aktivität von {{count}} Agent über {{over}}: {{clauses}}.{{live}}",
-      "activityBy_other": "Aktivität von {{count}} Agents über {{over}}: {{clauses}}.{{live}}",
-      "stillGoing": " Läuft noch."
+      "workBy_one": "Arbeit von {{count}} Agent über {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "workBy_other": "Arbeit von {{count}} Agents über {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_one": "Aktivität von {{count}} Agent über {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_other": "Aktivität von {{count}} Agents über {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "stillGoing": " Läuft noch.",
+      "notToScale": " Nicht maßstabsgetreu: {{skipped}}."
     },
     "card": {
       "title": "Verlauf",
       "loading": "Lade…",
       "showMore": "Mehr zeigen",
       "showLess": "Weniger zeigen",
-      "showHeartbeats": "Heartbeats zeigen",
-      "hideHeartbeats": "Heartbeats ausblenden",
-      "heartbeats_one": "{{count}} Heartbeat, zuletzt {{time}}",
-      "heartbeats_other": "{{count}} Heartbeats, zuletzt {{time}}",
       "story": "Verlaufsgeschichte"
     },
     "story": {
@@ -2317,7 +2323,6 @@
       "someone": "jemand",
       "waiting": "wartet auf {{who}}",
       "stoppedWaiting": "wartet nicht mehr auf {{who}}{{note}}",
-      "heartbeat": "Heartbeat{{note}}",
       "movedTo": "nach {{stage}} verschoben",
       "createdIn": "in {{stage}} erstellt",
       "pushed": "gepusht",
@@ -2334,6 +2339,21 @@
       "minutesSeconds": "{{m}} Min. {{s}} s",
       "hours": "{{count}} Std.",
       "hoursMinutes": "{{h}} Std. {{m}} Min."
+    },
+    "stretch": {
+      "start": "Wartet auf den Start",
+      "blocked": "Blockiert",
+      "human": "Wartet auf den Menschen",
+      "review": "Im Review",
+      "merge": "Wartet aufs Mergen",
+      "decision": "Wartet auf eine Entscheidung"
+    },
+    "skipped": {
+      "start": "wartete {{duration}} auf den Start",
+      "blocked": "{{duration}} blockiert",
+      "human": "wartete {{duration}} auf den Menschen",
+      "review": "{{duration}} im Review",
+      "merge": "wartete {{duration}} aufs Mergen"
     }
   },
   "roadmap": {
@@ -2482,11 +2502,23 @@
     "succeeded": "Erfolgreich",
     "notice": "Hinweis",
     "cannotWait": "Warten nicht möglich: {{reason}}",
+    "muted": "„{{name}}“ in diesem Projekt stummgeschaltet",
+    "new": "Neu",
+    "snooze": "Später erinnern",
+    "snoozeFor": "Erinnern in",
+    "mute": "Diese Art in diesem Projekt stummschalten",
+    "copied": "Kopiert",
+    "copyFailed": "Kopieren fehlgeschlagen: markiere den Text stattdessen",
     "unit": {
       "s": "{{value}} s",
       "min": "{{value}} Min.",
       "h": "{{value}} Std.",
       "d": "{{value}} T."
+    },
+    "severity": {
+      "info": "Info",
+      "warning": "Warnung",
+      "problem": "Problem"
     }
   },
   "ticketPage": {
@@ -2693,6 +2725,28 @@
       "working": "arbeitet",
       "waiting": "wartet",
       "asleep": "schläft"
+    }
+  },
+  "notificationSettings": {
+    "title": "Benachrichtigungen",
+    "intro": "Die Hinweise, die die Glocke für dieses Projekt zeigen kann. Schalte einen aus, um ihn hier nicht mehr zu sehen; das Board beobachtet ihn weiterhin, und andere Projekte behalten ihre eigene Auswahl.",
+    "none": "Noch keine Hinweise",
+    "show": "{{label}} anzeigen"
+  },
+  "alerts": {
+    "group": {
+      "setup": "Einrichtung und Versionen",
+      "work": "Arbeit",
+      "machine": "Dieser Rechner",
+      "housekeeping": "Aufräumen"
+    },
+    "snooze": {
+      "minutes_one": "{{count}} Minute",
+      "minutes_other": "{{count}} Minuten",
+      "hours_one": "{{count}} Stunde",
+      "hours_other": "{{count}} Stunden",
+      "days_one": "{{count}} Tag",
+      "days_other": "{{count}} Tage"
     }
   }
 }

@@ -357,7 +357,7 @@
     "saving": "सहेजा जा रहा है…"
   },
   "projectSettings": {
-    "intro": "यह प्रोजेक्ट कैसे काम करता है: नए ticket किससे शुरू हों, कौन से टैग सुझाए जाएँ, ticket कब ठहरा माना जाए, इसके चरण, रन और इसके पेज क्या दिखाएँ। इसके एजेंट के निर्देश उनके अपने पेज पर हैं।",
+    "intro": "यह प्रोजेक्ट कैसे काम करता है: नए ticket किससे शुरू हों, कौन से टैग सुझाए जाएँ, ticket कब ठहरा माना जाए, कौन से अलर्ट दिखें, इसके चरण, रन और इसके पेज क्या दिखाएँ। इसके एजेंट के निर्देश उनके अपने पेज पर हैं।",
     "save": "सहेजें",
     "saving": "सहेजा जा रहा है…",
     "unsaved": "बदलाव सहेजे नहीं गए।",
@@ -1915,6 +1915,11 @@
         "subtitle": "ticket कब ठहरा दिखे",
         "keywords": "ठहरा, मिनट, निष्क्रिय, stall, minutes, idle"
       },
+      "notifications": {
+        "title": "सूचनाएँ",
+        "subtitle": "इस प्रोजेक्ट में कौन से अलर्ट दिखें",
+        "keywords": "अलर्ट, म्यूट, घंटी, रिमाइंडर, alerts, mute, bell, reminders"
+      },
       "stages": {
         "title": "चरण",
         "subtitle": "बोर्ड के कॉलम और उनका मतलब",
@@ -2227,7 +2232,6 @@
     "noWork": "अभी कोई काम दर्ज नहीं।",
     "now": "अभी",
     "board": "बोर्ड",
-    "blocked": "अटका",
     "unnamed": "बिना नाम",
     "work": "काम",
     "theHuman": "इंसान",
@@ -2238,6 +2242,8 @@
     "delegatedTo": "{{on}} को सौंपा",
     "subAgentOf": "{{name}}, {{parent}} का सबएजेंट",
     "created": "काम से {{count}} मिनट पहले बना",
+    "notToScaleNote": "यह समय छोटे ब्लॉक में दिखाया गया है, असली लंबाई में नहीं।",
+    "alsoThenItem": "{{name}}, {{time}}",
     "duration": {
       "seconds": "{{count}} से",
       "minutes": "{{count}} मि",
@@ -2246,6 +2252,7 @@
     },
     "spoken": {
       "underMinute": "एक मिनट से कम",
+      "days": "{{count}} दिन",
       "minutes": "{{count}} मिनट",
       "hours": "{{count}} घंटे",
       "hoursMinutes": "{{h}} घंटे {{m}} मिनट"
@@ -2265,7 +2272,7 @@
       "delegation": "{{agent}} ने {{on}} को सौंपा, {{from}} से {{to}}, {{duration}}{{open}}{{note}}",
       "handoff": "{{from}} ने काम {{to}} को सौंपा, {{time}}{{note}}",
       "mark": "{{name}}{{note}}, {{time}}",
-      "blockedStage": "अटका चरण, {{from}} से {{to}}, {{duration}}"
+      "collapsed": "{{label}}, {{from}} से {{to}}, {{duration}}, पैमाने के अनुसार नहीं"
     },
     "fact": {
       "delegatedTo": "किसे सौंपा",
@@ -2274,6 +2281,7 @@
       "ended": "समाप्त",
       "note": "नोट",
       "waiting": "प्रतीक्षा",
+      "waitingFor": "प्रतीक्षा किसकी",
       "on": "किसकी",
       "duration": "अवधि",
       "who": "कौन",
@@ -2281,8 +2289,9 @@
       "from": "से",
       "to": "को",
       "at": "समय",
-      "stage": "चरण",
-      "event": "घटना"
+      "event": "घटना",
+      "notToScale": "पैमाने के अनुसार नहीं",
+      "alsoThen": "उसी समय"
     },
     "summary": {
       "noAgentWork": "एजेंट का कोई काम दर्ज नहीं।",
@@ -2290,21 +2299,18 @@
       "waited": "{{target}} की {{duration}} प्रतीक्षा की",
       "delegated": "{{on}}, सौंपा",
       "clause": "{{agent}} {{parts}}",
-      "workBy_one": "{{over}} में {{count}} एजेंट का काम: {{clauses}}।{{live}}",
-      "workBy_other": "{{over}} में {{count}} एजेंट का काम: {{clauses}}।{{live}}",
-      "activityBy_one": "{{over}} में {{count}} एजेंट की गतिविधि: {{clauses}}।{{live}}",
-      "activityBy_other": "{{over}} में {{count}} एजेंट की गतिविधि: {{clauses}}।{{live}}",
-      "stillGoing": " अभी जारी है।"
+      "workBy_one": "{{over}} में {{count}} एजेंट का काम: {{clauses}}।{{live}}{{scale}}",
+      "workBy_other": "{{over}} में {{count}} एजेंट का काम: {{clauses}}।{{live}}{{scale}}",
+      "activityBy_one": "{{over}} में {{count}} एजेंट की गतिविधि: {{clauses}}।{{live}}{{scale}}",
+      "activityBy_other": "{{over}} में {{count}} एजेंट की गतिविधि: {{clauses}}।{{live}}{{scale}}",
+      "stillGoing": " अभी जारी है।",
+      "notToScale": " पैमाने के अनुसार नहीं: {{skipped}}।"
     },
     "card": {
       "title": "टाइमलाइन",
       "loading": "लोड हो रहा है…",
       "showMore": "और दिखाएँ",
       "showLess": "कम दिखाएँ",
-      "showHeartbeats": "हार्टबीट दिखाएँ",
-      "hideHeartbeats": "हार्टबीट छिपाएँ",
-      "heartbeats_one": "{{count}} हार्टबीट, आख़िरी {{time}}",
-      "heartbeats_other": "{{count}} हार्टबीट, आख़िरी {{time}}",
       "story": "टाइमलाइन की कहानी"
     },
     "story": {
@@ -2317,7 +2323,6 @@
       "someone": "कोई",
       "waiting": "{{who}} की प्रतीक्षा",
       "stoppedWaiting": "{{who}} की प्रतीक्षा रोकी{{note}}",
-      "heartbeat": "हार्टबीट{{note}}",
       "movedTo": "{{stage}} में गया",
       "createdIn": "{{stage}} में बना",
       "pushed": "push हुआ",
@@ -2334,6 +2339,21 @@
       "minutesSeconds": "{{m}} मिनट {{s}} से",
       "hours": "{{count}} घंटे",
       "hoursMinutes": "{{h}} घंटे {{m}} मिनट"
+    },
+    "stretch": {
+      "start": "शुरू होने की प्रतीक्षा",
+      "blocked": "अटका",
+      "human": "इंसान की प्रतीक्षा में",
+      "review": "रिव्यू में",
+      "merge": "merge की प्रतीक्षा",
+      "decision": "फ़ैसले की प्रतीक्षा"
+    },
+    "skipped": {
+      "start": "{{duration}} शुरू होने की प्रतीक्षा",
+      "blocked": "{{duration}} अटका",
+      "human": "{{duration}} इंसान की प्रतीक्षा में",
+      "review": "{{duration}} रिव्यू में",
+      "merge": "{{duration}} merge की प्रतीक्षा"
     }
   },
   "roadmap": {
@@ -2482,11 +2502,23 @@
     "succeeded": "सफल",
     "notice": "सूचना",
     "cannotWait": "प्रतीक्षा नहीं हो सकती: {{reason}}",
+    "muted": "इस प्रोजेक्ट में \"{{name}}\" म्यूट किया गया",
+    "new": "नया",
+    "snooze": "स्नूज़ करें",
+    "snoozeFor": "स्नूज़ करें:",
+    "mute": "इस प्रोजेक्ट में इस तरह के अलर्ट म्यूट करें",
+    "copied": "कॉपी हुआ",
+    "copyFailed": "कॉपी नहीं हो सका: टेक्स्ट चुनकर कॉपी करें",
     "unit": {
       "s": "{{value}} से",
       "min": "{{value}} मिनट",
       "h": "{{value}} घंटे",
       "d": "{{value}} दिन"
+    },
+    "severity": {
+      "info": "जानकारी",
+      "warning": "चेतावनी",
+      "problem": "समस्या"
     }
   },
   "ticketPage": {
@@ -2693,6 +2725,28 @@
       "working": "काम पर",
       "waiting": "प्रतीक्षा में",
       "asleep": "निष्क्रिय"
+    }
+  },
+  "notificationSettings": {
+    "title": "सूचनाएँ",
+    "intro": "इस प्रोजेक्ट के लिए घंटी जो अलर्ट दिखा सकती है। किसी को बंद करें तो वह यहाँ नहीं दिखेगा; बोर्ड फिर भी उस पर नज़र रखता है, और दूसरे प्रोजेक्ट की अपनी पसंद रहती है।",
+    "none": "अभी कोई अलर्ट नहीं",
+    "show": "{{label}} दिखाएँ"
+  },
+  "alerts": {
+    "group": {
+      "setup": "सेटअप और वर्ज़न",
+      "work": "काम",
+      "machine": "यह मशीन",
+      "housekeeping": "साफ़-सफ़ाई"
+    },
+    "snooze": {
+      "minutes_one": "{{count}} मिनट",
+      "minutes_other": "{{count}} मिनट",
+      "hours_one": "{{count}} घंटा",
+      "hours_other": "{{count}} घंटे",
+      "days_one": "{{count}} दिन",
+      "days_other": "{{count}} दिन"
     }
   }
 }

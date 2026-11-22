@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 
 import { LayoutEditor } from '#/components/LayoutEditor'
 import { ListInput } from '#/components/ListInput'
+import { NotificationSettings } from '#/components/NotificationSettings'
 import { RunsSettings } from '#/components/RunsSettings'
 import { StagesEditor } from '#/components/StagesEditor'
 import { Button } from '#/components/ui/button'
@@ -50,6 +51,7 @@ export function ProjectSettings({ id }: { id: string }) {
       <DefaultPhases key={id} projectId={id} saved={p.defaultPhases} />
       <TagSuggestions key={`tags-${id}`} projectId={id} saved={p.tagSuggestions} />
       <StallMinutes key={`stall-${id}`} projectId={id} saved={p.stallMinutes} />
+      <NotificationSettings key={`notifications-${id}`} projectId={id} />
       <StagesEditor projectId={id} />
       <RunsSettings projectId={id} />
       <LayoutEditor key={`layout-${id}`} projectId={id} saved={p.layout} />

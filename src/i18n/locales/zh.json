@@ -349,7 +349,7 @@
     "saving": "保存中…"
   },
   "projectSettings": {
-    "intro": "这个项目如何运作：新 ticket 的初始内容、它提供的标签、ticket 何时算停滞、它的阶段、它的运行项，以及各页面显示什么。它的智能体说明在各自的页面上。",
+    "intro": "这个项目如何运作：新 ticket 的初始内容、它提供的标签、ticket 何时算停滞、它显示的提醒、它的阶段、它的运行项，以及各页面显示什么。它的智能体说明在各自的页面上。",
     "save": "保存",
     "saving": "保存中…",
     "unsaved": "有未保存的更改。",
@@ -1860,6 +1860,11 @@
         "subtitle": "ticket 何时显示为停滞",
         "keywords": "停滞, 分钟, 空闲, stall, idle"
       },
+      "notifications": {
+        "title": "通知",
+        "subtitle": "这个项目显示哪些提醒",
+        "keywords": "提醒, 静音, 铃铛, 通知, alerts, mute, bell"
+      },
       "stages": {
         "title": "阶段",
         "subtitle": "看板的列及其含义",
@@ -2162,7 +2167,6 @@
     "noWork": "尚无工作记录。",
     "now": "现在",
     "board": "看板",
-    "blocked": "已阻塞",
     "unnamed": "未命名",
     "work": "工作",
     "theHuman": "人",
@@ -2173,6 +2177,8 @@
     "delegatedTo": "委派给 {{on}}",
     "subAgentOf": "{{name}}，{{parent}} 的子智能体",
     "created": "在工作开始前{{count}}分钟创建",
+    "notToScaleNote": "这段时间以短块显示，不是实际长度。",
+    "alsoThenItem": "{{name}}，{{time}}",
     "duration": {
       "seconds": "{{count}}秒",
       "minutes": "{{count}}分",
@@ -2181,6 +2187,7 @@
     },
     "spoken": {
       "underMinute": "不到一分钟",
+      "days": "{{count}}天",
       "minutes": "{{count}}分钟",
       "hours": "{{count}}小时",
       "hoursMinutes": "{{h}}小时{{m}}分钟"
@@ -2200,7 +2207,7 @@
       "delegation": "{{agent}} 委派给 {{on}}，{{from}}至{{to}}，{{duration}}{{open}}{{note}}",
       "handoff": "{{from}}把工作交给{{to}}，{{time}}{{note}}",
       "mark": "{{name}}{{note}}，{{time}}",
-      "blockedStage": "阻塞的阶段，{{from}}至{{to}}，{{duration}}"
+      "collapsed": "{{label}}，{{from}}至{{to}}，{{duration}}，未按比例绘制"
     },
     "fact": {
       "delegatedTo": "委派给",
@@ -2209,6 +2216,7 @@
       "ended": "结束",
       "note": "备注",
       "waiting": "等待",
+      "waitingFor": "等待",
       "on": "对象",
       "duration": "时长",
       "who": "谁",
@@ -2216,8 +2224,9 @@
       "from": "从",
       "to": "到",
       "at": "时间",
-      "stage": "阶段",
-      "event": "事件"
+      "event": "事件",
+      "notToScale": "未按比例",
+      "alsoThen": "同时"
     },
     "summary": {
       "noAgentWork": "没有智能体工作记录。",
@@ -2225,18 +2234,16 @@
       "waited": "在{{target}}上等待了{{duration}}",
       "delegated": "委派给 {{on}}",
       "clause": "{{agent}} {{parts}}",
-      "workBy_other": "{{count}}个智能体在{{over}}内的工作：{{clauses}}。{{live}}",
-      "activityBy_other": "{{count}}个智能体在{{over}}内的活动：{{clauses}}。{{live}}",
-      "stillGoing": "仍在进行。"
+      "workBy_other": "{{count}}个智能体在{{over}}内的工作：{{clauses}}。{{live}}{{scale}}",
+      "activityBy_other": "{{count}}个智能体在{{over}}内的活动：{{clauses}}。{{live}}{{scale}}",
+      "stillGoing": "仍在进行。",
+      "notToScale": " 未按比例：{{skipped}}。"
     },
     "card": {
       "title": "时间线",
       "loading": "加载中…",
       "showMore": "显示更多",
       "showLess": "收起",
-      "showHeartbeats": "显示心跳",
-      "hideHeartbeats": "隐藏心跳",
-      "heartbeats_other": "{{count}}次心跳，最近{{time}}",
       "story": "时间线记录"
     },
     "story": {
@@ -2249,7 +2256,6 @@
       "someone": "某人",
       "waiting": "等待 {{who}}",
       "stoppedWaiting": "不再等待 {{who}}{{note}}",
-      "heartbeat": "心跳{{note}}",
       "movedTo": "移到 {{stage}}",
       "createdIn": "创建于 {{stage}}",
       "pushed": "已推送",
@@ -2266,6 +2272,21 @@
       "minutesSeconds": "{{m}}分{{s}}秒",
       "hours": "{{count}}小时",
       "hoursMinutes": "{{h}}小时{{m}}分钟"
+    },
+    "stretch": {
+      "start": "等待开始",
+      "blocked": "已阻塞",
+      "human": "等待人工处理",
+      "review": "评审中",
+      "merge": "等待合并",
+      "decision": "等待决定"
+    },
+    "skipped": {
+      "start": "等待开始{{duration}}",
+      "blocked": "阻塞{{duration}}",
+      "human": "等待人工处理{{duration}}",
+      "review": "评审中{{duration}}",
+      "merge": "等待合并{{duration}}"
     }
   },
   "roadmap": {
@@ -2407,11 +2428,23 @@
     "succeeded": "成功",
     "notice": "提示",
     "cannotWait": "无法等待：{{reason}}",
+    "muted": "已在这个项目中静音“{{name}}”",
+    "new": "新",
+    "snooze": "稍后提醒",
+    "snoozeFor": "稍后提醒：",
+    "mute": "在这个项目中静音此类提醒",
+    "copied": "已复制",
+    "copyFailed": "无法复制：请改为选中文本",
     "unit": {
       "s": "{{value}}秒",
       "min": "{{value}}分钟",
       "h": "{{value}}小时",
       "d": "{{value}}天"
+    },
+    "severity": {
+      "info": "信息",
+      "warning": "警告",
+      "problem": "问题"
     }
   },
   "ticketPage": {
@@ -2612,6 +2645,25 @@
       "working": "工作中",
       "waiting": "等待中",
       "asleep": "休眠"
+    }
+  },
+  "notificationSettings": {
+    "title": "通知",
+    "intro": "铃铛可以为这个项目显示的提醒。关闭某一项后这里不再显示；看板仍会监测它，其他项目保留各自的选择。",
+    "none": "还没有提醒",
+    "show": "显示{{label}}"
+  },
+  "alerts": {
+    "group": {
+      "setup": "设置与版本",
+      "work": "工作",
+      "machine": "本机",
+      "housekeeping": "整理"
+    },
+    "snooze": {
+      "minutes_other": "{{count}}分钟",
+      "hours_other": "{{count}}小时",
+      "days_other": "{{count}}天"
     }
   }
 }

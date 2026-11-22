@@ -357,7 +357,7 @@
     "saving": "Saving…"
   },
   "projectSettings": {
-    "intro": "How this project works: what new tickets start with, the tags it offers, when a ticket counts as stalled, its stages, its runs and what its pages show. Its agents' instructions are on their own page.",
+    "intro": "How this project works: what new tickets start with, the tags it offers, when a ticket counts as stalled, the alerts it shows, its stages, its runs and what its pages show. Its agents' instructions are on their own page.",
     "save": "Save",
     "saving": "Saving…",
     "unsaved": "Unsaved changes.",
@@ -1915,6 +1915,11 @@
         "subtitle": "When a ticket reads as stalled",
         "keywords": "stall, minutes, idle"
       },
+      "notifications": {
+        "title": "Notifications",
+        "subtitle": "Which alerts this project shows",
+        "keywords": "alerts, mute, bell, reminders"
+      },
       "stages": {
         "title": "Stages",
         "subtitle": "The board columns and what they mean",
@@ -2227,7 +2232,6 @@
     "noWork": "No work recorded yet.",
     "now": "now",
     "board": "Board",
-    "blocked": "blocked",
     "unnamed": "unnamed",
     "work": "work",
     "theHuman": "the human",
@@ -2238,6 +2242,8 @@
     "delegatedTo": "delegated to {{on}}",
     "subAgentOf": "{{name}}, sub-agent of {{parent}}",
     "created": "created {{count}} min before work",
+    "notToScaleNote": "This time is shown as a short block, not at its real length.",
+    "alsoThenItem": "{{name}}, {{time}}",
     "duration": {
       "seconds": "{{count}}s",
       "minutes": "{{count}}m",
@@ -2246,6 +2252,7 @@
     },
     "spoken": {
       "underMinute": "under a minute",
+      "days": "{{count}} d",
       "minutes": "{{count}} min",
       "hours": "{{count}} h",
       "hoursMinutes": "{{h}} h {{m}} min"
@@ -2265,7 +2272,7 @@
       "delegation": "delegated to {{on}} by {{agent}}, {{from}} to {{to}}, {{duration}}{{open}}{{note}}",
       "handoff": "{{from}} passed the work to {{to}}, {{time}}{{note}}",
       "mark": "{{name}}{{note}}, {{time}}",
-      "blockedStage": "blocked stage, {{from}} to {{to}}, {{duration}}"
+      "collapsed": "{{label}}, {{from}} to {{to}}, {{duration}}, not drawn to scale"
     },
     "fact": {
       "delegatedTo": "Delegated to",
@@ -2274,6 +2281,7 @@
       "ended": "Ended",
       "note": "Note",
       "waiting": "Waiting",
+      "waitingFor": "Waiting for",
       "on": "On",
       "duration": "Duration",
       "who": "Who",
@@ -2281,8 +2289,9 @@
       "from": "From",
       "to": "To",
       "at": "At",
-      "stage": "Stage",
-      "event": "Event"
+      "event": "Event",
+      "notToScale": "Not to scale",
+      "alsoThen": "Also then"
     },
     "summary": {
       "noAgentWork": "No agent work recorded.",
@@ -2290,21 +2299,18 @@
       "waited": "waited {{duration}} on {{target}}",
       "delegated": "{{on}}, delegated",
       "clause": "{{agent}} {{parts}}",
-      "workBy_one": "Work by {{count}} agent over {{over}}: {{clauses}}.{{live}}",
-      "workBy_other": "Work by {{count}} agents over {{over}}: {{clauses}}.{{live}}",
-      "activityBy_one": "Activity by {{count}} agent over {{over}}: {{clauses}}.{{live}}",
-      "activityBy_other": "Activity by {{count}} agents over {{over}}: {{clauses}}.{{live}}",
-      "stillGoing": " Still going."
+      "workBy_one": "Work by {{count}} agent over {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "workBy_other": "Work by {{count}} agents over {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_one": "Activity by {{count}} agent over {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_other": "Activity by {{count}} agents over {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "stillGoing": " Still going.",
+      "notToScale": " Not to scale: {{skipped}}."
     },
     "card": {
       "title": "Timeline",
       "loading": "Loading…",
       "showMore": "Show more",
       "showLess": "Show less",
-      "showHeartbeats": "Show heartbeats",
-      "hideHeartbeats": "Hide heartbeats",
-      "heartbeats_one": "{{count}} heartbeat, last {{time}}",
-      "heartbeats_other": "{{count}} heartbeats, last {{time}}",
       "story": "Timeline story"
     },
     "story": {
@@ -2317,7 +2323,6 @@
       "someone": "someone",
       "waiting": "waiting for {{who}}",
       "stoppedWaiting": "stopped waiting for {{who}}{{note}}",
-      "heartbeat": "heartbeat{{note}}",
       "movedTo": "moved to {{stage}}",
       "createdIn": "created in {{stage}}",
       "pushed": "pushed",
@@ -2334,6 +2339,21 @@
       "minutesSeconds": "{{m}} min {{s}} s",
       "hours": "{{count}} h",
       "hoursMinutes": "{{h}} h {{m}} min"
+    },
+    "stretch": {
+      "start": "Waiting to start",
+      "blocked": "Blocked",
+      "human": "Waiting on human",
+      "review": "In review",
+      "merge": "Waiting to merge",
+      "decision": "Waiting for a decision"
+    },
+    "skipped": {
+      "start": "waiting to start {{duration}}",
+      "blocked": "blocked {{duration}}",
+      "human": "waiting on the human {{duration}}",
+      "review": "in review {{duration}}",
+      "merge": "waiting to merge {{duration}}"
     }
   },
   "roadmap": {
@@ -2482,11 +2502,23 @@
     "succeeded": "Succeeded",
     "notice": "Notice",
     "cannotWait": "Cannot wait: {{reason}}",
+    "muted": "Muted \"{{name}}\" in this project",
+    "new": "New",
+    "snooze": "Snooze",
+    "snoozeFor": "Snooze for",
+    "mute": "Mute this kind in this project",
+    "copied": "Copied",
+    "copyFailed": "Could not copy: select the text instead",
     "unit": {
       "s": "{{value}} s",
       "min": "{{value}} min",
       "h": "{{value}} h",
       "d": "{{value}} d"
+    },
+    "severity": {
+      "info": "Info",
+      "warning": "Warning",
+      "problem": "Problem"
     }
   },
   "ticketPage": {
@@ -2693,6 +2725,28 @@
       "working": "working",
       "waiting": "waiting",
       "asleep": "asleep"
+    }
+  },
+  "notificationSettings": {
+    "title": "Notifications",
+    "intro": "The alerts the bell can show for this project. Switch one off to stop seeing it here; the board still watches for it, and other projects keep their own choice.",
+    "none": "No alerts yet",
+    "show": "Show {{label}}"
+  },
+  "alerts": {
+    "group": {
+      "setup": "Setup and versions",
+      "work": "Work",
+      "machine": "This machine",
+      "housekeeping": "Housekeeping"
+    },
+    "snooze": {
+      "minutes_one": "{{count}} minute",
+      "minutes_other": "{{count}} minutes",
+      "hours_one": "{{count}} hour",
+      "hours_other": "{{count}} hours",
+      "days_one": "{{count}} day",
+      "days_other": "{{count}} days"
     }
   }
 }
