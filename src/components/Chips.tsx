@@ -7,7 +7,7 @@ export interface Chip<K extends string> {
   key: K
   label: ReactNode
   /** A count shown in a badge after the label; none without it. */
-  count?: number
+  count?: number | string
 }
 
 // A tab's underline, drawn by the line style only (chips are the default style), hangs 5px below it:

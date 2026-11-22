@@ -25,6 +25,7 @@ import {
 
 export {
   activeRuns as activePreviews,
+  forgetLimitRefusal,
   holdRuns as holdPreviews,
   hasRuns as hasPreviews,
   isActive,
@@ -32,6 +33,7 @@ export {
   needsInstall,
   PORTS,
   previewLimit,
+  previewLimitRefusals,
   previewNode,
   previewToolProblem,
   RESTARTED,

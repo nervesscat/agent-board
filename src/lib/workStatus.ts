@@ -48,7 +48,7 @@ export const onServerClock = (browserNow: number, offset: number): number => bro
 /** The agent a wait is delegated to ('' when none). */
 const waitOn = (w: TimelineWait): string => w.on ?? ''
 
-const GERUND: Record<string, string> = {
+export const GERUND: Record<string, string> = {
   spec: 'Specifying',
   build: 'Building',
   review: 'Reviewing',
