@@ -32,12 +32,6 @@ export const LAYOUT_ELEMENTS = [
   { id: 'nav.cleanup', label: 'Cleanup', area: 'nav' },
   { id: 'nav.repositories', label: 'Repositories', area: 'nav' },
   { id: 'nav.instructions', label: 'Instructions', area: 'nav' },
-  {
-    id: 'nav.settings',
-    label: 'Settings',
-    area: 'nav',
-    locked: 'The settings page, where this layout is changed',
-  },
   // The Overview's cards (and each project's block on Home).
   { id: 'overview.needsYou', label: 'Needs you', area: 'overview' },
   { id: 'overview.agents', label: 'Agents at work', area: 'overview' },

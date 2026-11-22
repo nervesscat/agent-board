@@ -35,12 +35,11 @@ describe('the catalogue', () => {
     expect(allowedAreas('overview.next')).toEqual(['overview'])
   })
 
-  it('locks the landing page, the board, the settings page and the deep-link targets of a ticket', () => {
+  it('locks the landing page, the board and the deep-link targets of a ticket', () => {
     const locked = LAYOUT_ELEMENTS.filter((e) => 'locked' in e).map((e) => e.id)
     expect(locked).toEqual([
       'nav.overview',
       'nav.features',
-      'nav.settings',
       'ticket.instructions',
       'ticket.tasks',
       'ticket.activity',
@@ -75,7 +74,7 @@ describe('mergeLayout', () => {
     const merged = mergeLayout(layout)
     expect(merged).toEqual(layout)
     expect(shownIn(merged, 'nav')).not.toContain('nav.gallery')
-    expect(shownIn(merged, 'nav')[0]).toBe('nav.settings')
+    expect(shownIn(merged, 'nav')[0]).toBe('nav.instructions')
     expect(shownIn(merged, 'overview')[0]).toBe('overview.notes')
     expect(shownIn(merged, 'ticket.main')).toEqual([
       'ticket.details',
@@ -106,7 +105,6 @@ describe('mergeLayout', () => {
       'nav.cleanup',
       'nav.repositories',
       'nav.instructions',
-      'nav.settings',
     ])
     expect(nav.find((it) => it.id === 'nav.roadmap')!.hidden).toBe(false)
     // The other areas, absent from what was saved, are the defaults.
@@ -114,7 +112,7 @@ describe('mergeLayout', () => {
   })
 
   it('shows Repositories in a menu saved before it was in the menu, after Cleanup', () => {
-    // Saved before the Repositories page moved into the project's menu: Settings first, Daily hidden.
+    // Saved before the Repositories page moved into the project's menu: the old Settings entry first, Daily hidden.
     const saved: SavedLayout = [
       { id: 'nav.settings', area: 'nav' },
       { id: 'nav.overview', area: 'nav' },
@@ -128,8 +126,8 @@ describe('mergeLayout', () => {
       { id: 'nav.cleanup', area: 'nav' },
     ]
     const merged = mergeLayout(saved)
+    // The Settings entry is no longer in the menu: it is dropped, the rest keeps its order.
     expect(shownIn(merged, 'nav')).toEqual([
-      'nav.settings',
       'nav.overview',
       'nav.prs',
       'nav.features',
@@ -155,12 +153,12 @@ describe('mergeLayout', () => {
     expect(shownIn(merged, 'overview').slice(0, 2)).toEqual(['overview.needsYou', 'overview.agents'])
   })
 
-  it('adds Instructions to a menu saved before the split, before Settings', () => {
-    // Every layout saved before the Instructions module existed: Settings is there, Instructions is not.
+  it('adds Instructions to a menu saved before the split, as the last page', () => {
+    // Every layout saved before the Instructions module existed: Instructions is not there.
     const merged = mergeLayout(without('nav.instructions'))
     expect(merged).toEqual(defaultLayout())
     const nav = shownIn(merged, 'nav')
-    expect(nav.slice(-2)).toEqual(['nav.instructions', 'nav.settings'])
+    expect(nav.slice(-2)).toEqual(['nav.repositories', 'nav.instructions'])
     expect(inArea(merged, 'nav').find((it) => it.id === 'nav.instructions')!.hidden).toBe(false)
   })
 
