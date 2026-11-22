@@ -577,8 +577,7 @@
         "daily": "Daily",
         "cleanup": "Cleanup",
         "repositories": "Repositories",
-        "instructions": "Instructions",
-        "settings": "Settings"
+        "instructions": "Instructions"
       },
       "overview": {
         "needsYou": "Needs you",
@@ -586,7 +585,8 @@
         "doneToday": "Done today",
         "next": "Next",
         "carryingOver": "Carrying over",
-        "notes": "Notes"
+        "notes": "Notes",
+        "agents": "Agents at work"
       },
       "ticket": {
         "instructions": "Instructions",
@@ -603,8 +603,7 @@
     "locked": {
       "nav": {
         "overview": "The project's landing page",
-        "features": "The project's board",
-        "settings": "The settings page, where this layout is changed"
+        "features": "The project's board"
       },
       "ticket": {
         "instructions": "The ticket's own text",
@@ -2673,6 +2672,25 @@
       "mid": "Mid: one review round.",
       "high": "High: up to three review rounds.",
       "max": "Max: up to ten review rounds, for a whole site or app built from scratch, a new product or a standalone service, and it stops at the first round that survives. A feature in an existing codebase is at most high, however difficult."
+    }
+  },
+  "agentsAtWork": {
+    "title": "Agents at work",
+    "error": "Could not read who is working.",
+    "empty": "No agents working",
+    "more_one": "+{{count}} more",
+    "more_other": "+{{count}} more",
+    "round": "{{phase}} round {{round}}",
+    "waiting": "Waiting: {{what}}",
+    "blocked": "Blocked",
+    "quiet": "quiet",
+    "lastHeard": "last heard {{time}}",
+    "label": "#{{id}} {{title}} — {{phase}}, {{since}}, {{state}}",
+    "labelAgent": "#{{id}} {{title}} — agent {{agent}}, {{phase}}, {{since}}, {{state}}",
+    "state": {
+      "working": "working",
+      "waiting": "waiting",
+      "asleep": "asleep"
     }
   }
 }

@@ -577,8 +577,7 @@
         "daily": "Diario",
         "cleanup": "Limpieza",
         "repositories": "Repositorios",
-        "instructions": "Instrucciones",
-        "settings": "Ajustes"
+        "instructions": "Instrucciones"
       },
       "overview": {
         "needsYou": "Te necesita",
@@ -586,7 +585,8 @@
         "doneToday": "Hecho hoy",
         "next": "Siguiente",
         "carryingOver": "Pendiente de antes",
-        "notes": "Notas"
+        "notes": "Notas",
+        "agents": "Agentes trabajando"
       },
       "ticket": {
         "instructions": "Instrucciones",
@@ -603,8 +603,7 @@
     "locked": {
       "nav": {
         "overview": "La página de inicio del proyecto",
-        "features": "El tablero del proyecto",
-        "settings": "La página de ajustes, donde se cambia este diseño"
+        "features": "El tablero del proyecto"
       },
       "ticket": {
         "instructions": "El propio texto del ticket",
@@ -2676,6 +2675,25 @@
       "mid": "Media: una ronda de revisión.",
       "high": "Alta: hasta tres rondas de revisión.",
       "max": "Máxima: hasta diez rondas de revisión, para un sitio o una app completos construidos desde cero, un producto nuevo o un servicio independiente; se detiene en la primera ronda que sobrevive. Una funcionalidad en un código ya existente es como mucho alta, por difícil que sea."
+    }
+  },
+  "agentsAtWork": {
+    "title": "Agentes trabajando",
+    "error": "No se pudo leer quién está trabajando.",
+    "empty": "Ningún agente trabajando",
+    "more_one": "+{{count}} más",
+    "more_other": "+{{count}} más",
+    "round": "{{phase}}, ronda {{round}}",
+    "waiting": "Esperando: {{what}}",
+    "blocked": "Bloqueado",
+    "quiet": "en silencio",
+    "lastHeard": "última señal {{time}}",
+    "label": "#{{id}} {{title}} — {{phase}}, {{since}}, {{state}}",
+    "labelAgent": "#{{id}} {{title}} — agente {{agent}}, {{phase}}, {{since}}, {{state}}",
+    "state": {
+      "working": "trabajando",
+      "waiting": "esperando",
+      "asleep": "dormido"
     }
   }
 }

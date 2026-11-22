@@ -61,8 +61,13 @@ const GERUND = {
   preview: 'workStatus.verb.preview',
   merge: 'workStatus.verb.merge',
 } as const
-const gerund = (phase: string, tr: TFunction): string =>
-  tr(GERUND[phase as keyof typeof GERUND] ?? 'workStatus.verb.work')
+/** The phase as a verb in the language shown ("Building"); `fallback` false: '' for a phase of no known verb. */
+export const gerund = (phase: string, tr: TFunction, fallback = true): string =>
+  Object.hasOwn(GERUND, phase)
+    ? tr(GERUND[phase as keyof typeof GERUND])
+    : fallback
+      ? tr('workStatus.verb.work')
+      : ''
 
 const ms = (iso: string) => Date.parse(iso)
 const latestFirst = <T extends { start: string }>(xs: T[]) =>

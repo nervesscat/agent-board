@@ -22,6 +22,7 @@ import { useState, type ReactNode } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 
 import { Actor, ClaimedActor } from '#/components/Actor'
+import { AgentsAtWork } from '#/components/AgentsAtWork'
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { Empty } from '#/components/Empty'
 import { GettingStarted } from '#/components/GettingStarted'
@@ -125,6 +126,7 @@ const headline = (p: ProjectSummary) =>
 /** Each card of the block; which show and in what order is the project's layout. */
 const CARDS: Record<AreaId<'overview'>, (props: CardProps) => ReactNode> = {
   'overview.needsYou': NeedsYou,
+  'overview.agents': Agents,
   'overview.inProgress': InProgress,
   'overview.doneToday': DoneToday,
   'overview.next': Next,
@@ -374,6 +376,11 @@ function HeardLine({ timeline }: { timeline: WorkTimelineLike }) {
 }
 
 // --- the sections ---
+
+/** Right after Needs you: the order class is the same, and cards of one order keep the layout's order. */
+function Agents({ p }: CardProps) {
+  return <AgentsAtWork p={p} className="lg:order-1 lg:col-span-full" />
+}
 
 function NeedsYou({ p, now, dismiss }: CardProps) {
   const { t: tr } = useTranslation()
