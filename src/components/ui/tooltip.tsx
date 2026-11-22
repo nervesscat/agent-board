@@ -223,12 +223,21 @@ function useReopenAfterScroll(enabled: boolean, waiting: boolean, tipId: string,
       const el = at && document.elementFromPoint(at.x, at.y)
       const trigger = el?.closest(`[data-tip-id="${tipId}"]`)
       if (!at || !trigger) return
-      reopenRef.current()
       // base-ui places the bubble from the last mouse move it saw, and the scroll has moved the element
-      // since: tell it where the pointer is now, once the bubble has mounted and is listening.
-      const nudge = () =>
-        trigger.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: at.x, clientY: at.y }))
-      requestAnimationFrame(() => requestAnimationFrame(nudge))
+      // since. The trigger takes that move while the tip is closed, with no bubble needed to listen, so
+      // the bubble is already at the pointer in its first frame, not where the pointer was before the scroll.
+      const tell = (p: { x: number; y: number }) =>
+        trigger.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: p.x, clientY: p.y }))
+      tell(at)
+      reopenRef.current()
+      // A pointer move that came between this and the bubble starting to listen is told once more, as
+      // the pointer is by then (never as it was when this ran).
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const now = pointer.current
+          if (now && (now.x !== at.x || now.y !== at.y) && trigger.isConnected) tell(now)
+        }),
+      )
     }
     const onScroll = () => {
       lastScroll = performance.now()
