@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 
 import { LayoutEditor } from '#/components/LayoutEditor'
 import { ListInput } from '#/components/ListInput'
+import { NotificationSettings } from '#/components/NotificationSettings'
 import { RunsSettings } from '#/components/RunsSettings'
 import { StagesEditor } from '#/components/StagesEditor'
 import { Button } from '#/components/ui/button'
@@ -44,14 +45,15 @@ export function ProjectSettings({ id }: { id: string }) {
       <div className="max-w-3xl space-y-2">
         <p className="text-sm text-muted-foreground">
           How this project works: what new tickets start with, the tags it offers, when a ticket counts as
-          stalled, its stages, its runs and what its pages show. Its agents&apos; instructions are on their
-          own page.
+          stalled, the alerts it shows, its stages, its runs and what its pages show. Its agents&apos;
+          instructions are on their own page.
         </p>
       </div>
       <ProjectKinds key={`kinds-${id}`} projectId={id} saved={p.kinds} />
       <DefaultPhases key={id} projectId={id} saved={p.defaultPhases} />
       <TagSuggestions key={`tags-${id}`} projectId={id} saved={p.tagSuggestions} />
       <StallMinutes key={`stall-${id}`} projectId={id} saved={p.stallMinutes} />
+      <NotificationSettings key={`notifications-${id}`} projectId={id} />
       <StagesEditor projectId={id} />
       <RunsSettings projectId={id} />
       <LayoutEditor key={`layout-${id}`} projectId={id} saved={p.layout} />

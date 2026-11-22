@@ -20,7 +20,6 @@ import {
   MonitorPlay,
   Play,
   ScrollText,
-  Settings,
   SquareCheckBig,
   StickyNote,
 } from 'lucide-react'
@@ -40,8 +39,8 @@ export const LAYOUT_ICONS: Record<LayoutId, typeof Home> = {
   'nav.cleanup': BrushCleaning,
   'nav.repositories': FolderGit2,
   'nav.instructions': ScrollText,
-  'nav.settings': Settings,
   'overview.needsYou': Inbox,
+  'overview.agents': Bot,
   'overview.inProgress': Play,
   'overview.doneToday': CheckCircle2,
   'overview.next': ListTodo,

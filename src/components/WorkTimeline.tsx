@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useId, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 
+import { DelayedLoading, SkeletonText } from '#/components/Loading'
 import { RunReportView, runReportLabel } from '#/components/RunReport'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '#/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
@@ -388,13 +389,17 @@ function SpanDialog({
                 ['Duration', spokenDuration(Date.parse(s.end) - Date.parse(s.start))],
               ]}
             />
-            <p className="text-xs text-muted-foreground">
-              {loading
-                ? 'Loading…'
-                : fetched.error
+            {loading ? (
+              <DelayedLoading label="Loading run report…">
+                <SkeletonText lines={1} />
+              </DelayedLoading>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {fetched.error
                   ? 'The reports could not be loaded.'
                   : `No report for this run${s.open ? ' yet' : ''}.`}
-            </p>
+              </p>
+            )}
           </div>
         )}
       </DialogContent>
