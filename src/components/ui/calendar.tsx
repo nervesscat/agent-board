@@ -3,10 +3,10 @@
 import * as React from 'react'
 import { cn } from 'cn'
 import { DayPicker, getDefaultClassNames, type DayButton, type Locale } from 'react-day-picker'
-import { es } from 'react-day-picker/locale'
 import { useTranslation } from 'react-i18next'
 
 import { Button, buttonVariants } from '#/components/ui/button.tsx'
+import { calendarLocale } from '#/components/ui/calendarLocale'
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from 'lucide-react'
 
 function Calendar({
@@ -25,7 +25,7 @@ function Calendar({
   const defaultClassNames = getDefaultClassNames()
   // Month and weekday names, and the labels read out, follow the interface's language (English is the default).
   const { i18n } = useTranslation()
-  locale ??= i18n.language === 'es' ? es : undefined
+  locale ??= calendarLocale(i18n.language)
 
   return (
     <DayPicker

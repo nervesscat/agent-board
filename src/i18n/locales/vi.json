@@ -9,7 +9,7 @@
     "connect": "Kết nối",
     "settings": "Cài đặt",
     "testMode": "chế độ test",
-    "authOff": "tắt xác thực",
+    "authOff": "tắt auth",
     "authOffTip": "BOARD_ENV={{env}}, tắt đăng nhập: đang đăng nhập với tư cách {{actor}}. Không phải board thật."
   },
   "time": {

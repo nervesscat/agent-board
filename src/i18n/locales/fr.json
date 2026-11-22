@@ -2080,7 +2080,7 @@
     "titleDone": "#{{id}} {{title}} : terminé",
     "titleNotDone": "#{{id}} {{title}} : pas terminé, aucune branche",
     "markDoneAnyway": "Marquer terminé quand même",
-    "mergeFirst": "À fusionner d’abord :\\n{{list}}",
+    "mergeFirst": "À fusionner d’abord :\n{{list}}",
     "badge": "dépend de {{list}}",
     "statusMerged": "Dépend de #{{id}} · fusionné",
     "statusNotMerged": "Dépend de #{{id}} · pas encore fusionné",
@@ -2146,7 +2146,7 @@
       "others": "Aucune PR en attente d’autres personnes ({{stage}})."
     },
     "refresh": "Actualiser",
-    "mergeAfterTip": "Son ticket a besoin que celles-ci soient d’abord fusionnées :\\n{{list}}",
+    "mergeAfterTip": "Son ticket a besoin que celles-ci soient d’abord fusionnées :\n{{list}}",
     "mergeAfterItem": "PR #{{number}} (de #{{ticketId}} {{title}})",
     "mergeAfter": "à fusionner après <refs/>",
     "updated": "mise à jour {{when}}",

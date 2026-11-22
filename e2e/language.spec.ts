@@ -215,3 +215,21 @@ test.describe('before a choice is made, the browser picks any of the twenty', ()
     })
   }
 })
+
+test('two quick picks: the last one wins, even the language that was showing', async ({ page }) => {
+  await page.goto('/settings')
+  // The Russian file arrives late; English is picked again before it does.
+  await page.route('**/assets/ru-*.js', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 2500))
+    await route.continue()
+  })
+  await choose(page, 'Language', 'Русский')
+  await choose(page, 'Language', 'English')
+  await expect(html(page)).toHaveAttribute('lang', 'en')
+  // Long after the Russian file has come in, the page is still English and English is what is kept.
+  await page.waitForTimeout(3500)
+  await expect(html(page)).toHaveAttribute('lang', 'en')
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
+  const me = await page.request.get('/api/me').then((r) => r.json())
+  expect(me.language).toBe('en')
+})

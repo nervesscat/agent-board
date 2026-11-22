@@ -114,8 +114,8 @@ function DefaultAgents({
   })
   return (
     <section className="space-y-3 rounded-lg border p-4" aria-label={t('projectAgents.defaults.title')}>
-      <div className="flex items-start gap-4">
-        <div className="flex-1 space-y-1">
+      <div className="flex flex-wrap items-start gap-4">
+        <div className="min-w-48 flex-1 space-y-1">
           <h2 className="text-sm font-medium">{t('projectAgents.defaults.title')}</h2>
           {!software ? (
             <p className="text-xs text-muted-foreground">

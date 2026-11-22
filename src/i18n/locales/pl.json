@@ -8,8 +8,8 @@
     "pages": "Strony",
     "connect": "Połącz",
     "settings": "Ustawienia",
-    "testMode": "tryb testowy",
-    "authOff": "bez logowania",
+    "testMode": "tryb testu",
+    "authOff": "bez loginu",
     "authOffTip": "BOARD_ENV={{env}}, logowanie wyłączone: zalogowano jako {{actor}}. To nie jest działająca tablica."
   },
   "time": {

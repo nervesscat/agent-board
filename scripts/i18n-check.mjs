@@ -119,6 +119,9 @@ export function compareLocales(en, other, name, language = name) {
   for (const k of bBases) if (!aBases.has(k)) problems.push(`${name}: key ${k} is not in the English file`)
   for (const [key, text] of Object.entries(b)) {
     if (typeof text !== 'string' || text.trim() === '') problems.push(`${name}: ${key} is empty`)
+    // A backslash and an n written as two characters (an escaped "\\n" in the JSON): a line break that was not one.
+    else if (text.includes('\\n') && !String(a[key] ?? '').includes('\\n'))
+      problems.push(`${name}: ${key} has a literal backslash-n, not a line break`)
   }
   for (const [lang, flat] of [
     ['en', a],

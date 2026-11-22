@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -141,6 +141,11 @@ function LanguagePicker() {
     onError: (err) => toast.error(errorMessage(err)),
   })
   const showing = i18n.language as Language
+  // The last language picked, which can be one whose file is still loading (`showing` is the one on screen).
+  const picked = useRef(showing)
+  useEffect(() => {
+    picked.current = showing
+  }, [showing])
   const [query, setQuery] = useState('')
   const shown = LANGUAGES.filter((code) => languageMatches(code, query))
   return (
@@ -150,7 +155,8 @@ function LanguagePicker() {
       <Combobox<Language>
         value={showing}
         onValueChange={(next) => {
-          if (!next || next === showing) return
+          if (!next || next === picked.current) return
+          picked.current = next
           void setLanguage(next)
           save.mutate(next)
         }}

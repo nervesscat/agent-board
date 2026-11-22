@@ -42,6 +42,14 @@ describe('every language has every text', () => {
     ])
   })
 
+  it('refuses a literal backslash-n where English has a line break', () => {
+    const model = { a: 'First:\nsecond' }
+    expect(compareLocales(model, { a: 'Primero:\nsegundo' }, 'es')).toEqual([])
+    expect(compareLocales(model, { a: 'Primero:\\nsegundo' }, 'es')).toEqual([
+      'es: a has a literal backslash-n, not a line break',
+    ])
+  })
+
   it('refuses a tag that is an HTML void element, whose text the parser would drop', () => {
     const model = { a: 'Open <link>Connect</link>.' }
     expect(compareLocales(model, { a: 'Abre <link>Conectar</link>.' }, 'es')).toEqual([

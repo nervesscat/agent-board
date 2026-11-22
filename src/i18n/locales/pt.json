@@ -8,7 +8,7 @@
     "pages": "Páginas",
     "connect": "Conectar",
     "settings": "Configurações",
-    "testMode": "modo de teste",
+    "testMode": "modo teste",
     "authOff": "sem auth",
     "authOffTip": "BOARD_ENV={{env}}, login desativado: conectado como {{actor}}. Não é o quadro real."
   },
