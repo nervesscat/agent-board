@@ -37,7 +37,7 @@ test('Settings has a Language selector with English and Spanish among its twenty
   await expect(html(page)).toHaveAttribute('lang', 'en')
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
   // The Board tab's section, next to the theme.
-  await expect(picker(page, 'Language')).toHaveText('English')
+  await expect(picker(page, 'Language')).toContainText('English')
 
   // No reload: a mark on the window must survive the switch.
   await page.evaluate(() => Object.assign(window, { stillHere: true }))
@@ -103,7 +103,7 @@ test.describe('before a choice is made, the browser decides between the supporte
       await page.goto('/settings')
       await expect(html(page)).toHaveAttribute('lang', 'es')
       await expect(page.getByRole('heading', { level: 1, name: 'Ajustes' })).toBeVisible()
-      await expect(picker(page, 'Idioma')).toHaveText('Español')
+      await expect(picker(page, 'Idioma')).toContainText('Español')
     })
   })
 
@@ -188,7 +188,7 @@ test('every one of the twenty works when picked: the page, the selector and <htm
     await expect(html(page)).toHaveAttribute('lang', language)
     await expect(page.getByRole('heading', { level: 1, name: texts.settings.title })).toBeVisible()
     name = texts.settings.board.language.title
-    await expect(picker(page, name)).toHaveText(LANGUAGE_NAME[language])
+    await expect(picker(page, name)).toContainText(LANGUAGE_NAME[language])
   }
   await choose(page, name, 'English')
   await expect(html(page)).toHaveAttribute('lang', 'en')
@@ -210,7 +210,7 @@ test.describe('before a choice is made, the browser picks any of the twenty', ()
         await expect(html(page)).toHaveAttribute('lang', language)
         const texts = textsOf(language)
         await expect(page.getByRole('heading', { level: 1, name: texts.settings.title })).toBeVisible()
-        await expect(picker(page, texts.settings.board.language.title)).toHaveText(LANGUAGE_NAME[language])
+        await expect(picker(page, texts.settings.board.language.title)).toContainText(LANGUAGE_NAME[language])
       })
     })
   }

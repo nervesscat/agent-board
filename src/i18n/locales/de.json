@@ -2080,7 +2080,7 @@
     "statusMerged": "Braucht #{{id}} · gemergt",
     "statusNotMerged": "Braucht #{{id}} · noch nicht gemergt",
     "removeNeed": "Abhängigkeit von #{{id}} entfernen",
-    "addPlaceholder": "Ein Ticket hinzufügen, das zuerst gemergt sein muss…",
+    "addPlaceholder": "Ticket hinzufügen…",
     "noOthers": "Keine anderen Tickets",
     "includes": "Enthält nicht gemergte Arbeit aus <goto>{{ref}}</goto>",
     "cannotBeDone": "#{{id}} kann nicht erledigt werden, bis der Branch von #{{need}} in seine Basis gemergt ist",

@@ -2080,7 +2080,7 @@
     "statusMerged": "#{{id}} দরকার · merge হয়েছে",
     "statusNotMerged": "#{{id}} দরকার · এখনও merge হয়নি",
     "removeNeed": "#{{id}}-এর নির্ভরতা সরান",
-    "addPlaceholder": "আগে merge হওয়া দরকার এমন একটি ticket যোগ করুন…",
+    "addPlaceholder": "ticket যোগ করুন…",
     "noOthers": "অন্য কোনো ticket নেই",
     "includes": "<goto>{{ref}}</goto> থেকে অ-merge করা কাজ অন্তর্ভুক্ত",
     "cannotBeDone": "#{{need}}-এর branch তার বেসে merge না হওয়া পর্যন্ত #{{id}} সম্পন্ন করা যায় না",

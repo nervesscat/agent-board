@@ -151,7 +151,7 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <h2 className="text-sm font-medium">{tr('runsSettings.title')}</h2>
         {anyRuns && (
-          <div className="ml-auto flex gap-1.5">
+          <div className="ml-auto flex flex-wrap gap-1.5">
             <Tip content={tr('runsCard.startAllTip')}>
               <Button
                 variant="outline"
