@@ -912,7 +912,7 @@ function Instructions({
       ) : t.body ? (
         <>
           {/* Clicking the text edits it; a link inside still opens. */}
-          <Tip content="Click to edit">
+          <Tip content="Click to edit" followPointer>
             <div
               role="button"
               tabIndex={0}
