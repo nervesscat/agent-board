@@ -11,6 +11,7 @@ import { RichEditor } from '#/components/RichEditor'
 import { StatusSelect } from '#/components/StatusSelect'
 import { TagsInput, useTagChoices } from '#/components/TagsInput'
 import { ListInput } from '#/components/ListInput'
+import { DelayedLoading, SkeletonText } from '#/components/Loading'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,
@@ -23,6 +24,7 @@ import {
 } from '#/components/ui/dialog'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
+import { Skeleton } from '#/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { errorMessage, post, type Ticket, type TicketFull } from '#/lib/api'
 import { DEFAULT_COMPLEXITY, type Complexity } from '#/lib/constants'
@@ -69,7 +71,7 @@ export function NewTicket({
   const [assignee, setAssignee] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [tagText, setTagText] = useState('')
-  const { data: project } = useProject(projectId)
+  const { data: project, isPending: projectPending } = useProject(projectId)
   const [picked, setPicked] = useState('')
   const repos = project?.repos ?? []
   const repoId = picked || String(parent?.repoId ?? repos[0]?.id ?? '')
@@ -239,6 +241,11 @@ export function NewTicket({
               text={taskText}
               onTextChange={setTaskText}
             />
+            {!parent && projectPending && (
+              <DelayedLoading label="Loading the project's phases…">
+                <SkeletonText lines={2} />
+              </DelayedLoading>
+            )}
             {phases.length > 0 && (
               <p className="text-xs text-muted-foreground">
                 It starts with the project&apos;s phases: {phases.join(', ')}. The tasks typed here go under{' '}
@@ -250,6 +257,14 @@ export function NewTicket({
             {/* A top-level ticket's Stage and level share a row: Stage takes what the level leaves of the cell. */}
             {!parent && (
               <div className="flex gap-4">
+                {!status && projectPending && (
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Label>Stage</Label>
+                    <DelayedLoading label="Loading stages…">
+                      <Skeleton className="h-8 w-full" />
+                    </DelayedLoading>
+                  </div>
+                )}
                 {status && (
                   <div className="min-w-0 flex-1 space-y-2">
                     <Label htmlFor="stage">Stage</Label>

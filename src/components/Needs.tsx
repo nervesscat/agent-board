@@ -4,6 +4,7 @@ import { GitMerge, Plus, Sparkles, TriangleAlert, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from 'cn'
 
+import { ControlSkeleton } from '#/components/ControlSkeleton'
 import { Button } from '#/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
@@ -84,7 +85,7 @@ export function NeedsStatus({ t }: { t: TicketFull }) {
  */
 export function NeedsField({ t, onSave }: { t: TicketFull; onSave: (needs: number[]) => void }) {
   // Every ticket of the project, lanes too: a branch can stand on any of them.
-  const { data: tickets = [] } = useQuery({
+  const { data: tickets = [], isPending } = useQuery({
     queryKey: ['tickets', String(t.projectId), 'all'],
     queryFn: () => get<TicketRow[]>(`/api/projects/${t.projectId}/tickets`),
     staleTime: 30_000,
@@ -145,11 +146,19 @@ export function NeedsField({ t, onSave }: { t: TicketFull; onSave: (needs: numbe
         value={null}
         onValueChange={(v) => v && onSave([...ids, Number(v)])}
         items={items}
-        disabled={!options.length}
+        disabled={isPending || !options.length}
       >
         <SelectTrigger id="needs" size="sm" className="w-full">
           <SelectValue
-            placeholder={options.length ? 'Add a ticket it needs merged first…' : 'No other tickets'}
+            placeholder={
+              isPending ? (
+                <ControlSkeleton label="Loading tickets…" />
+              ) : options.length ? (
+                'Add a ticket it needs merged first…'
+              ) : (
+                'No other tickets'
+              )
+            }
           />
         </SelectTrigger>
         <SelectContent>
