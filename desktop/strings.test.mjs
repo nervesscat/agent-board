@@ -12,19 +12,27 @@ const placeholders = (/** @type {string} */ text) =>
 const tags = (/** @type {string} */ text) => [...text.matchAll(/<\/?(\w+)[^>]*>/g)].map((m) => m[1]).sort()
 
 describe('the desktop app strings', () => {
+  // A language writes the plural forms it has (`_one`/`_other` in English, `_other` alone in Japanese, four in
+  // Russian), so keys compare without the suffix; scripts/i18n-check.mjs checks the forms themselves.
+  const base = (/** @type {string} */ key) => key.replace(/_(zero|one|two|few|many|other)$/, '')
+  const bases = (/** @type {Record<string, string>} */ table) =>
+    [...new Set(Object.keys(table).map(base))].sort()
+
   it('have the same keys in every language, none empty', () => {
-    const en = Object.keys(STRINGS.en).sort()
+    expect(LANGUAGES).toHaveLength(20)
     for (const language of LANGUAGES) {
-      expect(Object.keys(STRINGS[language]).sort(), language).toEqual(en)
+      expect(bases(STRINGS[language]), language).toEqual(bases(STRINGS.en))
       for (const [key, text] of Object.entries(STRINGS[language])) expect(text.trim(), key).not.toBe('')
     }
   })
 
   it('use the same placeholders and tags as the English text', () => {
+    const english = (/** @type {string} */ key) =>
+      STRINGS.en[key] ?? STRINGS.en[`${base(key)}_other`] ?? STRINGS.en[base(key)]
     for (const language of LANGUAGES)
       for (const [key, text] of Object.entries(STRINGS[language])) {
-        expect(placeholders(text), `${language}.${key}`).toEqual(placeholders(STRINGS.en[key]))
-        expect(tags(text), `${language}.${key}`).toEqual(tags(STRINGS.en[key]))
+        expect(placeholders(text), `${language}.${key}`).toEqual(placeholders(english(key)))
+        expect(tags(text), `${language}.${key}`).toEqual(tags(english(key)))
       }
   })
 

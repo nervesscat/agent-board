@@ -118,6 +118,19 @@ describe('every language has every text', () => {
     expect(checkLocales()).toEqual([])
   })
 
+  it('has a real translation in every language, not a copy of the English', () => {
+    const { en, ...rest } = readLocales()
+    const english = flatten(en)
+    for (const [name, tree] of Object.entries(rest)) {
+      const flat = flatten(tree)
+      // A few texts are the same word in two languages (Menu, Team, brand names, kept product terms).
+      const same = Object.keys(flat).filter((k) => flat[k] === english[k] && /\p{L}{4,}/u.test(flat[k]))
+      expect(same.length / Object.keys(flat).length, `${name}: ${same.slice(0, 5).join(', ')}`).toBeLessThan(
+        0.1,
+      )
+    }
+  })
+
   it("passes on the desktop app's table", async () => {
     expect(await checkDesktopStrings()).toEqual([])
   })
