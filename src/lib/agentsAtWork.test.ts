@@ -211,11 +211,11 @@ describe('petsOf', () => {
   })
 
   it('stops at the cap and counts the rest', () => {
-    const liveNow = Array.from({ length: 15 }, (_, i) => live({ ticketId: i + 1 }))
+    const liveNow = Array.from({ length: MAX_PETS + 3 }, (_, i) => live({ ticketId: i + 1 }))
     const r = petsOf({ liveNow, recentlyActive: [] }, NOW)
     expect(r.pets).toHaveLength(MAX_PETS)
     expect(r.more).toBe(3)
-    expect(r.live).toBe(15)
+    expect(r.live).toBe(MAX_PETS + 3)
     expect(r.pets[0]!.ticketId).toBe(1)
   })
 

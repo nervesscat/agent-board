@@ -6,7 +6,7 @@ import { record, scrollsSideways, stalledTicket } from './workTimeline'
 /*
  * The Overview's Agents at work card: one tiny pixel-art pet per agent on a ticket, from the live work
  * read. Its pose and its words say working, waiting or asleep; a ticket in Done, Approved or Cancelled
- * has none; each is a link to its ticket; a strip on a wide screen and a column on a phone; it reads in
+ * has none; each is a link to its ticket; a grid on a wide screen and a column on a phone; it reads in
  * the dark and stands still under reduced motion.
  */
 
@@ -130,13 +130,13 @@ test('a stalled ticket sleeps', async ({ page, project, human, agent }) => {
   await expect(sleeper.locator('svg[data-pet="asleep"]')).toBeVisible()
 })
 
-test('more than a dozen agents show twelve and a count', async ({ page, project, api, agent }) => {
-  for (let i = 1; i <= 13; i++) {
+test('more than two dozen agents show twenty-four and a count', async ({ page, project, api, agent }) => {
+  for (let i = 1; i <= 25; i++) {
     const t = await api.ticket({ title: `Busy ${i}`, status: 'in_progress' })
     await record(agent, project, t.id, { kind: 'heartbeat' })
   }
   await page.goto(`/projects/${project.id}`)
-  await expect(pets(page)).toHaveCount(12)
+  await expect(pets(page)).toHaveCount(24)
   await expect(card(page)).toContainText('+1 more')
 })
 
@@ -216,30 +216,106 @@ test('on a phone the pets stack one under another, each with its line beside it'
   await card(page).screenshot({ path: test.info().outputPath('phone.png'), animations: 'disabled' })
 })
 
-test('on a wide screen the pets are a strip, side by side', async ({ page, project, api, agent }) => {
-  for (let i = 1; i <= 3; i++) {
-    const t = await api.ticket({ title: `Strip ${i}`, status: 'in_progress' })
+/** The pets' boxes, in order, and the distinct rows (top edges) and columns (left edges) they sit on. */
+async function layout(page: Page) {
+  const boxes = await pets(page).evaluateAll((els) =>
+    els.map((el) => {
+      const r = el.getBoundingClientRect()
+      return { x: r.x, y: Math.round(r.y), w: r.width, h: r.height }
+    }),
+  )
+  const rows = [...new Set(boxes.map((b) => b.y))]
+  const cols = [...new Set(boxes.map((b) => Math.round(b.x)))]
+  return { boxes, rows, cols }
+}
+
+test('on a wide screen the pets are a grid: several per row, wrapping onto more rows', async ({
+  page,
+  project,
+  api,
+  agent,
+}) => {
+  for (let i = 1; i <= 9; i++) {
+    const t = await api.ticket({ title: `Grid ${i} with a title that is rather long`, status: 'in_progress' })
     await record(agent, project, t.id, { kind: 'span_start', phase: 'build' })
   }
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto(`/projects/${project.id}`)
-  await expect(pets(page)).toHaveCount(3)
-  const boxes = await pets(page).evaluateAll((els) =>
-    els.map((el) => {
-      const r = el.getBoundingClientRect()
-      return { x: r.x, y: r.y, w: r.width }
-    }),
-  )
-  for (let i = 1; i < boxes.length; i++) {
-    expect(boxes[i]!.y).toBe(boxes[0]!.y)
-    expect(boxes[i]!.x).toBeGreaterThanOrEqual(boxes[i - 1]!.x + boxes[i - 1]!.w)
+  await expect(pets(page)).toHaveCount(9)
+  const { boxes, rows, cols } = await layout(page)
+  // Several columns, and more than one row: nine pets do not fit on one line, and they are not a column.
+  expect(cols.length).toBeGreaterThanOrEqual(3)
+  expect(rows.length).toBeGreaterThanOrEqual(2)
+  expect(rows.length).toBeLessThan(9)
+  // Every cell is aligned to a column and none is cut off by the card.
+  const card1 = (await card(page).boundingBox())!
+  for (const b of boxes) {
+    expect(b.x).toBeGreaterThanOrEqual(card1.x)
+    expect(b.x + b.w).toBeLessThanOrEqual(card1.x + card1.width)
   }
+  expect(await scrollsSideways(page)).toBe(false)
+  // No horizontal scroll inside the card either.
+  expect(await card(page).evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+  // The art is still beside its ticket line, and a long title is cut inside its cell.
+  const first = pets(page).first()
+  const title = first.locator('span.truncate').first()
+  await expect(title).toContainText('…')
+  expect(await title.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+  await card(page).screenshot({ path: test.info().outputPath('wide.png'), animations: 'disabled' })
+})
+
+test('the grid takes as many columns as the card is wide, and none sideways', async ({
+  page,
+  project,
+  api,
+  agent,
+}) => {
+  for (let i = 1; i <= 8; i++) {
+    const t = await api.ticket({ title: `Fit ${i}`, status: 'in_progress' })
+    await record(agent, project, t.id, { kind: 'span_start', phase: 'build' })
+  }
+  const columns: number[] = []
+  for (const width of [1600, 1280, 700]) {
+    await page.setViewportSize({ width, height: 800 })
+    await page.goto(`/projects/${project.id}`)
+    await expect(pets(page)).toHaveCount(8)
+    const { cols } = await layout(page)
+    columns.push(cols.length)
+    expect(await scrollsSideways(page)).toBe(false)
+    expect(await card(page).evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+  }
+  // Wider means at least as many columns, and the narrowest desktop width still has more than one.
+  expect(columns[0]!).toBeGreaterThanOrEqual(columns[1]!)
+  expect(columns[1]!).toBeGreaterThanOrEqual(columns[2]!)
+  expect(columns[2]!).toBeGreaterThanOrEqual(2)
+  expect(columns[0]!).toBeGreaterThan(columns[2]!)
+  await card(page).screenshot({ path: test.info().outputPath('narrow.png'), animations: 'disabled' })
+})
+
+test('in the grid a subagent sits right after its parent', async ({ page, project, api, agent }) => {
+  const a = await api.ticket({ title: 'Parent ticket', status: 'in_progress' })
+  await record(agent, project, a.id, { kind: 'span_start', phase: 'build' })
+  await record(agent, project, a.id, { kind: 'span_start', phase: 'build', agent: 'claude/helper' })
+  const b = await api.ticket({ title: 'Other ticket', status: 'in_progress' })
+  await record(agent, project, b.id, { kind: 'span_start', phase: 'build' })
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto(`/projects/${project.id}`)
+  await expect(pets(page)).toHaveCount(3)
+  const names = await pets(page).evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') ?? ''))
+  const parent = names.findIndex((n) => n.includes('Parent ticket') && !n.includes('claude/helper'))
+  const child = names.findIndex((n) => n.includes('claude/helper'))
+  expect(parent).toBeGreaterThanOrEqual(0)
+  expect(child).toBe(parent + 1)
+  const { boxes } = await layout(page)
+  // Next to it: on the parent's row, in the next column.
+  expect(boxes[child]!.y).toBe(boxes[parent]!.y)
+  expect(boxes[child]!.x).toBeGreaterThan(boxes[parent]!.x)
 })
 
 test.describe('in the dark theme', () => {
   test.use({ colorScheme: 'dark' })
 
-  test('the strip is drawn from the theme', async ({ page, project, api, agent }) => {
+  test('the grid is drawn from the theme', async ({ page, project, api, agent }) => {
     const t = await api.ticket({ title: 'Night shift', status: 'in_progress' })
     await record(agent, project, t.id, { kind: 'wait_start', reason: 'human', note: 'a question' })
     const s = await api.ticket({ title: 'Napping', status: 'in_progress' })

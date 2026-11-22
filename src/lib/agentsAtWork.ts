@@ -2,7 +2,7 @@ import type { LiveWorkPayload } from '#/lib/api'
 import { GERUND } from '#/lib/workStatus'
 
 /**
- * The Overview's Agents at work strip, as data: one character per agent on a ticket, from the live
+ * The Overview's Agents at work card, as data: one character per agent on a ticket, from the live
  * work read (who is on which ticket, in what phase, since when it was heard). A ticket in Done,
  * Approved or Cancelled has no one at work, so none of its agents is drawn. Pure: the clock is passed
  * in, and nothing here reads the board.
@@ -41,7 +41,7 @@ export interface Pets {
 }
 
 export const TITLE_LIMIT = 28
-export const MAX_PETS = 12
+export const MAX_PETS = 24
 
 const RANK: Record<PetState, number> = { waiting: 0, working: 1, asleep: 2 }
 
