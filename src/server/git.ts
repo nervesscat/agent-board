@@ -1016,8 +1016,21 @@ export async function holdsWorkOf(
   const below = [...bases, ...stands]
   // A copy: of the commits only one of the two has (outside the bases and what `other` stands on), a
   // pair with the same change on both sides is marked `=`.
-  const marks = await git(repoPath, ['rev-list', '--cherry-mark', `${ref}...${other}`, '--not', ...below])
-  if (marks.split('\n').some((line) => line.startsWith('='))) return true
+  const marks = await git(repoPath, [
+    'rev-list',
+    '--no-merges',
+    '--cherry-mark',
+    `${ref}...${other}`,
+    '--not',
+    ...below,
+  ])
+  // An empty commit (a "trigger the checks" one) has the empty change, which any two share: it is no copy.
+  for (const line of marks.split('\n'))
+    if (
+      line.startsWith('=') &&
+      (await git(repoPath, ['diff-tree', '--root', '-r', '--no-commit-id', line.slice(1)]))
+    )
+      return true
   // Quick way out: nothing the two share lies outside the bases.
   const shared = await git(repoPath, ['merge-base', '--all', ref, other]).catch(() => '')
   let outside = false

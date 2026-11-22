@@ -213,6 +213,24 @@ describe('holdsOwnWork', () => {
     expect(await holdsWorkOf(repo, sha('twin/a'), sha('twin/c'), [sha('main')], [])).toBe(false)
   })
 
+  it('names no copy for two branches that each hold an empty commit, but still for a copy beside one', async () => {
+    git('checkout', '-q', '-b', 'trig/a', 'main')
+    git('commit', '-q', '--allow-empty', '-m', 'trigger a')
+    git('checkout', '-q', '-b', 'trig/b', 'main')
+    git('commit', '-q', '--allow-empty', '-m', 'trigger b')
+    // Each has a commit of its own beside it, different ones: nothing is shared.
+    commit('trig-a.txt', 'a\n')
+    git('checkout', '-q', 'trig/a')
+    commit('trig-a2.txt', 'a2\n')
+    expect(await holdsWorkOf(repo, sha('trig/a'), sha('trig/b'), [sha('main')], [])).toBe(false)
+    expect(await holdsWorkOf(repo, sha('trig/b'), sha('trig/a'), [sha('main')], [])).toBe(false)
+    // A real copy next to an empty commit is still named.
+    git('checkout', '-q', '-b', 'trig/c', 'main')
+    git('commit', '-q', '--allow-empty', '-m', 'trigger c')
+    git('cherry-pick', sha('trig/a~0'))
+    expect(await holdsWorkOf(repo, sha('trig/c'), sha('trig/a'), [sha('main')], [])).toBe(true)
+  })
+
   it('names no copy of what a base already holds, nor of what the other branch stands on', async () => {
     // a's commit went into main as a copy (rebased, landed); b took main in: b holds main's copy, not a's work.
     branch('landed/a', 'main')
