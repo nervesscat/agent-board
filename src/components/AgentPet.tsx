@@ -27,7 +27,7 @@ export function AgentPet({
   state: PetState
   /** A subagent: the same character, at two thirds of the size. */
   small?: boolean
-  /** Its place in the strip: shifts its animation so they do not all move together. */
+  /** Its place in the grid: shifts its animation so they do not all move together. */
   index?: number
   className?: string
 }) {
