@@ -742,7 +742,9 @@ agent-only route, so a human gets 403 and a call with `as` is refused, and a tes
 no `as` for it. With sign-in off the sign-in pages go to `/` and `/api/auth/*` answers 409. Test mode
 alone also answers `POST /api/test/jobs {projectId, steps?, ms?, fail?}` (202 with the running job):
 a slow job for the browser tests to watch, ticking a step at a time and ending succeeded, or failed
-with `fail`; anywhere else it is a 404. To try a branch without signing in:
+with `fail`; anywhere else it is a 404. It also answers `POST /api/test/alerts {projectId|null, title,
+subject?, severity?, body?, seen?}` (201 with the row): an alert of a test type written by hand, with a link, a
+copy and an action button, for the browser tests of the notification center. To try a branch without signing in:
 
 ```
 AUTH=off pnpm dev                       # in a worktree: a preview on the first free port from 47101, with a copy of the data
@@ -993,6 +995,7 @@ menu, the cards of its Overview (and of its block on Home) and the sections of a
 its main or its side column. Each is a tile on a small picture of those pages: its switch hides it,
 dragging it or its arrows move it, and Save applies it to everyone; Reset to default goes back to the
 defaults. A hidden page leaves the menu but still opens by its link. The Overview's cards are Needs you,
+Agents at work (one tiny pixel-art pet per agent on a ticket right now, read from the live work, each linking to its ticket, in a grid on a wide screen and a column on a phone),
 In progress, Done today, Next, Carrying over and Notes: the project's short shared facts (a command, a
 path, a rule, a reminder), pinned first, edited in place or in its manage dialog. The landing page, the board and
 the Settings page, and the ticket sections that links lead to (instructions, tasks, activity)
@@ -1059,6 +1062,61 @@ they are a day old, every hour in the background (the file from disk or the buck
 then the row; a file the store cannot delete keeps its row for the next run). Younger files are never
 touched: they may be an upload about to be attached. **Delete now** on the Cleanup page runs it at
 once. A `pnpm dev` copy on `STORAGE=s3` shares the bucket with the live board, so it deletes nothing.
+
+## Notifications
+
+The bell in the top bar is the one place for what needs the human's eye in the project the page is in.
+One list, newest first, carries three kinds of item, all with a severity mark (info, warning or problem):
+
+- **Jobs**: long operations the board runs itself, such as a Cleanup delete, with a progress bar and
+  their outcome. They live in memory and a restart drops them.
+- **Agent cards**: a tracked request an agent opened because you asked to watch something ("You asked:
+  ..."), and an important notice. Both are stored and stay until you dismiss them.
+- **Alerts**: things the board notices by itself, each with a title, a line saying what to do, buttons
+  and a "New" dot until you have seen it.
+
+The badge counts what is new, running or a notice, coloured by the worst severity among them. Opening
+the panel marks its alerts seen after a moment; a new alert raises one toast. On an alert, a button is a
+link into the board, a command to copy, or an action the board runs for you. **Snooze** hides it for an
+hour, a day or a week, **X** dismisses it, and **Mute this kind in this project** hides every alert of
+that type in the project. Project settings has a **Notifications** section listing every alert type by
+group with a switch for each. Muting only hides: the board keeps watching, and other projects keep
+their own choice. Nothing leaves the board: no desktop or phone notification is sent.
+
+An alert is a row for one condition (project, type, subject). A background run checks every type a
+minute apart (and shortly after start); a condition that stops holding resolves its row, and one that
+returns later is new again, with its snooze and dismissal cleared (a type can keep the dismissal for
+good, "do not ask again"). A check that fails or takes over ten seconds is logged and its alerts are
+left as they are. An alert with no project is board-wide and shows in every project. Only the human
+sees and acts on alerts: an agent's list has its own jobs and cards only, and an agent that calls an
+action route gets 403. Agents still read and dismiss their cards with the MCP tools
+`list_notifications` and `dismiss_notification`.
+
+Every alert type is one entry of the registry (`src/server/alerts/registry.ts`) in the file of its
+group: `setup.ts`, `work.ts`, `machine.ts` or `housekeeping.ts`. It names its group, label, one-line
+description for the mute list, scope (per project or board-wide), a `check` that returns the alerts
+that hold right now, the handlers of its action buttons, its snooze options, and whether it can be
+dismissed. A test adds a type with `registerForTest`.
+
+The alerts the board raises today, by group (a type that only fits some boards says when; each can be
+muted per project):
+
+- **Setup and versions**: skills were updated (the Update button lists the files that differ), a repo's
+  own review skills were updated, a newer board release is available (desktop app), release due (tickets
+  waiting in the Release stage for 3 days or 5 tickets), an agent token about to expire or expired, a
+  downloaded update that needs a manual step (desktop app), a repo without the board skills, and git,
+  node or pnpm missing, not runnable or too old (Check again).
+- **Work**: a decision waiting too long, a ticket stalled or an agent that lost contact, an approved PR that
+  cannot merge, PR checks failed or the branch out of date, a blocked task waiting on you, a review ready
+  for your verdict, an archive request (Archive or Keep it), the Needs-you digest, a PR waiting on you in
+  the PR queue (Release the hold), no agent calling in while tickets wait in To do, and work that exists
+  only on this machine (Ask the agent to push).
+- **This machine**: the agent CLI missing, too old or refused login, GitHub access, leftover processes
+  (Stop), disk, load and memory, a preview stopped by a restart (Restart), a migration applied at startup,
+  only one passkey, a sign-in from a new device and a tailnet entrance that does not answer (only when the
+  board is reachable beyond this machine), the preview limit reached (Stop the oldest and start this one)
+  and file storage that does not answer (S3 only).
+- **Housekeeping**: cleanup ready, report due, and report generation failed (Try again).
 
 ## Reviews
 
@@ -1197,6 +1255,15 @@ one (`\t`, `\n`, `\r`, `\b`, `\f`) the string silently changes. `\u005c` survive
 | POST         | `/api/projects/:id/cleanup/delete` `{items: [{ticketId, branch, kind, sha, worktrees?}]}`                           | delete closed tickets' worked branches, `kind` `local`, `remote` (on origin) or `worktrees` (its worktrees, then the local branch), `sha` the commit seen: an agent may ask for `local` alone, and a request of theirs with anything else in it is 403 whole, as an unknown project is 404, both before anything runs; each item is checked again first, the same for agents (MCP `cleanup_delete` waits for the answer) and logged under whoever asked. Answers `202` with the running job at once (`kind` `cleanup-delete`, `total` the items, `href` the Cleanup page): it reports each item as it lands (`done`, `step` `#12 lane/47: deleted`) and ends `succeeded` with the items' outcomes in the order asked as its `result`, or `failed` with the reason; follow it with `GET /api/projects/:id/jobs` |
 | GET          | `/api/projects/:id/jobs`                                                                                            | the project's in-memory jobs, newest first: `{id, kind, title, projectId, actor, total, done, state, step, reason, startedAt, finishedAt, href, result}`; `state` is `running`, `succeeded` or `failed`; the human sees every job of the project, an agent only its own there; finished ones stay ten minutes and at most twenty stand a project (the oldest finished make room); reads only; a Cleanup delete's job (`kind` `cleanup-delete`) carries the items' `{ok, outcome, reason, removed, unlinked, restore}`, in the order asked, as its `result` |
 | DELETE       | `/api/jobs/:id`                                                                                                     | dismiss one job for every caller (a running one is hidden, its work goes on): `{ok: true}`; 404 for an unknown job or one the caller may not see (another project's or another agent's)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| GET          | `/api/projects/:id/notifications`                                                                                   | the bell's one list, newest first: the project's jobs, agent cards and active alerts as items `{key, source: job\|tracked\|notice\|alert, id, type?, severity: info\|warning\|problem, title, body?, href?, at, isNew, buttons, progress?, state?, group?, details?, dismissible, snoozeOptions, mutable}`, a job or card also carrying itself as `job` or `card`; an alert is on show while it is not resolved, dismissed, snoozed or muted in the project, a board-wide one included. An agent gets its own jobs and cards and no alerts; reads only |
+| POST         | `/api/projects/:id/notifications/seen`                                                                              | the human marks every alert on show in the project seen: `{seen}` is how many were new; an agent gets 403                                                                                                                                                                                                       |
+| POST         | `/api/alerts/:id/seen`                                                                                              | the human marks one alert seen (`isNew` false); an agent gets 403                                                                                                                                                                                                                                              |
+| POST         | `/api/alerts/:id/dismiss`                                                                                           | the human dismisses one alert while its condition holds; when the condition ends the alert resolves, and it is new again if it returns (a type with sticky dismissals stays dismissed); 409 for a type that cannot be dismissed, 403 for an agent                                                              |
+| POST         | `/api/alerts/:id/snooze` `{ms}`                                                                                     | the human hides one alert for `ms`, one of its `snoozeOptions` (400 otherwise): `{snoozedUntil}`; an agent gets 403                                                                                                                                                                                            |
+| POST         | `/api/alerts/:id/actions/:buttonId`                                                                                 | the human runs the handler behind one of the alert's buttons of kind `action`: `{ok, message, resolved}`; an unknown button is 404, a failing handler 500 with its message, an agent 403                                                                                                                       |
+| GET          | `/api/projects/:id/alert-types`                                                                                     | every alert type: `{type, idea, group, label, description, scope, muted, applies}`, `muted` for this project; the Notifications section of project settings                                                                                                                                                   |
+| PUT          | `/api/projects/:id/alert-mutes/:type`                                                                               | the human mutes one alert type in the project (404 for an unknown type); an agent gets 403                                                                                                                                                                                                                     |
+| DELETE       | `/api/projects/:id/alert-mutes/:type`                                                                               | the human shows the type in the project again; an agent gets 403                                                                                                                                                                                                                                               |
 | GET          | `/api/projects/:id/agent-cards`                                                                                     | the project's agent cards, newest first, in the top bar beside the jobs: tracked requests (`kind: tracked`, with `request`, `total`, `done`, `state` running/succeeded/failed, `step`, `reason`, `result`, `finishedAt`; `stale: true` when a running one has not moved for six hours) and notices (`kind: notice`, with `body` and the `reason` it cannot wait); both carry `actor`, `title`, `href` and their times. The human sees every card of the project, an agent only its own and its sub-identities' (`<its name>/…`); reads only                                                                                                                                                                                                              |
 | POST         | `/api/projects/:id/agent-cards` `{title, request, total?, href?}`                                                   | an agent opens a tracked card for one thing the human asked to watch (MCP `start_tracked_request`): `request` is the human's own words, required (a call without it is 400, as is a title), and makes `You asked: …` on the card; `total` makes a determinate bar; `href` is a board path or an absolute http(s) URL (anything else 400); answers 201 with the card; the human gets 403                                                                                                                                                                                                                              |
 | POST         | `/api/projects/:id/agent-cards/:cardId/progress` `{done?, step?}`                                                   | an agent moves a running tracked card (MCP `tracked_request_progress`): `done` is clamped into the card's `total`, a `step` left out keeps the last one; a card that already ended or a notice is 409, another agent's, another project's or an unknown one 404; the human gets 403                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
