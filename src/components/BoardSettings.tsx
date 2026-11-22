@@ -131,9 +131,20 @@ function Theme() {
 function LanguagePicker() {
   const { t, i18n } = useTranslation()
   const qc = useQueryClient()
+  // The language asked for last: an answer to an earlier ask arriving late (its file was slow) is not the person's choice.
+  const asked = useRef<Language>(undefined)
   const save = useMutation({
-    mutationFn: (language: Language) => patch<{ language: Language }>('/api/me', { language }),
+    // Switched at once, kept on the board meanwhile; the confirmation waits for both, so it is in the new language.
+    mutationFn: async (language: Language) => {
+      asked.current = language
+      const [saved] = await Promise.all([
+        patch<{ language: Language }>('/api/me', { language }),
+        setLanguage(language),
+      ])
+      return saved
+    },
     onSuccess: ({ language }) => {
+      if (language !== asked.current) return
       qc.setQueryData<Me>(['me'], (me) => (me ? { ...me, language } : me))
       // The page was drawn again in the new language: this render's `t` is the old one.
       toast.success(shared.t('common.saved'))
@@ -141,10 +152,11 @@ function LanguagePicker() {
     onError: (err) => toast.error(errorMessage(err)),
   })
   const showing = i18n.language as Language
-  // The last language picked, which can be one whose file is still loading (`showing` is the one on screen).
-  const picked = useRef(showing)
+  // The last language picked, which can be one whose file is still loading (`showing` is the one on screen): the
+  // dropdown shows the pick at once, and picking the language still on screen again is a new pick.
+  const [picked, setPicked] = useState(showing)
   useEffect(() => {
-    picked.current = showing
+    setPicked(showing)
   }, [showing])
   const [query, setQuery] = useState('')
   const shown = LANGUAGES.filter((code) => languageMatches(code, query))
@@ -153,11 +165,10 @@ function LanguagePicker() {
       <h2 className="text-sm font-medium">{t('settings.board.language.title')}</h2>
       <p className="text-sm text-muted-foreground">{t('settings.board.language.text')}</p>
       <Combobox<Language>
-        value={showing}
+        value={picked}
         onValueChange={(next) => {
-          if (!next || next === picked.current) return
-          picked.current = next
-          void setLanguage(next)
+          if (!next || next === picked) return
+          setPicked(next)
           save.mutate(next)
         }}
         items={LANGUAGES}
