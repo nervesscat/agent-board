@@ -236,10 +236,10 @@ describe('the sign-in pages speak the language of the request', () => {
     expect(await asked('/setup', { cookie: 'lang=en', 'accept-language': 'es' })).toContain(
       '<html lang="en">',
     )
-    const fr = await asked('/setup', { 'accept-language': 'fr-FR,fr;q=0.9' })
-    expect(fr).toContain('<html lang="en">')
-    expect(fr).toContain('Create passkey')
-    expect(await asked('/setup', { cookie: 'lang=fr' })).toContain('<html lang="en">')
+    const arabic = await asked('/setup', { 'accept-language': 'ar-EG,ar;q=0.9' })
+    expect(arabic).toContain('<html lang="en">')
+    expect(arabic).toContain('Create passkey')
+    expect(await asked('/setup', { cookie: 'lang=ar' })).toContain('<html lang="en">')
   })
 
   it('translates the host-only notice and keeps the address in it', async () => {

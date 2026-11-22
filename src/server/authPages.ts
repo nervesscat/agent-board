@@ -1,8 +1,7 @@
 import i18next, { type TFunction } from 'i18next'
 
 import { DEFAULT_LANGUAGE, LANGUAGES, languageOfRequest, type Language } from '#/i18n/languages'
-import en from '#/i18n/locales/en.json' with { type: 'json' }
-import es from '#/i18n/locales/es.json' with { type: 'json' }
+import { translationOf } from '#/i18n/locales'
 import { callerOf, onThisMachine, redirectTo } from './auth'
 import { config } from './config'
 import { LOCAL_RP_ID, localSite, type SignInSite } from './entrance'
@@ -31,7 +30,10 @@ function translator(language: Language): TFunction {
   if (!t) {
     const instance = i18next.createInstance()
     void instance.init({
-      resources: { en: { translation: en }, es: { translation: es } },
+      resources: {
+        en: { translation: translationOf('en')! },
+        [language]: { translation: translationOf(language)! },
+      },
       lng: language,
       fallbackLng: DEFAULT_LANGUAGE,
       supportedLngs: [...LANGUAGES],

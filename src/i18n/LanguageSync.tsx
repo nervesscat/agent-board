@@ -13,7 +13,7 @@ export function LanguageSync() {
   const { data } = useQuery({ queryKey: ['me'], queryFn: () => get<Me>('/api/me'), staleTime: Infinity })
   const picked = data?.language ?? null
   useEffect(() => {
-    if (picked) setLanguage(picked)
+    if (picked) void setLanguage(picked)
   }, [picked])
   return null
 }

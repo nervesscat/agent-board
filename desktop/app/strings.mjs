@@ -1,91 +1,59 @@
-// The desktop app's own texts, English and Spanish. This file is packaged with the app and cannot import
-// from src/, so it has its own small copy of the idea (src/i18n, docs/translating.md: same glossary and
-// same {{placeholders}}). Texts from the board's pages come from the board; these are the tray, the window's
-// menu, the dialogs, the notifications and the page shown while a remote board is away.
+// The desktop app's own texts, one file per language in strings/ (the same twenty as the board's interface,
+// src/i18n/languages.ts; en.mjs is the model). This file is packaged with the app and cannot import from src/,
+// so it has its own small copy of the idea (src/i18n, docs/translating.md: same glossary and same
+// {{placeholders}}). Texts from the board's pages come from the board; these are the tray, the window's menu, the
+// dialogs, the notifications and the page shown while a remote board is away.
 //
 // The language is the board's: its page sets the `lang` cookie in the window's session (main.mjs reads
 // it), and the system's locale decides until there is one.
 
-export const LANGUAGES = ['en', 'es']
+import en from './strings/en.mjs'
+import zh from './strings/zh.mjs'
+import hi from './strings/hi.mjs'
+import es from './strings/es.mjs'
+import fr from './strings/fr.mjs'
+import bn from './strings/bn.mjs'
+import pt from './strings/pt.mjs'
+import ru from './strings/ru.mjs'
+import id from './strings/id.mjs'
+import de from './strings/de.mjs'
+import ja from './strings/ja.mjs'
+import mr from './strings/mr.mjs'
+import vi from './strings/vi.mjs'
+import te from './strings/te.mjs'
+import tr from './strings/tr.mjs'
+import ko from './strings/ko.mjs'
+import ta from './strings/ta.mjs'
+import it from './strings/it.mjs'
+import pl from './strings/pl.mjs'
+import uk from './strings/uk.mjs'
+
+export const LANGUAGES = [
+  'en',
+  'zh',
+  'hi',
+  'es',
+  'fr',
+  'bn',
+  'pt',
+  'ru',
+  'id',
+  'de',
+  'ja',
+  'mr',
+  'vi',
+  'te',
+  'tr',
+  'ko',
+  'ta',
+  'it',
+  'pl',
+  'uk',
+]
 export const DEFAULT_LANGUAGE = 'en'
 
 /** @type {Record<string, Record<string, string>>} */
-export const STRINGS = {
-  en: {
-    open: 'Open',
-    openInBrowser: 'Open in browser',
-    retryNow: 'Retry now',
-    startAtLogin: 'Start at login',
-    quit: 'Quit',
-    openSettings: 'Open the settings file',
-    openLogs: 'Open the logs folder',
-    openHome: 'Open the app folder',
-    startAtLoginFailed: 'Start at login could not be changed.',
-    cannotStart: 'The board cannot start.',
-    settingsInvalid: 'The board’s settings are not valid.',
-    homeUnusable:
-      "The app's folder {{home}} cannot be used: {{error}}\n\nSet AGENT_BOARD_HOME to a folder that can be written, or remove it to use the default.",
-    homeLine: "{{error}}\n\nThe app's folder: {{home}}",
-    dataFolderUnusable:
-      'Its data folder {{dir}} cannot be used: {{error}}\n\nSet another DATA_DIR in {{file}}, or in the environment, and start the app again.',
-    logsLine: '{{detail}}\n\nLogs: {{logs}}',
-    stopped: 'The board stopped.',
-    restartedTimes_one: ' It was started again {{count}} time.',
-    restartedTimes_other: ' It was started again {{count}} times.',
-    noOutput: '(no output)',
-    exitedSignal: 'It was killed by {{signal}} at {{time}}.',
-    exitedCode: 'It exited with code {{code}} at {{time}}.',
-    exited: 'It exited at {{time}}.',
-    reasonCode: 'exit code {{code}}',
-    reasonSignal: 'signal {{signal}}',
-    reasonNone: 'no exit code',
-    tipRestarting: '{{name}}: restarting the board ({{reason}})',
-    tipRestarted: '{{name}}: {{url}} (restarted at {{time}} after {{reason}})',
-    notifyRestarted: 'The board restarted ({{reason}}).',
-    didNotStart: 'The board did not start.',
-    didNotAnswer: 'It did not answer on {{url}} within a minute.',
-    unreachableHeading: 'The board at <code>{{address}}</code> cannot be reached.',
-    unreachableBody:
-      'The board runs on another machine: check that this one is online and that the board is running there. The app tries again by itself, and {{retry}} tries at once.',
-  },
-  es: {
-    open: 'Abrir',
-    openInBrowser: 'Abrir en el navegador',
-    retryNow: 'Reintentar ahora',
-    startAtLogin: 'Iniciar con el sistema',
-    quit: 'Salir',
-    openSettings: 'Abrir el archivo de ajustes',
-    openLogs: 'Abrir la carpeta de registros',
-    openHome: 'Abrir la carpeta de la app',
-    startAtLoginFailed: 'No se pudo cambiar el inicio con el sistema.',
-    cannotStart: 'El tablero no puede iniciarse.',
-    settingsInvalid: 'Los ajustes del tablero no son válidos.',
-    homeUnusable:
-      'La carpeta de la app {{home}} no se puede usar: {{error}}\n\nEstablece AGENT_BOARD_HOME en una carpeta donde se pueda escribir, o quítalo para usar la predeterminada.',
-    homeLine: '{{error}}\n\nLa carpeta de la app: {{home}}',
-    dataFolderUnusable:
-      'Su carpeta de datos {{dir}} no se puede usar: {{error}}\n\nEstablece otro DATA_DIR en {{file}}, o en el entorno, y vuelve a iniciar la app.',
-    logsLine: '{{detail}}\n\nRegistros: {{logs}}',
-    stopped: 'El tablero se detuvo.',
-    restartedTimes_one: ' Se inició de nuevo {{count}} vez.',
-    restartedTimes_other: ' Se inició de nuevo {{count}} veces.',
-    noOutput: '(sin salida)',
-    exitedSignal: 'Lo terminó la señal {{signal}} a las {{time}}.',
-    exitedCode: 'Terminó con el código {{code}} a las {{time}}.',
-    exited: 'Terminó a las {{time}}.',
-    reasonCode: 'código de salida {{code}}',
-    reasonSignal: 'señal {{signal}}',
-    reasonNone: 'sin código de salida',
-    tipRestarting: '{{name}}: reiniciando el tablero ({{reason}})',
-    tipRestarted: '{{name}}: {{url}} (reiniciado a las {{time}} tras {{reason}})',
-    notifyRestarted: 'El tablero se reinició ({{reason}}).',
-    didNotStart: 'El tablero no se inició.',
-    didNotAnswer: 'No respondió en {{url}} en un minuto.',
-    unreachableHeading: 'No se puede llegar al tablero en <code>{{address}}</code>.',
-    unreachableBody:
-      'El tablero se ejecuta en otra máquina: comprueba que esta tenga conexión y que el tablero esté en marcha allí. La app lo reintenta sola, y {{retry}} lo intenta al instante.',
-  },
-}
+export const STRINGS = { en, zh, hi, es, fr, bn, pt, ru, id, de, ja, mr, vi, te, tr, ko, ta, it, pl, uk }
 
 /**
  * The supported language a tag or locale asks for (`es-MX`, `es_ES` and `es` are Spanish), if any.
@@ -96,7 +64,8 @@ export function languageOfTag(tag) {
     .trim()
     .toLowerCase()
     .split(/[-_]/)[0]
-  return LANGUAGES.find((l) => l === primary)
+  // The old code of Indonesian (`in`); every Chinese locale (zh-CN, zh-TW) reads the Simplified text.
+  return LANGUAGES.find((l) => l === (primary === 'in' ? 'id' : primary))
 }
 
 /**

@@ -32,14 +32,17 @@ describe('the desktop app strings', () => {
     expect(t('es', 'reasonCode', { code: 3 })).toBe('código de salida 3')
     expect(t('en', 'restartedTimes', { count: 1 })).toBe(' It was started again 1 time.')
     expect(t('es', 'restartedTimes', { count: 2 })).toBe(' Se inició de nuevo 2 veces.')
-    expect(t('fr', 'quit')).toBe('Quit')
+    expect(t('ar', 'quit')).toBe('Quit')
     expect(t('es', 'nothing')).toBe('nothing')
   })
 
   it('pick the board language first, then the system locale, then English', () => {
     expect(resolveLanguage('es', 'en-US')).toBe('es')
     expect(resolveLanguage(undefined, 'es-MX')).toBe('es')
-    expect(resolveLanguage('xx', 'fr')).toBe(DEFAULT_LANGUAGE)
+    expect(resolveLanguage('xx', 'ar')).toBe(DEFAULT_LANGUAGE)
+    expect(resolveLanguage(undefined, 'zh-TW')).toBe('zh')
+    expect(resolveLanguage(undefined, 'pt-BR')).toBe('pt')
+    expect(resolveLanguage('ja', 'es')).toBe('ja')
     expect(resolveLanguage(undefined, undefined)).toBe('en')
   })
 

@@ -3,7 +3,7 @@ import { createRouter } from '@tanstack/react-router'
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
 
 import { initialLanguage } from './i18n/initial'
-import { createI18n, shared } from './i18n'
+import { createI18n, shared, showLanguage } from './i18n'
 import { followHistory } from './lib/reveal'
 import { routeTree } from './routeTree.gen'
 
@@ -12,7 +12,7 @@ export function getRouter() {
   // started in the language the server's page was drawn in, so what it draws first matches that page.
   const language = initialLanguage()
   const i18n = typeof window === 'undefined' ? createI18n(language) : shared
-  if (typeof window !== 'undefined' && i18n.language !== language) void i18n.changeLanguage(language)
+  if (typeof window !== 'undefined' && i18n.language !== language) void showLanguage(i18n, language)
   const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 5_000, retry: 1 } } })
   const router = createRouter({
     routeTree,

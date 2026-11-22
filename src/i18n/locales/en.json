@@ -54,7 +54,9 @@
       },
       "language": {
         "title": "Language",
-        "text": "The language of the whole interface, dates and numbers included. It is kept on the board, so it follows you to every device you sign in from. What people and agents write stays as it was written."
+        "text": "The language of the whole interface, dates and numbers included. It is kept on the board, so it follows you to every device you sign in from. What people and agents write stays as it was written.",
+        "search": "Search languages",
+        "none": "No language matches"
       }
     }
   },

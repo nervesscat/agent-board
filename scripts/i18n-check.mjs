@@ -88,13 +88,27 @@ const VOID_TAGS = new Set([
   'wbr',
 ])
 
+const FORMS = ['zero', 'one', 'two', 'few', 'many', 'other']
 const base = (key) => key.replace(PLURAL, '')
+
+/**
+ * The plural forms a language writes: `required` are the ones a whole number up to a thousand falls in
+ * (Russian: one, few, many, other; Japanese: other; Spanish: one, other), `allowed` all the ones the
+ * language has (Spanish also has `many`, for millions, which a count here never reaches).
+ */
+export function pluralForms(language) {
+  const rules = new Intl.PluralRules(language)
+  const seen = new Set(['other'])
+  for (let n = 0; n <= 1000; n++) seen.add(rules.select(n))
+  const inOrder = (forms) => new Set(FORMS.filter((f) => forms.has(f)))
+  return { required: inOrder(seen), allowed: inOrder(new Set(rules.resolvedOptions().pluralCategories)) }
+}
 const placeholders = (text) =>
   [...String(text).matchAll(/\{\{\s*([\w.]+)\s*(?:,[^}]*)?\}\}/g)].map((m) => m[1]).sort()
 const tags = (text) => [...String(text).matchAll(/<\/?(\w+)\s*\/?>/g)].map((m) => m[1]).sort()
 
 /** The problems of `other` against the model `en`, as readable lines; none when they agree. */
-export function compareLocales(en, other, name) {
+export function compareLocales(en, other, name, language = name) {
   const problems = []
   const a = flatten(en)
   const b = flatten(other)
@@ -116,10 +130,25 @@ export function compareLocales(en, other, name) {
           problems.push(
             `${lang}: ${key} uses <${tag}>, an HTML void element that loses its text: pick another tag name`,
           )
+  const { required, allowed } = pluralForms(language)
   for (const k of aBases) {
     const pluralOf = (flat) => Object.keys(flat).filter((x) => base(x) === k && PLURAL.test(x))
-    if (pluralOf(a).length && !pluralOf(b).some((x) => x.endsWith('_other')))
-      problems.push(`${name}: ${k} has no _other form`)
+    const model = pluralOf(a)
+    const forms = pluralOf(b).map((x) => x.match(PLURAL)[1])
+    if (!bBases.has(k)) continue
+    if (!model.length) {
+      // English says the same for every count ("{{count}} blocked"): a language that inflects it has its forms.
+      if (!forms.length) continue
+      if (!placeholders(a[k] ?? '').includes('count'))
+        problems.push(`${name}: ${k} is plural here but has no {{count}} in the English file`)
+    } else if (!forms.length) {
+      problems.push(`${name}: ${k} has no plural forms (it needs ${[...required].join(', ')})`)
+      continue
+    }
+    for (const form of required)
+      if (!forms.includes(form)) problems.push(`${name}: ${k} has no _${form} form, which ${language} needs`)
+    for (const form of forms)
+      if (!allowed.has(form)) problems.push(`${name}: ${k}_${form} is a form ${language} does not have`)
   }
   for (const [key, text] of Object.entries(b)) {
     const model = a[key] ?? a[`${base(key)}_other`] ?? a[base(key)]
@@ -145,13 +174,13 @@ export const DESKTOP_STRINGS = path.join(root, 'desktop/app/strings.mjs')
 export async function checkDesktopStrings(file = DESKTOP_STRINGS) {
   const { STRINGS } = await import(pathToFileURL(file).href)
   const { en, ...rest } = STRINGS
-  return Object.entries(rest).flatMap(([name, table]) => compareLocales(en, table, `desktop ${name}`))
+  return Object.entries(rest).flatMap(([name, table]) => compareLocales(en, table, `desktop ${name}`, name))
 }
 
 export function checkLocales(locales = readLocales()) {
   const { en, ...rest } = locales
   if (!en) return ['the English file (en.json) is missing']
-  return Object.entries(rest).flatMap(([name, tree]) => compareLocales(en, tree, name))
+  return Object.entries(rest).flatMap(([name, tree]) => compareLocales(en, tree, name, name))
 }
 
 /** The hard-coded texts of one component's source: `[{ line, text }]`. */
@@ -275,13 +304,23 @@ export function allHardcoded() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const problems = [...checkLocales(), ...(await checkDesktopStrings()), ...checkComponents()]
+  // `--lang <code>`: only that language's file and its desktop table, for whoever is writing one.
+  const at = process.argv.indexOf('--lang')
+  const only = at > 0 ? process.argv[at + 1] : undefined
+  const keep = (problem) => !only || problem.startsWith(`${only}:`) || problem.startsWith(`desktop ${only}:`)
+  const problems = [
+    ...checkLocales(),
+    ...(await checkDesktopStrings()),
+    ...(only ? [] : checkComponents()),
+  ].filter(keep)
   if (problems.length) {
     console.error(problems.join('\n'))
     console.error(`\n${problems.length} translation problem(s).`)
     process.exit(1)
   }
   console.log(
-    `i18n: ${Object.keys(readLocales()).join(', ')} agree; ${pendingFiles().length} component file(s) pending.`,
+    only
+      ? `i18n: ${only} agrees with en (keys, placeholders, tags, plural forms), desktop table too.`
+      : `i18n: ${Object.keys(readLocales()).join(', ')} agree; ${pendingFiles().length} component file(s) pending.`,
   )
 }

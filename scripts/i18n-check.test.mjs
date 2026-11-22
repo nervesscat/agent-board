@@ -7,8 +7,10 @@ import {
   compareLocales,
   findHardcoded,
   flatten,
+  pluralForms,
   readLocales,
 } from './i18n-check.mjs'
+import { LANGUAGES } from '../src/i18n/languages'
 
 describe('every language has every text', () => {
   const en = { a: 'A', b: { c: 'Hello {{name}}', d_one: '{{count}} item', d_other: '{{count}} items' } }
@@ -34,7 +36,7 @@ describe('every language has every text', () => {
   it('catches a placeholder or a tag that does not match, and a plural with no _other', () => {
     const es = { a: 'A <b>x</b>', b: { c: 'Hola {{nombre}}', d_one: '{{count}} cosa' } }
     expect(compareLocales(en, es, 'es')).toEqual([
-      'es: b.d has no _other form',
+      'es: b.d has no _other form, which es needs',
       'es: a uses other <tags> than the English text',
       'es: b.c uses other {{placeholders}} than the English text',
     ])
@@ -51,8 +53,68 @@ describe('every language has every text', () => {
     ).toEqual([])
   })
 
-  it("passes on the app's own translation files", () => {
-    expect(Object.keys(readLocales()).sort()).toEqual(['en', 'es'])
+  it('asks each language for the plural forms it writes', () => {
+    const enPlural = { n_one: '{{count}} item', n_other: '{{count}} items' }
+    expect(pluralForms('en').required).toEqual(new Set(['one', 'other']))
+    expect(pluralForms('ja').required).toEqual(new Set(['other']))
+    expect(pluralForms('ru').required).toEqual(new Set(['one', 'few', 'many', 'other']))
+    expect(pluralForms('pl').required).toEqual(new Set(['one', 'few', 'many', 'other']))
+    expect(pluralForms('uk').required).toEqual(new Set(['one', 'few', 'many', 'other']))
+    expect(pluralForms('fr').allowed.has('many')).toBe(true)
+    const ru = {
+      n_one: '{{count}} штука',
+      n_few: '{{count}} штуки',
+      n_many: '{{count}} штук',
+      n_other: '{{count}} штуки',
+    }
+    expect(compareLocales(enPlural, ru, 'ru')).toEqual([])
+    // Russian with only one and other: few and many are missing.
+    expect(compareLocales(enPlural, { n_one: '{{count}} штука', n_other: '{{count}} штук' }, 'ru')).toEqual([
+      'ru: n has no _few form, which ru needs',
+      'ru: n has no _many form, which ru needs',
+    ])
+    // Japanese has one form: `_other`; a `_one` is a form it does not have.
+    expect(compareLocales(enPlural, { n_other: '{{count}}個' }, 'ja')).toEqual([])
+    expect(compareLocales(enPlural, { n_one: '{{count}}個', n_other: '{{count}}個' }, 'ja')).toEqual([
+      'ja: n_one is a form ja does not have',
+    ])
+    // A plural key written as one text is not a plural.
+    expect(compareLocales(enPlural, { n: '{{count}}' }, 'ru')).toEqual([
+      'ru: n has no plural forms (it needs one, few, many, other)',
+    ])
+  })
+
+  it('lets a language inflect a text English says the same for every count, and only then', () => {
+    const en = { w: '{{count}} waiting', plain: 'Waiting' }
+    const ru = {
+      w_one: '{{count}} ждёт',
+      w_few: '{{count}} ждут',
+      w_many: '{{count}} ждут',
+      w_other: '{{count}} ждут',
+      plain: 'Ждёт',
+    }
+    expect(compareLocales(en, ru, 'ru')).toEqual([])
+    expect(compareLocales(en, { w: '{{count}} ждут', plain: 'Ждёт' }, 'ru')).toEqual([])
+    expect(
+      compareLocales(
+        en,
+        {
+          w: '{{count}} ждут',
+          plain_one: 'Ждёт',
+          plain_few: 'Ждёт',
+          plain_many: 'Ждёт',
+          plain_other: 'Ждёт',
+        },
+        'ru',
+      ),
+    ).toEqual(['ru: plain is plural here but has no {{count}} in the English file'])
+  })
+
+  it("has a file for each of the board's languages, and nothing else", () => {
+    expect(Object.keys(readLocales()).sort()).toEqual([...LANGUAGES].sort())
+  })
+
+  it("passes on the app's own translation files: every language has exactly en.json's keys, placeholders, tags and plural forms", () => {
     expect(checkLocales()).toEqual([])
   })
 

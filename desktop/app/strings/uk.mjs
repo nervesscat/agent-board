@@ -1,0 +1,38 @@
+// The desktop app's own texts in uk (see ../strings.mjs). Every key of en.mjs, the same {{placeholders}} and <tags>.
+export default {
+  open: 'Open',
+  openInBrowser: 'Open in browser',
+  retryNow: 'Retry now',
+  startAtLogin: 'Start at login',
+  quit: 'Quit',
+  openSettings: 'Open the settings file',
+  openLogs: 'Open the logs folder',
+  openHome: 'Open the app folder',
+  startAtLoginFailed: 'Start at login could not be changed.',
+  cannotStart: 'The board cannot start.',
+  settingsInvalid: 'The board’s settings are not valid.',
+  homeUnusable:
+    "The app's folder {{home}} cannot be used: {{error}}\n\nSet AGENT_BOARD_HOME to a folder that can be written, or remove it to use the default.",
+  homeLine: "{{error}}\n\nThe app's folder: {{home}}",
+  dataFolderUnusable:
+    'Its data folder {{dir}} cannot be used: {{error}}\n\nSet another DATA_DIR in {{file}}, or in the environment, and start the app again.',
+  logsLine: '{{detail}}\n\nLogs: {{logs}}',
+  stopped: 'The board stopped.',
+  restartedTimes_one: ' It was started again {{count}} time.',
+  restartedTimes_other: ' It was started again {{count}} times.',
+  noOutput: '(no output)',
+  exitedSignal: 'It was killed by {{signal}} at {{time}}.',
+  exitedCode: 'It exited with code {{code}} at {{time}}.',
+  exited: 'It exited at {{time}}.',
+  reasonCode: 'exit code {{code}}',
+  reasonSignal: 'signal {{signal}}',
+  reasonNone: 'no exit code',
+  tipRestarting: '{{name}}: restarting the board ({{reason}})',
+  tipRestarted: '{{name}}: {{url}} (restarted at {{time}} after {{reason}})',
+  notifyRestarted: 'The board restarted ({{reason}}).',
+  didNotStart: 'The board did not start.',
+  didNotAnswer: 'It did not answer on {{url}} within a minute.',
+  unreachableHeading: 'The board at <code>{{address}}</code> cannot be reached.',
+  unreachableBody:
+    'The board runs on another machine: check that this one is online and that the board is running there. The app tries again by itself, and {{retry}} tries at once.',
+}

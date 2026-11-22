@@ -10,7 +10,17 @@ import { Devices } from '#/components/Devices'
 import { TailnetEntrance } from '#/components/TailnetEntrance'
 import { PreviewLimitEditor } from '#/components/Preview'
 import { Updates } from '#/components/Updates'
-import { LANGUAGES, LANGUAGE_NAME, setLanguage, shared, type Language } from '#/i18n'
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxScroller,
+  ComboboxTrigger,
+  ComboboxValue,
+} from '#/components/ui/combobox'
+import { LANGUAGES, LANGUAGE_ENGLISH_NAME, LANGUAGE_NAME, setLanguage, shared, type Language } from '#/i18n'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { errorMessage, get, type Me, patch } from '#/lib/api'
 import { useAnchor, useReveal } from '#/lib/reveal'
@@ -130,29 +140,69 @@ function LanguagePicker() {
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
-  const showing = i18n.language
+  const showing = i18n.language as Language
+  const [query, setQuery] = useState('')
+  const shown = LANGUAGES.filter((code) => languageMatches(code, query))
   return (
     <section id="language" className="scroll-mt-16 space-y-2">
       <h2 className="text-sm font-medium">{t('settings.board.language.title')}</h2>
       <p className="text-sm text-muted-foreground">{t('settings.board.language.text')}</p>
-      <Tabs
+      <Combobox<Language>
         value={showing}
-        onValueChange={(value) => {
-          const next = LANGUAGES.find((l) => l === value)
-          if (!next) return
-          setLanguage(next)
+        onValueChange={(next) => {
+          if (!next || next === showing) return
+          void setLanguage(next)
           save.mutate(next)
         }}
+        items={LANGUAGES}
+        filteredItems={shown}
+        inputValue={query}
+        onInputValueChange={setQuery}
+        // Closed, the search goes.
+        onOpenChangeComplete={(isOpen) => {
+          if (!isOpen) setQuery('')
+        }}
+        itemToStringLabel={(code) => LANGUAGE_NAME[code]}
+        itemToStringValue={(code) => code}
       >
-        <TabsList aria-label={t('settings.board.language.title')}>
-          {LANGUAGES.map((value) => (
-            // Each language in its own words, whatever the page is in: findable by whoever cannot read it.
-            <TabsTrigger key={value} value={value} lang={value}>
-              {LANGUAGE_NAME[value]}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+        <ComboboxTrigger
+          id="language-select"
+          aria-label={t('settings.board.language.title')}
+          className="w-60 max-w-full"
+        >
+          <ComboboxValue>
+            {/* Each language in its own words, whatever the page is in: findable by whoever cannot read it. */}
+            {(code: Language) => <span lang={code}>{LANGUAGE_NAME[code]}</span>}
+          </ComboboxValue>
+        </ComboboxTrigger>
+        <ComboboxContent aria-label={t('settings.board.language.title')}>
+          <ComboboxInput
+            placeholder={t('settings.board.language.search')}
+            aria-label={t('settings.board.language.search')}
+          />
+          <ComboboxScroller>
+            <ComboboxList>
+              {shown.map((code) => (
+                <ComboboxItem key={code} value={code} lang={code}>
+                  {LANGUAGE_NAME[code]}
+                </ComboboxItem>
+              ))}
+            </ComboboxList>
+            {shown.length === 0 && (
+              <p className="px-1.5 py-1 text-sm text-muted-foreground">{t('settings.board.language.none')}</p>
+            )}
+          </ComboboxScroller>
+        </ComboboxContent>
+      </Combobox>
     </section>
   )
+}
+
+const plain = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+
+/** Whether a language answers a search: by its own name, its English name or its code ("deutsch", "german", "de"). */
+export function languageMatches(code: Language, query: string): boolean {
+  const q = plain(query.trim())
+  if (!q) return true
+  return [LANGUAGE_NAME[code], LANGUAGE_ENGLISH_NAME[code], code].some((name) => plain(name).includes(q))
 }

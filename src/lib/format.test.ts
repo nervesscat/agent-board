@@ -82,11 +82,11 @@ describe('times, dates and numbers follow the language', () => {
 
   it("keeps a browser's own formats when it speaks no language the board has", async () => {
     const iso = '2026-03-05T15:30:00'
-    await at('en', ['de-DE', 'fr'])
+    await at('en', ['nl-NL', 'sv'])
     expect(clock(iso)).toMatch(/15:30/)
     expect(formatNumber(1234.5)).toBe('1.234,5')
     // The Spanish interface keeps Spanish formats whatever the browser speaks.
-    await at('es', ['de-DE'])
+    await at('es', ['nl-NL'])
     expect(formatNumber(1234.5)).toBe('1234,5')
     expect(stamp(iso)).toMatch(/5 mar 2026/)
     // A Spanish browser picks Spanish; a pick of English over it keeps English formats.

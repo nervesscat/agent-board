@@ -60,7 +60,7 @@ describe('the language of the interface, per person', () => {
   })
 
   it('takes a supported language only', async () => {
-    for (const bad of ['fr', '', 'ES', 1, undefined]) {
+    for (const bad of ['ar', '', 'ES', 1, undefined]) {
       const res = await call('PATCH', 'human:luis', { language: bad })
       expect(res.status, String(bad)).toBe(400)
     }
