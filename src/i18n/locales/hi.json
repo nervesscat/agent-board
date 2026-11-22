@@ -2118,7 +2118,7 @@
     "statusMerged": "#{{id}} पर निर्भर · merge हुआ",
     "statusNotMerged": "#{{id}} पर निर्भर · अभी merge नहीं",
     "removeNeed": "#{{id}} की निर्भरता हटाएँ",
-    "addPlaceholder": "वह ticket जोड़ें जो पहले merge होना चाहिए…",
+    "addPlaceholder": "ticket जोड़ें…",
     "noOthers": "कोई और ticket नहीं",
     "includes": "<goto>{{ref}}</goto> का बिना merge काम शामिल है",
     "cannotBeDone": "#{{id}} तब तक पूर्ण नहीं हो सकता जब तक #{{need}} की branch उसके बेस में merge न हो",

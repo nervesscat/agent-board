@@ -23,7 +23,7 @@ import {
 import { LANGUAGES, LANGUAGE_ENGLISH_NAME, LANGUAGE_NAME, setLanguage, shared, type Language } from '#/i18n'
 import { loadTranslation } from '#/i18n/locales'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
-import { ApiError, errorMessage, get, type Me, patch } from '#/lib/api'
+import { errorMessage, get, type Me, patch } from '#/lib/api'
 import { useAnchor, useReveal } from '#/lib/reveal'
 import { THEMES, readTheme, setTheme, type Theme } from '#/lib/theme'
 import type { Settings } from '#/server/agents'
@@ -125,6 +125,9 @@ function Theme() {
   )
 }
 
+/** The file of the language picked could not be fetched (as opposed to a failure to keep the choice on the board). */
+class LanguageLoadError extends Error {}
+
 /**
  * The language of the interface: kept on the board for the person (it follows them to every device) and
  * applied at once, with no reload. Until one is picked the browser's decides, and that is what shows here.
@@ -139,7 +142,9 @@ function LanguagePicker() {
     mutationFn: async (language: Language) => {
       asked.current = language
       // First the language's file: when it cannot come (offline), nothing changes and nothing is saved.
-      await loadTranslation(language)
+      await loadTranslation(language).catch(() => {
+        throw new LanguageLoadError()
+      })
       // A later pick took over while it loaded: only the last one is applied and kept.
       if (asked.current !== language) return { language }
       const [saved] = await Promise.all([
@@ -157,7 +162,9 @@ function LanguagePicker() {
     onError: (err) => {
       // The pick did not happen: the dropdown goes back to the language on screen.
       setPicked(i18n.language as Language)
-      toast.error(err instanceof ApiError ? errorMessage(err) : shared.t('settings.board.language.failed'))
+      toast.error(
+        err instanceof LanguageLoadError ? shared.t('settings.board.language.failed') : errorMessage(err),
+      )
     },
   })
   const showing = i18n.language as Language

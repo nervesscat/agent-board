@@ -62,7 +62,7 @@ function RunReportsPage() {
           onValueChange={(v) => filter({ agent: v === 'all' ? undefined : (v ?? undefined) })}
           items={[{ value: 'all', label: t('runReport.allAgents') }, ...agents]}
         >
-          <SelectTrigger className="w-40" aria-label={t('runReport.agent')}>
+          <SelectTrigger className="min-w-40" aria-label={t('runReport.agent')}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

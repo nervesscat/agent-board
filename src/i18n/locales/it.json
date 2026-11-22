@@ -2118,7 +2118,7 @@
     "statusMerged": "Richiede #{{id}} · integrato",
     "statusNotMerged": "Richiede #{{id}} · non ancora integrato",
     "removeNeed": "Rimuovi la dipendenza da #{{id}}",
-    "addPlaceholder": "Aggiungi un ticket di cui fare prima il merge…",
+    "addPlaceholder": "Aggiungi ticket…",
     "noOthers": "Nessun altro ticket",
     "includes": "Include lavoro non integrato da <goto>{{ref}}</goto>",
     "cannotBeDone": "#{{id}} non può essere fatto finché il branch di #{{need}} non è integrato nella sua base",

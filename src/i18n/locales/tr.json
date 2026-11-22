@@ -2118,7 +2118,7 @@
     "statusMerged": "Bağımlı #{{id}} · merge edildi",
     "statusNotMerged": "Bağımlı #{{id}} · henüz merge edilmedi",
     "removeNeed": "#{{id}} bağımlılığını kaldır",
-    "addPlaceholder": "Önce merge edilmesi gereken bir ticket ekle…",
+    "addPlaceholder": "Ticket ekle…",
     "noOthers": "Başka ticket yok",
     "includes": "<goto>{{ref}}</goto> ticket'ından merge edilmemiş iş içerir",
     "cannotBeDone": "#{{id}}, #{{need}} numaralı ticket'ın branch'i base'ine merge edilmeden bitirilemez",

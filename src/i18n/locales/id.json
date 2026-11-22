@@ -2053,7 +2053,7 @@
     "statusMerged": "Butuh #{{id}} · di-merge",
     "statusNotMerged": "Butuh #{{id}} · belum di-merge",
     "removeNeed": "Hapus kebutuhan akan #{{id}}",
-    "addPlaceholder": "Tambah tiket yang harus di-merge dulu…",
+    "addPlaceholder": "Tambah tiket…",
     "noOthers": "Tidak ada tiket lain",
     "includes": "Mencakup pekerjaan belum di-merge dari <goto>{{ref}}</goto>",
     "cannotBeDone": "#{{id}} tidak bisa selesai sampai branch #{{need}} di-merge ke dasarnya",

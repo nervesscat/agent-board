@@ -2118,7 +2118,7 @@
     "statusMerged": "Dépend de #{{id}} · fusionné",
     "statusNotMerged": "Dépend de #{{id}} · pas encore fusionné",
     "removeNeed": "Retirer la dépendance à #{{id}}",
-    "addPlaceholder": "Ajouter un ticket à fusionner d’abord…",
+    "addPlaceholder": "Ajouter un ticket…",
     "noOthers": "Aucun autre ticket",
     "includes": "Inclut du travail non fusionné de <goto>{{ref}}</goto>",
     "cannotBeDone": "#{{id}} ne peut pas être terminé tant que la branche de #{{need}} n’est pas fusionnée dans sa base",

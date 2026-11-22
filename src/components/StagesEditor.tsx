@@ -124,7 +124,7 @@ export function StagesEditor({ projectId }: { projectId: string }) {
               items={kindItems}
             >
               <Tip content={t(`stagesEditor.hint.${s.kind}`)}>
-                <SelectTrigger size="sm" className="w-32">
+                <SelectTrigger size="sm" className="min-w-32">
                   <SelectValue />
                 </SelectTrigger>
               </Tip>
@@ -166,7 +166,7 @@ export function StagesEditor({ projectId }: { projectId: string }) {
         />
         <Select value={kind} onValueChange={(k) => k && setKind(k as StageKind)} items={kindItems}>
           <Tip content={t(`stagesEditor.hint.${kind}`)}>
-            <SelectTrigger size="sm" className="w-32">
+            <SelectTrigger size="sm" className="min-w-32">
               <SelectValue />
             </SelectTrigger>
           </Tip>
@@ -229,7 +229,7 @@ function WorkStage({ projectId, stages }: { projectId: string; stages: StageRow[
         items={items}
         disabled={save.isPending}
       >
-        <SelectTrigger size="sm" className="w-64" aria-labelledby="work-stage-label">
+        <SelectTrigger size="sm" className="min-w-64" aria-labelledby="work-stage-label">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

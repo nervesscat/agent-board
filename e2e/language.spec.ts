@@ -275,3 +275,34 @@ test.describe('long translations keep the phone layout', () => {
     })
   }
 })
+
+test('a pick the board cannot keep says so in its own words, not that the language could not load', async ({
+  page,
+}) => {
+  await page.goto('/settings')
+  await page.route('**/api/me', (route) =>
+    route.request().method() === 'PATCH' ? route.abort() : route.continue(),
+  )
+  await choose(page, 'Language', 'Deutsch')
+  await expect(page.locator('[data-sonner-toast]').first()).toBeVisible()
+  await expect(
+    page.locator('[data-sonner-toast]').filter({ hasText: 'Could not load that language' }),
+  ).toHaveCount(0)
+  await expect(
+    page.locator('[data-sonner-toast]').filter({ hasText: 'Diese Sprache konnte nicht' }),
+  ).toHaveCount(0)
+})
+
+test.describe('a phone in Russian', () => {
+  test.use({ locale: 'ru-RU', viewport: { width: 390, height: 800 } })
+  test('the Roadmap tabs, wrapped, stay inside their pill', async ({ page, project }) => {
+    await page.goto(`/projects/${project.id}/roadmap`)
+    await expect(html(page)).toHaveAttribute('lang', 'ru')
+    const tablist = page.getByRole('tablist').first()
+    const box = await tablist.boundingBox()
+    for (const tab of await tablist.getByRole('tab').all()) {
+      const t = await tab.boundingBox()
+      expect(t!.y + t!.height).toBeLessThanOrEqual(box!.y + box!.height + 1)
+    }
+  })
+})
