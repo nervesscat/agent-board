@@ -115,7 +115,7 @@ function Roadmap() {
             navigate({ search: (prev) => ({ ...prev, show: v === 'all' ? undefined : v }), replace: true })
           }
           // A long translation wraps onto a second row instead of widening the page.
-          listClassName="max-w-full flex-wrap group-data-horizontal/tabs:h-auto"
+          listClassName="max-w-full max-sm:flex-wrap max-sm:group-data-horizontal/tabs:h-auto"
         />
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
@@ -126,7 +126,7 @@ function Roadmap() {
           onChange={(v) =>
             navigate({ search: (prev) => ({ ...prev, window: v || undefined }), replace: true })
           }
-          listClassName="max-w-full flex-wrap group-data-horizontal/tabs:h-auto"
+          listClassName="max-w-full max-sm:flex-wrap max-sm:group-data-horizontal/tabs:h-auto"
         />
         {mounted && (
           <span>

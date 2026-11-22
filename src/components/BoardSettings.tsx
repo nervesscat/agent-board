@@ -159,7 +159,9 @@ function LanguagePicker() {
       // The page was drawn again in the new language: this render's `t` is the old one.
       toast.success(shared.t('common.saved'))
     },
-    onError: (err) => {
+    onError: (err, language) => {
+      // A later pick took over: its own answer is the one that counts.
+      if (language !== asked.current) return
       // The pick did not happen: the dropdown goes back to the language on screen.
       setPicked(i18n.language as Language)
       toast.error(

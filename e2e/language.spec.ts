@@ -306,3 +306,28 @@ test.describe('a phone in Russian', () => {
     }
   })
 })
+
+test('a pick whose file fails after a later pick took over says nothing', async ({ page }) => {
+  await page.goto('/settings')
+  await page.route('**/assets/es-*.js', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1200))
+    await route.abort()
+  })
+  await choose(page, 'Language', 'Español')
+  await choose(page, 'Language', 'Français')
+  await expect(html(page)).toHaveAttribute('lang', 'fr')
+  await page.waitForTimeout(2200)
+  await expect(html(page)).toHaveAttribute('lang', 'fr')
+  await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Impossible de charger' })).toHaveCount(
+    0,
+  )
+})
+
+test.describe('a tablet in English', () => {
+  test.use({ viewport: { width: 800, height: 900 } })
+  test("the Roadmap's filter tabs stay on one row, as they always did", async ({ page, project }) => {
+    await page.goto(`/projects/${project.id}/roadmap`)
+    const box = await page.getByRole('tablist').first().boundingBox()
+    expect(box!.height).toBeLessThan(40)
+  })
+})
