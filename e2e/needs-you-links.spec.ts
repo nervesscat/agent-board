@@ -1658,7 +1658,7 @@ test('going to another ticket with an anchor, nothing on the one still shown is 
   await feedDrawn(page)
   expect(await scrollTo(page, 1500)).toBe(1500)
   await recordMarks(page)
-  // The next ticket answers late, so the first one stays on screen meanwhile.
+  // The next ticket answers late.
   await page.route(
     (url) => url.pathname === `/api/tickets/${b.id}`,
     async (route) => {
@@ -1678,8 +1678,10 @@ test('going to another ticket with an anchor, nothing on the one still shown is 
   )
   await expect(page).toHaveURL(new RegExp(`/features/${b.id}#tasks$`))
   await page.waitForTimeout(1_000)
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('First in review')
-  expect(await scrollY(page)).toBe(1500)
+  // Still loading: placeholders stand in for the ticket left, which is no longer on screen under the next
+  // one's number, and nothing was marked on the way.
+  await expect(page.getByRole('status', { name: 'Loading ticket…' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1 })).toHaveCount(0)
   expect(await marks(page)).toEqual([])
 
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Second in review')
