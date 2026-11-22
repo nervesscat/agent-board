@@ -115,6 +115,7 @@ describe("a project's layout", () => {
     const summary = await call('GET', `/api/summary?projectId=${p}`)
     expect(summary.body.projects[0].project.overview).toEqual([
       'overview.needsYou',
+      'overview.agents',
       'overview.inProgress',
       'overview.next',
       'overview.carryingOver',
