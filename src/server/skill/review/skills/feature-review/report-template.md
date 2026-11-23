@@ -12,7 +12,8 @@
 - Services up: <list with ports, all started by this review>
 - Services unavailable: <list with reasons> | none
 - Refutation: blinded (separate agent) | inline (no blinding)
-- Hunts: two (independent, always)
+- Plan: <the phases that ran> (from the phases= argument | the ticket's workflow | no workflow: the six standard phases)
+- Hunts: <how many ran: two for the standard plan> (independent)
 
 ## Confirmed findings
 

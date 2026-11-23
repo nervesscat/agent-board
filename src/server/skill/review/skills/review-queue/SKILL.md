@@ -193,15 +193,24 @@ feature-review skill's **On the board** section); after Step 5, check that a res
 is in `list_review_results`, and record it yourself with `post_review_result` from the runner's
 summary if not.
 
+**The plan follows the workflow.** With `ticket=<id>` and no `phases=`, a runner's plan is the one the
+ticket's workflow gives (the feature-review skill's **The plan**): a project on the Light workflow is
+reviewed by one reviewer, and a ticket whose workflow lists no review gets the six standard phases. The
+runner reads both `phases=` and `agents=` of the ticket's workflow from `get_workflow` (it prints them
+together per run), so the human's Team picks for the review phases apply here too. Do not pass
+`phases=` to change the plan, and pass `agents=` only to override the workflow's picks. The runner's `NOTES` names the plan it used, and the queue summary
+carries it per PR.
+
 **Building** (`build` only). After the reviews and their report, run the `todo-review` skill through
 the Skill tool for the same project, passing `parallel` and `model` through. It works the To do
-tickets through the build cycle (spec → builder → `/feature-review` until the change survives → the
-intent check → hand-off), one `todo-review-ticket` agent per ticket, with its own scheduling and report. The cycle
-follows each ticket's complexity: a low ticket has no spec agent and no review, so it leaves no review
-record; a mid ticket gets one review round, a high ticket up to three, a max ticket up to ten (for work
+tickets through the build cycle of the project's workflow (`get_workflow`, which the board serves; each
+`todo-review-ticket` agent reads it for its ticket and follows it), one agent per ticket, with its own
+scheduling and report. The workflow sets each ticket's steps and review rounds, by the ticket's
+complexity: a ticket the workflow gives no spec step and no review (a low ticket) has no spec agent and
+leaves no review record; the rounds a ticket gets are the workflow's for its level (max is for work
 built from scratch, a whole site or app or a new product; a feature in an existing codebase is at most
-high). Every agent it starts for a ticket runs at the effort the complexity sets (the Agent tool's
-`effort`): `low` for low, `medium` for mid and high, `high` for max, except the intent agent, which runs at `low` effort whatever the complexity. Do not
+high). Every agent it starts for a ticket runs at the effort its workflow step names (the Agent tool's
+`effort`), except the intent agent, which runs at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity. Do not
 work tickets yourself.
 
 ## Notes

@@ -28,6 +28,7 @@ import {
 } from '#/lib/constants'
 import type { AnnotationDoc } from '#/lib/annotations'
 import type { SavedLayout } from '#/lib/layout'
+import type { ProjectTweaks, WorkflowPresetId } from '#/lib/workflow'
 import type { Kind } from '#/lib/kinds'
 import type { RunReportDurationSource, RunReportStep, RunReportTime } from '#/lib/runReports'
 import type { RunType } from '#/lib/runs'
@@ -67,6 +68,10 @@ export const projects = sqliteTable('projects', {
   // What the project is for (`#/lib/kinds`): one or more kinds. Software is the git side; a project
   // with none of software hides it. The migration gives every existing project software.
   kinds: text('kinds', { mode: 'json' }).$type<Kind[]>().notNull().default(['software']),
+  // The workflow its tickets' agents follow (`#/lib/workflow`): the active preset, and what the human changed
+  // in each preset (order, switches, efforts, the Team agent of each node, review rounds). Null is no change.
+  workflowPreset: text('workflow_preset').$type<WorkflowPresetId>().notNull().default('standard'),
+  workflowTweaks: text('workflow_tweaks', { mode: 'json' }).$type<ProjectTweaks>(),
   // The command the board runs, on its own machine, to continue a ticket's work once the human answers a
   // decision card or moves it back to an active stage (src/server/resume.ts). '' is off. Only the
   // signed-in human writes it.
@@ -274,6 +279,9 @@ export const tickets = sqliteTable(
     // How much review the ticket gets: low none, mid one round, high three, max up to ten
     // (COMPLEXITIES).
     complexity: text().$type<Complexity>().notNull().default(DEFAULT_COMPLEXITY),
+    // The preset of the workflow this ticket follows instead of its project's; null follows the project's.
+    // Checked in code (`#/lib/workflow`), not by a column CHECK: a table CHECK would have drizzle rebuild tickets.
+    workflowPreset: text('workflow_preset').$type<WorkflowPresetId>(),
     assignee: text().notNull().default(''),
     branch: text().notNull().default(''),
     baseBranch: text('base_branch').notNull().default('main'),

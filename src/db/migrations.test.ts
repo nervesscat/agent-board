@@ -52,14 +52,30 @@ const withoutDropped = ({
 }: Record<string, unknown>) => rest
 
 /**
- * Tickets gained closed_by_approval in 0056: no ticket that existed had closed on an approval, so the
- * column is 0 on every one, and the other columns are compared as they were.
+ * Tickets gained closed_by_approval in 0056 and workflow_preset in 0065: no ticket that existed had closed
+ * on an approval or named a workflow, so the columns are 0 and null on every one, and the other columns are
+ * compared as they were.
  */
-function ticketsWithClosedFlag(rows: Record<string, unknown>[]) {
-  // Before 0056 the table has no such column: the rows are compared as they are.
-  if (!rows.length || !('closed_by_approval' in rows[0]!)) return rows
-  expect(rows.map((r) => r.closed_by_approval)).toEqual(rows.map(() => 0))
-  return rows.map(({ closed_by_approval: _c, ...rest }) => rest)
+function ticketsAsTheyWere(rows: Record<string, unknown>[]) {
+  // Before those migrations the table has no such columns: the rows are compared as they are.
+  if (!rows.length) return rows
+  const first = rows[0]!
+  if ('closed_by_approval' in first) expect(rows.map((r) => r.closed_by_approval)).toEqual(rows.map(() => 0))
+  if ('workflow_preset' in first) expect(rows.map((r) => r.workflow_preset)).toEqual(rows.map(() => null))
+  return rows.map(({ closed_by_approval: _c, workflow_preset: _w, ...rest }) => rest)
+}
+
+/**
+ * Projects gained kinds in 0055 and workflow_preset and workflow_tweaks in 0065: every project that existed
+ * is software, follows the Standard workflow and has no tweaks; the other columns are compared as they were.
+ */
+function projectsAsTheyWere(rows: Record<string, unknown>[]) {
+  for (const row of rows) {
+    if ('kinds' in row) expect(row.kinds).toBe('["software"]')
+    if ('workflow_preset' in row) expect(row.workflow_preset).toBe('standard')
+    if ('workflow_tweaks' in row) expect(row.workflow_tweaks).toBeNull()
+  }
+  return rows.map(({ kinds: _k, workflow_preset: _p, workflow_tweaks: _t, ...rest }) => rest)
 }
 
 /**
@@ -437,7 +453,7 @@ describe('0029_ticket_pr_link', () => {
     // Later migrations add the Merged phase marker and the place in the column: the rest of each ticket
     // is what it was.
     expect(
-      ticketsWithClosedFlag(after.tickets).map((t) =>
+      ticketsAsTheyWere(after.tickets).map((t) =>
         withoutDropped({
           ...t,
           pr_id: undefined,
@@ -887,7 +903,7 @@ describe('0037_drop_handoff_post_phase', () => {
       expect(rows(`id IN (${kept.join(', ')})`)).toEqual(before.kept)
       expect(rows('1')).toEqual(before.others)
       expect(
-        ticketsWithClosedFlag(
+        ticketsAsTheyWere(
           sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[],
         ),
       ).toEqual(before.tickets)
@@ -1007,7 +1023,7 @@ describe('0038_multi_repo_tickets_and_runs', () => {
     expect(counts()).toEqual(before)
     // The tickets themselves are untouched, their repo, branch and PR included (a later migration adds
     // their place in the column).
-    expect(ticketsWithClosedFlag(tickets()).map(({ rank: _r, ...rest }) => withoutDropped(rest))).toEqual(
+    expect(ticketsAsTheyWere(tickets()).map(({ rank: _r, ...rest }) => withoutDropped(rest))).toEqual(
       ticketsBefore.map(withoutDropped),
     )
     expect(
@@ -1296,7 +1312,7 @@ describe('0042_summary_phase', () => {
       expect(after.filter((t) => t.ticket_id === id)).toEqual(before.tasks.filter((t) => t.ticket_id === id))
     // A later migration adds the tickets' place in the column: the rest of each is what it was.
     expect(
-      ticketsWithClosedFlag(
+      ticketsAsTheyWere(
         sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[],
       ).map(({ rank: _r, ...rest }) => withoutDropped(rest)),
     ).toEqual(before.tickets.map(withoutDropped))
@@ -1571,7 +1587,7 @@ describe('0050_widen_ticket_complexity', () => {
     const after = rows()
     expect({
       ...after,
-      tickets: ticketsWithClosedFlag(after.tickets as Record<string, unknown>[]),
+      tickets: ticketsAsTheyWere(after.tickets as Record<string, unknown>[]),
       ticket_needs: needsWithAutoColumns(after.ticket_needs as Record<string, unknown>[]),
     }).toEqual(before)
     expect(
@@ -1642,18 +1658,29 @@ describe('0051_agent_cards', () => {
     migrate(drizzle(sqlite), { migrationsFolder: folder })
 
     // The existing tables are exactly what they were. Projects gained columns later (0055 kinds, 0061 the
-    // resume command): every project that existed is software now, and every column 0050 had is unchanged.
+    // resume command, 0065 the workflow): every project that existed is software now, and every column 0050 had is unchanged.
     expect(before.projects.length).toBeGreaterThan(0)
     const projects = sqlite.prepare('SELECT * FROM projects ORDER BY id').all() as Record<string, unknown>[]
     expect(projects.map((row) => row.kinds)).toEqual(before.projects.map(() => '["software"]'))
+    // 0065 gave every project the Standard workflow and no tweaks.
+    expect(projects.map((row) => [row.workflow_preset, row.workflow_tweaks])).toEqual(
+      before.projects.map(() => ['standard', null]),
+    )
     expect(
       projects.map((row) => {
-        const { kinds: _kinds, resume_command: _command, resume_timeout_minutes: _timeout, ...kept } = row
+        const {
+          kinds: _kinds,
+          resume_command: _command,
+          resume_timeout_minutes: _timeout,
+          workflow_preset: _preset,
+          workflow_tweaks: _tweaks,
+          ...kept
+        } = row
         return kept
       }),
     ).toEqual(before.projects)
     expect(
-      ticketsWithClosedFlag(
+      ticketsAsTheyWere(
         sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[],
       ),
     ).toEqual(before.tickets)
@@ -1931,11 +1958,194 @@ describe('0060_lane_verdicts_to_stages', () => {
         closed_by_approval: 0,
       })
     // Top-level tickets, parents included, and the PR review are as they were: every column.
-    expect([topApproved, topRejected, topClosed, parent, otherParent, prReview].map(read)).toEqual(before)
+    // A later migration (0065) adds the workflow column, null on every ticket that existed.
+    const asBefore = (id: number) => {
+      const { workflow_preset: workflow, ...rest } = read(id)
+      expect(workflow).toBeNull()
+      return rest
+    }
+    expect([topApproved, topRejected, topClosed, parent, otherParent, prReview].map(asBefore)).toEqual(before)
     expect(read(prReview)).toMatchObject({ closed_by_approval: 1, approved_by: 'enrique' })
     expect(read(topApproved)).toMatchObject({ approved_by: 'enrique', status: 'todo' })
     expect(read(topClosed)).toMatchObject({ closed_by_approval: 1 })
     expect(sqlite.prepare('SELECT * FROM stages ORDER BY id').all()).toEqual(others)
+    sqlite.close()
+  })
+})
+
+describe('0065_project_workflow', () => {
+  it('reads every project that existed as Standard with no tweaks and every ticket as following its project, changing nothing else', () => {
+    const sqlite = databaseAt('0064_approved_kind')
+    const project = (name: string) =>
+      Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run(name).lastInsertRowid)
+    const ticket = (projectId: number, title: string) =>
+      Number(
+        sqlite
+          .prepare(
+            "INSERT INTO tickets (project_id, title, created_by, complexity) VALUES (?, ?, 'claude', 'high')",
+          )
+          .run(projectId, title).lastInsertRowid,
+      )
+    const a = project('first')
+    const b = project('second')
+    const t = ticket(a, 'one')
+    ticket(b, 'two')
+    const before = {
+      projects: sqlite.prepare('SELECT * FROM projects ORDER BY id').all() as Record<string, unknown>[],
+      tickets: sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[],
+    }
+    expect(columns(sqlite, 'projects')).not.toContain('workflow_preset')
+    expect(columns(sqlite, 'tickets')).not.toContain('workflow_preset')
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    expect(columns(sqlite, 'projects')).toEqual(
+      expect.arrayContaining(['workflow_preset', 'workflow_tweaks']),
+    )
+    expect(columns(sqlite, 'tickets')).toContain('workflow_preset')
+    const projects = sqlite.prepare('SELECT * FROM projects ORDER BY id').all() as Record<string, unknown>[]
+    expect(projects.map((p) => [p.workflow_preset, p.workflow_tweaks])).toEqual([
+      ['standard', null],
+      ['standard', null],
+    ])
+    expect(projectsAsTheyWere(projects)).toEqual(projectsAsTheyWere(before.projects))
+    const tickets = sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[]
+    expect(tickets.map((r) => r.workflow_preset)).toEqual([null, null])
+    expect(ticketsAsTheyWere(tickets)).toEqual(ticketsAsTheyWere(before.tickets))
+    // The ticket keeps its id and level, and a workflow can be named on it afterwards.
+    sqlite.prepare("UPDATE tickets SET workflow_preset = 'light' WHERE id = ?").run(t)
+    expect(sqlite.prepare('SELECT workflow_preset, complexity FROM tickets WHERE id = ?').get(t)).toEqual({
+      workflow_preset: 'light',
+      complexity: 'high',
+    })
+    sqlite.close()
+  })
+})
+
+describe('0066_drop_workflow_instruction_edits', () => {
+  const tweaks = (sqlite: Database.Database, id: number) =>
+    (
+      sqlite.prepare('SELECT workflow_tweaks FROM projects WHERE id = ?').get(id) as {
+        workflow_tweaks: string | null
+      }
+    ).workflow_tweaks
+
+  it("strips a step's saved instruction from every preset and keeps the order, rounds, switches and efforts exactly", () => {
+    const sqlite = databaseAt('0065_project_workflow')
+    const project = (name: string, value: string | null, preset = 'thorough') =>
+      Number(
+        sqlite
+          .prepare('INSERT INTO projects (name, workflow_preset, workflow_tweaks) VALUES (?, ?, ?)')
+          .run(name, preset, value).lastInsertRowid,
+      )
+    const order = [
+      'claim',
+      'build',
+      'spec',
+      'gate',
+      'review',
+      'preview',
+      'intent',
+      'push',
+      'pr',
+      'ci',
+      'summary',
+      'handoff',
+    ]
+    const mixed = project(
+      'mixed',
+      JSON.stringify({
+        standard: {
+          steps: {
+            build: { instructions: 'x', effort: 'high' },
+            spec: { instructions: 'y' },
+            preview: { enabled: false, instructions: 'z', effort: 'low' },
+          },
+          order,
+          rounds: { mid: 2, max: 7 },
+        },
+        light: { steps: { intent: { instructions: 'z' } } },
+        maximum: { rounds: { low: 1 }, steps: {} },
+      }),
+    )
+    const clean = project(
+      'clean',
+      JSON.stringify({ standard: { steps: { build: { effort: 'low' } }, order, rounds: { mid: 2 } } }),
+      'light',
+    )
+    const empty = project('empty', null)
+    const text = project('not json', 'not json {', 'light')
+    const list = project('a list', '["instructions"]')
+    const scalar = project('a string', '"instructions"')
+    const odd = project(
+      'odd shapes',
+      JSON.stringify({
+        standard: {
+          steps: { build: { instructions: 'x' }, tests: 'instructions', ci: null, push: true, pr: 4 },
+          order,
+        },
+        thorough: 'instructions',
+        maximum: ['instructions'],
+        light: null,
+        extra: { steps: 'instructions' },
+      }),
+    )
+    const before = sqlite.prepare('SELECT * FROM projects ORDER BY id').all() as Record<string, unknown>[]
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    expect(JSON.parse(tweaks(sqlite, mixed)!)).toEqual({
+      standard: {
+        steps: {
+          build: { effort: 'high' },
+          spec: {},
+          preview: { enabled: false, effort: 'low' },
+        },
+        order,
+        rounds: { mid: 2, max: 7 },
+      },
+      light: { steps: { intent: {} } },
+      maximum: { rounds: { low: 1 }, steps: {} },
+    })
+    expect(tweaks(sqlite, mixed)).not.toContain('"instructions"')
+    // A row with no instruction is not rewritten at all, and a value that is no object is left as it was.
+    expect(tweaks(sqlite, clean)).toBe(
+      (before.find((r) => r.id === clean) as { workflow_tweaks: string }).workflow_tweaks,
+    )
+    expect(tweaks(sqlite, empty)).toBeNull()
+    expect(tweaks(sqlite, text)).toBe('not json {')
+    expect(tweaks(sqlite, list)).toBe('["instructions"]')
+    expect(tweaks(sqlite, scalar)).toBe('"instructions"')
+    expect(JSON.parse(tweaks(sqlite, odd)!)).toEqual({
+      standard: { steps: { build: {}, tests: 'instructions', ci: null, push: true, pr: 4 }, order },
+      thorough: 'instructions',
+      maximum: ['instructions'],
+      light: null,
+      extra: { steps: 'instructions' },
+    })
+    // Nothing else of any project changed: not its name, its id, its preset.
+    const after = sqlite.prepare('SELECT * FROM projects ORDER BY id').all() as Record<string, unknown>[]
+    const withoutTweaks = ({ workflow_tweaks: _t, ...rest }: Record<string, unknown>) => rest
+    expect(after.map(withoutTweaks)).toEqual(before.map(withoutTweaks))
+    expect(after.map((r) => [r.id, r.workflow_preset])).toEqual(before.map((r) => [r.id, r.workflow_preset]))
+    sqlite.close()
+  })
+
+  it('reads as it should: the reader sees no instruction and the step is as the preset ships it', async () => {
+    const { readProjectTweaks } = await import('../lib/workflow')
+    const sqlite = databaseAt('0065_project_workflow')
+    const id = Number(
+      sqlite.prepare('INSERT INTO projects (name, workflow_tweaks) VALUES (?, ?)').run(
+        'p',
+        JSON.stringify({
+          standard: { steps: { build: { instructions: 'only this' }, spec: { effort: 'high' } } },
+        }),
+      ).lastInsertRowid,
+    )
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+    expect(readProjectTweaks(JSON.parse(tweaks(sqlite, id)!))).toEqual({
+      standard: { steps: { spec: { effort: 'high' } } },
+    })
     sqlite.close()
   })
 })

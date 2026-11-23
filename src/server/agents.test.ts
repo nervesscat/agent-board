@@ -318,6 +318,18 @@ describe('the general rules in the served skill texts', () => {
   const board = () => flat(agents.renderSkill('claude'))
   const ticketAgent = () => flat(review('agents/todo-review-ticket.md'))
   const todoReview = () => flat(review('skills/todo-review/SKILL.md'))
+  // The step procedures moved out of the ticket agent into the workflow the board serves (`get_workflow`):
+  // what a test pins about one is read from that served text (Standard, a mid ticket), not from the agent file.
+  const workflow = async () => {
+    const { resolveWorkflow } = await import('#/lib/workflow')
+    const { renderWorkflowText } = await import('./workflow')
+    return flat(
+      renderWorkflowText(resolveWorkflow('standard', undefined, 'mid'), {
+        source: 'project',
+        projectPreset: 'standard',
+      }),
+    )
+  }
 
   it('has the session skill restart the work on an answer or a comment that moved the ticket', () => {
     for (const text of [
@@ -417,13 +429,13 @@ describe('the general rules in the served skill texts', () => {
     )
   })
 
-  it('cleans up per ticket and per review round, by process id, in every text', () => {
+  it('cleans up per ticket and per review round, by process id, in every text', async () => {
     expect(board()).toContain('Clean up what you started per ticket, not only at the close')
     expect(board().split('after each review round and at the hand-off').length - 1).toBeGreaterThanOrEqual(2)
     expect(board()).toContain('by its process id, after each review round and at the hand-off (except')
     expect(board()).toContain('by their process id after each review round and at the hand-off (except')
     expect(ticketAgent()).toContain('Clean up what you started, per round and at the hand-off.')
-    expect(ticketAgent()).toContain('clean up after each round, not only at the hand-off')
+    expect(await workflow()).toContain('clean up after each round, not only at the hand-off')
     expect(todoReview()).toContain('Clean up what you started, per ticket.')
     expect(todoReview()).toContain('check that nothing the agent started is still running')
     expect(session()).toContain('After each agent ends, check that nothing it started is still running')
@@ -457,11 +469,12 @@ describe('the general rules in the served skill texts', () => {
     expect(ticketAgent()).toContain(keep)
   })
 
-  it('never builds on an open question, and limits "nothing else can go on" to a human action', () => {
+  it('never builds on an open question, and limits "nothing else can go on" to a human action', async () => {
     expect(ticketAgent()).not.toContain('keep going on it')
-    expect(ticketAgent()).toContain('never building on the assumption past the open card')
-    expect(ticketAgent()).toContain('A question that is not decisive takes the spec')
-    expect(ticketAgent()).toContain(
+    // The spec and review steps' procedures are the workflow's now: read from `get_workflow`.
+    expect(await workflow()).toContain('never building on the assumption past the open card')
+    expect(await workflow()).toContain('A question that is not decisive takes the spec')
+    expect(await workflow()).toContain(
       "it finishes its read-only phases with the spec's assumption marked unconfirmed",
     )
     expect(flat(review('skills/feature-review/SKILL.md'))).not.toContain(
