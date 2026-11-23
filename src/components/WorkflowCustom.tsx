@@ -116,16 +116,8 @@ export function NewWorkflowDialog({
         if (next) setSource(choices.some((c) => c.id === from) ? from : (choices[0]?.id ?? from))
       }}
     >
-      <DialogTrigger
-        render={
-          <button
-            type="button"
-            data-new-workflow
-            className="flex min-h-12 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-dashed bg-card/50 p-3 text-sm font-medium text-muted-foreground transition-colors outline-none hover:bg-muted/60 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-          />
-        }
-      >
-        <Plus className="size-4" aria-hidden /> New workflow
+      <DialogTrigger render={<Button type="button" variant="outline" size="sm" data-new-workflow />}>
+        <Plus data-icon="inline-start" /> New workflow
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

@@ -469,6 +469,7 @@ describe('the README documents the workflow (I1)', () => {
       '**Tweakable, per preset.**',
       'the review rounds per complexity (0 to 12)',
       '**Locked steps** cannot be turned off',
+      '**Your own workflows, per project.**',
       "**A ticket's own workflow.**",
       '`workflowPreset`',
       '`get_workflow`',
@@ -496,11 +497,13 @@ describe('the README documents the workflow (I1)', () => {
       .split('\n')
       .filter((l) => l.startsWith('|'))
     const row = (needle: string) => rows.find((l) => l.includes(needle))
-    expect(row('`/api/projects/:id/workflow`')).toContain('{active, team, presets[]}')
+    expect(row('`/api/projects/:id/workflow`')).toContain('{active, fellBack, team, presets[]}')
     expect(row('`/api/projects/:id/workflow/:preset`')).toContain('{order?, steps?, agents?, rounds?}')
     expect(row('`/api/projects/:id/workflow/:preset`')).toContain('`steps`: `{enabled?, effort?}`')
     expect(row('`/api/projects/:id/workflow/:preset`')).not.toContain('instructions?')
     expect(row('`/api/projects/:id/workflow/effective?ticketId=`')).toContain('get_workflow')
+    expect(row('`/api/projects/:id/workflow/custom`')).toContain('`{name, from}`')
+    expect(row('`/api/projects/:id/workflow/custom/:workflowId`')).toContain('renames')
     expect(row('`workflowPreset` on GET `/api/projects/:id`')).toBeDefined()
     expect(
       rows.find((l) => l.includes('`/api/projects/:id/tickets`') && l.includes('`/api/tickets/:id`')),
