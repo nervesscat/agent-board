@@ -134,9 +134,9 @@ test('the chart scrolls under the ticket’s sticky header: its labels never pai
   await page.evaluate((y) => window.scrollTo(0, y), top)
   await page.waitForTimeout(200)
 
-  // The ticket header is the one that says who opened the ticket; it is sticky and opaque.
+  // The ticket header is the one with the line of who opened the ticket and when; it is sticky and opaque.
   const hit = await page.evaluate(() => {
-    const header = [...document.querySelectorAll('header')].find((h) => h.textContent?.includes('opened by'))!
+    const header = [...document.querySelectorAll('header')].find((h) => h.querySelector('[data-fact]'))!
     const hr = header.getBoundingClientRect()
     const under = [...document.querySelectorAll('[data-testid="agent-label"]')]
       .filter((el) => {
@@ -153,7 +153,7 @@ test('the chart scrolls under the ticket’s sticky header: its labels never pai
   // The labels do overlap the header's box (the chart is scrolled under it)…
   expect(hit.under.length).toBeGreaterThan(0)
   expect(hit.headerTop).toBeGreaterThan(0)
-  // …and the header paints above every one of them: the rows' z-10 stays inside the chart.
+  // …and the header paints above every one of them.
   expect(hit.under).toEqual(hit.under.map((u) => ({ ...u, inHeader: true })))
   await page.screenshot({ path: test.info().outputPath('labels-under-ticket-header.png') })
 })
@@ -233,7 +233,7 @@ test('a human wait is amber and filled on the waiting agent’s row, not hatched
   await expect(bar.locator('[data-kind="human-overlay"]')).toHaveCount(0)
 })
 
-test('a segment opens its details in a popover by click, and by Enter from the keyboard', async ({
+test('a span without a report opens its facts and says so, by click and by Enter from the keyboard', async ({
   page,
   project,
   human,
@@ -259,6 +259,8 @@ test('a segment opens its details in a popover by click, and by Enter from the k
   await expect(details).toContainText('reviewer-sub-1')
   await expect(details).toContainText('via')
   await expect(details).toContainText('review round 2')
+  await expect(details).toContainText('Duration')
+  await expect(details).toContainText('No report for this run.')
   await page.keyboard.press('Escape')
   await expect(details).toHaveCount(0)
 
@@ -296,7 +298,7 @@ test('a live ticket draws its open segment growing to a now line at the right ed
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
-  test('the labels sit above their rows, the track scrolls sideways, and now is in view', async ({
+  test('the labels sit above their rows, the chart fits the phone and now is at its right edge', async ({
     page,
     project,
     human,
@@ -316,25 +318,25 @@ test.describe('on a phone', () => {
         const r = el!.getBoundingClientRect()
         return { x: r.x, y: r.y, width: r.width, height: r.height, right: r.right, bottom: r.bottom }
       }
-      const scroller = root.querySelector('[data-testid="work-timeline-scroll"]')!
       const label = [...root.querySelectorAll('span.truncate')].find(
         (el) => el.textContent === 'builder-sub-1',
       )
       return {
-        scroller: { ...box(scroller), scrollable: scroller.scrollWidth > scroller.clientWidth },
+        chart: { ...box(root), scrollable: root.scrollWidth > root.clientWidth },
         now: box(root.querySelector('[data-kind="now"]')),
         label: box(label ?? null),
         span: box(root.querySelector('[data-kind="span"]')),
       }
     })
-    // The track is wider than the phone, so it scrolls, and it opened on now at its right end.
-    expect(geometry.scroller.scrollable).toBe(true)
-    expect(geometry.now.x).toBeGreaterThanOrEqual(geometry.scroller.x - 1)
-    expect(geometry.now.right).toBeLessThanOrEqual(geometry.scroller.right + 1)
-    // The row's label sits above its track, and the segment is inside the scroller, with height.
+    // A 200 minute track no longer scrolls: it is drawn to the phone's width, ending at now.
+    expect(geometry.chart.scrollable).toBe(false)
+    expect(geometry.chart.right).toBeLessThanOrEqual(390)
+    expect(geometry.now.x).toBeGreaterThanOrEqual(geometry.chart.x - 1)
+    expect(geometry.now.right).toBeLessThanOrEqual(geometry.chart.right + 1)
+    // The row's label sits above its track, and the segment is inside the chart, with height.
     expect(geometry.label.bottom).toBeLessThanOrEqual(geometry.span.y + 1)
-    expect(geometry.span.y).toBeGreaterThanOrEqual(geometry.scroller.y)
-    expect(geometry.span.bottom).toBeLessThanOrEqual(geometry.scroller.bottom + 1)
+    expect(geometry.span.y).toBeGreaterThanOrEqual(geometry.chart.y)
+    expect(geometry.span.bottom).toBeLessThanOrEqual(geometry.chart.bottom + 1)
     await bar.screenshot({ path: test.info().outputPath('work-timeline-390.png') })
   })
 })

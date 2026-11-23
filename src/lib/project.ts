@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import { useParams } from '@tanstack/react-router'
+import { useLocation, useParams, useSearch } from '@tanstack/react-router'
 
 import { get, type Project, type ProjectAgent, type ProjectRow } from '#/lib/api'
-import { recall, remember } from '#/lib/remembered'
+import { recall, remember, useRemembered } from '#/lib/remembered'
+import { validateSettingsSearch } from '#/lib/settingsTabs'
 
 export const useProjects = () =>
   useQuery({ queryKey: ['projects'], queryFn: () => get<ProjectRow[]>('/api/projects') })
@@ -16,6 +17,32 @@ export const rememberCurrentProject = (id: string | number) => remember(CURRENT_
 /** The remembered project, when it is still one of `ids`. */
 export const currentProjectId = (ids: readonly number[]): string | undefined =>
   recall(CURRENT_PROJECT, ids.map(String))
+
+/**
+ * The project the project selector shows: the one in the address (a project's page, or the project tab of
+ * Settings); on Connect an agent and the Settings page, which are outside every project, the one this
+ * browser was last in, while it is still a project. Undefined elsewhere: no project is selected.
+ */
+export function useSelectedProject(): string | undefined {
+  const params = useParams({ strict: false }) as { id?: string }
+  const { pathname } = useLocation()
+  const search = validateSettingsSearch(useSearch({ strict: false }) as Record<string, unknown>)
+  const { data: projects } = useProjects()
+  const remembered = useRemembered(CURRENT_PROJECT)
+  if (params.id) return params.id
+  if (pathname === '/settings' && search.tab === 'project' && search.project !== undefined)
+    return String(search.project)
+  const keeps = pathname === '/agents' || pathname === '/settings'
+  return keeps && remembered !== null && projects?.some((p) => String(p.id) === remembered)
+    ? remembered
+    : undefined
+}
+
+/** The remembered project, as it changes, when it is still one of `ids`. */
+export function useCurrentProjectId(ids: readonly number[]): string | undefined {
+  const remembered = useRemembered(CURRENT_PROJECT)
+  return remembered !== null && ids.some((id) => String(id) === remembered) ? remembered : undefined
+}
 
 /** The project with its repos; every module of a project reads repo names from here. */
 export const useProject = (id: string | number) =>

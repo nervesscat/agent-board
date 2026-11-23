@@ -10,16 +10,20 @@ import {
   stageCount,
   waitingCount,
   WAITING_STAGES,
-  type PrFilter,
+  type PrSide,
   type PrStage,
   type QueueRow,
 } from './prQueue'
 
-/** A queue row: its side, its stage, and whether GitHub still asks me to review it. */
-const row = (waitingOn: PrFilter, status: PrStage, requested = false): QueueRow => ({
+/**
+ * A queue row: its side, its stage, whether GitHub still asks me to review it and whether it involves
+ * me (one of my searches found it).
+ */
+const row = (waitingOn: PrSide, status: PrStage, requested = false, involvesMe = true): QueueRow => ({
   waitingOn,
   status,
   requested,
+  involvesMe,
 })
 
 /**
@@ -109,5 +113,83 @@ describe('the PR queue counters', () => {
     const none = [row('me', 'pending'), row('me', 'on_hold')]
     expect(PR_STAGES.map((s) => stageCount(none, 'me', 'mine', s))).toEqual([0, 0, 0, 0])
     expect(waitingCount(none, 'me', 'mine')).toBe(0)
+  })
+})
+
+describe('All PRs', () => {
+  const sides = ['me', 'others'] as const
+  const involving = [true, false] as const
+  const requests = [true, false] as const
+  const stages = PR_STAGES
+
+  it('shows every open PR, whoever wrote it, and no merged one, whatever the switch says', () => {
+    for (const waitingOn of sides)
+      for (const involvesMe of involving)
+        for (const requested of requests)
+          for (const status of stages)
+            for (const reviewer of PR_REVIEWERS)
+              expect(
+                inQueue(row(waitingOn, status, requested, involvesMe), 'all', reviewer),
+                `${waitingOn} ${involvesMe} ${requested} ${status} ${reviewer}`,
+              ).toBe(status !== 'done')
+  })
+
+  it("holds a stranger's PR (involves me not, waiting on me) and one of mine", () => {
+    expect(inQueue(row('me', 'pending', false, false), 'all', 'all')).toBe(true)
+    expect(inQueue(row('others', 'pending'), 'all', 'mine')).toBe(true)
+    expect(inQueue(row('me', 'done', true), 'all', 'all')).toBe(false)
+  })
+
+  it('leaves a PR that involves me not out of To review and Waiting on others', () => {
+    for (const waitingOn of sides)
+      for (const status of stages)
+        for (const reviewer of PR_REVIEWERS) {
+          const r = row(waitingOn, status, true, false)
+          expect(inQueue(r, 'me', reviewer)).toBe(false)
+          expect(inQueue(r, 'others', reviewer)).toBe(false)
+          expect(onSide(r, waitingOn)).toBe(false)
+        }
+  })
+
+  it('keeps To review and Waiting on others as they were for the PRs that involve me', () => {
+    for (const waitingOn of sides)
+      for (const requested of requests)
+        for (const status of stages) {
+          const r = row(waitingOn, status, requested)
+          expect(inQueue(r, 'me', 'all')).toBe(waitingOn === 'me')
+          expect(inQueue(r, 'me', 'mine')).toBe(waitingOn === 'me' && requested)
+          expect(inQueue(r, 'others', 'all')).toBe(waitingOn === 'others')
+          expect(inQueue(r, 'others', 'mine')).toBe(waitingOn === 'others')
+        }
+  })
+
+  it('counts through the one predicate for every filter, switch and stage', () => {
+    const mixed: QueueRow[] = [
+      ...queue,
+      row('me', 'pending', false, false),
+      row('me', 'on_hold', false, false),
+      row('me', 'reviewed', false, false),
+      row('me', 'done', false, false),
+      row('others', 'pending', false, false),
+    ]
+    for (const filter of PR_FILTERS)
+      for (const reviewer of PR_REVIEWERS) {
+        for (const stage of stages)
+          expect(stageCount(mixed, filter, reviewer, stage), `${filter} ${reviewer} ${stage}`).toBe(
+            mixed.filter((r) => inQueue(r, filter, reviewer) && r.status === stage).length,
+          )
+        expect(waitingCount(mixed, filter, reviewer), `${filter} ${reviewer}`).toBe(
+          mixed.filter((r) => inQueue(r, filter, reviewer) && ['pending', 'on_hold'].includes(r.status))
+            .length,
+        )
+      }
+    // All PRs: every open pending and on-hold PR (five of the queue's, three of the strangers'), no
+    // Done, whatever the switch.
+    expect(waitingCount(mixed, 'all', 'all')).toBe(8)
+    expect(waitingCount(mixed, 'all', 'mine')).toBe(8)
+    expect(stageCount(mixed, 'all', 'all', 'done')).toBe(0)
+    // The sides leave the stranger's rows out.
+    expect(waitingCount(mixed, 'me', 'all')).toBe(3)
+    expect(waitingCount(mixed, 'others', 'all')).toBe(2)
   })
 })

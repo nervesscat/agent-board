@@ -1542,20 +1542,26 @@ type BlockedTag = { blocked?: boolean; blockedReason?: string }
  */
 function blockedTag(
   input: BlockedTag,
-  current: Pick<schema.Task, 'blocked' | 'blockedReason'> | null,
-): { blocked: boolean; blockedReason: string } | null {
+  current: Pick<schema.Task, 'blocked' | 'blockedReason' | 'blockedAt'> | null,
+): { blocked: boolean; blockedReason: string; blockedAt: string | null } | null {
   const reason = input.blockedReason?.trim()
   if (reason !== undefined && reason.length > MAX_BLOCKED_REASON)
     throw new HttpError(400, `blockedReason is longer than ${MAX_BLOCKED_REASON} characters`)
-  if (input.blocked === false) return { blocked: false, blockedReason: '' }
+  if (input.blocked === false) return { blocked: false, blockedReason: '', blockedAt: null }
   const blocked = input.blocked ?? current?.blocked ?? false
   if (reason && !blocked) throw new HttpError(400, 'blockedReason goes with blocked: true')
   if (!blocked || (input.blocked === undefined && reason === undefined)) return null
-  return { blocked: true, blockedReason: reason ?? (current?.blocked ? current.blockedReason : '') }
+  return {
+    blocked: true,
+    blockedReason: reason ?? (current?.blocked ? current.blockedReason : ''),
+    // The wait began when the tag first went on: a reworded reason keeps it.
+    blockedAt: (current?.blocked && current.blockedAt) || new Date().toISOString(),
+  }
 }
 
 /** What a tick writes besides `done`: a done task waits on nobody, so its tag goes. */
-const ticked = (done: boolean) => (done ? { done, blocked: false, blockedReason: '' } : { done })
+const ticked = (done: boolean) =>
+  done ? { done, blocked: false, blockedReason: '', blockedAt: null } : { done }
 
 /** Each new task's tag, null for a plain text; one bad tag refuses them all. */
 function newTaskTags(items: NewTask[]) {

@@ -665,7 +665,7 @@ export function startRun(
       `its ${run.type} ${run.name} is already ${before!.status}: stop it first, or restart it`,
     )
   // A restart puts back the one it just stopped: it adds none, so the limit does not stop it.
-  if (!opts.replacing) assertRoom()
+  if (!opts.replacing) assertRoom(workspaceId, runId)
   const dataDir = run.copyData ? dataDirOf(target.path) : null
   const logs = dataDir
     ? path.join(dataDir, 'logs')
@@ -896,6 +896,9 @@ async function go(e: Entry, run: RunConfig) {
   else await fs.promises.rm(path.dirname(e.logs.build), { recursive: true, force: true })
   await fs.promises.mkdir(path.dirname(e.logs.build), { recursive: true })
   ownFolder(e.dataDir ?? runsDirOf(e.path))
+  // Stopped (or restarted) while it cleared the last run's files: with no install or build to check it
+  // on the way, nothing may start a server the board no longer tracks.
+  if (!current(e)) return
   const env = {
     ...worktreeEnv(),
     ...(previewBase ? { BOARD_PREVIEW_BASE: previewBase, NITRO_APP_BASE_URL: previewBase } : {}),
@@ -1079,15 +1082,32 @@ function notePreview(e: Pick<Entry, 'ticketId' | 'runType' | 'runName'>, what: s
 export const runsInUse = () =>
   [...all().values()].filter((e) => isActive(e) || kept.restarting.has(keyOfEntry(e))).length
 
+/**
+ * The starts the preview limit refused, per run (workspace:run), newest refusal each: kept in memory so
+ * the board can say that someone tried (the alert of a full limit), and forgotten once the run starts.
+ */
+const limitRefusals = new Map<string, { workspaceId: number; runId: number; at: number }>()
+
+/** The starts refused for want of room that have not started since, oldest first. */
+export const previewLimitRefusals = () =>
+  [...limitRefusals.values()].sort((a, b) => a.at - b.at || a.workspaceId - b.workspaceId)
+
+/** Forgets a refused start (it started, or the human gave up on it). */
+export const forgetLimitRefusal = (workspaceId: number, runId: number) =>
+  limitRefusals.delete(keyOf(workspaceId, runId))
+
 /** A refusal when the preview limit is reached: as many build or run as the human allows. */
-function assertRoom() {
+function assertRoom(workspaceId: number, runId: number) {
   const running = runsInUse()
   const limit = previewLimit()
-  if (running >= limit)
+  if (running >= limit) {
+    limitRefusals.set(keyOf(workspaceId, runId), { workspaceId, runId, at: Date.now() })
     throw new HttpError(
       409,
       `${running} previews already run, at most ${limit} (the preview limit): stop one first`,
     )
+  }
+  limitRefusals.delete(keyOf(workspaceId, runId))
 }
 
 /**
@@ -1101,7 +1121,7 @@ export async function restartRun(workspaceId: number, runId: number, actor: stri
   if (refused) throw new HttpError(400, refused)
   const key = keyOf(workspaceId, runId)
   const replacing = isActive(all().get(key))
-  if (!replacing) assertRoom()
+  if (!replacing) assertRoom(workspaceId, runId)
   // Its slot stays taken while it is stopped (killing its processes takes a moment), so a start in
   // between cannot take it and leave the board over the limit once this one is back.
   const reserved = replacing && !kept.restarting.has(key)
