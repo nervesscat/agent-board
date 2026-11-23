@@ -448,9 +448,7 @@ describe('the review texts the board ships', () => {
       // The intent step's procedure now lives in the workflow the board serves (`get_workflow`): read there.
       const wf = await workflowText('standard', 'mid')
       const intent = wf.slice(wf.indexOf('Intent check'))
-      expect(intent).toContain(
-        'After the last review round passes (a ticket with no review: after its gate and evidence) and before every hand-off',
-      )
+      expect(intent).toContain('After the last review round passes and before every hand-off')
       expect(intent).toContain('again after any human comment that sent the ticket back')
       expect(intent).toContain(
         "started with the Agent tool at this step's effort (`low` unless the human set another)",
@@ -658,7 +656,9 @@ describe('the review texts the board ships', () => {
     it('a low ticket keeps its path: no rounds, no depth, and the intent check still runs', async () => {
       // The low path's text (no review, the gate's evidence) is the gate step's now: read from `get_workflow`.
       const wf = await workflowText('standard', 'low')
-      expect(wf).toContain('Run no `/feature-review` and write no line to `depth.md`')
+      expect(wf).toContain('Run no review.')
+      expect(wf).not.toContain('depth.md')
+      expect(wf).not.toContain('/feature-review')
       expect(wf).toMatch(/- Review - skipped/)
       expect(wf).toMatch(/Intent check \[locked above low\] - built-in `intent`, effort low/)
       expect(flat(ticketAgent)).toContain('DEPTH: <light | standard | deep>')
@@ -904,10 +904,10 @@ describe('the review texts the board ships', () => {
       'After the second return, a criterion that still has no evidence is the decision above, never a hand-off.',
     )
     expect(text).toContain('Only a gate that passed with that evidence for every criterion may go on.')
-    expect(text).toContain('or, for a ticket with no review, when a criterion still has no evidence (below)')
+    expect(text).toContain('or when a criterion still has no evidence (below)')
     // The preview (evidence) and the hand-off come next, in order; the preview names the no-review case.
     expect(text).toContain(
-      'A ticket with no review has no review folder, so its screenshots come from the preview.',
+      'This workflow runs no review for the ticket, so its screenshots come from the preview.',
     )
     const at = (label: string) => text.search(new RegExp(`## \\d+\\. ${label}`))
     expect(at('Gate')).toBeGreaterThan(at('Build'))
