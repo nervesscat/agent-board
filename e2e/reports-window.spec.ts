@@ -22,6 +22,8 @@ const count = (page: Page) => dialog(page).locator('[aria-live="polite"]')
 async function pick(page: Page, label: string, option: string) {
   await dialog(page).getByLabel(label, { exact: true }).click()
   await page.getByRole('option', { name: option, exact: true }).click()
+  // The list closes with an animation: the next filter is only clicked once it is gone.
+  await expect(page.getByRole('listbox')).toHaveCount(0)
 }
 
 /** Four reports on one ticket: they differ in agent, round, ratings, duration and when they ran. */
