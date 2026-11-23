@@ -173,11 +173,10 @@ export function TicketBoard({
                             dragging === t.id ? 'opacity-40' : ''
                           }`}
                         >
-                          <div className="flex items-start gap-1.5">
-                            <ComplexityChip level={t.complexity} className="mt-0.5" />
-                            <div className="line-clamp-2 min-w-0 font-medium leading-snug max-md:line-clamp-none">
-                              <span className="text-muted-foreground">#{t.id}</span> {t.title}
-                            </div>
+                          {/* The chip is a word of the title: the second line wraps under it, at the card's edge. */}
+                          <div className="line-clamp-2 min-w-0 font-medium leading-snug max-md:line-clamp-none">
+                            <ComplexityChip level={t.complexity} className="mr-1.5 align-middle" />
+                            <span className="text-muted-foreground">#{t.id}</span> {t.title}
                           </div>
                           {hasWork(kind) || t.tags.length > 0 ? (
                             // One row: the state, the tags, then the time at the end. It never wraps, so
