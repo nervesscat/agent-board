@@ -457,7 +457,7 @@ describe('the review texts the board ships', () => {
       )
       expect(intent).toContain('`done as asked`, `done differently (how)` or `not done`')
       expect(intent).toContain(
-        "`does not match`: back to the builder with the intent check's lines as the brief, then your gate, then ONE more full review round (the review's phases all run again; a ticket with no review has only the gate), then the intent check again",
+        "`does not match`: back to the builder with the intent check's lines as the brief (that fix pass is run and posted by the agent the review's `Between rounds` line names), then your gate, then ONE more full review round (the review's phases all run again; a ticket with no review has only the gate), then the intent check again",
       )
       expect(intent).toContain(
         "A `does not match` is not a gate return and is outside the complexity's round budget. After the SECOND `does not match` on one ticket, stop and ask the human with `ask_decision` (keep going, ship as is, drop), with the intent check's lines and the human's words on the card",
