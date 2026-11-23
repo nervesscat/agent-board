@@ -66,7 +66,7 @@ export function SidePanel({
     >
       <PanelBody
         node={node}
-        title={
+        heading={
           <h2 id={PANEL_TITLE} ref={title} tabIndex={-1} className="text-base font-semibold outline-none">
             {titleOf(nodeView(node))}
           </h2>
@@ -90,7 +90,7 @@ export function SheetPanel({ node, onClose, ...rest }: PanelProps) {
         <PanelBody
           node={node}
           onClose={onClose}
-          title={<DialogTitle className="text-base font-semibold">{titleOf(nodeView(node))}</DialogTitle>}
+          heading={<DialogTitle className="text-base font-semibold">{titleOf(nodeView(node))}</DialogTitle>}
           {...rest}
         />
       </DialogContent>
@@ -134,9 +134,9 @@ function PanelBody({
   edits,
   flightOf,
   onClose,
-  title,
+  heading,
 }: PanelProps & {
-  title: ReactNode
+  heading: ReactNode
 }) {
   const view = nodeView(node)
   const step = node.kind === 'step' ? node.step : null
@@ -145,7 +145,7 @@ function PanelBody({
     <div className="flex min-w-0 flex-col gap-4">
       <div className="flex items-start gap-2 pr-8 sm:pr-0">
         <div className="min-w-0 flex-1 space-y-1.5">
-          {title}
+          {heading}
           <div className="flex flex-wrap items-center gap-1">
             {view.lock && <Chip tone="lock">{view.lock === 'always' ? 'Locked' : 'Locked above low'}</Chip>}
             {view.skipped && <Chip tone="skipped">{view.skipped}</Chip>}
