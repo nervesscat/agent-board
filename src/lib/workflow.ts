@@ -968,7 +968,7 @@ function flowText(id: WorkflowStepId, flow: FlowState): { what?: string; handoff
       return flow.firstSpec
         ? null
         : {
-            what: "A spec agent writes the ticket's only spec from the ticket alone, to `01-spec.md`: the Spec step is turned off, so the builder gets this spec as it is, with nothing to merge.",
+            what: "A spec agent writes the ticket's only spec from the ticket alone, to `01-spec.md`: the Spec step is not run for this ticket, so the builder gets this spec as it is, with nothing to merge.",
             handoff:
               "Brief it with the ticket's context. Its spec is the one the builder gets; where the readings lead to different products, put both on a decision card.",
           }
@@ -1354,11 +1354,13 @@ export function normalizeTweaks(ref: WorkflowRef, tweak: PresetTweak | null | un
     if (role !== undefined && name.trim() && !sameName(name, role)) agents[id] = name.trim()
   }
   if (Object.keys(agents).length) out.agents = agents
+  // The rounds belong to the review step: a workflow without it keeps none, so adding it back starts from the preset's.
   const rounds: Partial<Record<Complexity, number>> = {}
-  for (const level of COMPLEXITIES) {
-    const n = tweak.rounds?.[level]
-    if (n !== undefined && n !== preset.rounds[level]) rounds[level] = n
-  }
+  if (own.includes('review'))
+    for (const level of COMPLEXITIES) {
+      const n = tweak.rounds?.[level]
+      if (n !== undefined && n !== preset.rounds[level]) rounds[level] = n
+    }
   if (Object.keys(rounds).length) out.rounds = rounds
   return Object.keys(out).length ? out : null
 }

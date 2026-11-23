@@ -455,6 +455,114 @@ describe('the steps of a custom workflow', () => {
     expect(entry(dropped.body, w).tweaks.agents).toBeUndefined()
   })
 
+  it('drops the review rounds with the review, never reads the workflow as changed for them, and starts over when it is added back', async () => {
+    const { removeStep, addStep } = await import('#/lib/workflow')
+    const { tweakBody, withoutStep } = await import('#/lib/workflowEdit')
+    const pid = await newProject()
+    const w = await duplicate(pid, 'Ours', 'standard')
+    const set = await call('PUT', `/api/projects/${pid}/workflow/${w}`, {
+      order: await orderOf(pid, w),
+      rounds: { low: 5, mid: 4 },
+    })
+    expect(entry(set.body, w).tweaks.rounds).toEqual({ low: 5, mid: 4 })
+    // The page's body for taking the review out carries no rounds.
+    const current = entry((await call('GET', `/api/projects/${pid}/workflow`)).body, w)
+    const next = removeStep(current.order, 'review')
+    if (!next.ok) throw new Error(next.reason)
+    const body = tweakBody(withoutStep(current.tweaks, 'review', next.order))
+    expect(body.rounds).toBeUndefined()
+    const removed = await call('PUT', `/api/projects/${pid}/workflow/${w}`, body)
+    expect(removed.status).toBe(200)
+    expect(entry(removed.body, w).tweaks.rounds).toBeUndefined()
+    expect(entry(removed.body, w).tweaked).toBe(true)
+    // A body from elsewhere that keeps rounds for a workflow with no review is kept out of the tweak, and
+    // the workflow is the one it was made as, with the review out of both (nothing left to be changed).
+    const kept = await call('PUT', `/api/projects/${pid}/workflow/${w}`, {
+      order: body.order,
+      rounds: { max: 9 },
+    })
+    expect(kept.status).toBe(200)
+    expect(entry(kept.body, w).tweaks.rounds).toBeUndefined()
+    expect(entry(kept.body, w).rounds).toEqual(entry(kept.body, 'standard').rounds)
+    // The review added back starts from the preset's rounds.
+    const added = addStep(entry(kept.body, w).order, 'review')
+    if (!added.ok) throw new Error(added.reason)
+    const back = await call('PUT', `/api/projects/${pid}/workflow/${w}`, { order: added.order })
+    expect(entry(back.body, w).rounds).toEqual(entry(back.body, 'standard').defaultRounds)
+    expect(entry(back.body, w).tweaked).toBe(false)
+  })
+
+  it('serves a step that was removed exactly as it serves one that was switched off, bar the line listing it as skipped', async () => {
+    const {
+      resolveWorkflow,
+      customSource,
+      WORKFLOW_PRESETS,
+      WORKFLOW_STEP_IDS,
+      WORKFLOW_STEPS,
+      removableStep,
+    } = await import('#/lib/workflow')
+    const { renderWorkflowText } = await import('./workflow')
+    const full = [...WORKFLOW_STEP_IDS]
+    const optional = full.filter(removableStep)
+    expect(optional).toEqual(['spec', 'spec2', 'tests', 'review', 'preview', 'ci'])
+    const render = (
+      base: (typeof WORKFLOW_PRESETS)[number],
+      tweak: object,
+      complexity: 'mid' | 'high' | 'max',
+    ) => {
+      const source = customSource({ id: 'custom-abcdef0123', name: 'Same', base, seed: { order: full } })
+      const w = resolveWorkflow(source, tweak, complexity)
+      const text = renderWorkflowText(w, { source: 'project', projectPreset: 'standard' })
+      return { text, w }
+    }
+    // The line that lists a skipped step, and the budget line, which says "none for this ticket" for a step
+    // that is off and "none" for one that is not there: the only places the two may differ.
+    const strip = (text: string, labels: string[]) =>
+      flat(
+        text
+          .split('\n')
+          .filter((line) => !labels.some((label) => line.startsWith(`- ${label} - skipped`)))
+          .join('\n')
+          .replace('Review: none for this ticket.', 'Review: none.'),
+      )
+    const lies = (text: string, gone: string[]) =>
+      gone.filter((id) => {
+        const label = WORKFLOW_STEPS[id as keyof typeof WORKFLOW_STEPS].label
+        return text.split('\n').some((line) => /^## \d+\. /.test(line) && line.includes(`. ${label} `))
+      })
+    const problems: string[] = []
+    for (const base of WORKFLOW_PRESETS)
+      for (const complexity of ['mid', 'high', 'max'] as const) {
+        const sets: string[][] = [
+          ...optional.map((id) => [id]),
+          ['preview', 'ci'],
+          ['spec', 'spec2', 'tests'],
+          optional,
+        ]
+        for (const gone of sets) {
+          const off = render(
+            base,
+            { order: full, steps: Object.fromEntries(gone.map((id) => [id, { enabled: false }])) },
+            complexity,
+          )
+          const removed = render(base, { order: full.filter((id) => !gone.includes(id)) }, complexity)
+          const labels = gone.map((id) => WORKFLOW_STEPS[id as keyof typeof WORKFLOW_STEPS].label)
+          const at = `${base}/${complexity}/-${gone.join(',')}`
+          if (strip(off.text, labels) !== strip(removed.text, labels)) problems.push(`${at}: texts differ`)
+          for (const lie of lies(removed.text, gone)) problems.push(`${at}: ${lie} is a section`)
+          if (removed.w.steps.some((s) => gone.includes(s.id)))
+            problems.push(`${at}: a removed step is listed`)
+          // A sentence that leans on the skipped line ("unless the workflow lists CI as skipped") says nothing when
+          // the step is not there at all: the text must say what holds without it.
+          const hedge = flat(removed.text).match(
+            /\b(?:unless|when|where) the workflow lists [^.]{0,40}? as skipped/,
+          )
+          if (hedge) problems.push(`${at}: leans on a skipped line: ${hedge[0]}`)
+        }
+      }
+    expect(problems).toEqual([])
+  })
+
   it('resets a custom workflow to how it was made, name included, and a preset to what ships', async () => {
     const pid = await newProject()
     const w = await duplicate(pid, 'Ours', 'standard')
@@ -669,8 +777,22 @@ describe('a workflow that was deleted', () => {
       { id: w, of: 'project' },
     ])
     expect(ids(served.steps)).toEqual(STANDARD)
+    // The project's own read says what is in effect, and names the deleted one; the row keeps the id.
+    const read = await call('GET', `/api/projects/${pid}`)
+    expect([read.body.workflowPreset, read.body.workflowFellBack]).toEqual(['standard', { id: w }])
+    const listed = (await call('GET', '/api/projects')).body.find((x: { id: number }) => x.id === pid)
+    expect([listed.workflowPreset, listed.workflowFellBack]).toEqual(['standard', { id: w }])
+    expect(
+      dbm.db
+        .select()
+        .from(dbm.schema.projects)
+        .all()
+        .find((x) => x.id === pid)!.workflowPreset,
+    ).toBe(w)
+    expect((await tool('get_project', { projectId: pid })).workflowPreset).toBe('standard')
     // Picking a workflow again clears the notice.
     expect((await call('PUT', `/api/projects/${pid}/workflow`, { preset: 'light' })).body.fellBack).toBeNull()
+    expect((await call('GET', `/api/projects/${pid}`)).body.workflowFellBack).toBeNull()
   })
 
   it('has a ticket that named it follow the project’s workflow, and says which it named', async () => {

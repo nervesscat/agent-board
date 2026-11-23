@@ -263,6 +263,24 @@ describe('validating a custom workflow’s tweak', () => {
   })
 })
 
+describe('the review rounds of a workflow with no review', () => {
+  it('are not kept, and the workflow is not changed for them; adding the review back starts from the preset’s', () => {
+    const order = [...WORKFLOW_PRESET_DEFS.standard.steps]
+    const without = order.filter((id) => id !== 'review')
+    const source = customSource({ id: 'custom-abcdef0123', name: 'Mine', base: 'standard', seed: { order } })
+    expect(normalizeTweaks(source, { order: without, rounds: { mid: 4, max: 2 } })).toEqual({
+      order: without,
+    })
+    expect(normalizeTweaks(source, { order, rounds: { mid: 4 } })).toEqual({ order, rounds: { mid: 4 } })
+    const w = resolveWorkflow(source, { order: without, rounds: { mid: 4 } }, 'mid')
+    expect(w.tweak).toEqual({ order: without })
+    expect(w.rounds).toEqual(WORKFLOW_PRESET_DEFS.standard.rounds)
+    // Stored with rounds and no review (an older save, or a body from elsewhere) reads the same.
+    const back = resolveWorkflow(source, { order, rounds: undefined }, 'mid')
+    expect(back.tweaked).toBe(false)
+  })
+})
+
 describe('naming a custom workflow', () => {
   it('trims, bounds, and refuses a preset’s name or a taken one in any casing', () => {
     expect(customNameProblem('  Our   flow ', [])).toEqual({ ok: true, name: 'Our flow' })

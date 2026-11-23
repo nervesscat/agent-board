@@ -785,7 +785,10 @@ describe('the served step texts of the Thorough and Maximum reviews, and of the 
     expect(text).not.toContain('gh pr checks')
     expect(text).not.toContain('Start the preview of this head here')
     expect(text).toContain(
-      'A step this workflow lists as skipped because it was turned off (CI, the preview) is not run and not required: its phase may stay open, and the summary says that step was turned off on the Workflow page.',
+      'This workflow runs no CI step for the ticket (the step is turned off or not part of the workflow): it is not run and not required, its phase may stay open, and the summary says so.',
+    )
+    expect(text).toContain(
+      'This workflow runs no preview step for the ticket (the step is turned off or not part of the workflow): it is not run and not required, its phase may stay open, and the summary says so.',
     )
     expect(text).toContain('The push, the pull request and the summary are never skipped.')
     // The locked steps cannot be turned off.
@@ -857,14 +860,19 @@ describe('the served step texts of the Thorough and Maximum reviews, and of the 
   it('has the gate and the tests step name what to do with CI turned off and the spec step turned off (C9)', async () => {
     const pid = await newProject()
     const text = flat(await effective(pid, 'preset=thorough&complexity=mid'))
-    expect(text).toContain(
-      'and CI green on the final head is required before hand-off, unless the workflow lists CI as skipped.',
+    expect(text).toContain('and CI green on the final head is required before hand-off. A failure goes back')
+    expect(text).not.toContain('this workflow runs no CI step')
+    await call('PUT', `/api/projects/${pid}/workflow/thorough`, { steps: { ci: { enabled: false } } })
+    const noCi = flat(await effective(pid, 'preset=thorough&complexity=mid'))
+    expect(noCi).toContain(
+      'GitHub CI runs both on the PR; this workflow runs no CI step for the ticket, so a CI result is not required before hand-off. A failure goes back',
     )
+    expect(noCi).not.toContain('CI green on the final head is required')
     await call('PUT', `/api/projects/${pid}/workflow/thorough`, { steps: { spec: { enabled: false } } })
     const noSpec = flat(await effective(pid, 'preset=thorough&complexity=mid'))
     expect(noSpec).toContain('- Spec - skipped: turned off on the Workflow page')
     expect(noSpec).toContain(
-      "When the workflow lists the spec step as skipped for the ticket there is no `WORKDIR/01-spec.md`: the ticket's instructions and the acceptance criteria you wrote from them are the spec, as in the build step.",
+      "When the workflow runs no spec step for the ticket (it is skipped, turned off or not part of it) there is no `WORKDIR/01-spec.md`: the ticket's instructions and the acceptance criteria you wrote from them are the spec, as in the build step.",
     )
     await call('DELETE', `/api/projects/${pid}/workflow/thorough`)
   })

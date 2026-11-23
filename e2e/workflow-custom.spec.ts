@@ -227,6 +227,7 @@ test('a step that has settings saved is removed too, and so is the review with i
         order,
         steps: { preview: { enabled: false }, tests: { effort: 'high' }, spec: { effort: 'low' } },
         agents: { spec: 'Quick', 'review.hunt-a': 'Sharp' },
+        rounds: { mid: 4 },
       },
     }),
   )
@@ -243,6 +244,36 @@ test('a step that has settings saved is removed too, and so is the review with i
   expect(mine.tweaks?.steps).not.toHaveProperty('preview')
   expect(mine.tweaks?.steps).not.toHaveProperty('tests')
   expect(mine.tweaks?.agents).not.toHaveProperty('review.hunt-a')
+  // The review's round counts went with it, and adding the review back starts from the preset's.
+  expect(mine.tweaks).not.toHaveProperty('rounds')
+  await page.getByRole('combobox', { name: 'Add a step' }).click()
+  await page.getByRole('option', { name: 'Review', exact: true }).click()
+  await expect(node(page, 'review')).toBeVisible()
+  const back = (await overview(human, project.id)).presets.find((p) => p.id === id)!
+  expect(back.rounds).toEqual(back.defaultRounds)
+  expect(back.tweaks).not.toHaveProperty('rounds')
+})
+
+test('a step that was removed is not asked for by the served text, and says what holds without it (C11)', async ({
+  project,
+  human,
+}) => {
+  const made = await ok<{ created: string }>(
+    human.post(`/api/projects/${project.id}/workflow/custom`, { data: { name: 'No CI', from: 'thorough' } }),
+  )
+  const order = (await overview(human, project.id)).presets
+    .find((p) => p.id === made.created)!
+    .order.filter((step) => step !== 'ci')
+  await ok(human.put(`/api/projects/${project.id}/workflow/${made.created}`, { data: { order } }))
+  const text = (
+    await ok<WorkflowEffective>(
+      human.get(`/api/projects/${project.id}/workflow/effective?preset=${made.created}&complexity=mid`),
+    )
+  ).text.replace(/\s+/g, ' ')
+  expect(text).toContain('this workflow runs no CI step for the ticket, so a CI result is not required')
+  expect(text).not.toContain('CI green on the final head is required')
+  expect(text).not.toContain('lists CI as skipped')
+  expect(text).toContain('This workflow runs no CI step for the ticket')
 })
 
 test('a preset has no Add a step and no Remove step: only a workflow of the project’s own has steps to change (C6)', async ({
@@ -311,11 +342,19 @@ test('the project follows a workflow of its own, a ticket names one, and deletin
   await expect(cards(page).locator('[data-preset="standard"]')).toContainText('Active')
   const after = await overview(human, project.id)
   expect([after.active, after.fellBack]).toEqual(['standard', { id }])
+  // The project's own read says what is in effect too, and names the deleted workflow.
+  const row = await ok<{ workflowPreset: string; workflowFellBack: { id: string } | null }>(
+    human.get(`/api/projects/${project.id}`),
+  )
+  expect([row.workflowPreset, row.workflowFellBack]).toEqual(['standard', { id }])
   // The notice is not a dead end: keeping Standard clears it, and it stays cleared on a reload.
   await expect(page.locator('[data-workflow-notice]')).toContainText('Keep Standard to dismiss this')
   await page.locator('[data-keep-standard]').click()
   await expect(page.locator('[data-workflow-notice]')).toHaveCount(0)
   expect((await overview(human, project.id)).fellBack).toBe(null)
+  expect(
+    (await ok<{ workflowFellBack: unknown }>(human.get(`/api/projects/${project.id}`))).workflowFellBack,
+  ).toBe(null)
   await open(page, project.id)
   await expect(page.locator('[data-workflow-notice]')).toHaveCount(0)
 

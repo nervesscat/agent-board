@@ -17,7 +17,7 @@ besides them:
   the current head.{{if roundIntent}} A workflow that checks intent at the end of each review round starts the head's
   preview before that check, and the preview step then reuses it.{{end}}
 {{else}}- the result: the diff at the current head and the screenshots the review took (its `shots/`, the verify phase), when there are any
-  (the preview step is turned off for this ticket, so there is no preview link and no screenshots from it; the
+  (this workflow runs no preview step for this ticket, so there is no preview link and no screenshots from it; the
   screenshots of a UI change come from the review's own run).
 {{end}}
 

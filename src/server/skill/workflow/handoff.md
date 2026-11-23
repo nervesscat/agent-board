@@ -19,10 +19,10 @@ Merged itself as their facts hold (a tick by hand is refused); you tick Implemen
    again: say in the summary which head SHA and which review it reuses, and go on; any other missing phase
    is run.
 3. Then `open`: fix every task it lists and check again (Summary open: no summary written since the last
-   commit). An open Preview may stay only when the summary says why (no preview setup, nothing to try, or
-   the preview step turned off on the Workflow page). A step this workflow lists as skipped because it was
-   turned off (CI, the preview) is not run and not required: its phase may stay open, and the summary says
-   that step was turned off on the Workflow page. {{if !preview}}With the preview turned off, the screenshots of a UI
-   change are the review's own (`shots/`, the verify phase), and the summary says the preview was turned off on the Workflow page; none are
+   commit). An open Preview may stay only when the summary says why (no preview setup, nothing to try{{if !preview}}, or
+   the preview step turned off or not part of this workflow{{end}}). {{if !ci}}This workflow runs no CI step for the ticket (the step is turned off or not part of
+   the workflow): it is not run and not required, its phase may stay open, and the summary says so. {{end}}{{if !preview}}This workflow runs no preview step for the ticket (the step is turned off or not part of
+   the workflow): it is not run and not required, its phase may stay open, and the summary says so. With no preview, the screenshots of a UI
+   change are the review's own (`shots/`, the verify phase); none are
    required when the review took none. {{end}}The push, the pull request and the summary are never
    skipped.

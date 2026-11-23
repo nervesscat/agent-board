@@ -96,6 +96,8 @@ export function withoutStep(
     if (Object.keys(kept).length) next.agents = kept
     else delete next.agents
   }
+  // The review's round counts go with it; adding the review back starts from the preset's.
+  if (id === 'review') delete next.rounds
   return next
 }
 

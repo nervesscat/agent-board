@@ -470,16 +470,16 @@ describe('the served workflow text for every preset, complexity and tweak', () =
         expect(text, at).toContain(
           "the screenshots of a UI change in `files`, which come from the review's own run (its `shots/` folder, the verify phase)",
         )
-        expect(text, at).toContain('the summary says the preview was turned off on the Workflow page')
+        expect(text, at).toContain('the summary says this workflow runs no preview for the ticket')
         // The hand-off checklist.
         expect(text, at).toContain(
-          "With the preview turned off, the screenshots of a UI change are the review's own (`shots/`, the verify phase)",
+          "With no preview, the screenshots of a UI change are the review's own (`shots/`, the verify phase)",
         )
         // The intent brief.
         expect(text, at).toContain("the screenshots of a UI change come from the review's own run")
         // With the preview on, none of it is said.
         expect(on, at).not.toContain("which come from the review's own run")
-        expect(on, at).not.toContain('With the preview turned off')
+        expect(on, at).not.toContain('With no preview, the screenshots')
       }
     // A ticket with no review has none of the review's screenshots to name as a source.
     const low = flat(render(resolveWorkflow('standard', { steps: off('preview') }, 'low')))

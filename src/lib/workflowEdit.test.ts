@@ -136,6 +136,14 @@ describe('taking a step out of a custom workflow', () => {
     )
   })
 
+  it('takes the review rounds with the review, and only with it', () => {
+    expect(withoutStep(saved, 'review', without('review')).rounds).toBeUndefined()
+    expect(withoutStep(saved, 'preview', without('preview')).rounds).toEqual({ mid: 3 })
+    expect(withoutStep({ order, rounds: { mid: 3 } }, 'review', without('review'))).toEqual({
+      order: without('review'),
+    })
+  })
+
   it('is a body the board accepts, and never changes the tweak it is given', () => {
     const copy = structuredClone(saved)
     for (const id of ['preview', 'tests', 'spec', 'review'] as const) {

@@ -1,7 +1,7 @@
 The ticket's summary (`set_ticket_summary`, not a new hand-off post), the one post the human reads on top
 of Main, short and to the point: what the change does and its current state, {{if review}}each review round's verdict
 in one line, {{end}}the PR link, {{if preview}}the preview link and exactly what to try there{{else}}what to try (the
-preview step is skipped for this ticket, so there is no preview link; the summary says the preview was turned off on the Workflow page){{end}}, how it was tested (the checks
+preview step is skipped for this ticket, so there is no preview link; the summary says this workflow runs no preview for the ticket){{end}}, how it was tested (the checks
 and the e2e summary; {{if review}}the review's verdict and counts{{else}}the builder's evidence per
 criterion{{end}}), any fake used at an edge and any contract hit you judged legitimate, and {{if intent}}the intent check's
 verdict in one line{{else}}one line saying the intent check was turned off on
