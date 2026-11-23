@@ -501,6 +501,67 @@ test('the PR queue stage tabs and filter fit every width from 375 to 1440px with
   }
 })
 
+test('the PR queue keeps one layout on every filter: the filters top right by Refresh, the switch on the stages row', async ({
+  page,
+  project,
+}) => {
+  await stubQueue(page, project.id, [
+    prRow(project.id, 1, 'me', 'pending'),
+    prRow(project.id, 2, 'others', 'pending'),
+  ])
+  const tab = (name: string) => page.getByRole('tab', { name: new RegExp(`^${name}`) })
+  const box = async (l: ReturnType<typeof tab>) => (await l.boundingBox())!
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto(`/projects/${project.id}/prs?filter=me`)
+    const stagesTop: number[] = []
+    for (const [filter, name] of [
+      ['me', 'To review'],
+      ['others', 'Waiting on others'],
+      ['all', 'All PRs'],
+    ] as const) {
+      await tab(name).click()
+      await expect(page).toHaveURL(new RegExp(`filter=${filter}`))
+      const at = `${width}px ${name}`
+      const title = await box(page.getByRole('heading', { name: 'PR queue' }))
+      const filters = await box(tab('To review'))
+      const refresh = await box(page.getByRole('button', { name: 'Refresh' }))
+      const pending = await box(tab('Pending'))
+      // The three filters sit in the header (above the stages) with Refresh on every filter.
+      expect(filters.y + filters.height, at).toBeLessThanOrEqual(pending.y)
+      if (width >= 640) {
+        // Beside the title, on its row, with Refresh to their right at the top right of the page.
+        expect(Math.abs(filters.y - refresh.y), at).toBeLessThanOrEqual(8)
+        expect(filters.x, at).toBeGreaterThan(title.x + title.width)
+        expect(refresh.x, at).toBeGreaterThan(filters.x + filters.width)
+      }
+      stagesTop.push(pending.y)
+      // The switch shows only on To review, on the stages' row and to its right.
+      const switchTab = page.getByRole('tab', { name: 'Involving me' })
+      if (filter === 'me') {
+        const sw = await box(switchTab)
+        const done = await box(tab('Done'))
+        if (width >= 640) {
+          expect(Math.abs(sw.y - pending.y), at).toBeLessThanOrEqual(8)
+          expect(sw.x, at).toBeGreaterThan(done.x + done.width)
+        } else {
+          expect(sw.y, at).toBeGreaterThanOrEqual(done.y)
+        }
+      } else {
+        await expect(switchTab, at).toHaveCount(0)
+      }
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        ),
+        at,
+      ).toBe(true)
+    }
+    // The stages row sits at the same place on every filter.
+    expect(new Set(stagesTop.map(Math.round)).size, `${width}px`).toBe(1)
+  }
+})
+
 test('edits the project instructions with the rich editor', async ({ page, project, human }) => {
   await page.goto(`/projects/${project.id}/instructions`)
   const section = page.getByRole('region', { name: 'Project instructions' })

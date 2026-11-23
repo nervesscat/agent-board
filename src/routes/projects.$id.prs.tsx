@@ -234,8 +234,8 @@ function PrQueue() {
           <h1 className="text-xl font-semibold tracking-tight">PR queue</h1>
           <p className="text-sm text-muted-foreground">PRs to review and your own, by review state.</p>
         </div>
-        {/* The filter row, the switch and Refresh wrap among themselves and, when they cannot sit
-            beside the title, onto a line of their own: a phone shows no sideways scroll. */}
+        {/* The filter choices and Refresh sit top right on every filter, and wrap among themselves and,
+            when they cannot sit beside the title, onto a line of their own: a phone shows no sideways scroll. */}
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Tabs value={filter} onValueChange={(v) => pickFilter(v as PrFilter)} className="max-w-full">
             {/* Three choices with their counts do not fit one row of a phone: there they wrap onto a second. */}
@@ -252,17 +252,6 @@ function PrQueue() {
               ))}
             </TabsList>
           </Tabs>
-          {filter === 'me' && (
-            <Tabs value={reviewer} onValueChange={(v) => pickReviewer(v as PrReviewer)}>
-              <TabsList>
-                {REVIEWERS.map((r) => (
-                  <TabsTrigger key={r.key} value={r.key} className={NO_UNDERLINE}>
-                    {r.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          )}
           <Button
             variant="outline"
             size="sm"
@@ -287,6 +276,20 @@ function PrQueue() {
           // Four stages do not fit one row on a phone: there they take two rows of two, so every stage
           // and its count shows without the list or the page scrolling.
           listClassName="grid w-full grid-cols-2 group-data-horizontal/tabs:h-auto sm:inline-flex sm:w-fit sm:group-data-horizontal/tabs:h-8"
+          // The To review switch sits on the stages' row, to its right, and shows only there.
+          trailing={
+            filter === 'me' ? (
+              <Tabs value={reviewer} onValueChange={(v) => pickReviewer(v as PrReviewer)}>
+                <TabsList>
+                  {REVIEWERS.map((r) => (
+                    <TabsTrigger key={r.key} value={r.key} className={NO_UNDERLINE}>
+                      {r.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            ) : undefined
+          }
         >
           {TABS.map((t) => (
             <TabsContent key={t.key} value={t.key} className="space-y-2">
