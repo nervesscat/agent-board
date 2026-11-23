@@ -363,8 +363,12 @@ test('a tab order that changes during a click leaves the spy reading the page ag
   await page.route(`**/api/tickets/${t.id}`, async (route) => {
     if (route.request().method() !== 'GET') return route.continue()
     asked = true
+    // The board answers now, from the ticket as it is now (the summary written below is in it), and
+    // the answer is what is held: letting go hands the page an answer that is already here, so how long
+    // the board takes to answer (seconds, on a busy runner) is no part of how soon the change lands.
+    const answer = await route.fetch()
     await release
-    return route.continue()
+    return route.fulfill({ response: answer })
   })
   // Five seconds since the page read the ticket make the next read on focus go out.
   await page.waitForTimeout(5_200)

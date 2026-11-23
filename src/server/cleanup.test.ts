@@ -132,6 +132,25 @@ describe('branchReach', () => {
   })
 })
 
+describe('workOf', () => {
+  it('skips a repo row whose project was deleted after the row was read, instead of seeding stages for it', async () => {
+    const { db, schema } = await import('#/db')
+    const { workOf } = await import('./cleanup')
+    const projectId = db.insert(schema.projects).values({ name: 'gone soon' }).returning().get().id
+    const row = db
+      .insert(schema.repos)
+      .values({ projectId, name: 'repo', repoPath: repo, baseBranch: 'dev' })
+      .returning()
+      .get()
+    // The report read its rows, then waited on git; the project is deleted meanwhile.
+    db.delete(schema.projects).where(eq(schema.projects.id, projectId)).run()
+    const kept: string[] = []
+    expect(() => workOf([row], (name) => kept.push(name))).not.toThrow()
+    expect(kept).toEqual([])
+    expect(db.select().from(schema.stages).where(eq(schema.stages.projectId, projectId)).all()).toEqual([])
+  })
+})
+
 describe('cleanupReport', () => {
   it('lists closed tickets with what they left behind, checked against their base chain', async () => {
     const { db, schema } = await import('#/db')
