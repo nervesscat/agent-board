@@ -484,7 +484,7 @@ describe('the README documents the workflow (I1)', () => {
       section.indexOf('**Tweakable, per preset.**'),
       section.indexOf('**Team agents.**'),
     )
-    expect(tweakable).toContain('the Team agent each step and each review phase runs')
+    expect(tweakable).toContain('the Team agent each agent-starting step and each review phase runs')
     expect(tweakable).toContain('no text is written in the workflow')
     expect(section).not.toMatch(/hand-off instruction|edited.instructions|instructions\?/i)
     expect(section).toContain('briefs that agent with the instructions it has in the Team')
@@ -865,6 +865,8 @@ describe('a step runs the Team agent the workflow names (B9, B11, B14)', () => {
     const fixed = [
       /the project's `(intent|hunt|spec|builder|runner|env|verify|refute|merge)` agent/,
       /project's `(intent|hunt|spec|builder|runner|env|verify|refute|merge)` agent/,
+      // The bold role label too: "the project's **intent** agent" names a fixed agent, not the step's Team agent.
+      /project's \*\*(intent|hunt|spec|builder|runner|env|verify|refute|merge)\*\*/,
       /The subagents are the project's `spec`/,
     ]
     const texts: Record<string, string> = {
@@ -882,6 +884,44 @@ describe('a step runs the Team agent the workflow names (B9, B11, B14)', () => {
     expect(flat(review('skills/feature-review/SKILL.md'))).toContain(
       "It runs the Team agent the intent step names in the project's workflow (`get_workflow`; by default the project's agent named `intent`, else the built-in `feature-review-intent`)",
     )
+  })
+
+  it("has a review of a ticket with no phases= take the workflow's agents= too, an explicit agents= still winning (C1)", async () => {
+    const skill = flat(review('skills/feature-review/SKILL.md'))
+    expect(skill).toContain(
+      "the `phases=` its review step gives for this run, and the `agents=` it prints with them for the same run (the human's Team picks for the review phases)",
+    )
+    expect(skill).toContain('An `agents=` given in the call still wins.')
+    expect(skill).toContain(
+      "on a board ticket with no `phases=`: the `agents=` the ticket's workflow gives with its plan",
+    )
+    expect(skill).toContain(
+      "(an `agents=` given in the call, else the one the ticket's workflow gave with the plan, **The plan** rule 2)",
+    )
+    const queue = flat(review('skills/review-queue/SKILL.md'))
+    expect(queue).toContain(
+      "The runner reads both `phases=` and `agents=` of the ticket's workflow from `get_workflow` (it prints them together per run), so the human's Team picks for the review phases apply here too.",
+    )
+    expect(queue).toContain("pass `agents=` only to override the workflow's picks")
+    // The workflow prints both for the run, so there is something to read.
+    expect(flat(await workflowText('standard', 'mid'))).toMatch(/phases=\S+ agents=\S+ effort=/)
+  })
+
+  it('serves the review step as the skill the ticket agent runs itself, with no Team agent of its own (C2)', async () => {
+    for (const preset of WORKFLOW_PRESETS)
+      for (const complexity of ['mid', 'high', 'max']) {
+        const text = await workflowText(preset, complexity)
+        const at = `${preset}/${complexity}`
+        const heading = text.split('\n').find((l) => /^## \d+\. Review - /.test(l))
+        expect(heading, at).toMatch(/^## \d+\. Review - agent \/feature-review(, effort \w+)?$/)
+        const section = text.slice(text.indexOf(heading!), text.indexOf('\n## ', text.indexOf(heading!)))
+        expect(section, at).not.toContain('Agent: ')
+        expect(section, at).not.toMatch(/run by (built-in|Team agent)/)
+      }
+    for (const file of ['AGENTS.md', 'board.md'])
+      expect(flat(file === 'AGENTS.md' ? read(root, file) : read(skillDir, file)), file).toContain(
+        'The review step names none: you run it through the /feature-review Skill in your own session, and its phases name their own Team agents.',
+      )
   })
 
   it("has the board skill, AGENTS.md and the MCP text say where a step's instructions come from (B14)", async () => {

@@ -195,8 +195,10 @@ summary if not.
 
 **The plan follows the workflow.** With `ticket=<id>` and no `phases=`, a runner's plan is the one the
 ticket's workflow gives (the feature-review skill's **The plan**): a project on the Light workflow is
-reviewed by one reviewer, and a ticket whose workflow lists no review gets the six standard phases. Do
-not pass `phases=` to change it. The runner's `NOTES` names the plan it used, and the queue summary
+reviewed by one reviewer, and a ticket whose workflow lists no review gets the six standard phases. The
+runner reads both `phases=` and `agents=` of the ticket's workflow from `get_workflow` (it prints them
+together per run), so the human's Team picks for the review phases apply here too. Do not pass
+`phases=` to change the plan, and pass `agents=` only to override the workflow's picks. The runner's `NOTES` names the plan it used, and the queue summary
 carries it per PR.
 
 **Building** (`build` only). After the reviews and their report, run the `todo-review` skill through

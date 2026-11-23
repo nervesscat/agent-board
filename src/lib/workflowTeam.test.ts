@@ -29,12 +29,11 @@ const refused = (preset: WorkflowPresetId, input: unknown, team: string[] = ['ac
 describe('the nodes that can name a Team agent (B10)', () => {
   const ids = (preset: WorkflowPresetId) => bindableNodes(preset).map((n) => n.id)
 
-  it("are the steps with an agent and the review phases with one, never the ticket agent's own or a group", () => {
-    expect(ids('light')).toEqual(['build', 'review', 'intent', 'review.reviewer', 'review.fix'])
+  it("are the steps that start an agent and the review phases with one, never the ticket agent's own, the review step or a group", () => {
+    expect(ids('light')).toEqual(['build', 'intent', 'review.reviewer', 'review.fix'])
     expect(ids('standard')).toEqual([
       'spec',
       'build',
-      'review',
       'intent',
       'review.spec',
       'review.env',
@@ -62,6 +61,7 @@ describe('the nodes that can name a Team agent (B10)', () => {
         'ci',
         'summary',
         'handoff',
+        'review',
         'review.gate',
         'review.reconcile',
         'review.first',
@@ -117,7 +117,18 @@ describe('refusing a pick (B2, B3)', () => {
   })
 
   it('refuses a node that runs no agent, a group, a node the preset lacks and an unknown one', () => {
-    for (const id of ['claim', 'gate', 'preview', 'push', 'pr', 'ci', 'summary', 'handoff', 'review.gate'])
+    for (const id of [
+      'claim',
+      'gate',
+      'preview',
+      'push',
+      'pr',
+      'ci',
+      'summary',
+      'handoff',
+      'review',
+      'review.gate',
+    ])
       expect(refused('standard', { agents: { [id]: 'acme-dev' } }), id).toContain(
         `${id} runs no agent of its own`,
       )
@@ -177,8 +188,18 @@ describe('normalizing the picks (B6)', () => {
 
   it('drops a pick for a node that cannot have one', () => {
     expect(
-      normalizeTweaks('standard', { agents: { claim: 'a', 'review.first': 'b', spec2: 'c' } }),
+      normalizeTweaks('standard', { agents: { claim: 'a', 'review.first': 'b', spec2: 'c', review: 'd' } }),
     ).toBeNull()
+  })
+
+  it('ignores a stored pick under the review step: the reader drops it and the step resolves with no Team agent', () => {
+    const saved = { standard: { agents: { review: 'acme-dev', build: 'acme-dev' } } }
+    expect(readProjectTweaks(saved)).toEqual({ standard: { agents: { build: 'acme-dev' } } })
+    const w = resolveWorkflow('standard', saved.standard, 'mid', ['acme-dev'])
+    const review = w.steps.find((s) => s.id === 'review')!
+    expect(review.teamAgent).toBeNull()
+    expect(review.edited.agent).toBe(false)
+    expect(w.tweak).toEqual({ agents: { build: 'acme-dev' } })
   })
 })
 
@@ -242,8 +263,8 @@ describe('which Team agent runs a node (B4)', () => {
         expect(find(team)?.source, `${preset} ${node.id}`).toBe('role')
         expect(find(team)?.name).toBe(node.agent)
       }
-      // The ticket agent's own steps run no agent.
-      for (const id of ['claim', 'gate', 'push', 'handoff'])
+      // The ticket agent's own steps run no agent, and the review step runs through the Skill: no Team agent.
+      for (const id of ['claim', 'gate', 'push', 'handoff', 'review'])
         expect(none.steps.find((s) => s.id === id)?.teamAgent ?? null).toBeNull()
     }
   })

@@ -41,8 +41,9 @@ const PANEL_TITLE = 'wf-panel-title'
 /**
  * The settings of the node selected, beside the graph on a wide screen (an `aside` with the node's title for its
  * name) and as a bottom sheet over it on a phone. A step has its Team agent, effort, switch and place in the
- * order; the review step also its round counts; a phase of the review round only its Team agent. What each node
- * does and hands on is shown read-only: the text is the preset's, never edited here.
+ * order; the review step also its round counts, but no Team agent (its phases have theirs); a phase of the review
+ * round only its Team agent. What each node does and hands on is shown read-only: the text is the preset's,
+ * never edited here.
  */
 export function SidePanel({
   node,
@@ -157,6 +158,11 @@ function PanelBody({
 
       {view.team ? (
         <TeamPicker view={view} team={team} onPick={(name) => edits.setAgent(node.id, name)} />
+      ) : step?.agent === 'runner' ? (
+        <p data-review-agents className="text-sm text-muted-foreground">
+          The ticket agent runs /feature-review itself. Its phases run their own Team agents, picked on the
+          phase nodes.
+        </p>
       ) : (
         <p className="text-sm text-muted-foreground">
           The ticket agent does this itself: there is no Team agent to pick.

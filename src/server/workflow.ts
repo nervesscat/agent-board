@@ -351,10 +351,10 @@ function teamWords(ref: TeamAgentRef, role: string): string {
 }
 
 const agentWords = (step: ResolvedStep) =>
-  step.teamAgent === null
-    ? 'you'
-    : step.agent === 'runner'
-      ? `agent /feature-review, run by ${teamWords(step.teamAgent, step.agent)}`
+  step.agent === 'runner'
+    ? 'agent /feature-review'
+    : step.teamAgent === null
+      ? 'you'
       : teamWords(step.teamAgent, step.agent)
 
 /** How the ticket agent briefs the agent of a step, and what it names it as: one paragraph under the step's heading. */

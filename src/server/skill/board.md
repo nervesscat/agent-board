@@ -487,8 +487,9 @@ and not required: no CI wait (the CI checks green on the head that item 2 still 
 6), and the summary says that step was turned off on the Workflow page. With the preview turned off, the screenshots of a UI change are the review's own (`shots/`, the verify phase), required only where the review took them, and the summary says the preview was turned off on the Workflow page. The push, the pull request and the summary are locked: they are always done.
 
 **The intent check comes first, on every ticket of any complexity (low included).** When you
-orchestrate the cycle, the last review round (none for low) passes and then the project's **intent**
-agent compares what the human asked with what was built, before any item above stands (the preview
+orchestrate the cycle, the last review round (none for low) passes and then the intent step's Team agent (as the
+workflow names it: by default the project's agent named `intent`, else the built-in `feature-review-intent`)
+compares what the human asked with what was built, before any item above stands (the preview
 is started first, with its screenshots, and the check reads it at the current head; a commit after a
 `matches`, such as a CI fix, changes the head, so the check runs again on it): at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity, again after any human comment that sent the ticket back. It gets only
 the human's own words and attachments (the instructions, every post and reply by the human and the human's own answer on a decision card, newest
@@ -680,7 +681,8 @@ runs an agent names the **Team agent** that runs it (the human's pick on the Wor
 agent named like the step's role, else the built-in role): brief that agent with the instructions it has
 in `get_project` -> `agents` (instructions are written on the Team page only; the workflow carries
 none), the project's instructions and the ticket, and name its span, run report and `agentName` by the
-step's role, never by the Team agent's name. Rules that
+step's role, never by the Team agent's name. The review step names none: you run it through the
+/feature-review Skill in your own session, and its phases name their own Team agents. Rules that
 hold in every workflow: a fix pass by the **builder** takes the review's confirmed findings, each with
 the project's checks and a new review; a review that does not survive after the workflow's last round
 goes to a human decision; the checks return the build at most twice, and after the second return,

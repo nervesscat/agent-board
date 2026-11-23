@@ -59,7 +59,8 @@ export const ROUNDS_MAX = 12
 /**
  * Who runs a step: the ticket agent itself (`you`), or an agent it starts. These are roles, resolved
  * against the project's agents by name and delegation notes: `spec`, `builder`, `intent` and the review's
- * phase agents, and `runner`, the `/feature-review` run that starts those phase agents.
+ * phase agents, and `runner`, the `/feature-review` run that starts those phase agents. The ticket agent
+ * runs `runner` itself through the Skill tool, so no Team agent is named for it (its phases name theirs).
  */
 export type WorkflowAgent =
   | 'you'
@@ -780,16 +781,28 @@ function planPhases(preset: WorkflowPresetDef): ReviewSubStepDef[] {
 }
 
 /**
- * The nodes of a preset that run an agent and so can name a Team agent: its steps with an agent of their
- * own (not `you`) and the review's phases with one. Groups (Maximum's two reviews) and the ticket agent's
- * own steps and phases are not nodes of that kind.
+ * Whether a step can name a Team agent: it starts an agent of its own. The ticket agent's own steps do not,
+ * and neither does the review step (`runner`): the ticket agent runs `/feature-review` itself through the
+ * Skill tool, and the phases it starts are the nodes that name their agents.
+ */
+const stepNamesTeamAgent = (id: WorkflowStepId) => {
+  const role = WORKFLOW_STEPS[id].agent
+  return role !== 'you' && role !== 'runner'
+}
+
+/**
+ * The nodes of a preset that run an agent and so can name a Team agent: its steps that start an agent of
+ * their own (not `you`, not the review step) and the review's phases with one. Groups (Maximum's two
+ * reviews) and the ticket agent's own steps and phases are not nodes of that kind.
  */
 export function bindableNodes(presetId: WorkflowPresetId): WorkflowNode[] {
   const preset = WORKFLOW_PRESET_DEFS[presetId]
   return [
     ...preset.steps.flatMap((id): WorkflowNode[] => {
       const def = WORKFLOW_STEPS[id]
-      return def.agent === 'you' ? [] : [{ id, label: def.label, agent: def.agent, kind: 'step' }]
+      return def.agent === 'you' || !stepNamesTeamAgent(id)
+        ? []
+        : [{ id, label: def.label, agent: def.agent, kind: 'step' }]
     }),
     ...planPhases(preset).flatMap((d): WorkflowNode[] =>
       d.agent === 'you' || d.children.length
@@ -1499,7 +1512,7 @@ export function resolveWorkflow(
       effortLevel: effort === null ? null : effortLevel(effort, complexity),
       review:
         stepId === 'review' ? resolveReview(preset, number, rounds, complexity, flow.intent, teamOf) : null,
-      teamAgent: teamOf(stepId, def.agent),
+      teamAgent: stepNamesTeamAgent(stepId) ? teamOf(stepId, def.agent) : null,
       span: def.span,
       edited,
       moveBlocked: { up: up.ok ? null : up.reason, down: down.ok ? null : down.reason },

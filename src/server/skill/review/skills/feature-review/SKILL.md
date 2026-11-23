@@ -80,7 +80,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | a number | a GitHub PR | |
 | a branch name, `diff`, `staged`, or a path | the change to review | see Setup |
 | `phases=<list>` | the plan: the phases this run executes, as comma-separated tokens (**The plan**, below): e.g. `spec,env,verify,hunt,hunt,refute,merge`, or `reviewer` alone. A board cycle's ticket agent passes what its workflow's review step gives | the ticket's workflow on a board ticket, else the six standard phases |
-| `agents=<list>` | the Team agent that briefs each phase of `phases=`: one name per token, in the same order (a board cycle's ticket agent passes what its workflow's review step gives). The phase is briefed with that project agent's `instructions` (**On the board**, step 1) instead of the agent named like the phase; a name that is not one of the project's agents (a built-in role the Team has no agent for) briefs the phase from its agent file as before. It changes only who briefs the phase: spans, run reports and `agentName` still carry the phase's own name | each phase's agent is the project's agent named like it |
+| `agents=<list>` | the Team agent that briefs each phase of `phases=`: one name per token, in the same order (a board cycle's ticket agent passes what its workflow's review step gives). The phase is briefed with that project agent's `instructions` (**On the board**, step 1) instead of the agent named like the phase; a name that is not one of the project's agents (a built-in role the Team has no agent for) briefs the phase from its agent file as before. It changes only who briefs the phase: spans, run reports and `agentName` still carry the phase's own name | on a board ticket with no `phases=`: the `agents=` the ticket's workflow gives with its plan (**The plan**, rule 2); else each phase's agent is the project's agent named like it |
 | `deep` | the independent hunts also report each finding's stability (every hunt or one) | off |
 | `light` | a depth name only: it has no effect on the phases, every phase the plan lists runs (every hunt included) | off |
 | `keep` | keep the worktree and servers after the report, for debugging | off |
@@ -107,7 +107,10 @@ first match:
 1. **`phases=<list>`**: the caller's plan. A ticket agent passes the `phases=` its workflow's review
    step gives (`get_workflow` serves it, e.g. `phases=spec,env,verify,hunt,hunt,refute,merge`).
 2. **On a board ticket without `phases=`**: the ticket's workflow. `get_workflow` with the project and
-   the ticket (`ticket=<id>`), the `phases=` its review step gives for this run.
+   the ticket (`ticket=<id>`), the `phases=` its review step gives for this run, and the `agents=` it
+   prints with them for the same run (the human's Team picks for the review phases), so a queue
+   review or a person's request briefs each phase with the Team agent the workflow names, as the
+   ticket agent's own cycle does. An `agents=` given in the call still wins.
    When that workflow lists the ticket's review as skipped (a low ticket, no rounds for its level, or
    the review step turned off) it gives no `phases=`; if a review is asked for anyway (a queue review of
    its PR, a person's request), run the six standard phases and say so in the report: "workflow lists no
@@ -483,7 +486,8 @@ and the review answers them, it replies under their post, never with a new top-l
 plan first, then the result with its proofs.
 
 1. **The project's agents brief the phases.** `get_project` → `agents`. For each phase, the agent is the
-   one `agents=` names at the phase's place in `phases=`; without `agents=`, the project's agent named
+   one `agents=` names at the phase's place in `phases=` (an `agents=` given in the call, else the one the
+   ticket's workflow gave with the plan, **The plan** rule 2); with neither, the project's agent named
    like the phase (`spec`, `env`, `verify`, `hunt`, `refute`, `merge`, `intent`). When the project has
    that agent and it has instructions, spawn a general-purpose subagent whose prompt is that agent's `instructions`
    followed by everything this skill gives the phase (paths, the contract, its inputs). The human

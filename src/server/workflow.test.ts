@@ -390,7 +390,7 @@ describe('the effective workflow (C6, C7, C9, D1 to D3)', () => {
     expect(w.steps.find((s: { id: string }) => s.id === 'review').review.rounds).toBe(2)
     expect(w.text).toContain('Review: up to 2 rounds.')
     expect(w.text).toContain('## 5. Preview - you')
-    expect(w.text).toContain('## 6. Review - agent /feature-review, run by built-in `runner`')
+    expect(w.text).toContain('## 6. Review - agent /feature-review, effort')
     expect(w.text).toContain('- CI - skipped: turned off on the Workflow page')
     expect(w.text).toContain('## 3. Build [locked] - built-in `builder`, effort high')
     expect(w.text).toContain(`Hand-off: ${nodeOf(w, 'build').handoff}`)
@@ -462,7 +462,12 @@ describe('the effective workflow (C6, C7, C9, D1 to D3)', () => {
     ])
     expect(w.text).toContain('## 1. Read and claim [locked] - you')
     expect(w.text).toContain('## 2. Spec - built-in `spec`, effort medium')
-    expect(w.text).toContain('## 5. Review - agent /feature-review, run by built-in `runner`, effort medium')
+    expect(w.text).toContain('## 5. Review - agent /feature-review, effort medium\n')
+    // The ticket agent runs the skill itself: no Team agent, no Agent line under this heading.
+    const review = w.text.slice(w.text.indexOf('## 5. Review'), w.text.indexOf('## 6.'))
+    expect(review).not.toContain('Agent:')
+    expect(review).not.toMatch(/run by (built-in|Team agent)/)
+    expect(nodeOf(w, 'review').teamAgent).toBeNull()
     expect(w.text).toContain('## 7. Intent check [locked above low] - built-in `intent`, effort low')
     expect(w.text).toContain('rounds: 1. Each round runs these phases, none skipped:')
     for (const phase of [
@@ -983,7 +988,18 @@ describe('the Team agent of a node (B1 to B4, B6 to B8, B10, B13)', () => {
       expect((await preset(pid)).tweaks).toEqual({ agents: { build: 'acme-dev' } })
     }
     await refused({ build: 'nobody' }, '"nobody" is not one of the project\'s Team agents')
-    for (const node of ['claim', 'gate', 'preview', 'push', 'pr', 'ci', 'summary', 'handoff', 'review.gate'])
+    for (const node of [
+      'claim',
+      'gate',
+      'preview',
+      'push',
+      'pr',
+      'ci',
+      'summary',
+      'handoff',
+      'review',
+      'review.gate',
+    ])
       await refused({ [node]: 'acme-dev' }, `${node} runs no agent of its own`)
     await refused({ 'review.reconcile': 'acme-dev' }, 'review.reconcile')
     await refused({ foo: 'acme-dev' }, 'unknown node "foo"')
@@ -1008,7 +1024,7 @@ describe('the Team agent of a node (B1 to B4, B6 to B8, B10, B13)', () => {
 
   it('runs a node as the Team agent named like its role, else the built-in agent of the role (B4)', async () => {
     const pid = await newProject()
-    const roles = { spec: 'spec', build: 'builder', review: 'runner', intent: 'intent' }
+    const roles = { spec: 'spec', build: 'builder', intent: 'intent' }
     for (const [id, role] of Object.entries(roles))
       expect(nodeOf(await preset(pid), id).teamAgent, id).toEqual({
         name: role,
@@ -1028,6 +1044,10 @@ describe('the Team agent of a node (B1 to B4, B6 to B8, B10, B13)', () => {
       expect(nodeOf(await preset(pid), id).teamAgent.name, id).toBe(role)
     expect(nodeOf(await preset(pid, 'light'), 'review.reviewer').teamAgent.name).toBe('hunt')
     expect(nodeOf(await preset(pid), 'gate').teamAgent ?? null).toBeNull()
+    // The review step runs through the Skill in the ticket agent's session: no Team agent, even with one named `runner`.
+    expect(nodeOf(await preset(pid), 'review').teamAgent).toBeNull()
+    await agent(pid, 'runner')
+    expect(nodeOf(await preset(pid), 'review').teamAgent).toBeNull()
     await agent(pid, 'Builder')
     await agent(pid, 'hunt')
     const standard = await preset(pid)

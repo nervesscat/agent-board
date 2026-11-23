@@ -841,6 +841,34 @@ test('a phase of the review round has its Team agent to pick and nothing else to
   await expect(node(page, 'review.first.hunt-a')).not.toContainText('sec-hunter')
 })
 
+test('the Review step has no Team agent to pick: the ticket agent runs /feature-review, and its phases name their agents', async ({
+  page,
+  project,
+  human,
+}) => {
+  await ok(
+    human.post(`/api/projects/${project.id}/agents`, { data: { name: 'runner', instructions: 'Run.' } }),
+  )
+  await open(page, project.id)
+  // The node shows the skill, not a Team agent, even with an agent named like the role in the Team.
+  await expect(node(page, 'review')).toContainText('/feature-review')
+  await expect(node(page, 'review').locator('[data-agent-name]')).toHaveCount(0)
+  const side = await select(page, 'review')
+  await expect(side.getByRole('combobox', { name: 'Team agent' })).toHaveCount(0)
+  await expect(side.locator('[data-review-agents]')).toContainText(
+    'Its phases run their own Team agents, picked on the phase nodes.',
+  )
+  // Its effort and round counts stay; the phases keep their pickers.
+  await expect(side.getByRole('combobox', { name: 'Effort' })).toBeVisible()
+  await select(page, 'review.hunt-a')
+  await expect(panel(page).getByRole('combobox', { name: 'Team agent' })).toBeVisible()
+  // The board refuses a pick on the step itself.
+  const refused = await human.put(`/api/projects/${project.id}/workflow/standard`, {
+    data: { agents: { review: 'runner' } },
+  })
+  expect(refused.status()).toBe(400)
+})
+
 test('the order is changed with Move up and Move down in the panel, refused where it would break the flow, and kept (F11, C7)', async ({
   page,
   project,
