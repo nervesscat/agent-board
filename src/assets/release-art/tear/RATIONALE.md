@@ -128,6 +128,10 @@ Loose, minor 2: the reference shade and no turn, so these are the approved piece
   thirty other things): _run_. A strip torn into six pieces that drift further apart as they go,
   the last one saffron, over one large sheet and a second from the corner because the release is
   crowded. Work in motion, reported step by step.
+- **v0.2.6** (the Approved stage, protected branches, the sidebar that shrinks to icons, the update
+  card, the intent check, one Settings page, and a dozen smaller fixes; 21 lines of notes, twenty
+  pull requests): _gather_. Seven slabs piled from every side over a bare corner of the ground,
+  the accent laid in the middle of the heap, the tear rough. Many hands again, and a crowded table.
 
 ## What it handles worst
 
