@@ -23,7 +23,6 @@ const SEGMENTS: Record<string, AreaId<'nav'>> = {
   previews: 'nav.previews',
   gallery: 'nav.gallery',
   agents: 'nav.agents',
-  'run-reports': 'nav.runReports',
   daily: 'nav.daily',
   cleanup: 'nav.cleanup',
   repositories: 'nav.repositories',

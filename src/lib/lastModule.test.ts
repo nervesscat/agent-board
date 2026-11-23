@@ -10,7 +10,6 @@ describe('moduleOf', () => {
     expect(moduleOf('/projects/3')).toEqual({ project: '3', page: 'nav.overview' })
     expect(moduleOf('/projects/3/prs')).toEqual({ project: '3', page: 'nav.prs' })
     expect(moduleOf('/projects/12/features/58')).toEqual({ project: '12', page: 'nav.features' })
-    expect(moduleOf('/projects/3/run-reports')).toEqual({ project: '3', page: 'nav.runReports' })
   })
 
   it('knows no page for the board-wide pages, the old settings address or a page it does not list', () => {
@@ -19,6 +18,7 @@ describe('moduleOf', () => {
     expect(moduleOf('/')).toBeUndefined()
     expect(moduleOf('/projects/3/settings')).toBeUndefined()
     expect(moduleOf('/projects/3/nowhere')).toBeUndefined()
+    expect(moduleOf('/projects/3/run-reports')).toBeUndefined()
     expect(moduleOf('/projects/abc/prs')).toBeUndefined()
   })
 })
