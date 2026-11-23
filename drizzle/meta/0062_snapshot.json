@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "e309a1b8-a16d-4ec1-80cb-f7e90687d6cd",
-  "prevId": "2a374b95-e294-4ffb-9705-e6b014fc4586",
+  "id": "5f628bd9-11a0-4104-890b-c9df0a4a6987",
+  "prevId": "e3ce05d1-55d4-417d-90e6-e9ee7a1157a4",
   "tables": {
     "account": {
       "name": "account",
@@ -1602,13 +1602,21 @@
           "autoincrement": false,
           "default": "'[\"software\"]'"
         },
-        "workflow_preset": {
-          "name": "workflow_preset",
+        "resume_command": {
+          "name": "resume_command",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'standard'"
+          "default": "''"
+        },
+        "resume_timeout_minutes": {
+          "name": "resume_timeout_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 240
         },
         "workflow_tweaks": {
           "name": "workflow_tweaks",
@@ -1617,12 +1625,13 @@
           "notNull": false,
           "autoincrement": false
         },
-        "workflow_custom": {
-          "name": "workflow_custom",
+        "workflow_preset": {
+          "name": "workflow_preset",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'standard'"
         }
       },
       "indexes": {},
@@ -3528,6 +3537,158 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "ticket_resumes": {
+      "name": "ticket_resumes",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "ticket_id": {
+          "name": "ticket_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "post_id": {
+          "name": "post_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "trigger": {
+          "name": "trigger",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pid": {
+          "name": "pid",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pid_identity": {
+          "name": "pid_identity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "command": {
+          "name": "command",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "exit_code": {
+          "name": "exit_code",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "log_path": {
+          "name": "log_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "ticket_resumes_ticket": {
+          "name": "ticket_resumes_ticket",
+          "columns": [
+            "ticket_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "ticket_resumes_ticket_id_tickets_id_fk": {
+          "name": "ticket_resumes_ticket_id_tickets_id_fk",
+          "tableFrom": "ticket_resumes",
+          "tableTo": "tickets",
+          "columnsFrom": [
+            "ticket_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ticket_resumes_post_id_updates_id_fk": {
+          "name": "ticket_resumes_post_id_updates_id_fk",
+          "tableFrom": "ticket_resumes",
+          "tableTo": "updates",
+          "columnsFrom": [
+            "post_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ticket_resumes_state": {
+          "name": "ticket_resumes_state",
+          "value": "\"ticket_resumes\".\"state\" IN ('queued', 'running', 'succeeded', 'failed', 'skipped')"
+        }
+      }
+    },
     "tickets": {
       "name": "tickets",
       "columns": {
@@ -3596,13 +3757,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'mid'"
-        },
-        "workflow_preset": {
-          "name": "workflow_preset",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         },
         "assignee": {
           "name": "assignee",
@@ -3740,6 +3894,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        },
+        "workflow_preset": {
+          "name": "workflow_preset",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -3900,6 +4061,14 @@
         },
         "relayed_text": {
           "name": "relayed_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "answer_delivered": {
+          "name": "answer_delivered",
           "type": "text",
           "primaryKey": false,
           "notNull": true,

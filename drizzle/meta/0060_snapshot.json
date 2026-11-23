@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "5e5712c1-ae94-472c-86e0-19ff0b54915e",
+  "id": "75d1a878-1562-4a74-b1bb-388c9af64fd1",
   "prevId": "24dd8fcd-d37d-4464-8673-3dbc50a39a7e",
   "tables": {
     "account": {
@@ -1601,21 +1601,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'[\"software\"]'"
-        },
-        "workflow_preset": {
-          "name": "workflow_preset",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'standard'"
-        },
-        "workflow_tweaks": {
-          "name": "workflow_tweaks",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {},
@@ -3589,13 +3574,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'mid'"
-        },
-        "workflow_preset": {
-          "name": "workflow_preset",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         },
         "assignee": {
           "name": "assignee",

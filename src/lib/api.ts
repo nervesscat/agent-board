@@ -41,6 +41,7 @@ import type { AlertGroup, AlertSeverity } from '#/lib/alerts'
 import type { AlertButton } from '#/server/alerts/registry'
 import type { ManagedPreview } from '#/server/managedPreview'
 import type { OpencodeConfig } from '#/server/opencodeConfig'
+import type { ResumeView, ticketResume } from '#/server/resume'
 import type { RunState } from '#/server/runs'
 import type {
   AlsoRunning,
@@ -70,6 +71,10 @@ import type { WorkTimeline } from './workTimeline'
 export type WorkflowOverview = ReturnType<typeof workflowOverview>
 /** `/api/projects/:id/workflow/effective`: the workflow a ticket (or a preset and complexity) follows, with its text. */
 export type WorkflowEffective = ReturnType<typeof effectiveWorkflow>
+/** What the ticket's Resume card reads: whether resuming is on, the resume in hand with its log tail, the earlier ones. */
+export type TicketResume = ReturnType<typeof ticketResume>
+export type TicketResumeRow = ResumeView
+
 /** A project as the API returns it: always with its repos. */
 export type Project = ProjectFull
 /**

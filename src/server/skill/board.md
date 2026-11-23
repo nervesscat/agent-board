@@ -228,10 +228,10 @@ Lanes of a ticket you are working are yours to create (next section).
   their last update; `laneUpdates: true` folds their updates into the feed; `get_ticket_git` shows
   every workspace under the ticket.
 - The human's verdict: `approvedAt` / `approvedBy` (approved) or `disapprovedAt` /
-  `disapprovedBy` (disapproved, which also moves it to `cancelled`) on a lane or ticket; both null
-  means no call yet, and `lanes.approved` / `lanes.disapproved` count them. Read it, never set it:
-  an approved lane is settled and a disapproved one is dropped, so ask in its thread before
-  touching either.
+  `disapprovedBy` (disapproved, which also moves it to `cancelled`) on a top-level ticket; both
+  null means no call yet. Read it, never set it. A lane has no verdict: its stage is the call
+  (Approved or Done is accepted, Cancelled is dropped), and the parent's `lanes` counts are
+  `total` and `byStage`. Ask in a lane's thread before moving one of those.
 - The archive: the human takes finished tickets (done or cancelled) off the board, their lanes with
   them; `archivedAt` / `archivedBy` show it. `list_tickets` leaves them out unless `archived` is
   `"include"` (with the rest) or `"only"`; `get_ticket` still opens them. Only the human archives

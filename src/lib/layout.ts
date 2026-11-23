@@ -52,6 +52,7 @@ export const LAYOUT_ELEMENTS = [
     locked: 'Decisions and threads that wait on you are here',
   },
   { id: 'ticket.runs', label: 'Runs', area: 'ticket.side' },
+  { id: 'ticket.resume', label: 'Resume', area: 'ticket.side' },
   { id: 'ticket.details', label: 'Details', area: 'ticket.side' },
   { id: 'ticket.branch', label: 'Branch', area: 'ticket.side' },
   { id: 'ticket.workspaces', label: 'Workspaces', area: 'ticket.side' },
