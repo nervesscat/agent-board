@@ -291,6 +291,39 @@ test('keyboard focus opens the same tooltip as hover, and leaving or Escape clos
   await expect(tooltip(page)).toHaveText('Attach files')
 })
 
+test("the top bar's Connect and Settings are icon buttons with a tooltip, a name and an active state", async ({
+  page,
+}) => {
+  await page.goto('/')
+  const bar = page.getByRole('banner')
+  const connect = bar.getByRole('link', { name: 'Connect an agent', exact: true })
+  const settings = bar.getByRole('link', { name: 'Settings', exact: true })
+  // Icons, not words: each link holds one svg and no text of its own.
+  for (const link of [connect, settings]) {
+    await expect(link.locator('svg')).toHaveCount(1)
+    await expect(link).toHaveText('')
+  }
+  await expectTooltip(connect, 'Connect an agent')
+  await expectTooltip(settings, 'Settings')
+  // The same size as the notification bell beside them.
+  const size = async (l: Locator) => {
+    const b = (await l.boundingBox())!
+    return [Math.round(b.width), Math.round(b.height)]
+  }
+  expect(await size(connect)).toEqual(await size(bar.getByRole('button', { name: 'Notifications' })))
+
+  // Keyboard focus opens the tooltip too, and the page's own link is the active one.
+  await connect.focus()
+  await expect(tooltip(page)).toHaveText('Connect an agent')
+  await connect.click()
+  await expect(page).toHaveURL(/\/agents$/)
+  await expect(connect).toHaveAttribute('aria-current', 'page')
+  await expect(settings).not.toHaveAttribute('aria-current', 'page')
+  await settings.click()
+  await expect(page).toHaveURL(/\/settings$/)
+  await expect(settings).toHaveAttribute('aria-current', 'page')
+})
+
 test('a tooltip of several lines keeps them, each on its own row', async ({ page, api, human, project }) => {
   const base = await api.ticket({ title: 'Foundation', status: 'todo' })
   const t = await api.ticket({ title: 'Built on it', status: 'in_progress' })
