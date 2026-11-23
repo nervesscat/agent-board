@@ -344,7 +344,13 @@ function Row({
         </div>
         <div role="group" className={`space-y-1 px-5 ${lane ? 'pb-2' : 'pb-3'}`} aria-label="Work timeline">
           {/* Keyed on the choice, not the times: a new choice re-anchors a live track at now; the ticking end does not. */}
-          <WorkTimelineBar key={windowKey} timeline={row.work} compact={Boolean(lane)} window={timeWindow} />
+          <WorkTimelineBar
+            key={windowKey}
+            timeline={row.work}
+            compact={Boolean(lane)}
+            window={timeWindow}
+            reports={{ projectId: Number(projectId), ticketId: row.id }}
+          />
           {hasWork(row.work) && <WorkSummary totals={row.work.totals} />}
         </div>
       </div>
