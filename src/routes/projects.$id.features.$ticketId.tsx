@@ -11,8 +11,10 @@ import {
   Archive,
   ArchiveRestore,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   ExternalLink,
   Flag,
   FlagOff,
@@ -34,6 +36,8 @@ import {
 import {
   Fragment,
   type ReactNode,
+  type Ref,
+  type RefObject,
   createContext,
   useCallback,
   useContext,
@@ -67,6 +71,7 @@ import { PrState } from '#/components/PrState'
 import type { FeedTab } from '#/lib/constants'
 import { PushBadge, PushDot, RefreshPush } from '#/components/PushDot'
 import { Tag, compareTags } from '#/components/Tag'
+import { TicketLine } from '#/components/TicketLine'
 import { TrashIcon } from '#/components/TrashIcon'
 import { TagsInput, useTagChoices } from '#/components/TagsInput'
 import { ReachBadge } from '#/components/ReachBadge'
@@ -136,6 +141,7 @@ import { useProject, useStages } from '#/lib/project'
 import { type Anchor, anchorId, cameBack, useAnchor, useReveal } from '#/lib/reveal'
 import { addTags, overTagLimits } from '#/lib/tags'
 import { type StepList, columnNeighbours, isClosed, stageBadge, stageOf } from '#/lib/stages'
+import { scrolledAway } from '#/lib/scrolledAway'
 import { ticketsKey, ticketsQuery } from '#/lib/tickets'
 
 export const Route = createFileRoute('/projects/$id/features/$ticketId')({
@@ -306,6 +312,9 @@ function TicketPage() {
   // once per anchor, so turning it off again stays off.
   const anchoredPost = anchorId(anchor?.holder ?? anchor?.target, 'post')
   const foldedFor = useRef<string | null>(null)
+  // The page's own breadcrumbs: the floating header shows them while these are scrolled out of view.
+  const crumbs = useRef<HTMLElement>(null)
+  const crumbsAway = useCrumbsAway(crumbs, t !== undefined)
   useEffect(() => {
     if (!drawn || !anchor || anchoredPost === null || laneFeed || foldedFor.current === anchor.hash) return
     if (t.lanes.length && !t.updates.some((u) => u.id === anchoredPost)) {
@@ -422,45 +431,30 @@ function TicketPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-        <Link to="/projects/$id/features" params={{ id }} className="hover:text-foreground">
-          Ongoing features
-        </Link>
-        {t.ancestors.map((a) => (
-          <span key={a.id} className="inline-flex min-w-0 items-center gap-1">
-            <ChevronRight className="size-3.5 shrink-0" />
-            <Link
-              to="/projects/$id/features/$ticketId"
-              params={{ id, ticketId: String(a.id) }}
-              // Back to the parent's list with the filter it had.
-              search={a.id === t.parentId ? laneSearch(filter) : {}}
-              className="max-w-64 truncate hover:text-foreground"
-            >
-              #{a.id} {a.title}
-            </Link>
-          </span>
-        ))}
-        <ChevronRight className="size-3.5" />
-        <span className="text-foreground">#{t.id}</span>
-      </nav>
+      <Breadcrumbs ref={crumbs} projectId={id} t={t} filter={filter} />
 
       {/* The header stays in view once scrolled up to the top bar (h-12 and its border), with the
             page scrolling under it: opaque, above the feed's positioned bits, below the top bar.
             Its padding keeps the title off the top bar's edge; the margins take it back at rest. */}
       <header
         ref={measureHeader}
-        className="sticky top-[calc(3rem+1px+env(safe-area-inset-top))] z-10 -my-2 flex flex-wrap items-start gap-3 bg-background py-2"
+        className="sticky top-[calc(3rem+1px+env(safe-area-inset-top))] z-10 -mb-2 -mt-6 flex flex-wrap items-start gap-3 bg-background pb-2 pt-6"
       >
+        {/* The page's breadcrumbs, on a line above the title, while the page's own are scrolled away. The
+              header's top padding is the page's gap above it (the margin takes it back at rest), so this
+              line takes no room of its own: the header's height does not change when it comes and goes. It
+              sticks exactly when the page's own go under the top bar. */}
+        {crumbsAway && (
+          <div className="absolute inset-x-0 top-1 flex min-w-0 items-center">
+            <Breadcrumbs projectId={id} t={t} filter={filter} compact />
+          </div>
+        )}
         {/* At least 12rem wide: a toolbar too wide to sit beside it wraps under it, not squeezes the title. */}
         <div className="min-w-48 flex-1">
           <InlineTitle key={t.id} t={t} onSave={(title) => update.mutate({ title })} />
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <span>
-              opened by <Actor name={t.createdBy} short /> {ago(t.createdAt)}
-            </span>
-            <span>updated {ago(t.updatedAt)}</span>
+          <TicketLine createdBy={t.createdBy} createdAt={t.createdAt} updatedAt={t.updatedAt}>
             <InlineTags key={t.id} t={t} projectId={id} onSave={(tags) => update.mutate({ tags })} />
-          </div>
+          </TicketLine>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {t.archivedAt && (
@@ -603,13 +597,230 @@ function TicketPage() {
           </div>
         )}
         {side.length > 0 && (
-          <aside data-ticket-column="side" className="min-w-0 space-y-4">
+          <SideColumn>
             {side.map((s) => (
               <Fragment key={s}>{sections[s]}</Fragment>
             ))}
-          </aside>
+          </SideColumn>
         )}
       </div>
+    </div>
+  )
+}
+
+type CrumbsProps = { projectId: string; t: TicketFull; filter: LaneFilter }
+
+/**
+ * The path to the ticket: Ongoing features, the tickets it is a lane of, the ticket. At the top of the page,
+ * and again in the floating header (`compact`) while the page's own is scrolled away.
+ */
+function Breadcrumbs({
+  projectId,
+  t,
+  filter,
+  compact = false,
+  ref,
+}: CrumbsProps & { compact?: boolean; ref?: Ref<HTMLElement> }) {
+  return (
+    <nav
+      ref={ref}
+      aria-label="Breadcrumb"
+      className={cn(
+        'flex items-center gap-1 text-muted-foreground',
+        // The bar is one line: the path shortens (each ticket's title cut off) instead of wrapping.
+        compact ? 'min-w-0 flex-nowrap overflow-hidden text-xs' : 'flex-wrap text-sm',
+      )}
+    >
+      <Link
+        to="/projects/$id/features"
+        params={{ id: projectId }}
+        className={cn('hover:text-foreground', compact && 'shrink-0')}
+      >
+        Ongoing features
+      </Link>
+      {t.ancestors.map((a) => (
+        <span key={a.id} className="inline-flex min-w-0 items-center gap-1">
+          <ChevronRight className="size-3.5 shrink-0" />
+          <Link
+            to="/projects/$id/features/$ticketId"
+            params={{ id: projectId, ticketId: String(a.id) }}
+            // Back to the parent's list with the filter it had.
+            search={a.id === t.parentId ? laneSearch(filter) : {}}
+            className={cn('truncate hover:text-foreground', compact ? 'max-w-32 sm:max-w-48' : 'max-w-64')}
+          >
+            #{a.id} {a.title}
+          </Link>
+        </span>
+      ))}
+      <ChevronRight className="size-3.5 shrink-0" />
+      <span className={cn('shrink-0', !compact && 'text-foreground')}>#{t.id}</span>
+    </nav>
+  )
+}
+
+/**
+ * Whether the page's own breadcrumbs (`page`) are scrolled out of view, up under the top bar: the floating
+ * header then shows them, and only then, so they are never on screen twice. The header's stuck offset is the
+ * top bar's height, which is where the page's breadcrumbs go out of sight. `drawn`: the page has its
+ * breadcrumbs and header.
+ */
+function useCrumbsAway(page: RefObject<HTMLElement | null>, drawn: boolean) {
+  const [away, setAway] = useState(false)
+  useEffect(() => {
+    const crumbs = page.current
+    const header = crumbs?.parentElement?.querySelector('header')
+    if (!drawn || !crumbs || !header) return
+    let seen: IntersectionObserver | undefined
+    const watch = () => {
+      seen?.disconnect()
+      const bar = parseFloat(getComputedStyle(header).top)
+      seen = new IntersectionObserver(([entry]) => setAway(scrolledAway(entry!, bar)), {
+        rootMargin: `-${bar}px 0px 0px 0px`,
+      })
+      seen.observe(crumbs)
+    }
+    watch()
+    // The top bar's height follows the device's safe area, which turns with the screen.
+    window.addEventListener('resize', watch)
+    return () => {
+      window.removeEventListener('resize', watch)
+      seen?.disconnect()
+    }
+  }, [page, drawn])
+  return away
+}
+
+/**
+ * The ticket page's side column. Side by side, it stays under the stuck header while the main column scrolls
+ * with the page, and scrolls by itself when it is taller than what is left of the window. Its scrollbar is
+ * not drawn, so it never stands beside the window's: the edge that has more behind it is blurred and faded
+ * instead, with a tiny arrow on it that scrolls a screenful that way. Stacked, it is part of the page's one
+ * scroll, with no fade and no arrow. The padding and the negative margin keep the focus rings of its cards
+ * inside the box the scroll clips to.
+ */
+function SideColumn({ children }: { children: ReactNode }) {
+  const column = useRef<HTMLElement>(null)
+  const up = useRef<HTMLButtonElement>(null)
+  const down = useRef<HTMLButtonElement>(null)
+  const [more, setMore] = useState({ above: false, below: false })
+  useEffect(() => {
+    const el = column.current
+    if (!el) return
+    const read = () => {
+      const above = el.scrollTop > 1
+      const below = el.scrollTop + el.clientHeight < el.scrollHeight - 1
+      setMore((m) => (m.above === above && m.below === below ? m : { above, below }))
+    }
+    read()
+    el.addEventListener('scroll', read, { passive: true })
+    // Its cards grow and shrink, and the window's height changes how much of it shows.
+    const resized = new ResizeObserver(read)
+    resized.observe(el)
+    for (const c of Array.from(el.children)) resized.observe(c)
+    const added = new MutationObserver(() => {
+      for (const c of Array.from(el.children)) resized.observe(c)
+      read()
+    })
+    added.observe(el, { childList: true })
+    return () => {
+      el.removeEventListener('scroll', read)
+      resized.disconnect()
+      added.disconnect()
+    }
+  }, [])
+  // An arrow that goes away under the keyboard (the end was reached) hands the focus to the other one.
+  useEffect(() => {
+    if (!more.below && document.activeElement === down.current) up.current?.focus()
+    if (!more.above && document.activeElement === up.current) down.current?.focus()
+  }, [more])
+  const go = (direction: 1 | -1) => {
+    const el = column.current
+    if (!el) return
+    const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    el.scrollBy({ top: direction * el.clientHeight * 0.85, behavior: calm ? 'auto' : 'smooth' })
+  }
+  return (
+    <div className="relative min-w-0 lg:sticky lg:top-[calc(var(--ticket-header,4rem)+1rem)] lg:-m-1 lg:self-start">
+      <aside
+        ref={column}
+        data-ticket-column="side"
+        data-more-above={more.above}
+        data-more-below={more.below}
+        className="min-w-0 space-y-4 lg:max-h-[calc(100dvh-var(--ticket-header,4rem)-1.5rem)] lg:overflow-y-auto lg:p-1 lg:[scrollbar-width:none] lg:[&::-webkit-scrollbar]:hidden"
+      >
+        {children}
+      </aside>
+      <SideEdge
+        edge="top"
+        shown={more.above}
+        label="Scroll the side column up"
+        onGo={() => go(-1)}
+        button={up}
+      />
+      <SideEdge
+        edge="bottom"
+        shown={more.below}
+        label="Scroll the side column down"
+        onGo={() => go(1)}
+        button={down}
+      />
+    </div>
+  )
+}
+
+/**
+ * One edge of the side column that has more behind it: the cards under it are blurred and fade into the
+ * page's background, and a tiny arrow sits centred on it. Side by side only; never in the way of the
+ * pointer except on the arrow itself.
+ */
+function SideEdge({
+  edge,
+  shown,
+  label,
+  onGo,
+  button,
+}: {
+  edge: 'top' | 'bottom'
+  shown: boolean
+  label: string
+  onGo: () => void
+  button: RefObject<HTMLButtonElement | null>
+}) {
+  const top = edge === 'top'
+  const Arrow = top ? ChevronUp : ChevronDown
+  return (
+    <div
+      data-side-edge={edge}
+      aria-hidden={!shown}
+      className={cn(
+        'pointer-events-none absolute inset-x-0 hidden h-11 transition-opacity duration-150 motion-reduce:transition-none lg:block',
+        top ? 'top-0' : 'bottom-0',
+        shown ? 'opacity-100' : 'invisible opacity-0',
+      )}
+    >
+      <div
+        className={cn(
+          'absolute inset-0 bg-linear-to-b backdrop-blur-[3px]',
+          top
+            ? 'from-background via-background/70 to-transparent [mask-image:linear-gradient(to_bottom,#000_30%,transparent)]'
+            : 'from-transparent via-background/70 to-background [mask-image:linear-gradient(to_top,#000_30%,transparent)]',
+        )}
+      />
+      <Tip content={label}>
+        <button
+          ref={button}
+          type="button"
+          tabIndex={shown ? 0 : -1}
+          aria-label={label}
+          onClick={onGo}
+          className={cn(
+            'pointer-events-auto absolute left-1/2 flex size-5 -translate-x-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+            top ? 'top-0.5' : 'bottom-0.5',
+          )}
+        >
+          <Arrow className="size-3.5" aria-hidden />
+        </button>
+      </Tip>
     </div>
   )
 }
