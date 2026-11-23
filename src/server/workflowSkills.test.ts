@@ -822,6 +822,68 @@ describe('a step runs the Team agent the workflow names (B9, B11, B14)', () => {
     expect(skill).toContain("spans, run reports and `agentName` still carry the phase's own name")
   })
 
+  it('says "never by" only of a name that differs from the role, for every preset and complexity (B11)', async () => {
+    const { renderWorkflowText } = await import('./workflow')
+    const roles = ['spec', 'builder', 'runner', 'env', 'verify', 'hunt', 'refute', 'merge', 'intent']
+    const teams: [string, string[], Record<string, string> | undefined][] = [
+      ['no Team', [], undefined],
+      ['role agents', roles, undefined],
+      [
+        'a pick of another name',
+        [...roles, 'acme-dev'],
+        { spec: 'acme-dev', build: 'acme-dev', 'review.hunt-a': 'acme-dev', 'review.hunt-b': 'acme-dev' },
+      ],
+    ]
+    let picked = 0
+    for (const preset of WORKFLOW_PRESETS)
+      for (const complexity of COMPLEXITIES)
+        for (const [label, team, agents] of teams) {
+          const w = resolveWorkflow(preset, agents && { agents }, complexity, team)
+          const text = renderWorkflowText(w, { source: 'project', projectPreset: preset, ticketId: null })
+          const at = `${preset}/${complexity}/${label}`
+          for (const line of text.split('\n')) {
+            const m = /by the role `([^`]+)`,? ?(?:never by `([^`]+)`)?/.exec(line)
+            if (m?.[2]) {
+              expect(m[2].toLowerCase(), `${at}: ${line.slice(0, 160)}`).not.toBe(m[1])
+              picked++
+            }
+          }
+          if (agents && !w.steps.every((x) => x.skipped || x.teamAgent?.source !== 'picked'))
+            expect(text, at).toMatch(/by the role `[a-z]+`, never by `acme-dev`:/)
+          if (team.length > 0 && !agents) expect(text, at).not.toContain('never by')
+          // The role is also the agent's name: the line says so, and posts as the agent.
+          if (team === roles)
+            expect(text, at).toContain(
+              "by the role `builder` (which is also the agent's name): the board counts this step's runs by role.",
+            )
+        }
+    expect(picked).toBeGreaterThan(0)
+  })
+
+  it("names a step's agent by the Team agent the workflow names, never by a fixed agent name (B9)", async () => {
+    // The intent and hunt agents are the step's pick: by default the agent named like the role, else the built-in.
+    const fixed = [
+      /the project's `(intent|hunt|spec|builder|runner|env|verify|refute|merge)` agent/,
+      /project's `(intent|hunt|spec|builder|runner|env|verify|refute|merge)` agent/,
+      /The subagents are the project's `spec`/,
+    ]
+    const texts: Record<string, string> = {
+      ...(await servedTexts()),
+      'feature-review-intent.md': review('agents/feature-review-intent.md'),
+      'feature-review-hunt.md': review('agents/feature-review-hunt.md'),
+    }
+    for (const file of fs.readdirSync(path.join(skillDir, 'workflow')))
+      texts[`workflow/${file}`] = read(skillDir, 'workflow', file)
+    for (const [file, text] of Object.entries(texts))
+      for (const bad of fixed) expect(flat(text), `${file} ${bad}`).not.toMatch(bad)
+    expect(flat(review('agents/todo-review-ticket.md'))).toContain(
+      "The intent agent (the Team agent the intent step names in the project's workflow, `get_workflow`: by default the project's agent named `intent`, else the built-in `feature-review-intent`)",
+    )
+    expect(flat(review('skills/feature-review/SKILL.md'))).toContain(
+      "It runs the Team agent the intent step names in the project's workflow (`get_workflow`; by default the project's agent named `intent`, else the built-in `feature-review-intent`)",
+    )
+  })
+
   it("has the board skill, AGENTS.md and the MCP text say where a step's instructions come from (B14)", async () => {
     const sentence =
       "Each step that runs an agent names the **Team agent** that runs it (the human's pick on the Workflow page, else the Team agent named like the step's role, else the built-in role)"

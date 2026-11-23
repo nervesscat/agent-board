@@ -95,7 +95,8 @@ Every step in the text has the same parts:
   round, or one more return, on your own. The review's rounds are the workflow's count for this
   ticket's complexity, at every review depth: a `deep` review earns no extra round and a `light` one
   loses none.
-- **The intent check's brief is blind.** The intent agent (the project's `intent` agent; else
+- **The intent check's brief is blind.** The intent agent (the Team agent the intent step names in
+  the project's workflow, `get_workflow`: by default the project's agent named `intent`, else the built-in
   `feature-review-intent`) is started at the intent step's effort: it runs at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity. It runs on every ticket where the workflow
   lists the check (a low ticket skips the review, never the intent check, unless the human turned
   the step off for low tickets), and it is briefed with only two things: the

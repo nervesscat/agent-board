@@ -493,7 +493,8 @@ baseBranch?}`; REST `PATCH /api/projects/:id/repos/:repoId`) changes the fields 
     for `post_report` on the current period.)
 11. **Run reports**: one report per subagent run, written before the hand-off: it is part of
     finishing, not a step after it, and the orchestrator writes none (nor a ticket agent that only
-    drives rounds). The subagents are the project's `spec`, `builder` and `runner`,
+    drives rounds). The subagents are the roles `spec`, `builder` and `runner` (each run by the Team agent the workflow
+    names for it),
     and the review's `env`, `verify`, `hunt`, `refute`, `merge` and the intent check; a ticket with three review rounds
     has three `hunt` reports, one per round. Each template ships with the review bundle as
     `run-reports/<agent>.md` (`spec`, `builder`, `runner`, `env`, `verify`, `hunt`, `refute`,

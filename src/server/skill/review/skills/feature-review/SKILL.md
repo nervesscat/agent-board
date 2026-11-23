@@ -141,8 +141,8 @@ Phase 1b does for a hunt: install or reuse the dependencies inside the worktree 
 `node_modules` copied by hardlink with `cp -al` into a real directory, never a symlink or a junction, or
 the project's own install), and write a small `00-env.md` with the test command that runs from the
 worktree (the project's own, from its runbook or scripts), the repo's `Test slots:` folders when `slots=`
-was given, and `Servers: none started`. Spawn one `feature-review-hunt` agent (the project's `hunt`
-agent when it has one) with prefix `_frh_`, the context pack, the focus, the diff, the checklists and
+was given, and `Servers: none started`. Spawn one `feature-review-hunt` agent (the Team agent the hunt phase names in the
+project's workflow, `agents=`: by default the project's agent named `hunt`, else the built-in role) with prefix `_frh_`, the context pack, the focus, the diff, the checklists and
 `00-env.md`, and tell it the test slots' rule (a heavy run, such as an end-to-end spec, takes the first
 free slot and releases it right after; a targeted unit test or probe takes none). It runs only targeted
 tests and probes from the worktree. Starting a server is the reviewer's own call, only when reproducing
@@ -527,7 +527,7 @@ plan first, then the result with its proofs.
    off; the review itself never runs it, the orchestrator that hands the ticket off does (the
    todo-review skill's ticket agent). It runs on every ticket, of any complexity (low included, which
    has no review rounds), and again after any human comment that sent the ticket back. It runs the
-   project's `intent` agent (or `feature-review-intent`) at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity,
+   Team agent the intent step names in the project's workflow (`get_workflow`; by default the project's agent named `intent`, else the built-in `feature-review-intent`) at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity,
    and gives it only the human's own words and attachments (the ticket's instructions, every post
    and reply by the human, newest last, and the human's own answer on a decision card, the latest comment that sent the ticket back weighing most)
    and the result (the preview, the screenshots or recordings, the diff). It never gets the
