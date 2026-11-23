@@ -3,6 +3,7 @@ import { Bot, Lock } from 'lucide-react'
 
 import { RoleBadge, useWho } from '#/components/Actor'
 import { AgentAvatar } from '#/components/AgentAvatar'
+import { ControlSkeleton } from '#/components/ControlSkeleton'
 import {
   Select,
   SelectContent,
@@ -32,7 +33,7 @@ export function AssigneeSelect({
   onChange: (name: string) => void
 }) {
   const agents = useProjectAgents()
-  const { data: actors = [] } = useQuery({
+  const { data: actors = [], isPending } = useQuery({
     queryKey: ['actors'],
     queryFn: () => get<ActorRow[]>('/api/actors'),
     staleTime: 5 * 60_000,
@@ -50,11 +51,23 @@ export function AssigneeSelect({
   const who = useWho()
   const isConnected = (v: string) => v !== NONE && !isAgent(v)
   return (
-    <Select value={current || NONE} onValueChange={(v) => onChange(!v || v === NONE ? '' : v)} items={items}>
+    <Select
+      value={current || NONE}
+      onValueChange={(v) => onChange(!v || v === NONE ? '' : v)}
+      items={items}
+      disabled={isPending}
+    >
       <SelectTrigger id={id} className="w-full">
         <SelectValue>
           {(v: string) =>
-            isConnected(v) ? (
+            // Until the actors are known "Unassigned" would be a guess: the stored name, or a skeleton.
+            isPending ? (
+              current ? (
+                <span className="truncate">{current}</span>
+              ) : (
+                <ControlSkeleton label="Loading agents…" />
+              )
+            ) : isConnected(v) ? (
               <span className="flex min-w-0 items-center gap-1.5">
                 <span className="truncate">{v}</span>
                 <RoleBadge role={who(v).role} />

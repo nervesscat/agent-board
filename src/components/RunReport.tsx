@@ -29,7 +29,7 @@ export const runReportLabel = (r: Pick<RunReport, 'agent' | 'round'>) =>
   r.round === null ? r.agent : `${r.agent} round ${r.round}`
 
 /** Its duration: `not reported` when neither a span measured it nor the agent gave a time. */
-export const runReportDuration = (r: Pick<RunReport, 'durationMs' | 'durationSource'>) =>
+const runReportDuration = (r: Pick<RunReport, 'durationMs' | 'durationSource'>) =>
   r.durationSource === 'unknown' ? 'not reported' : formatDuration(r.durationMs)
 
 /** The report's sections in the template's order, then any the agent added of its own. */

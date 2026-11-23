@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
 import { ChangeDiff } from '#/components/daily/SettingsChangeDiff'
+import { DelayedLoading, SkeletonCard } from '#/components/Loading'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
@@ -74,6 +75,11 @@ export function InstructionsHistory({ projectId }: { projectId: string }) {
         applies at once and waits on your review.
       </p>
       {error && <p className="text-xs text-destructive">{errorMessage(error)}</p>}
+      {!data && !error && (
+        <DelayedLoading label="Loading instructions history…">
+          <SkeletonCard lines={3} />
+        </DelayedLoading>
+      )}
       {data?.length === 0 && <p className="text-xs text-muted-foreground">No changes yet.</p>}
       {!!data?.length && (
         <ol className="space-y-3">

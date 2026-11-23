@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 
 import { formatTime, useHour12 } from '#/components/AnalogClock'
+import { DelayedLoading } from '#/components/Loading'
+import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { get, type ReportSettingsView } from '#/lib/api'
 import { localDate } from '#/lib/format'
@@ -13,13 +15,19 @@ import { cn } from '#/lib/utils'
  * shift is the arc from its start to its end, and now is the hand. Only while reports are tracked.
  */
 export function ShiftClock({ projectId }: { projectId: number }) {
-  const { data: settings } = useQuery({
+  const { data: settings, error } = useQuery({
     queryKey: ['report-settings', projectId],
     queryFn: () => get<ReportSettingsView>(`/api/projects/${projectId}/report-settings`),
   })
   const hour12 = useHour12()
   const now = useMinuteClock()
-  if (!settings || settings.cadence === 'off' || !now) return null
+  if (!settings)
+    return error ? null : (
+      <DelayedLoading label="Loading shift…">
+        <Skeleton className="h-8 w-28 rounded-full" />
+      </DelayedLoading>
+    )
+  if (settings.cadence === 'off' || !now) return null
 
   const start = minutesOf(settings.shiftStart)
   const end = minutesOf(settings.shiftEnd)

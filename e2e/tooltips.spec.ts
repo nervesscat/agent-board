@@ -127,6 +127,7 @@ function prRow(projectId: number, n: number, extra: Partial<PrRow> = {}): PrRow 
     reviewDecision: null,
     myReview: 'none',
     requested: false,
+    involvesMe: true,
     waitingOn: 'me',
     reviewStage: 'pending',
     mergeable: 'MERGEABLE',
@@ -1030,3 +1031,165 @@ function tipsBesidePointer(page: Page, pointer: { x: number; y: number }) {
 function openTooltipTexts(page: Page) {
   return anyTooltip(page).evaluateAll((els) => els.map((el) => el.textContent ?? ''))
 }
+
+test("the Instructions card's tooltip opens at the pointer, follows it and stays in the window", async ({
+  page,
+  api,
+  project,
+}) => {
+  const body = Array.from({ length: 12 }, (_, i) => `Paragraph ${i + 1}: ${'words '.repeat(40)}`).join('\n\n')
+  const t = await api.ticket({ title: 'Pointer tooltip', body })
+  await page.setViewportSize({ width: 1100, height: 700 })
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const card = page.getByRole('region', { name: 'Instructions' }).locator('[data-tip]').first()
+  await expect(card).toBeVisible()
+  const cardBox = (await card.boundingBox())!
+  const tip = tooltip(page)
+
+  /** Moves the pointer onto the card from outside it and waits for the tooltip, then reads its box. */
+  async function hoverAt(x: number, y: number) {
+    await expect(async () => {
+      await page.mouse.move(0, 0)
+      await page.mouse.move(x, y, { steps: 4 })
+      await expect(tip).toHaveText('Click to edit', { timeout: 2000 })
+    }).toPass({ timeout: 10_000 })
+    return (await tip.boundingBox())!
+  }
+
+  // Wherever the pointer rests on the card, the bubble sits just below and to the right of it, never over it.
+  for (const [fx, fy] of [
+    [0.2, 0],
+    [0.5, 0.5],
+    [0.8, 1],
+  ]) {
+    const x = cardBox.x + cardBox.width * fx
+    const y = cardBox.y + 20 + fy * 200
+    const box = await hoverAt(x, y)
+    expect(box.x).toBeGreaterThanOrEqual(x)
+    expect(box.x).toBeLessThanOrEqual(x + 40)
+    expect(box.y).toBeGreaterThan(y)
+    expect(box.y).toBeLessThanOrEqual(y + 40)
+  }
+
+  // It follows the pointer as it moves over the card, without closing.
+  const from = (await tip.boundingBox())!
+  const moved = { x: cardBox.x + cardBox.width * 0.3, y: cardBox.y + 100 }
+  await page.mouse.move(moved.x, moved.y, { steps: 6 })
+  await expect.poll(async () => Math.round((await tip.boundingBox())!.y)).not.toBe(Math.round(from.y))
+  const after = (await tip.boundingBox())!
+  expect(after.x).toBeGreaterThanOrEqual(moved.x)
+  expect(after.x).toBeLessThanOrEqual(moved.x + 40)
+  expect(after.y).toBeGreaterThan(moved.y)
+  expect(after.y).toBeLessThanOrEqual(moved.y + 40)
+
+  // Near the window's right and bottom edges it flips and shifts to stay fully inside, off the pointer.
+  await page.setViewportSize({ width: 1100, height: 500 })
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  await expect(card).toBeVisible()
+  const edge = (await card.boundingBox())!
+  const corner = {
+    x: Math.min(edge.x + edge.width - 6, 1100 - 6),
+    y: 500 - 8,
+  }
+  const box = await hoverAt(corner.x, corner.y)
+  expect(box.x).toBeGreaterThanOrEqual(0)
+  expect(box.y).toBeGreaterThanOrEqual(0)
+  expect(box.x + box.width).toBeLessThanOrEqual(1100)
+  expect(box.y + box.height).toBeLessThanOrEqual(500)
+  const covers =
+    corner.x >= box.x && corner.x <= box.x + box.width && corner.y >= box.y && corner.y <= box.y + box.height
+  expect(covers).toBe(false)
+
+  // From the keyboard there is no pointer: it opens against the card's edge, as every tooltip does, with its arrow.
+  await page.mouse.move(0, 0)
+  await expect(tip).toHaveCount(0)
+  await page.keyboard.press('Tab')
+  await card.focus()
+  await expect(tip).toHaveText('Click to edit')
+  const kb = (await tip.boundingBox())!
+  const c = (await card.boundingBox())!
+  const gapX = Math.max(c.x - (kb.x + kb.width), kb.x - (c.x + c.width), 0)
+  const gapY = Math.max(c.y - (kb.y + kb.height), kb.y - (c.y + c.height), 0)
+  expect(Math.max(gapX, gapY)).toBeLessThanOrEqual(12)
+})
+
+test("the Instructions card's tooltip comes back after a scroll, beside the pointer, while the pointer stays on the card", async ({
+  page,
+  api,
+  project,
+}) => {
+  const body = Array.from({ length: 30 }, (_, i) => `Paragraph ${i + 1}: ${'words '.repeat(40)}`).join('\n\n')
+  const t = await api.ticket({ title: 'Scrolled pointer tooltip', body })
+  await page.setViewportSize({ width: 1100, height: 600 })
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const card = page.getByRole('region', { name: 'Instructions' }).locator('[data-tip]').first()
+  await expect(card).toBeVisible()
+  const tip = tooltip(page)
+  const scrollTop = () => page.evaluate(() => window.scrollY)
+  /** Starts watching: true once no tooltip is open (it comes back within a moment, too fast to poll for). */
+  const watchClose = () =>
+    page.evaluate(() => {
+      const w = window as unknown as { __tipClosed: boolean; __tipWatch?: MutationObserver }
+      w.__tipClosed = false
+      w.__tipWatch?.disconnect()
+      w.__tipWatch = new MutationObserver(() => {
+        if (!document.querySelector('[data-slot="tooltip-content"][data-open]')) w.__tipClosed = true
+      })
+      w.__tipWatch.observe(document.body, { subtree: true, childList: true, attributes: true })
+    })
+  const closed = () => page.evaluate(() => (window as unknown as { __tipClosed: boolean }).__tipClosed)
+  const cardTop = async () => Math.round((await card.boundingBox())!.y)
+
+  /** Moves the pointer onto the card from outside it and waits for the tooltip. */
+  async function hoverAt(x: number, y: number) {
+    await expect(async () => {
+      await page.mouse.move(0, 0)
+      await page.mouse.move(x, y, { steps: 4 })
+      await expect(tip).toHaveText('Click to edit', { timeout: 2000 })
+    }).toPass({ timeout: 10_000 })
+  }
+  /** The bubble is just below and to the right of the pointer. */
+  async function expectBesidePointer(x: number, y: number) {
+    await expect(tip).toHaveText('Click to edit')
+    const box = (await tip.boundingBox())!
+    expect(box.x).toBeGreaterThanOrEqual(x)
+    expect(box.x).toBeLessThanOrEqual(x + 40)
+    expect(box.y).toBeGreaterThan(y)
+    expect(box.y).toBeLessThanOrEqual(y + 40)
+  }
+
+  const box = (await card.boundingBox())!
+  const at = { x: box.x + box.width * 0.4, y: 450 }
+  await hoverAt(at.x, at.y)
+
+  // A scroll (wheel) closes it, as before; the pointer has not moved and is still on the card.
+  const top = await cardTop()
+  await watchClose()
+  await page.mouse.wheel(0, 120)
+  await expect.poll(cardTop).toBeLessThan(top)
+  await expect.poll(closed).toBe(true)
+
+  // Once the scrolling stops, with the pointer still, it is back beside the pointer.
+  await expectBesidePointer(at.x, at.y)
+
+  // Scrolled again: this time the pointer moves a little afterwards, and it is back at its new place.
+  await watchClose()
+  await page.mouse.wheel(0, 120)
+  await expect.poll(closed).toBe(true)
+  const moved = { x: at.x + 30, y: at.y + 40 }
+  await page.mouse.move(moved.x, moved.y)
+  await expectBesidePointer(moved.x, moved.y)
+
+  // A scroll that takes the card from under the pointer leaves no tooltip floating.
+  const edge = (await card.boundingBox())!
+  const low = { x: at.x, y: Math.min(edge.y + edge.height - 6, 560) }
+  await hoverAt(low.x, low.y)
+  const bottom = (await card.boundingBox())!.y + (await card.boundingBox())!.height
+  await page.mouse.wheel(0, bottom - low.y + 60)
+  await expect
+    .poll(async () => (await card.boundingBox())!.y + (await card.boundingBox())!.height)
+    .toBeLessThan(low.y)
+  await page.waitForTimeout(PAST_THE_DELAY * 2)
+  await expect(tip).toHaveCount(0)
+  expect(await scrollTop()).toBeGreaterThan(0)
+})

@@ -11,13 +11,12 @@ const MENU = [
   'Previews',
   'Gallery',
   'Team',
-  'Run reports',
   'Daily',
   'Cleanup',
   'Repositories',
   'Instructions',
 ]
-const CARDS = ['Needs you', 'In progress', 'Done today', 'Next', 'Carrying over', 'Notes']
+const CARDS = ['Needs you', 'Agents at work', 'In progress', 'Done today', 'Next', 'Carrying over', 'Notes']
 
 const editor = (page: Page) => page.getByRole('region', { name: 'Layout' })
 const tiles = (scope: Locator, list: string) => scope.getByRole('list', { name: list }).getByRole('listitem')
@@ -80,22 +79,12 @@ test('the human hides a page and reorders the menu from the keyboard; both persi
   )
   await expect(status).toHaveText('Unsaved changes. 1 hidden.')
 
-  // Daily up twice with Enter: the focus stays on its button as it moves.
+  // Daily up with Enter: the focus stays on its button as it moves.
   const up = layout.getByRole('button', { name: 'Move Daily up in the menu' })
   await up.focus()
   await page.keyboard.press('Enter')
   await expect(up).toBeFocused()
-  await page.keyboard.press('Enter')
-  await expect(up).toBeFocused()
-  const order = [
-    ...MENU.slice(0, 6),
-    'Daily',
-    'Team',
-    'Run reports',
-    'Cleanup',
-    'Repositories',
-    'Instructions',
-  ]
+  const order = [...MENU.slice(0, 6), 'Daily', 'Team', 'Cleanup', 'Repositories', 'Instructions']
   await expect(tiles(layout, 'Project menu')).toHaveText(order)
   // At the top, the focus moves to its other arrow.
   const instructionsUp = layout.getByRole('button', { name: 'Move Instructions up in the menu' })
@@ -173,15 +162,7 @@ test('an edit made while a Save or a Reset is on its way stays, unsaved, and a s
   await expect(saving).toBeDisabled()
   await roadmap.click()
   await layout.getByRole('button', { name: 'Move Daily up in the menu' }).click()
-  const order = [
-    ...MENU.slice(0, 6),
-    'Team',
-    'Daily',
-    'Run reports',
-    'Cleanup',
-    'Repositories',
-    'Instructions',
-  ]
+  const order = [...MENU.slice(0, 6), 'Daily', 'Team', 'Cleanup', 'Repositories', 'Instructions']
   await expect(tiles(layout, 'Project menu')).toHaveText(order)
   await expect(status).toHaveText('Unsaved changes. 2 hidden.')
   release()
@@ -241,7 +222,7 @@ test('dragging reorders the Overview and moves a ticket section to the other col
   await overview
     .filter({ hasText: 'Carrying over' })
     .dragTo(overview.filter({ hasText: 'Needs you' }), { targetPosition: { x: 10, y: 10 } })
-  await expect(overview).toHaveText(['Carrying over', ...CARDS.slice(0, 4), 'Notes'])
+  await expect(overview).toHaveText(['Carrying over', ...CARDS.slice(0, 5), 'Notes'])
   await layout.getByRole('switch', { name: 'Show Done today on the Overview' }).click()
 
   // Details dropped on the top half of Instructions, in the main column: first there.
@@ -259,7 +240,7 @@ test('dragging reorders the Overview and moves a ticket section to the other col
   await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Saved' })).toBeVisible()
 
   await page.reload()
-  await expect(overview).toHaveText(['Carrying over', ...CARDS.slice(0, 4), 'Notes'])
+  await expect(overview).toHaveText(['Carrying over', ...CARDS.slice(0, 5), 'Notes'])
   await expect(layout.getByRole('switch', { name: 'Show Done today on the Overview' })).not.toBeChecked()
   await expect(main).toHaveText([
     'Details',
@@ -274,7 +255,7 @@ test('dragging reorders the Overview and moves a ticket section to the other col
   // The Overview: in that order, Done today gone.
   await page.goto(`/projects/${project.id}`)
   await expect(cardTitles(page)).toHaveText(
-    starting(['Carrying over', 'Needs you', 'In progress', 'Next', 'Notes']),
+    starting(['Carrying over', 'Needs you', 'Agents at work', 'In progress', 'Next', 'Notes']),
   )
 
   // Home: this project's block follows its layout, another's keeps every card.
@@ -282,7 +263,7 @@ test('dragging reorders the Overview and moves a ticket section to the other col
   const block = (name: string) =>
     page.getByRole('heading', { level: 2, name, exact: true }).locator('xpath=ancestor::section[1]')
   await expect(cardTitles(block(project.name))).toHaveText(
-    starting(['Carrying over', 'Needs you', 'In progress', 'Next', 'Notes']),
+    starting(['Carrying over', 'Needs you', 'Agents at work', 'In progress', 'Next', 'Notes']),
   )
   await expect(cardTitles(block(seededProject().name))).toHaveText(starting(CARDS))
 
