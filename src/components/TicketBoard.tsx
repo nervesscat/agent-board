@@ -1,14 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import {
-  Archive,
-  ArchiveRestore,
-  ArrowDownUp,
-  ChevronLeft,
-  ChevronRight,
-  Hand,
-  Layers,
-  Scale,
-} from 'lucide-react'
+import { Archive, ArchiveRestore, ChevronLeft, ChevronRight, Hand, Layers, Scale } from 'lucide-react'
 import { type DragEvent, type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { Actor } from '#/components/Actor'
@@ -34,15 +25,7 @@ import type { TicketRow } from '#/lib/api'
 import { hasWork, stallStage, timelineFromActivity } from '#/lib/activityTimeline'
 import { ago } from '#/lib/format'
 import { useProject } from '#/lib/project'
-import {
-  type StageLike,
-  columnOrder,
-  isClosed,
-  mergeAfter,
-  stageBadge,
-  stageColumn,
-  stageOf,
-} from '#/lib/stages'
+import { type StageLike, columnOrder, isClosed, stageBadge, stageColumn, stageOf } from '#/lib/stages'
 import { nameFirst } from '#/lib/tickets'
 
 /** Where a card goes in its own column: right above or below another card of it. */
@@ -51,9 +34,7 @@ export type Placement = { anchor: number; side: 'above' | 'below' }
 /**
  * Tickets in the project's stage columns. Drag a card onto another column to change its stage, or up
  * and down its own column to change its place there (a line shows where it lands). In a review column
- * the order is the merge order, read top to bottom, and a card placed above a ticket it needs says
- * "merge after" it. Clicking a card opens
- * the ticket. A done or cancelled column can archive all its tickets at once.
+ * the order is the merge order, read top to bottom. Clicking a card opens the ticket. A done or cancelled column can archive all its tickets at once.
  */
 export function TicketBoard({
   projectId,
@@ -130,7 +111,6 @@ export function TicketBoard({
           const own = dragging !== null && draggedStatus === status
           // The line where a card dragged in its own column would land; none where it would not move.
           const line = own && slot !== null && slotPlacement(column, dragging, slot) ? slot : null
-          const after = kind === 'review' ? mergeAfter(column) : null
           // Taking both dragenter and dragover is what marks the column as a place to drop.
           const dragOver = (e: DragEvent<HTMLDivElement>) => {
             if (dragging === null) return
@@ -199,10 +179,7 @@ export function TicketBoard({
                               <span className="text-muted-foreground">#{t.id}</span> {t.title}
                             </div>
                           </div>
-                          {hasWork(kind) ||
-                          t.needs.some((n) => !n.merged) ||
-                          after?.has(t.id) ||
-                          t.tags.length > 0 ? (
+                          {hasWork(kind) || t.tags.length > 0 ? (
                             // One row: the state, the tags, then the time at the end. It never wraps, so
                             // the time shares the line; the tags clip first when the card is narrow.
                             <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
@@ -218,8 +195,6 @@ export function TicketBoard({
                                   ))}
                                 </div>
                               )}
-                              {after?.has(t.id) && <MergeAfterBadge ids={after.get(t.id)!} />}
-                              <NeedsBadge needs={t.needs} />
                               <Updated at={t.updatedAt} />
                             </div>
                           ) : (
@@ -276,16 +251,6 @@ function DropLine({ at }: { at: string }) {
       aria-hidden
       className={`pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-primary ${at}`}
     />
-  )
-}
-
-/** In a review column, a card placed above tickets it needs merged first: merge it after them. */
-function MergeAfterBadge({ ids }: { ids: number[] }) {
-  const list = ids.map((n) => `#${n}`).join(', ')
-  return (
-    <span className="inline-flex w-fit items-center gap-1 rounded bg-rose-500/10 px-1.5 py-0.5 text-[11px] font-medium text-rose-700 dark:text-rose-400">
-      <ArrowDownUp className="size-3" /> merge after {list}
-    </span>
   )
 }
 
@@ -581,7 +546,6 @@ function LaneCount({ lanes, stages }: { lanes: TicketRow['lanes']; stages: Stage
   const parts = stages
     .filter((s) => s.kind !== 'open' && lanes.byStage[s.key])
     .map((s) => `${lanes.byStage[s.key]} ${s.name.toLowerCase()}`)
-  if (lanes.approved) parts.push(`${lanes.approved} approved`)
   return (
     <div className="mt-1.5 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
       <Layers className="size-3 shrink-0" />

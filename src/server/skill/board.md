@@ -228,10 +228,10 @@ Lanes of a ticket you are working are yours to create (next section).
   their last update; `laneUpdates: true` folds their updates into the feed; `get_ticket_git` shows
   every workspace under the ticket.
 - The human's verdict: `approvedAt` / `approvedBy` (approved) or `disapprovedAt` /
-  `disapprovedBy` (disapproved, which also moves it to `cancelled`) on a lane or ticket; both null
-  means no call yet, and `lanes.approved` / `lanes.disapproved` count them. Read it, never set it:
-  an approved lane is settled and a disapproved one is dropped, so ask in its thread before
-  touching either.
+  `disapprovedBy` (disapproved, which also moves it to `cancelled`) on a top-level ticket; both
+  null means no call yet. Read it, never set it. A lane has no verdict: its stage is the call
+  (Approved or Done is accepted, Cancelled is dropped), and the parent's `lanes` counts are
+  `total` and `byStage`. Ask in a lane's thread before moving one of those.
 - The archive: the human takes finished tickets (done or cancelled) off the board, their lanes with
   them; `archivedAt` / `archivedBy` show it. `list_tickets` leaves them out unless `archived` is
   `"include"` (with the rest) or `"only"`; `get_ticket` still opens them. Only the human archives
@@ -440,10 +440,20 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    (commits only here) or `local-only` (not on origin) is red: push, then check again. (`merged`:
    gone from origin because its PR was merged into the base.)
 4. `needs` declared for any unmerged branch it builds on. If your branch is built on another
-   ticket's open branch (stacked), or you merged one in to get past a conflict, declare it with
+   ticket's open branch (stacked), or you merged one in to get past a conflict, the board adds
+   that need itself once the commits are in the branches it looks at (after a push or a fetch, and
+   when a ticket is read; `get_ticket` → `needs[].auto` is true, and it drops the need again when
+   the branch no longer holds those commits or the other ticket was cancelled or archived without
+   landing). It sees only what git has, at its looks (a fresh listing, a ticket read, a status
+   change), and cannot prove who owns commits two branches share once they moved apart: when you
+   stack before your ticket's branch exists or the commits are in git, declare it with
    `update_ticket` → `needs: [<its ticket id>]` (or `needs` on `create_ticket`) instead of only
-   writing "builds on …" in the PR. `get_ticket_git` → `includes` lists the open tickets whose
-   unmerged work your branch holds: each one belongs in `needs`. The PR queue then marks your PR
+   writing "builds on …" in the PR; the board then confirms it, and a need you declared is yours,
+   never touched by the board. Your `needs` list never removes one the board added (only the
+   human does). `get_ticket_git` → `includes` (REST: `?includes=1`) lists only the open tickets whose unmerged work your
+   branch holds (commits of theirs, or a copy of them) but git cannot prove are theirs, so the board adds no need for
+   them (the human sees each as an amber "Includes unmerged work" row with "Add as a need"): each one that
+   is a real dependency belongs in `needs`. The PR queue then marks your PR
    "merge after #<its PR>", and the ticket cannot go to `done` until those branches are merged into
    its base: `update_ticket` to `done` is refused with which one (`get_ticket` → `needs[].merged`).
    Only the human can mark it done anyway; in Approved, where an orchestrator merges the PR without
@@ -525,9 +535,8 @@ After that:
 1. `done` is the human's call unless the project instructions say otherwise, or the ticket is in
    Approved, where an orchestrator merges the PR and then moves it: see
    [Approved](#approved-the-go-ahead-to-merge).
-2. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the
-   board flags a ticket that is further along than its lanes. Say in the summary which lanes it
-   covers.
+2. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`. Say in the
+   summary which lanes it covers.
 3. Dropping work: `status: cancelled`, with a comment saying why. A cancelled or done lane's tasks
    leave the parent's progress.
 4. Clean up your lane before it goes to `done` (or when the human moves it there): see

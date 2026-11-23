@@ -191,6 +191,14 @@ const card = (page: Page) => page.getByTestId('update-card')
 const memory = (page: Page): Promise<unknown> =>
   page.evaluate(() => JSON.parse(localStorage.getItem('update-card') ?? 'null'))
 
+/**
+ * Waits until the page has read the update state from the app (its badge is in the top bar), so a count of
+ * zero cards after it means the card was not wanted, not that the answer was still on its way. A state the
+ * test changes next is then read by the next load only: a page still waiting for its answer would take the
+ * new one, show the card and write it as seen, and the reload after it would find nothing to show.
+ */
+const stateRead = (page: Page) => expect(page.getByRole('link', { name: 'Update available' })).toBeVisible()
+
 /** A picture the artwork route can answer, one per theme. */
 const SVG = (fill: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900"><rect width="1600" height="900" fill="${fill}"/></svg>`
@@ -246,6 +254,7 @@ test('the card is once per release: it writes the version seen and a reload is q
   await expect(card(page)).toBeVisible()
   await expect.poll(() => memory(page)).toEqual({ seenVersion: '0.3.0', skippedVersion: null })
   await page.reload()
+  await stateRead(page)
   await expect(card(page)).toHaveCount(0)
 })
 
@@ -260,6 +269,7 @@ test('Skip is remembered, and a later release is shown again', async ({ page }) 
   expect(asked).toEqual([])
   expect(await memory(page)).toEqual({ seenVersion: '0.3.0', skippedVersion: '0.3.0' })
   await page.reload()
+  await stateRead(page)
   await expect(card(page)).toHaveCount(0)
   // A later release is offered again.
   state = desktop({ status: 'available', newest: { ...offer, version: '0.4.0' } })

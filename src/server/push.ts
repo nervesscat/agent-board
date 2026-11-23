@@ -96,6 +96,15 @@ interface RepoState {
   worktrees: ReturnType<typeof windowed<Worktree[]>>
 }
 
+/** Told of every fresh listing of a checkout's branches, so what depends on them can follow them. */
+type RefsListener = (repoPath: string, refs: Refs) => void
+const refsListeners: RefsListener[] = []
+
+/** Registers `fn` to be called after each fresh listing of a repo's refs (never for one kept from before). */
+export function onRefsListed(fn: RefsListener) {
+  refsListeners.push(fn)
+}
+
 const repos = new Map<string, RepoState>()
 /** Ahead/behind per pair of shas (and commits on no origin branch per sha): they never change. */
 const counts = new Map<string, Promise<[number, number]>>()
@@ -124,6 +133,13 @@ function repoState(repoPath: string): RepoState {
               recheckMovedPrs(noteOriginRefs(repoPath, refs, new Date(), { fetched }))
             } catch (err) {
               console.error(`recording origin's branches of ${repoPath} failed:`, err)
+            }
+            for (const fn of refsListeners) {
+              try {
+                fn(repoPath, refs)
+              } catch (err) {
+                console.error(`following the branches of ${repoPath} failed:`, err)
+              }
             }
             return refs
           })

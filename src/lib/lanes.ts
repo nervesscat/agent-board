@@ -16,15 +16,14 @@ type Lane = {
   id: number
   status: string
   tags: string[]
-  approvedAt: string | null
-  disapprovedAt: string | null
 }
 
-/** The human's call on a lane, as the filter names it: `none` is no call yet. */
-export const LANE_VERDICTS = ['approved', 'disapproved', 'none'] as const
-export type LaneVerdict = (typeof LANE_VERDICTS)[number]
-export const laneVerdict = (l: Pick<Lane, 'approvedAt' | 'disapprovedAt'>): LaneVerdict =>
-  l.approvedAt ? 'approved' : l.disapprovedAt ? 'disapproved' : 'none'
+/**
+ * Whether a ticket is judged by its stage, with no approval of its own: a lane. A PR review (a ticket
+ * tagged `PR`, a lane of the review queue) keeps the human's approval, which finishes it.
+ */
+export const judgedByStage = (t: { parentId: number | null; tags: string[] }) =>
+  t.parentId !== null && !t.tags.some((tag) => tag.toLowerCase() === 'pr')
 
 /** Lanes in stage order (see `laneStageOrder`), then by id; a lane in no known stage goes last. */
 export function sortLanes<L extends Lane>(lanes: L[], stages: Stage[]) {
@@ -34,22 +33,20 @@ export function sortLanes<L extends Lane>(lanes: L[], stages: Stage[]) {
 }
 
 /**
- * The lanes filter, kept in the URL (`?stage=todo,review&tag=high&verdict=none`) so the parent's
+ * The lanes filter, kept in the URL (`?stage=todo,review&tag=high`) so the parent's
  * list and each lane's page (its previous / next) see the same one. Tags are compared lower-cased.
  */
 export interface LaneFilter {
   /** Stage keys. */
   stages: string[]
   tags: string[]
-  verdicts: LaneVerdict[]
 }
 export interface LaneSearch {
   stage?: string
   tag?: string
-  verdict?: string
 }
 
-export const NO_FILTER: LaneFilter = { stages: [], tags: [], verdicts: [] }
+export const NO_FILTER: LaneFilter = { stages: [], tags: [] }
 
 const list = (v: unknown) =>
   v == null
@@ -63,7 +60,6 @@ export function validateLaneSearch(s: Record<string, unknown>): LaneSearch {
   return {
     stage: s.stage == null ? undefined : String(s.stage),
     tag: s.tag == null ? undefined : String(s.tag),
-    verdict: s.verdict == null ? undefined : String(s.verdict),
   }
 }
 
@@ -71,7 +67,6 @@ export function laneFilter(search: LaneSearch): LaneFilter {
   return {
     stages: list(search.stage),
     tags: list(search.tag).map((t) => t.toLowerCase()),
-    verdicts: list(search.verdict).filter((v): v is LaneVerdict => LANE_VERDICTS.includes(v as LaneVerdict)),
   }
 }
 
@@ -79,7 +74,6 @@ export function laneSearch(f: LaneFilter): LaneSearch {
   return {
     stage: f.stages.length ? f.stages.join(',') : undefined,
     tag: f.tags.length ? f.tags.join(',') : undefined,
-    verdict: f.verdicts.length ? f.verdicts.join(',') : undefined,
   }
 }
 
@@ -88,17 +82,14 @@ export function effectiveFilter(lanes: Lane[], f: LaneFilter): LaneFilter {
   return {
     stages: f.stages.filter((s) => lanes.some((l) => l.status === s)),
     tags: f.tags.filter((k) => lanes.some((l) => l.tags.some((x) => x.toLowerCase() === k))),
-    verdicts: f.verdicts.filter((v) => lanes.some((l) => laneVerdict(l) === v)),
   }
 }
 
-export const isFiltering = (f: LaneFilter) =>
-  f.stages.length > 0 || f.tags.length > 0 || f.verdicts.length > 0
+export const isFiltering = (f: LaneFilter) => f.stages.length > 0 || f.tags.length > 0
 
 export const stageOk = (l: Lane, f: LaneFilter) => !f.stages.length || f.stages.includes(l.status)
 export const tagOk = (l: Lane, f: LaneFilter) =>
   !f.tags.length || l.tags.some((tag) => f.tags.includes(tag.toLowerCase()))
-export const verdictOk = (l: Lane, f: LaneFilter) => !f.verdicts.length || f.verdicts.includes(laneVerdict(l))
 
 /**
  * The lanes before and after `id` in the filtered, sorted list. A lane the filter hides (say it was
@@ -108,7 +99,7 @@ export function laneNeighbours<L extends Lane>(lanes: L[], stages: Stage[], id: 
   const f = effectiveFilter(lanes, filter)
   const all = sortLanes(lanes, stages)
   const at = all.findIndex((l) => l.id === id)
-  const shown = all.filter((l) => stageOk(l, f) && tagOk(l, f) && verdictOk(l, f))
+  const shown = all.filter((l) => stageOk(l, f) && tagOk(l, f))
   const before = all.slice(0, Math.max(at, 0)).filter((l) => shown.includes(l))
   const after = all.slice(at + 1).filter((l) => shown.includes(l))
   const index = shown.findIndex((l) => l.id === id)
