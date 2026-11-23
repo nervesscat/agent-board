@@ -16,7 +16,15 @@ const MENU = [
   'Repositories',
   'Instructions',
 ]
-const CARDS = ['Needs you', 'Agents at work', 'In progress', 'Done today', 'Next', 'Carrying over', 'Notes']
+const CARDS = [
+  'Needs you',
+  'Agents at work',
+  'In progress',
+  'Done today',
+  'Lost contact',
+  'Carrying over',
+  'Notes',
+]
 
 const editor = (page: Page) => page.getByRole('region', { name: 'Layout' })
 const tiles = (scope: Locator, list: string) => scope.getByRole('list', { name: list }).getByRole('listitem')
@@ -33,7 +41,7 @@ const expectMenu = async (page: Page, projectId: number, expected: string[]) => 
 }
 /** The Overview's card titles, in order. */
 const cardTitles = (scope: Page | Locator) => scope.locator('[data-slot="card-title"]')
-/** Titles matched by their start: "Next: To do" is Next, a count may follow. */
+/** Titles matched by their start: a count may follow the title. */
 const starting = (titles: string[]) => titles.map((t) => new RegExp(`^\\s*${t}`))
 
 test('the human hides a page and reorders the menu from the keyboard; both persist after a reload', async ({
@@ -256,7 +264,7 @@ test('dragging reorders the Overview and moves a ticket section to the other col
   // The Overview: in that order, Done today gone.
   await page.goto(`/projects/${project.id}`)
   await expect(cardTitles(page)).toHaveText(
-    starting(['Carrying over', 'Needs you', 'Agents at work', 'In progress', 'Next', 'Notes']),
+    starting(['Carrying over', 'Needs you', 'Agents at work', 'In progress', 'Lost contact', 'Notes']),
   )
 
   // Home: this project's block follows its layout, another's keeps every card.
@@ -264,7 +272,7 @@ test('dragging reorders the Overview and moves a ticket section to the other col
   const block = (name: string) =>
     page.getByRole('heading', { level: 2, name, exact: true }).locator('xpath=ancestor::section[1]')
   await expect(cardTitles(block(project.name))).toHaveText(
-    starting(['Carrying over', 'Needs you', 'Agents at work', 'In progress', 'Next', 'Notes']),
+    starting(['Carrying over', 'Needs you', 'Agents at work', 'In progress', 'Lost contact', 'Notes']),
   )
   await expect(cardTitles(block(seededProject().name))).toHaveText(starting(CARDS))
 
