@@ -227,7 +227,8 @@ export async function infoOf(
 const CONTAINS_MEMO_MAX = 500
 const containsMemo = new Map<string, Promise<Set<string>>>()
 
-const refsKey = (refs: Refs) => {
+/** A fingerprint of every branch and its commit, local and origin's. */
+export const refsKey = (refs: Refs) => {
   const hash = crypto.createHash('sha1')
   for (const [name, sha] of refs.local) hash.update(`refs/heads/${name} ${sha}\n`)
   for (const [name, sha] of refs.remote) hash.update(`refs/remotes/origin/${name} ${sha}\n`)

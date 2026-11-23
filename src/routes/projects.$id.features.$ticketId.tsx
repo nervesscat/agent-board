@@ -406,9 +406,7 @@ function TicketPage() {
         </DelayedLoading>
       ) : null,
     'ticket.resume': resume.shown ? <ResumeCard t={t} onChange={invalidate} /> : null,
-    'ticket.details': (
-      <Details key={t.id} t={t} git={gitSide} includes={git?.includes} onSave={(p) => update.mutate(p)} />
-    ),
+    'ticket.details': <Details key={t.id} t={t} git={gitSide} onSave={(p) => update.mutate(p)} />,
     'ticket.branch': gitSide ? <BranchPanel t={t} git={git} gitFailed={Boolean(ticketGitError)} /> : null,
     'ticket.workspaces': gitSide ? (
       <WorkspacesPanel t={t} git={git} gitFailed={Boolean(ticketGitError)} onChange={invalidate} />
@@ -1293,13 +1291,11 @@ function OtherRepos({
 function Details({
   t,
   git = true,
-  includes,
   onSave,
 }: {
   t: TicketFull
   /** Whether the project has a git side: its repository, branch, base branch and needs show only then. */
   git?: boolean
-  includes?: number[]
   onSave: (p: Record<string, unknown>) => void
 }) {
   const { data: project } = useProject(t.projectId)
@@ -1457,7 +1453,7 @@ function Details({
               )}
             </Label>
           </Tip>
-          <NeedsField t={t} includes={includes} onSave={(needs) => onSave({ needs })} />
+          <NeedsField t={t} onSave={(needs) => onSave({ needs })} />
         </div>
       )}
     </section>

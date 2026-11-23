@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "767799c7-3b18-4221-a867-ea0aa7bf104a",
-  "prevId": "d15d8f79-5013-4669-832a-8b6fddd06ed0",
+  "id": "3dd212da-d3ed-46e5-9d5f-cd6c320fa64d",
+  "prevId": "9e79969a-ffc8-40e2-a3db-b980df185077",
   "tables": {
     "account": {
       "name": "account",
@@ -1618,13 +1618,6 @@
           "autoincrement": false,
           "default": 240
         },
-        "workflow_tweaks": {
-          "name": "workflow_tweaks",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "workflow_preset": {
           "name": "workflow_preset",
           "type": "text",
@@ -1632,6 +1625,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'standard'"
+        },
+        "workflow_tweaks": {
+          "name": "workflow_tweaks",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},
@@ -3372,6 +3372,81 @@
         }
       }
     },
+    "ticket_need_dismissals": {
+      "name": "ticket_need_dismissals",
+      "columns": {
+        "ticket_id": {
+          "name": "ticket_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "needs_id": {
+          "name": "needs_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "held": {
+          "name": "held",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "ticket_need_dismissals_ticket_id_tickets_id_fk": {
+          "name": "ticket_need_dismissals_ticket_id_tickets_id_fk",
+          "tableFrom": "ticket_need_dismissals",
+          "tableTo": "tickets",
+          "columnsFrom": [
+            "ticket_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ticket_need_dismissals_needs_id_tickets_id_fk": {
+          "name": "ticket_need_dismissals_needs_id_tickets_id_fk",
+          "tableFrom": "ticket_need_dismissals",
+          "tableTo": "tickets",
+          "columnsFrom": [
+            "needs_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "ticket_need_dismissals_ticket_id_needs_id_pk": {
+          "columns": [
+            "ticket_id",
+            "needs_id"
+          ],
+          "name": "ticket_need_dismissals_ticket_id_needs_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "ticket_needs": {
       "name": "ticket_needs",
       "columns": {
@@ -3388,6 +3463,22 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "auto": {
+          "name": "auto",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "held": {
+          "name": "held",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
         }
       },
       "indexes": {

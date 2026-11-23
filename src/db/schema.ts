@@ -380,8 +380,31 @@ export const ticketNeeds = sqliteTable(
     needsId: integer('needs_id')
       .notNull()
       .references(() => tickets.id, { onDelete: 'cascade' }),
+    // Added by the board because the ticket's branch holds the other's unmerged commits (and dropped by
+    // it when that stops holding), not declared by an agent or the human.
+    auto: integer('auto', { mode: 'boolean' }).notNull().default(false),
+    // The needed branch's tip the board saw inside this ticket's branch when it added or last
+    // confirmed an automatic need.
+    held: text('held').notNull().default(''),
   },
   (t) => [primaryKey({ columns: [t.ticketId, t.needsId] }), index('ticket_needs_needs').on(t.needsId)],
+)
+
+// An automatic need the human removed, with the needed branch's tip it held then: the board does not
+// add it again for those commits, only for new work taken in later.
+export const ticketNeedDismissals = sqliteTable(
+  'ticket_need_dismissals',
+  {
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    needsId: integer('needs_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    held: text('held').notNull().default(''),
+    createdAt: now(),
+  },
+  (t) => [primaryKey({ columns: [t.ticketId, t.needsId] })],
 )
 
 // The repos a ticket's work spans, in order, each with its own branch, base and PR. The first is the

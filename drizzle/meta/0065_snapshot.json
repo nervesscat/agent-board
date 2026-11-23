@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "967d69a3-1bc7-4a05-9923-74217b229131",
-  "prevId": "767799c7-3b18-4221-a867-ea0aa7bf104a",
+  "id": "7a9d8a90-a22e-4d39-8955-57b18e374137",
+  "prevId": "3dd212da-d3ed-46e5-9d5f-cd6c320fa64d",
   "tables": {
     "account": {
       "name": "account",
@@ -1618,20 +1618,6 @@
           "autoincrement": false,
           "default": 240
         },
-        "workflow_custom": {
-          "name": "workflow_custom",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "workflow_tweaks": {
-          "name": "workflow_tweaks",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "workflow_preset": {
           "name": "workflow_preset",
           "type": "text",
@@ -1639,6 +1625,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'standard'"
+        },
+        "workflow_tweaks": {
+          "name": "workflow_tweaks",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},
@@ -3379,6 +3372,81 @@
         }
       }
     },
+    "ticket_need_dismissals": {
+      "name": "ticket_need_dismissals",
+      "columns": {
+        "ticket_id": {
+          "name": "ticket_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "needs_id": {
+          "name": "needs_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "held": {
+          "name": "held",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "ticket_need_dismissals_ticket_id_tickets_id_fk": {
+          "name": "ticket_need_dismissals_ticket_id_tickets_id_fk",
+          "tableFrom": "ticket_need_dismissals",
+          "tableTo": "tickets",
+          "columnsFrom": [
+            "ticket_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ticket_need_dismissals_needs_id_tickets_id_fk": {
+          "name": "ticket_need_dismissals_needs_id_tickets_id_fk",
+          "tableFrom": "ticket_need_dismissals",
+          "tableTo": "tickets",
+          "columnsFrom": [
+            "needs_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "ticket_need_dismissals_ticket_id_needs_id_pk": {
+          "columns": [
+            "ticket_id",
+            "needs_id"
+          ],
+          "name": "ticket_need_dismissals_ticket_id_needs_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "ticket_needs": {
       "name": "ticket_needs",
       "columns": {
@@ -3395,6 +3463,22 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "auto": {
+          "name": "auto",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "held": {
+          "name": "held",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
         }
       },
       "indexes": {

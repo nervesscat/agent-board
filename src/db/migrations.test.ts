@@ -52,7 +52,7 @@ const withoutDropped = ({
 }: Record<string, unknown>) => rest
 
 /**
- * Tickets gained closed_by_approval in 0056 and workflow_preset in 0057: no ticket that existed had closed
+ * Tickets gained closed_by_approval in 0056 and workflow_preset in 0064: no ticket that existed had closed
  * on an approval or named a workflow, so the columns are 0 and null on every one, and the other columns are
  * compared as they were.
  */
@@ -67,7 +67,7 @@ function ticketsAsTheyWere(rows: Record<string, unknown>[]) {
 
 /**
  * Projects gained kinds in 0055, the resume command and its time limit in 0061, and the workflow columns in
- * 0063 and 0065: every project that existed is software, follows the Standard workflow, has no tweaks and no
+ * 0064 and 0066: every project that existed is software, follows the Standard workflow, has no tweaks and no
  * workflows of its own; the other columns are compared as they were.
  */
 function projectsAsTheyWere(rows: Record<string, unknown>[]) {
@@ -75,7 +75,7 @@ function projectsAsTheyWere(rows: Record<string, unknown>[]) {
     if ('kinds' in row) expect(row.kinds).toBe('["software"]')
     if ('workflow_preset' in row) expect(row.workflow_preset).toBe('standard')
     if ('workflow_tweaks' in row) expect(row.workflow_tweaks).toBeNull()
-    // 0065 added the project's own workflows: none on a project that existed.
+    // 0066 added the project's own workflows: none on a project that existed.
     if ('workflow_custom' in row) expect(row.workflow_custom).toBeNull()
   }
   return rows.map(
@@ -100,6 +100,17 @@ function updatesWithDelivered(rows: Record<string, unknown>[]) {
   if (!rows.length || !('answer_delivered' in rows[0]!)) return rows
   expect(rows.map((r) => r.answer_delivered)).toEqual(rows.map(() => ''))
   return rows.map(({ answer_delivered: _d, ...rest }) => rest)
+}
+
+/**
+ * The needs of a database migrated past 0063: each has the columns it added, `auto` (0: written before the
+ * board added any) and `held` (empty), and the other columns are compared as they were.
+ */
+function needsWithAutoColumns(rows: Record<string, unknown>[]) {
+  // Before 0063 the table has no such columns: the rows are compared as they are.
+  if (!rows.length || !('auto' in rows[0]!)) return rows
+  expect(rows.map((r) => [r.auto, r.held])).toEqual(rows.map(() => [0, '']))
+  return rows.map(({ auto: _a, held: _h, ...rest }) => rest)
 }
 
 describe('0023_daily_reports_and_shifts', () => {
@@ -1586,9 +1597,11 @@ describe('0050_widen_ticket_complexity', () => {
 
     // Every ticket kept its id, its level and the rest of its columns, and so did each row that refers to one.
     const after = rows()
-    expect({ ...after, tickets: ticketsAsTheyWere(after.tickets as Record<string, unknown>[]) }).toEqual(
-      before,
-    )
+    expect({
+      ...after,
+      tickets: ticketsAsTheyWere(after.tickets as Record<string, unknown>[]),
+      ticket_needs: needsWithAutoColumns(after.ticket_needs as Record<string, unknown>[]),
+    }).toEqual(before)
     expect(
       Object.fromEntries(
         (after.tickets as { id: number; complexity: string }[]).map((t) => [t.id, t.complexity]),
@@ -2075,9 +2088,38 @@ describe('0061_ticket_resumes', () => {
   })
 })
 
-describe('0063_project_workflow', () => {
-  it('reads every project that existed as Standard with no tweaks and every ticket as following its project, changing nothing else', () => {
+describe('0063_auto_needs', () => {
+  it('adds the automatic and held columns to the needs a board already has and a table of dismissals', () => {
     const sqlite = databaseAt('0062_overview_next_to_lost_contact')
+    const project = Number(
+      sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('kept').lastInsertRowid,
+    )
+    const ticket = sqlite.prepare("INSERT INTO tickets (project_id, title, created_by) VALUES (?, ?, 'a')")
+    const lower = Number(ticket.run(project, 'lower').lastInsertRowid)
+    const upper = Number(ticket.run(project, 'upper').lastInsertRowid)
+    sqlite.prepare('INSERT INTO ticket_needs (ticket_id, needs_id) VALUES (?, ?)').run(upper, lower)
+    expect(columns(sqlite, 'ticket_needs')).toEqual(['ticket_id', 'needs_id'])
+    expect(columns(sqlite, 'ticket_need_dismissals')).toEqual([])
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    // A need written before is the human's or an agent's: not automatic, and nothing held for it.
+    expect(sqlite.prepare('SELECT ticket_id, needs_id, auto, held FROM ticket_needs').all()).toEqual([
+      { ticket_id: upper, needs_id: lower, auto: 0, held: '' },
+    ])
+    expect(columns(sqlite, 'ticket_need_dismissals')).toEqual(['ticket_id', 'needs_id', 'held', 'createdAt'])
+    // A dismissal goes with either ticket.
+    sqlite
+      .prepare('INSERT INTO ticket_need_dismissals (ticket_id, needs_id, held) VALUES (?, ?, ?)')
+      .run(upper, lower, 'abc')
+    sqlite.prepare('DELETE FROM tickets WHERE id = ?').run(lower)
+    expect(sqlite.prepare('SELECT count(*) AS n FROM ticket_need_dismissals').get()).toEqual({ n: 0 })
+  })
+})
+
+describe('0064_project_workflow', () => {
+  it('reads every project that existed as Standard with no tweaks and every ticket as following its project, changing nothing else', () => {
+    const sqlite = databaseAt('0063_auto_needs')
     const project = (name: string) =>
       Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run(name).lastInsertRowid)
     const ticket = (projectId: number, title: string) =>
@@ -2124,7 +2166,7 @@ describe('0063_project_workflow', () => {
   })
 })
 
-describe('0064_drop_workflow_instruction_edits', () => {
+describe('0065_drop_workflow_instruction_edits', () => {
   const tweaks = (sqlite: Database.Database, id: number) =>
     (
       sqlite.prepare('SELECT workflow_tweaks FROM projects WHERE id = ?').get(id) as {
@@ -2133,7 +2175,7 @@ describe('0064_drop_workflow_instruction_edits', () => {
     ).workflow_tweaks
 
   it("strips a step's saved instruction from every preset and keeps the order, rounds, switches and efforts exactly", () => {
-    const sqlite = databaseAt('0063_project_workflow')
+    const sqlite = databaseAt('0064_project_workflow')
     const project = (name: string, value: string | null, preset = 'thorough') =>
       Number(
         sqlite
@@ -2236,7 +2278,7 @@ describe('0064_drop_workflow_instruction_edits', () => {
 
   it('reads as it should: the reader sees no instruction and the step is as the preset ships it', async () => {
     const { readProjectTweaks } = await import('../lib/workflow')
-    const sqlite = databaseAt('0063_project_workflow')
+    const sqlite = databaseAt('0064_project_workflow')
     const id = Number(
       sqlite.prepare('INSERT INTO projects (name, workflow_tweaks) VALUES (?, ?)').run(
         'p',
@@ -2253,9 +2295,9 @@ describe('0064_drop_workflow_instruction_edits', () => {
   })
 })
 
-describe('0065_project_custom_workflows', () => {
+describe('0066_project_custom_workflows', () => {
   it('gives every project an empty list of its own workflows and keeps what the workflow columns held', () => {
-    const sqlite = databaseAt('0064_drop_workflow_instruction_edits')
+    const sqlite = databaseAt('0065_drop_workflow_instruction_edits')
     const project = (name: string, preset: string, tweaks: string | null) =>
       Number(
         sqlite
@@ -2322,7 +2364,7 @@ describe('the journal and the workflow migrations after the overview migration',
   })
 
   it('applies the three workflow migrations at once to a board that ran every migration of dev up to the overview one, with rows, and keeps them', () => {
-    const sqlite = databaseAt('0062_overview_next_to_lost_contact')
+    const sqlite = databaseAt('0063_auto_needs')
     const project = Number(
       sqlite
         .prepare(
