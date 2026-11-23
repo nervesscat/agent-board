@@ -896,6 +896,9 @@ async function go(e: Entry, run: RunConfig) {
   else await fs.promises.rm(path.dirname(e.logs.build), { recursive: true, force: true })
   await fs.promises.mkdir(path.dirname(e.logs.build), { recursive: true })
   ownFolder(e.dataDir ?? runsDirOf(e.path))
+  // Stopped (or restarted) while it cleared the last run's files: with no install or build to check it
+  // on the way, nothing may start a server the board no longer tracks.
+  if (!current(e)) return
   const env = {
     ...worktreeEnv(),
     ...(previewBase ? { BOARD_PREVIEW_BASE: previewBase, NITRO_APP_BASE_URL: previewBase } : {}),
