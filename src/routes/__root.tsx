@@ -7,8 +7,9 @@ import {
   Scripts,
   createRootRouteWithContext,
 } from '@tanstack/react-router'
-import { Menu } from 'lucide-react'
+import { Menu, Plug, Settings } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { cn } from 'cn'
 
 import { CrossBoardMark } from '#/components/CrossBoardMark'
 import { CommandPalette } from '#/components/CommandPalette'
@@ -22,7 +23,7 @@ import { ReportDueBanner } from '#/components/ReportDueBanner'
 import { UpdateCard } from '#/components/UpdateCard'
 import { UpdateBadge } from '#/components/Updates'
 import { Badge } from '#/components/ui/badge'
-import { Button } from '#/components/ui/button'
+import { Button, buttonVariants } from '#/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
 import { Toaster } from '#/components/ui/sonner'
 import { Tip, TooltipProvider } from '#/components/ui/tooltip'
@@ -88,11 +89,12 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 /**
  * The board-wide pages, on the right of the top bar. Under `md` they fold into a menu: between `sm` and
  * `md` the lockup, the auth-off badge, the project switcher and the links do not fit on one row.
- * A project's pages, Daily among them, are in its own menu beside the page.
+ * A project's pages, Daily among them, are in its own menu beside the page. Beside the search and the
+ * notifications they are icon buttons with a tooltip (`name`); in the menu they keep their words.
  */
 const PAGES = [
-  { to: '/agents', label: 'Connect' },
-  { to: '/settings', label: 'Settings' },
+  { to: '/agents', label: 'Connect', name: 'Connect an agent', Icon: Plug },
+  { to: '/settings', label: 'Settings', name: 'Settings', Icon: Settings },
 ] as const
 
 /**
@@ -131,15 +133,20 @@ function App() {
             <GettingStartedEntry />
             <NotificationCenter />
           </div>
-          <div className="hidden items-center gap-5 md:flex">
+          <div className="hidden items-center gap-2 md:flex">
             {PAGES.map((p) => (
-              <Link
-                key={p.to}
-                to={p.to}
-                className="text-muted-foreground hover:text-foreground [&.active]:text-foreground"
-              >
-                {p.label}
-              </Link>
+              <Tip key={p.to} content={p.name}>
+                <Link
+                  to={p.to}
+                  aria-label={p.name}
+                  className={cn(
+                    buttonVariants({ variant: 'ghost', size: 'icon' }),
+                    '[&.active]:bg-muted [&.active]:text-foreground',
+                  )}
+                >
+                  <p.Icon />
+                </Link>
+              </Tip>
             ))}
           </div>
           <PagesMenu />

@@ -203,7 +203,9 @@ test('a job started and ended between two polls raises a toast', async ({ page, 
 
   // Start the quick one right after a poll's answer arrived: the next poll is a second away, well
   // after it ended, so no poll ever sees it running.
-  await page.waitForResponse((res) => res.url().endsWith(`/api/projects/${project.id}/jobs`) && res.ok())
+  await page.waitForResponse(
+    (res) => res.url().endsWith(`/api/projects/${project.id}/notifications`) && res.ok(),
+  )
   const quick = await startJob(human, project, { steps: 1, ms: 0 })
   await expect
     .poll(async () => (await jobsOf(human, project)).find((job) => job.id === quick.id)?.state)

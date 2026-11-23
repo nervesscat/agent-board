@@ -310,6 +310,22 @@ const prState = (pr: schema.Pr, merge: Merge) => ({
 
 const REFRESH_MS = 5 * 60_000
 const lastRefresh = new Map<number, number>()
+/** Per project: why its last refresh failed outright (every repo failed), until a later one succeeds. */
+const refreshFailures = new Map<number, { message: string; at: string }>()
+
+/**
+ * The projects whose last PR refresh failed, with why: what the alerts say of GitHub access. A project
+ * that is gone no longer has a refresh to succeed, so its entry is dropped here.
+ */
+export function prRefreshFailures() {
+  for (const projectId of refreshFailures.keys())
+    try {
+      getProject(projectId)
+    } catch {
+      refreshFailures.delete(projectId)
+    }
+  return [...refreshFailures].map(([projectId, f]) => ({ projectId, message: f.message, at: f.at }))
+}
 /** The repos whose PRs a refresh read from GitHub since the board started. */
 const refreshedRepos = new Set<number>()
 /** Per project: the last refresh queued, which never rejects, so the next one can wait on it. */
@@ -355,13 +371,19 @@ async function runRefresh(projectId: number) {
   })
   if (repos.length && failed.length === repos.length) {
     const gh = toolProblem('gh', failed[0]!.err)
-    throw gh ? new HttpError(502, gh) : failed[0]!.err
+    const err = gh ? new HttpError(502, gh) : failed[0]!.err
+    refreshFailures.set(projectId, {
+      message: err instanceof Error ? err.message : String(err),
+      at: new Date().toISOString(),
+    })
+    throw err
   }
   await syncPrTickets(
     projectId,
     results.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])),
   )
   lastRefresh.set(projectId, Date.now())
+  refreshFailures.delete(projectId)
   followUnknowns(projectId)
   // A PR opened, merged or closed, CI turning green or red: the tickets' automatic phases follow.
   await reconcileProject(projectId).catch((err: unknown) =>
@@ -584,7 +606,8 @@ const MERGED_DAYS = 14
 const mergedSince = () => new Date(Date.now() - MERGED_DAYS * 86_400_000).toISOString()
 
 /**
- * Pull my PRs from GitHub, open and recently merged, and upsert the snapshot; board-side fields (hold)
+ * Pull the repo's open PRs from GitHub (flagged `involvesMe` when one of my searches finds them) and
+ * my recently merged ones, and upsert the snapshot; board-side fields (hold)
  * are kept. Returns the rows that were stored before and changed.
  */
 async function refreshRepoPrs(repo: schema.Repo): Promise<RowChange[]> {
@@ -618,6 +641,7 @@ async function refreshRepoPrs(repo: schema.Repo): Promise<RowChange[]> {
       reviewDecision: pr.reviewDecision || null,
       myReview: mine ? mine.state.toLowerCase() : 'none',
       requested: pr.requested,
+      involvesMe: pr.involvesMe,
       waitingOn: prWaitingOn(pr, me),
       reviewStage: reviewStage(pr, me),
       mergeable: pr.mergeable,
@@ -648,8 +672,8 @@ async function refreshRepoPrs(repo: schema.Repo): Promise<RowChange[]> {
         .values({ ...values, projectId, repoId: repo.id, number: pr.number })
         .run()
   }
-  // A PR that left every search was closed, unassigned, or merged out of the merged searches' reach:
-  // keep the row, mark it closed, and keep what GitHub says it became (null when it cannot say).
+  // A PR that left every list was closed, merged, or beyond the open list's 100 most recent (and no
+  // longer one of mine): keep the row, mark it closed, and keep what GitHub says it became (null when it cannot say).
   const goneOpen = db
     .select()
     .from(schema.prs)
@@ -711,7 +735,12 @@ async function stopMergedPreviews(repo: schema.Repo, left: schema.Pr[]) {
   }
 }
 
-export async function listPrs(projectId: number, opts: { refresh?: boolean } = {}) {
+/**
+ * The queue's rows. `involvingMe` leaves out the open PRs only the repos' plain open list found (what
+ * All PRs adds to the rest): a reader that acts on the queue, such as an agent picking PRs to review,
+ * asks for it; the page gets every row and narrows by choice.
+ */
+export async function listPrs(projectId: number, opts: { refresh?: boolean; involvingMe?: boolean } = {}) {
   getProject(projectId)
   const stale = Date.now() - (lastRefresh.get(projectId) ?? 0) > REFRESH_MS
   if (opts.refresh || stale) await refreshPrs(projectId)
@@ -723,6 +752,7 @@ export async function listPrs(projectId: number, opts: { refresh?: boolean } = {
       and(
         eq(schema.prs.projectId, projectId),
         or(eq(schema.prs.open, true), gte(schema.prs.mergedAt, mergedSince())),
+        ...(opts.involvingMe ? [eq(schema.prs.involvesMe, true)] : []),
       ),
     )
     .orderBy(desc(schema.prs.updatedAt))

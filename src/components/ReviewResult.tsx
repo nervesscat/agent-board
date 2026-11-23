@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
 
 import { Actor } from '#/components/Actor'
+import { DelayedLoading, SkeletonText } from '#/components/Loading'
 import { Markdown } from '#/components/Markdown'
 import { Thread } from '#/components/Thread'
 import { Badge } from '#/components/ui/badge'
@@ -86,7 +87,9 @@ export function ReviewResultDialog({ resultId, onClose }: { resultId: number | n
         ) : data ? (
           <ReviewResultView r={data} />
         ) : (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <DelayedLoading label="Loading review result…">
+            <SkeletonText lines={8} />
+          </DelayedLoading>
         )}
       </DialogContent>
     </Dialog>

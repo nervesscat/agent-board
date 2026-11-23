@@ -3,9 +3,11 @@ import { Check, Copy, ExternalLink, Loader2, Maximize2, Minimize2, RotateCw, X }
 import { createElement, useEffect, useState, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 
+import { DelayedLoading, SkeletonText } from '#/components/Loading'
 import { Button, buttonVariants } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
 import { get, type RunState, type WorkspacePreview } from '#/lib/api'
+import { useDelayedFlag } from '#/lib/useDelayedFlag'
 import { cn } from '#/lib/utils'
 import {
   activeTab,
@@ -91,6 +93,10 @@ export function PreviewWindows() {
     refetchInterval: 5_000,
     retry: false,
   })
+  // The spinner for a state that is still unknown shows only when it is slow to arrive.
+  const slowPending = useDelayedFlag(!!tab && preview.isPending)
+  // The frame whose page has loaded (a reload makes a new key), so a skeleton shows until then.
+  const [loadedFrame, setLoadedFrame] = useState('')
   const [copied, setCopied] = useState(false)
   useEffect(() => setCopied(false), [tab?.key])
 
@@ -164,7 +170,7 @@ export function PreviewWindows() {
           </p>
           <p className="truncate text-[11px] text-muted-foreground">{tab.subtitle}</p>
         </div>
-        {(health === 'building' || preview.isPending) && (
+        {(health === 'building' || slowPending) && (
           <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" aria-hidden />
         )}
         <Tip content="Load the preview again">
@@ -288,7 +294,16 @@ export function PreviewWindows() {
             // allows.
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
             className="h-full w-full border-0 bg-white"
+            onLoad={() => setLoadedFrame(frameKey)}
           />
+        )}
+        {!blocked && !desktop && loadedFrame !== frameKey && (
+          <DelayedLoading
+            label="Loading preview…"
+            className="pointer-events-none absolute inset-0 bg-white p-4"
+          >
+            <SkeletonText lines={5} />
+          </DelayedLoading>
         )}
       </div>
     </section>

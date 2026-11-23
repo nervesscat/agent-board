@@ -19,6 +19,7 @@ const PROJECT_IDS = [
   'default-phases',
   'tag-suggestions',
   'stalled-tickets',
+  'notifications',
   'stages',
   'runs',
   'layout',
@@ -153,7 +154,7 @@ test('a section of the other tab in the address opens the tab that has it', asyn
   await fresh.close()
 })
 
-test("the project's sidebar opens the project tab, and each project shows its own", async ({
+test("the top bar's Settings opens the project tab; the sidebar has no Settings", async ({
   page,
   project,
   human,
@@ -161,7 +162,13 @@ test("the project's sidebar opens the project tab, and each project shows its ow
   const other = await seedProject(human, `Other ${project.name}`)
   for (const p of [project, other]) {
     await page.goto(`/projects/${p.id}`)
-    await page.locator('aside nav').getByRole('link', { name: 'Settings', exact: true }).click()
+    // The project's sidebar has no Settings entry: the top bar's opens the page, and the tab is the project's.
+    await expect(page.locator('aside nav').getByRole('link', { name: 'Settings', exact: true })).toHaveCount(
+      0,
+    )
+    await remembered(page, p.id)
+    await page.getByRole('banner').getByRole('link', { name: 'Settings', exact: true }).click()
+    await projectTab(page, p.name).click()
     await expect(page).toHaveURL(new RegExp(`/settings\\?tab=project&project=${p.id}$`))
     await expect(projectTab(page, p.name)).toHaveAttribute('aria-selected', 'true')
     await expect(region(page, 'Stages')).toBeVisible()
