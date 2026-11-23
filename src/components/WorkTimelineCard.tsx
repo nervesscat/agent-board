@@ -46,7 +46,7 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
     <section className="rounded-lg border p-4" aria-label="Timeline">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="text-sm font-medium">Timeline</h2>
-        <RunReportsWindow reports={t.runReports} />
+        <RunReportsWindow reports={t.runReports} serverNow={data?.timeline.now} />
       </div>
       {error ? (
         <p className="text-sm text-destructive">{errorMessage(error)}</p>

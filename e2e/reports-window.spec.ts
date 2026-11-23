@@ -299,3 +299,32 @@ test.describe('on a phone', () => {
 })
 
 const sideways = (el: Locator) => el.evaluate((e) => e.scrollWidth > e.clientWidth)
+
+test('the Time presets count from the server clock when the browser clock is hours ahead', async ({
+  page,
+  api,
+  project,
+  agent,
+}) => {
+  const t = await api.ticket({ title: 'Import the ledger' })
+  await seed(agent, project.id, t.id)
+  // The browser's clock runs three hours ahead of the server's.
+  await page.addInitScript(() => {
+    const skew = 3 * 60 * 60 * 1000
+    const RealDate = Date
+    class SkewedDate extends RealDate {
+      constructor(...args: unknown[]) {
+        super(...((args.length ? args : [RealDate.now() + skew]) as [number]))
+      }
+      static now() {
+        return RealDate.now() + skew
+      }
+    }
+    window.Date = SkewedDate as DateConstructor
+  })
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  await card(page).getByRole('button', { name: 'Reports (4)' }).click()
+  await expect(count(page)).toHaveText('4 of 4 reports')
+  await pick(page, 'Time', 'Last hour')
+  await order(page, [/hunt.*round 1/])
+})

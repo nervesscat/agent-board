@@ -20,7 +20,8 @@ import {
   sortReports,
 } from '#/lib/reportFilter'
 import type { RunReport } from '#/lib/runReports'
-import { useNow } from '#/lib/useNow'
+import { useNow, useServerOffset } from '#/lib/useNow'
+import { onServerClock } from '#/lib/workStatus'
 
 const ANY = 'any'
 
@@ -89,6 +90,7 @@ function ReportList({
   sort,
   onSort,
   onOpen,
+  serverNow,
 }: {
   reports: RunReport[]
   filters: ReportFilters
@@ -96,9 +98,10 @@ function ReportList({
   sort: ReportSort
   onSort: (s: ReportSort) => void
   onOpen: (r: RunReport) => void
+  serverNow?: string | null
 }) {
-  // Presets count from the clock, refreshed while the window is open.
-  const now = useNow(30_000)
+  // Presets count from the server's clock (report times are the server's), refreshed while the window is open.
+  const now = onServerClock(useNow(30_000), useServerOffset(serverNow))
   const agents = useMemo(() => agentOptions(reports), [reports])
   const rounds = useMemo(() => roundOptions(reports), [reports])
   const shown = useMemo(
@@ -188,7 +191,13 @@ function ReportList({
  * lists every report with filters and a sort; a row opens the whole report in the same window, and Back
  * returns to the list as it was left. Full-screen on a phone.
  */
-export function RunReportsWindow({ reports }: { reports: RunReport[] }) {
+export function RunReportsWindow({
+  reports,
+  serverNow,
+}: {
+  reports: RunReport[]
+  serverNow?: string | null
+}) {
   const [open, setOpen] = useState(false)
   const [openId, setOpenId] = useState<number | null>(null)
   const [filters, setFilters] = useState(NO_REPORT_FILTERS)
@@ -249,6 +258,7 @@ export function RunReportsWindow({ reports }: { reports: RunReport[] }) {
               sort={sort}
               onSort={setSort}
               onOpen={(r) => setOpenId(r.id)}
+              serverNow={serverNow}
             />
           )}
         </DialogContent>
