@@ -37,7 +37,7 @@ export const LAYOUT_ELEMENTS = [
   { id: 'overview.agents', label: 'Agents at work', area: 'overview' },
   { id: 'overview.inProgress', label: 'In progress', area: 'overview' },
   { id: 'overview.doneToday', label: 'Done today', area: 'overview' },
-  { id: 'overview.next', label: 'Next', area: 'overview' },
+  { id: 'overview.lostContact', label: 'Lost contact', area: 'overview' },
   { id: 'overview.carryingOver', label: 'Carrying over', area: 'overview' },
   { id: 'overview.notes', label: 'Notes', area: 'overview' },
   // A ticket's page.

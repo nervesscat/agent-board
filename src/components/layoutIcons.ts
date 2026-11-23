@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Bot,
   BrushCleaning,
   CalendarDays,
@@ -14,7 +15,6 @@ import {
   Info,
   KanbanSquare,
   Layers,
-  ListTodo,
   MessageSquare,
   Milestone,
   MonitorPlay,
@@ -46,7 +46,7 @@ export const LAYOUT_ICONS: Record<LayoutId, typeof Home> = {
   'overview.agents': Bot,
   'overview.inProgress': Play,
   'overview.doneToday': CheckCircle2,
-  'overview.next': ListTodo,
+  'overview.lostContact': AlertTriangle,
   'overview.carryingOver': Clock,
   'overview.notes': StickyNote,
   'ticket.instructions': ScrollText,

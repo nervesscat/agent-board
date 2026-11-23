@@ -67,7 +67,7 @@ function ticketsAsTheyWere(rows: Record<string, unknown>[]) {
 
 /**
  * Projects gained kinds in 0055, the resume command and its time limit in 0061, and the workflow columns in
- * 0062 and 0064: every project that existed is software, follows the Standard workflow, has no tweaks and no
+ * 0063 and 0065: every project that existed is software, follows the Standard workflow, has no tweaks and no
  * workflows of its own; the other columns are compared as they were.
  */
 function projectsAsTheyWere(rows: Record<string, unknown>[]) {
@@ -75,7 +75,7 @@ function projectsAsTheyWere(rows: Record<string, unknown>[]) {
     if ('kinds' in row) expect(row.kinds).toBe('["software"]')
     if ('workflow_preset' in row) expect(row.workflow_preset).toBe('standard')
     if ('workflow_tweaks' in row) expect(row.workflow_tweaks).toBeNull()
-    // 0064 added the project's own workflows: none on a project that existed.
+    // 0065 added the project's own workflows: none on a project that existed.
     if ('workflow_custom' in row) expect(row.workflow_custom).toBeNull()
   }
   return rows.map(
@@ -2075,9 +2075,9 @@ describe('0061_ticket_resumes', () => {
   })
 })
 
-describe('0062_project_workflow', () => {
+describe('0063_project_workflow', () => {
   it('reads every project that existed as Standard with no tweaks and every ticket as following its project, changing nothing else', () => {
-    const sqlite = databaseAt('0061_ticket_resumes')
+    const sqlite = databaseAt('0062_overview_next_to_lost_contact')
     const project = (name: string) =>
       Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run(name).lastInsertRowid)
     const ticket = (projectId: number, title: string) =>
@@ -2124,7 +2124,7 @@ describe('0062_project_workflow', () => {
   })
 })
 
-describe('0063_drop_workflow_instruction_edits', () => {
+describe('0064_drop_workflow_instruction_edits', () => {
   const tweaks = (sqlite: Database.Database, id: number) =>
     (
       sqlite.prepare('SELECT workflow_tweaks FROM projects WHERE id = ?').get(id) as {
@@ -2133,7 +2133,7 @@ describe('0063_drop_workflow_instruction_edits', () => {
     ).workflow_tweaks
 
   it("strips a step's saved instruction from every preset and keeps the order, rounds, switches and efforts exactly", () => {
-    const sqlite = databaseAt('0062_project_workflow')
+    const sqlite = databaseAt('0063_project_workflow')
     const project = (name: string, value: string | null, preset = 'thorough') =>
       Number(
         sqlite
@@ -2236,7 +2236,7 @@ describe('0063_drop_workflow_instruction_edits', () => {
 
   it('reads as it should: the reader sees no instruction and the step is as the preset ships it', async () => {
     const { readProjectTweaks } = await import('../lib/workflow')
-    const sqlite = databaseAt('0062_project_workflow')
+    const sqlite = databaseAt('0063_project_workflow')
     const id = Number(
       sqlite.prepare('INSERT INTO projects (name, workflow_tweaks) VALUES (?, ?)').run(
         'p',
@@ -2253,9 +2253,9 @@ describe('0063_drop_workflow_instruction_edits', () => {
   })
 })
 
-describe('0064_project_custom_workflows', () => {
+describe('0065_project_custom_workflows', () => {
   it('gives every project an empty list of its own workflows and keeps what the workflow columns held', () => {
-    const sqlite = databaseAt('0063_drop_workflow_instruction_edits')
+    const sqlite = databaseAt('0064_drop_workflow_instruction_edits')
     const project = (name: string, preset: string, tweaks: string | null) =>
       Number(
         sqlite
@@ -2291,7 +2291,7 @@ describe('0064_project_custom_workflows', () => {
   })
 })
 
-describe('the journal and the workflow migrations after the resume migration', () => {
+describe('the journal and the workflow migrations after the overview migration', () => {
   const journal = JSON.parse(fs.readFileSync(path.join(folder, 'meta', '_journal.json'), 'utf8')) as {
     entries: { idx: number; when: number; tag: string }[]
   }
@@ -2321,8 +2321,8 @@ describe('the journal and the workflow migrations after the resume migration', (
     }
   })
 
-  it('applies the three workflow migrations at once to a board that ran the resume migration, with rows, and keeps them', () => {
-    const sqlite = databaseAt('0061_ticket_resumes')
+  it('applies the three workflow migrations at once to a board that ran every migration of dev up to the overview one, with rows, and keeps them', () => {
+    const sqlite = databaseAt('0062_overview_next_to_lost_contact')
     const project = Number(
       sqlite
         .prepare(
