@@ -1829,6 +1829,136 @@ describe('0059_project_workflow', () => {
   })
 })
 
+describe('0060_drop_workflow_instruction_edits', () => {
+  const tweaks = (sqlite: Database.Database, id: number) =>
+    (
+      sqlite.prepare('SELECT workflow_tweaks FROM projects WHERE id = ?').get(id) as {
+        workflow_tweaks: string | null
+      }
+    ).workflow_tweaks
+
+  it("strips a step's saved instruction from every preset and keeps the order, rounds, switches and efforts exactly", () => {
+    const sqlite = databaseAt('0059_project_workflow')
+    const project = (name: string, value: string | null, preset = 'thorough') =>
+      Number(
+        sqlite
+          .prepare('INSERT INTO projects (name, workflow_preset, workflow_tweaks) VALUES (?, ?, ?)')
+          .run(name, preset, value).lastInsertRowid,
+      )
+    const order = [
+      'claim',
+      'build',
+      'spec',
+      'gate',
+      'review',
+      'preview',
+      'intent',
+      'push',
+      'pr',
+      'ci',
+      'summary',
+      'handoff',
+    ]
+    const mixed = project(
+      'mixed',
+      JSON.stringify({
+        standard: {
+          steps: {
+            build: { instructions: 'x', effort: 'high' },
+            spec: { instructions: 'y' },
+            preview: { enabled: false, instructions: 'z', effort: 'low' },
+          },
+          order,
+          rounds: { mid: 2, max: 7 },
+        },
+        light: { steps: { intent: { instructions: 'z' } } },
+        maximum: { rounds: { low: 1 }, steps: {} },
+      }),
+    )
+    const clean = project(
+      'clean',
+      JSON.stringify({ standard: { steps: { build: { effort: 'low' } }, order, rounds: { mid: 2 } } }),
+      'light',
+    )
+    const empty = project('empty', null)
+    const text = project('not json', 'not json {', 'light')
+    const list = project('a list', '["instructions"]')
+    const scalar = project('a string', '"instructions"')
+    const odd = project(
+      'odd shapes',
+      JSON.stringify({
+        standard: {
+          steps: { build: { instructions: 'x' }, tests: 'instructions', ci: null, push: true, pr: 4 },
+          order,
+        },
+        thorough: 'instructions',
+        maximum: ['instructions'],
+        light: null,
+        extra: { steps: 'instructions' },
+      }),
+    )
+    const before = sqlite.prepare('SELECT * FROM projects ORDER BY id').all() as Record<string, unknown>[]
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    expect(JSON.parse(tweaks(sqlite, mixed)!)).toEqual({
+      standard: {
+        steps: {
+          build: { effort: 'high' },
+          spec: {},
+          preview: { enabled: false, effort: 'low' },
+        },
+        order,
+        rounds: { mid: 2, max: 7 },
+      },
+      light: { steps: { intent: {} } },
+      maximum: { rounds: { low: 1 }, steps: {} },
+    })
+    expect(tweaks(sqlite, mixed)).not.toContain('"instructions"')
+    // A row with no instruction is not rewritten at all, and a value that is no object is left as it was.
+    expect(tweaks(sqlite, clean)).toBe(
+      (before.find((r) => r.id === clean) as { workflow_tweaks: string }).workflow_tweaks,
+    )
+    expect(tweaks(sqlite, empty)).toBeNull()
+    expect(tweaks(sqlite, text)).toBe('not json {')
+    expect(tweaks(sqlite, list)).toBe('["instructions"]')
+    expect(tweaks(sqlite, scalar)).toBe('"instructions"')
+    expect(JSON.parse(tweaks(sqlite, odd)!)).toEqual({
+      standard: { steps: { build: {}, tests: 'instructions', ci: null, push: true, pr: 4 }, order },
+      thorough: 'instructions',
+      maximum: ['instructions'],
+      light: null,
+      extra: { steps: 'instructions' },
+    })
+    // Nothing else of any project changed: not its name, its id, its preset.
+    const after = sqlite.prepare('SELECT * FROM projects ORDER BY id').all() as Record<string, unknown>[]
+    const withoutTweaks = ({ workflow_tweaks: _t, ...rest }: Record<string, unknown>) => rest
+    expect(after.map(withoutTweaks)).toEqual(before.map(withoutTweaks))
+    expect(after.map((r) => [r.id, r.workflow_preset])).toEqual(before.map((r) => [r.id, r.workflow_preset]))
+    sqlite.close()
+  })
+
+  it('reads as it should: the reader sees no instruction and the step is as the preset ships it', async () => {
+    const { readProjectTweaks } = await import('../lib/workflow')
+    const sqlite = databaseAt('0059_project_workflow')
+    const id = Number(
+      sqlite
+        .prepare('INSERT INTO projects (name, workflow_tweaks) VALUES (?, ?)')
+        .run(
+          'p',
+          JSON.stringify({
+            standard: { steps: { build: { instructions: 'only this' }, spec: { effort: 'high' } } },
+          }),
+        ).lastInsertRowid,
+    )
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+    expect(readProjectTweaks(JSON.parse(tweaks(sqlite, id)!))).toEqual({
+      standard: { steps: { spec: { effort: 'high' } } },
+    })
+    sqlite.close()
+  })
+})
+
 describe('0057_alerts', () => {
   it('adds the alert tables beside the rows a board already has, and keeps a board-wide alert unique', () => {
     const sqlite = databaseAt('0056_closed_by_approval')
