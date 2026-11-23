@@ -626,7 +626,9 @@ function workOf(
     const open = db
       .select()
       .from(schema.prs)
-      .where(and(eq(schema.prs.projectId, projectId), eq(schema.prs.open, true)))
+      .where(
+        and(eq(schema.prs.projectId, projectId), eq(schema.prs.open, true), eq(schema.prs.involvesMe, true)),
+      )
       .all()
       .filter((pr) => (pr.repoId ? rowIds.has(pr.repoId) : true))
     for (const pr of open) {

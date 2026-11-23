@@ -127,6 +127,7 @@ function prRow(projectId: number, n: number, extra: Partial<PrRow> = {}): PrRow 
     reviewDecision: null,
     myReview: 'none',
     requested: false,
+    involvesMe: true,
     waitingOn: 'me',
     reviewStage: 'pending',
     mergeable: 'MERGEABLE',
