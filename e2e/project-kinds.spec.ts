@@ -276,8 +276,9 @@ test('an agent cannot close a hand-off, and approving a ticket that names a repo
     }),
   )
   await ok(human.put(`/api/tickets/${named.id}/approval`, { data: { verdict: 'approved' } }))
+  // It moves to Approved, a stage of its own kind, not to a done stage.
   expect((await ok<{ stage: { kind: string } }>(human.get(`/api/tickets/${named.id}`))).stage.kind).toBe(
-    'review',
+    'approved',
   )
 })
 
