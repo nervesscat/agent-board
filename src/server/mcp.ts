@@ -7,6 +7,7 @@ import { hasGitSide } from '#/lib/kinds'
 import type { RunConfigInput } from '#/lib/runs'
 import { listActors, noteActor } from './actors'
 import * as agentCards from './agentCards'
+import { WAIT_DEFAULT_SECONDS, WAIT_MAX_SECONDS, waitAndReport } from './answerWait'
 import { asSubIdentity, type Caller, callerInfo } from './auth'
 import { previewBranch } from './branchPreview'
 import { linkFor } from './previewProxy'
@@ -924,6 +925,70 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
     `Say you are still working a ticket. Send one every few minutes while you work it (in Claude Code under /loop, or between steps), or let the runtime beat for you (save the beater from /api/agent-setup/board-beat and wrap long tool calls with it): a heartbeat refreshes the ticket's lease, which lasts ten minutes. With the lease live the ticket reads working; when it expires with a span still open the ticket reads Lost contact (the agent is gone, not waiting on the human), and with nothing open it reads stalled only once silent past the project's stallMinutes (30 by default). Needs you is the human's turn: an open span never puts a ticket there. Returns at, lastSignalAt and leaseUntil. ${SCOPE}`,
     { ...scoped },
     ({ projectId, ticketId, ...input }) => work.heartbeat(projectId, ticketId, input, actor),
+  )
+
+  // wait_for_answer: block on a decision card until the human answers it (answerWait.ts)
+  server.registerTool(
+    'wait_for_answer',
+    {
+      description:
+        "Wait for the human's answer on a decision card of a ticket, and get it: the option picked, its label and the human's words. Use it only when you can stay alive while you wait (a session that keeps running, a loop that calls again); otherwise end your turn with the ticket blocked on the card, as the board skill says, and the board resumes you when the project has a resume command. Without postId it waits on the ticket's newest open decision card; an already answered card returns its answer at once. It blocks until the answer or timeoutSeconds (default 300, at most 1800) and, while it waits, keeps the ticket's lease alive like heartbeat (attributed to you) and sends progress to clients that ask for it. No answer yet is a normal result: call wait_for_answer again, with the postId it returns. It only reads: it never answers a card.",
+      inputSchema: {
+        ticketId: z.number().int(),
+        postId: z
+          .number()
+          .int()
+          .optional()
+          .describe("the decision card; left out, the ticket's newest open one"),
+        timeoutSeconds: z.number().int().min(1).max(WAIT_MAX_SECONDS).default(WAIT_DEFAULT_SECONDS),
+        agentName: AGENT_NAME,
+      },
+    },
+    (async (
+      { ticketId, postId, timeoutSeconds }: { ticketId: number; postId?: number; timeoutSeconds: number },
+      extra: {
+        signal: AbortSignal
+        _meta?: { progressToken?: string | number }
+        sendNotification: (n: {
+          method: 'notifications/progress'
+          params: Record<string, unknown>
+        }) => Promise<void>
+      },
+    ) => {
+      try {
+        if (refused) throw refused
+        let beats = 0
+        return text(
+          await waitAndReport({
+            ticketId,
+            postId,
+            timeoutSeconds,
+            // The transport is stateless: a dropped connection shows on the HTTP request's own signal.
+            signal: AbortSignal.any([extra.signal, request.signal]),
+            actor,
+            onBeat: async () => {
+              const progressToken = extra._meta?.progressToken
+              if (progressToken === undefined) return
+              beats += 1
+              await extra
+                .sendNotification({
+                  method: 'notifications/progress',
+                  params: { progressToken, progress: beats, message: 'still waiting for the answer' },
+                })
+                .catch(() => {})
+            },
+          }),
+        )
+      } catch (err) {
+        if (!(err instanceof HttpError)) console.error('mcp wait_for_answer failed:', err)
+        return fail(err)
+      }
+    }) as unknown as ToolCallback<{
+      ticketId: z.ZodNumber
+      postId: z.ZodOptional<z.ZodNumber>
+      timeoutSeconds: z.ZodDefault<z.ZodNumber>
+      agentName: typeof AGENT_NAME
+    }>,
   )
 
   tool(

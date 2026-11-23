@@ -62,6 +62,7 @@ import { NewTicket } from '#/components/NewTicket'
 import { hasGitSide } from '#/lib/kinds'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
+import { ResumeCard, useTicketResume } from '#/components/ResumeCard'
 import { RunsCard, useTicketRuns } from '#/components/RunsCard'
 import { DelayedLoading, SkeletonCard, SkeletonText } from '#/components/Loading'
 import { TicketSkeleton } from '#/components/TicketSkeleton'
@@ -204,6 +205,8 @@ function TicketPage() {
     qc.invalidateQueries({ queryKey: ['ticket-git', ticketId] })
     // Its repos, and with them its runs, may have changed.
     qc.invalidateQueries({ queryKey: ['ticket-runs'] })
+    // An answer or a move may have started a resume: the Resume card shows it now, not on its next poll.
+    qc.invalidateQueries({ queryKey: ['ticket-resume'] })
     // The tags the project's tickets carry, offered under every tags field.
     qc.invalidateQueries({ queryKey: ['project', id] })
   }
@@ -325,6 +328,7 @@ function TicketPage() {
   const git = t && t.id === Number(ticketId) ? ticketGit : undefined
   // Here, not only in the Runs card: with none to show the card is left out, and its column with it.
   const runs = useTicketRuns(t, git)
+  const resume = useTicketResume(t)
 
   // The ticket asked for is not on screen yet: after a short wait, placeholders take the place of the
   // previous ticket (or of nothing), never its data under the next one's number.
@@ -400,6 +404,7 @@ function TicketPage() {
           <SkeletonCard className="p-3" lines={2} />
         </DelayedLoading>
       ) : null,
+    'ticket.resume': resume.shown ? <ResumeCard t={t} onChange={invalidate} /> : null,
     'ticket.details': (
       <Details key={t.id} t={t} git={gitSide} includes={git?.includes} onSave={(p) => update.mutate(p)} />
     ),
