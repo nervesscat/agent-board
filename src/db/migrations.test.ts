@@ -1942,14 +1942,12 @@ describe('0060_drop_workflow_instruction_edits', () => {
     const { readProjectTweaks } = await import('../lib/workflow')
     const sqlite = databaseAt('0059_project_workflow')
     const id = Number(
-      sqlite
-        .prepare('INSERT INTO projects (name, workflow_tweaks) VALUES (?, ?)')
-        .run(
-          'p',
-          JSON.stringify({
-            standard: { steps: { build: { instructions: 'only this' }, spec: { effort: 'high' } } },
-          }),
-        ).lastInsertRowid,
+      sqlite.prepare('INSERT INTO projects (name, workflow_tweaks) VALUES (?, ?)').run(
+        'p',
+        JSON.stringify({
+          standard: { steps: { build: { instructions: 'only this' }, spec: { effort: 'high' } } },
+        }),
+      ).lastInsertRowid,
     )
     migrate(drizzle(sqlite), { migrationsFolder: folder })
     expect(readProjectTweaks(JSON.parse(tweaks(sqlite, id)!))).toEqual({
