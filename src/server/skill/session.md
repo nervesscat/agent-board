@@ -145,6 +145,9 @@ the close below keeps its own cleanup.
 When the human answers a decision card, or comments on a ticket and moves it back to In progress,
 relaunch that ticket's agent at once, briefed with the answer or the comment. The agent replies under
 the post: its plan first, then the result. A comment with no stage move does not relaunch by itself.
+When the project has a resume command, the board starts that work itself on the human's answer or move
+(the ticket's Resume card says so): relaunch only when it says nothing started. An agent that can stay
+alive may call `wait_for_answer` on the card instead of ending its turn.
 
 A short UI comment is the exception: the human confirms the reading first ([Short UI comments:
 confirm first](#short-ui-comments-confirm-first)); once they have, relaunch at once, briefed with the

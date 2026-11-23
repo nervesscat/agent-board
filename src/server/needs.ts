@@ -1,16 +1,31 @@
-import { asc, eq, inArray } from 'drizzle-orm'
+import crypto from 'node:crypto'
+
+import { and, asc, eq, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { hasGitSide } from '#/lib/kinds'
 import { isClosed } from '#/lib/stages'
 import { activityOf } from '#/lib/workTimeline'
 import { logActivity } from './activity'
-import { baseChain, baseRefs, branchRef, gitCache, type GitCache, memo, reachOf, refSha } from './cleanup'
+import {
+  baseChain,
+  baseRefs,
+  branchRef,
+  gitCache,
+  localRef,
+  type GitCache,
+  type RepoGit,
+  memo,
+  reachOf,
+  refSha,
+  refsKey,
+} from './cleanup'
 import * as features from './features'
-import { holdsWorkOf, type Reach } from './git'
+import { holdsOwnWork, holdsWorkOf, isAncestor, refsMergedInto, type Reach, type Refs } from './git'
 import { type OpenTask, openTasks } from './openTasks'
 import { HttpError } from './http'
 import { getProject } from './projects'
+import { onRefsListed, readRefs } from './push'
 import { listRepos } from './repos'
 import { missingReports, missingReviewPhases, ticketReports } from './runReports'
 import {
@@ -45,9 +60,24 @@ export interface Need {
   merged: boolean
   /** The branch it has to land in: this ticket's base, or its own when this ticket is built on it. */
   into: string
+  /** The board added it, because this ticket's branch holds its unmerged commits; it goes when that stops. */
+  auto: boolean
 }
 
 export type NeededBy = Pick<Ticket, 'id' | 'title' | 'branch' | 'prNumber' | 'status'>
+
+/** The needs of a ticket the board added. */
+function autoIds(ticketId: number | null): Set<number> {
+  if (ticketId === null) return new Set()
+  return new Set(
+    db
+      .select({ id: schema.ticketNeeds.needsId })
+      .from(schema.ticketNeeds)
+      .where(and(eq(schema.ticketNeeds.ticketId, ticketId), eq(schema.ticketNeeds.auto, true)))
+      .all()
+      .map((r) => r.id),
+  )
+}
 
 /** The tickets this one needs, by id. */
 export function needIds(ticketId: number): number[] {
@@ -111,19 +141,62 @@ export function checkNeeds(subject: Pick<Subject, 'id' | 'projectId'>, ids: numb
   return wanted
 }
 
-/** Replace what a ticket needs (checked as `checkNeeds` does); `[]` clears it. */
-export function setNeeds(ticketId: number, ids: number[], actor: string) {
+/**
+ * Replace what a ticket needs (checked as `checkNeeds` does); `[]` clears it. The needs the board added
+ * (`auto`) are its own: a human's list that keeps one leaves its row as it is (the UI sends every id on
+ * each edit), an agent's list never removes one, and the human removing any need is remembered
+ * (`ticket_need_dismissals`), so the board does not add it again for the same commits. An agent that
+ * names a need the board added has declared it: the row stays and is the agent's from then on (not
+ * `auto`), so a rebase never drops it. `ids` is what the caller itself named, not merged with the
+ * automatic needs. Needs not in the list before are the caller's own (not `auto`).
+ */
+export function setNeeds(ticketId: number, ids: number[], actor: string, opts: { agent?: boolean } = {}) {
   const t = features.getTicket(ticketId)
-  const next = checkNeeds(t, ids)
-  const before = needIds(ticketId)
-  if (next.length === before.length && next.every((id) => before.includes(id))) return before
+  const rows = db.select().from(schema.ticketNeeds).where(eq(schema.ticketNeeds.ticketId, ticketId)).all()
+  const named = checkNeeds(t, ids)
+  const kept = opts.agent ? rows.filter((r) => r.auto).map((r) => r.needsId) : []
+  const declared = opts.agent ? rows.filter((r) => r.auto && named.includes(r.needsId)) : []
+  const next = [...new Set([...named, ...kept])]
+  const before = rows.map((r) => r.needsId).sort((a, b) => a - b)
+  const same = next.length === before.length && next.every((id) => before.includes(id))
+  if (same && !declared.length) return before
   db.transaction((tx) => {
-    tx.delete(schema.ticketNeeds).where(eq(schema.ticketNeeds.ticketId, ticketId)).run()
-    if (next.length)
-      tx.insert(schema.ticketNeeds)
-        .values(next.map((needsId) => ({ ticketId, needsId })))
+    for (const r of declared)
+      tx.update(schema.ticketNeeds)
+        .set({ auto: false })
+        .where(and(eq(schema.ticketNeeds.ticketId, ticketId), eq(schema.ticketNeeds.needsId, r.needsId)))
         .run()
+    for (const r of rows.filter((r) => !next.includes(r.needsId))) {
+      tx.delete(schema.ticketNeeds)
+        .where(and(eq(schema.ticketNeeds.ticketId, ticketId), eq(schema.ticketNeeds.needsId, r.needsId)))
+        .run()
+      // The human's removal sticks for any need: a manual row has held '' (no commit seen for it yet).
+      if (r.auto || !opts.agent)
+        tx.insert(schema.ticketNeedDismissals)
+          .values({ ticketId, needsId: r.needsId, held: r.held })
+          .onConflictDoUpdate({
+            target: [schema.ticketNeedDismissals.ticketId, schema.ticketNeedDismissals.needsId],
+            set: { held: r.held },
+          })
+          .run()
+    }
+    const added = next.filter((id) => !before.includes(id))
+    if (added.length) {
+      tx.insert(schema.ticketNeeds)
+        .values(added.map((needsId) => ({ ticketId, needsId })))
+        .run()
+      // Taken on by hand: whatever was dismissed before is no longer.
+      tx.delete(schema.ticketNeedDismissals)
+        .where(
+          and(
+            eq(schema.ticketNeedDismissals.ticketId, ticketId),
+            inArray(schema.ticketNeedDismissals.needsId, added),
+          ),
+        )
+        .run()
+    }
   })
+  if (same) return needIds(ticketId)
   logActivity({
     projectId: t.projectId,
     actor,
@@ -147,6 +220,7 @@ function context(projectId: number, git: GitCache = gitCache()) {
   return {
     stages,
     all,
+    repos,
     byId: new Map(all.map((t) => [t.id, t])),
     repoOf: (t: Pick<Ticket, 'repoId'>) =>
       (t.repoId ? repos.find((r) => r.id === t.repoId) : repos[0]) ?? null,
@@ -177,7 +251,12 @@ async function isMet(subject: Subject, need: Ticket, ctx: Context): Promise<bool
   return landed(await reachOf(repo.repoPath, need.branch, baseChain(need, ctx.byId, repo), refs))
 }
 
-async function needsOf(subject: Subject, ids: number[], ctx: Context): Promise<Need[]> {
+async function needsOf(
+  subject: Subject,
+  ids: number[],
+  ctx: Context,
+  autos: ReadonlySet<number> = autoIds(subject.id),
+): Promise<Need[]> {
   const sameRepo = (n: Ticket) => ctx.repoOf(subject)?.id === ctx.repoOf(n)?.id
   return Promise.all(
     ids
@@ -192,6 +271,7 @@ async function needsOf(subject: Subject, ids: number[], ctx: Context): Promise<N
         // git failing to answer leaves it not merged: the human can still mark the ticket done.
         merged: await isMet(subject, n, ctx).catch(() => false),
         into: sameRepo(n) && subject.baseBranch !== n.branch ? subject.baseBranch : n.baseBranch,
+        auto: autos.has(n.id),
       })),
   )
 }
@@ -205,7 +285,8 @@ async function needsFor(rows: Ticket[], ctx: Context) {
   const out = new Map<number, Need[]>()
   await Promise.all(
     rows.map(async (t) => {
-      const mine = edges.filter((e) => e.ticketId === t.id).map((e) => e.needsId)
+      const own = edges.filter((e) => e.ticketId === t.id)
+      const mine = own.map((e) => e.needsId)
       if (mine.length)
         out.set(
           t.id,
@@ -213,6 +294,7 @@ async function needsFor(rows: Ticket[], ctx: Context) {
             t,
             mine.sort((a, b) => a - b),
             ctx,
+            new Set(own.filter((e) => e.auto).map((e) => e.needsId)),
           ),
         )
     }),
@@ -226,6 +308,7 @@ async function needsFor(rows: Ticket[], ctx: Context) {
  */
 export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {}) {
   const full = await features.getTicketWithPush(id, opts)
+  followBranches(full.projectId)
   const ctx = context(full.projectId)
   const needs = await needsOf(full, needIds(id), ctx)
   const neededBy: NeededBy[] = db
@@ -268,6 +351,7 @@ export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {
  */
 export async function ticketRows(projectId: number, filter: features.TicketFilter = {}) {
   const rows = features.listTickets(projectId, filter)
+  followBranches(projectId)
   const needs = await needsFor(rows, context(projectId))
   const timelines = timelinesFor(rows)
   return rows.map((t) => {
@@ -288,89 +372,418 @@ export async function ticketRows(projectId: number, filter: features.TicketFilte
 
 // --- what a branch took in from other tickets' branches ---
 
-const INCLUDES_MAX = 40
+/** Answers kept for the commits they were worked out for (by the branches too, where those matter). */
+const MEMO_MAX = 20_000
 const includesMemo = new Map<string, Promise<boolean>>()
+const mergedMemo = new Map<string, Promise<Set<string>>>()
+const ownMemo = new Map<string, Promise<boolean>>()
+const includedMemo = new Map<string, Promise<number[]>>()
 
 /**
- * The open tickets (same repo, not this ticket's own parents or lanes) whose unmerged work this
- * ticket's branch holds: commits of their branch that are in this one but in none of its bases. A
- * ticket built on this one does not count. At most the 40 most recently updated are checked, and
- * each answer is kept for the commits it was worked out for.
+ * The open tickets this one's branch could hold work of: same repo, not its own parents or lanes, not
+ * built on this ticket's branch (that holds this one's work, not the other way round).
+ */
+function candidatesOf(t: Ticket, ctx: Context, repo: schema.Repo): Ticket[] {
+  const family = new Set([t.id, ...features.laneTree(ctx.all, t.id).map((l) => l.id)])
+  for (let p = t.parentId; p; p = ctx.byId.get(p)?.parentId ?? null) family.add(p)
+  return ctx.all.filter(
+    (o) =>
+      !family.has(o.id) &&
+      o.branch &&
+      o.branch !== t.branch &&
+      !o.archivedAt &&
+      !isClosed(kindOf(ctx.stages, o.status)) &&
+      ctx.repoOf(o)?.id === repo.id &&
+      !baseChain(o, ctx.byId, repo).includes(t.branch),
+  )
+}
+
+/** Runs `work` over `items` a few at a time, so a busy project does not start dozens of git processes at once. */
+async function inBatches<T, R>(items: T[], work: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = []
+  for (let i = 0; i < items.length; i += 4) out.push(...(await Promise.all(items.slice(i, i + 4).map(work))))
+  return out
+}
+
+/** The full name of the ref `branchRef` picks for a branch. */
+const fullRef = (branch: string, refs: { local: Map<string, string> }) =>
+  refs.local.has(branch) ? `refs/heads/${branch}` : `refs/remotes/origin/${branch}`
+
+/**
+ * The tickets whose unmerged work this ticket's branch certainly holds, each with the commit of its
+ * branch seen inside this one: its tip is a strict ancestor of this one's, and it has commits of its own
+ * that no branch below it and no base of this ticket holds (`holdsOwnWork`). Null when there is no
+ * branch to look at or no listing of the repo; throws when git cannot answer. Every answer is kept for the commits it is about.
+ */
+async function certainWork(t: Ticket, ctx: Context): Promise<Map<number, string> | null> {
+  const repo = ctx.repoOf(t)
+  if (!t.branch || !repo) return null
+  const { refs, error } = await ctx.git(repo.repoPath)
+  // A repo git cannot read says nothing: its tickets keep their needs until it can be read again.
+  if (error) return null
+  const ref = branchRef(t.branch, refs)
+  if (!ref) return null
+  const a = refSha(ref, refs)!
+  const fingerprint = refsKey(refs)
+  const merged = await memo(mergedMemo, MEMO_MAX, [repo.repoPath, a, fingerprint].join('\0'), () =>
+    refsMergedInto(repo.repoPath, a),
+  )
+  const chain = baseChain(t, ctx.byId, repo)
+  const found = new Map<number, string>()
+  const candidates = candidatesOf(t, ctx, repo).filter(
+    (o) => (refs.local.has(o.branch) || refs.remote.has(o.branch)) && merged.has(fullRef(o.branch, refs)),
+  )
+  await inBatches(candidates, async (o) => {
+    const b = refSha(branchRef(o.branch, refs)!, refs)!
+    // Built on the other branch by its base: its work counts until it lands below it.
+    const bases = baseRefs(
+      chain.filter((c) => c !== o.branch),
+      refs,
+    )
+      .filter((r) => r !== ref)
+      .map((r) => refSha(r, refs)!)
+    const key = [repo.repoPath, a, b, o.branch, ...bases, fingerprint].join('\0')
+    const holds = await memo(ownMemo, MEMO_MAX, key, () =>
+      holdsOwnWork(repo.repoPath, a, b, [`refs/heads/${o.branch}`, `refs/remotes/origin/${o.branch}`], bases),
+    )
+    if (holds) found.set(o.id, b)
+  })
+  return found
+}
+
+/**
+ * The open tickets whose unmerged work this ticket's branch holds, though the board cannot tell for
+ * sure whose it is (so it adds no need): commits of their branch that are in this one but in none of its
+ * bases, or a copy of them under other shas (`holdsWorkOf`), as two branches do that took each other's
+ * work in (a partial merge-in), stacked and then moved apart, or had commits cherry-picked across. Two
+ * branches off the same base are not here. Not those it needs already, nor those it certainly holds
+ * (`certainWork`: the board adds those itself), nor those the human removed a need for, nor those that need
+ * this ticket (adding one would be a cycle). Every open ticket of
+ * the repo is checked. The git answers are kept for the commits they were worked out for, and the whole
+ * answer for the state of the project's branches and tickets and this ticket's needs, so a ticket page
+ * read again (the page asks every minute) costs a fingerprint until something changes.
  */
 async function includedWork(t: Ticket, ctx: Context): Promise<number[]> {
+  // The whole answer is kept for the state of the project's branches and tickets it was worked out for
+  // (and this ticket's needs), so a ticket page opened again, or by someone else, costs a fingerprint.
+  const key = [t.id, needIds(t.id).join(','), await projectState(ctx)].join('\0')
+  const found = await memo(includedMemo, 2_000, key, () => scanIncluded(t, ctx))
+  // Read as it is now, not kept: what the human removed is not asked about again, and neither is what
+  // "Add as a need" would refuse (one that needs this ticket already, directly or through others).
+  const removed = new Set(
+    db
+      .select({ id: schema.ticketNeedDismissals.needsId })
+      .from(schema.ticketNeedDismissals)
+      .where(eq(schema.ticketNeedDismissals.ticketId, t.id))
+      .all()
+      .map((r) => r.id),
+  )
+  return found.filter((id) => {
+    if (removed.has(id)) return false
+    try {
+      checkNeeds(t, [id])
+      return true
+    } catch {
+      return false
+    }
+  })
+}
+
+async function scanIncluded(t: Ticket, ctx: Context): Promise<number[]> {
   const repo = ctx.repoOf(t)
   if (!t.branch || !repo) return []
   const { refs } = await ctx.git(repo.repoPath)
   const ref = branchRef(t.branch, refs)
   if (!ref) return []
   const chain = baseChain(t, ctx.byId, repo)
-  const family = new Set([t.id, ...features.laneTree(ctx.all, t.id).map((l) => l.id)])
-  for (let p = t.parentId; p; p = ctx.byId.get(p)?.parentId ?? null) family.add(p)
-  const candidates = ctx.all
-    .filter(
-      (o) =>
-        !family.has(o.id) &&
-        o.branch &&
-        o.branch !== t.branch &&
-        !o.archivedAt &&
-        !isClosed(kindOf(ctx.stages, o.status)) &&
-        ctx.repoOf(o)?.id === repo.id &&
-        // Built on this ticket's branch: it holds this one's work, not the other way round.
-        !baseChain(o, ctx.byId, repo).includes(t.branch),
-    )
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .slice(0, INCLUDES_MAX)
-  // Every ticket's branch in the repo, this one's too: what a branch is built on is not its own work.
+  // A failure here fails the scan (and is not kept): the ones the board adds are not for the hint.
+  const settled = new Set([...needIds(t.id), ...((await certainWork(t, ctx))?.keys() ?? [])])
+  const candidates = candidatesOf(t, ctx, repo).filter((o) => !settled.has(o.id))
+  // Every branch of the repo, this one's too: what a branch is built on, a shared integration branch
+  // included, is not its own work.
   const others = [
     ...new Set([
       ref,
-      ...ctx.all.flatMap(
-        (o) => (o.branch && ctx.repoOf(o)?.id === repo.id && branchRef(o.branch, refs)) || [],
-      ),
+      ...[...refs.local.keys()].map((b) => localRef(b)),
+      ...[...refs.remote.keys()].map((b) => `origin/${b}`),
     ]),
   ]
   const at = (r: string) => `${r}@${refSha(r, refs)}`
-  const found: number[] = []
-  // A few at a time, so a busy project does not start dozens of git processes at once.
-  for (let i = 0; i < candidates.length; i += 4) {
-    const batch = await Promise.all(
-      candidates.slice(i, i + 4).map(async (o) => {
-        const other = branchRef(o.branch, refs)
-        if (!other) return null
-        // Built on the other branch: its work counts until it lands below it.
-        const bases = baseRefs(
-          chain.filter((b) => b !== o.branch),
-          refs,
-        ).filter((b) => b !== ref && b !== other)
-        const key = [repo.repoPath, at(ref), at(other), ...bases.map(at), '|', ...others.map(at)].join('\0')
-        // On the listed commits the key names, not on the branches as they are now.
-        const sha = (r: string) => refSha(r, refs)!
-        const holds = await memo(includesMemo, 2000, key, () =>
-          holdsWorkOf(
-            repo.repoPath,
-            sha(ref),
-            sha(other),
-            bases.map(sha),
-            others.filter((x) => x !== other).map(sha),
-          ),
-        )
-        return holds ? o.id : null
-      }),
+  const found = await inBatches(candidates, async (o) => {
+    const other = branchRef(o.branch, refs)
+    if (!other) return null
+    // Built on the other branch: its work counts until it lands below it.
+    const bases = baseRefs(
+      chain.filter((b) => b !== o.branch),
+      refs,
+    ).filter((b) => b !== ref && b !== other)
+    const key = [repo.repoPath, at(ref), at(other), ...bases.map(at), '|', ...others.map(at)].join('\0')
+    // On the listed commits the key names, not on the branches as they are now.
+    const sha = (r: string) => refSha(r, refs)!
+    const holds = await memo(includesMemo, MEMO_MAX, key, () =>
+      holdsWorkOf(
+        repo.repoPath,
+        sha(ref),
+        sha(other),
+        bases.map(sha),
+        // Not the other ticket's own copies: its pushed commits are its own work.
+        others.filter((x) => x !== localRef(o.branch) && x !== `origin/${o.branch}`).map(sha),
+      ),
     )
-    for (const id of batch) if (id !== null) found.push(id)
-  }
-  return found.sort((a, b) => a - b)
+    return holds ? o.id : null
+  })
+  return found.filter((id): id is number => id !== null).sort((a, b) => a - b)
 }
 
 /**
- * `get_ticket_git` with `includes`: the open tickets whose unmerged work this ticket's branch holds.
- * Both read the same ref listing, the one every read shares for a few seconds.
+ * `get_ticket_git` with `includes` (the HTTP route only with `?includes=1`, which runs the scan): the open tickets whose unmerged work this ticket's branch holds
+ * and the board did not add a need for (`includedWork`). Both read the same ref listing, the one every
+ * read shares for a few seconds.
  */
-export async function ticketGitView(id: number) {
+export async function ticketGitView(
+  id: number,
+  opts: { includes?: boolean } = {},
+): Promise<Awaited<ReturnType<typeof features.ticketGit>> & { includes?: number[] }> {
   const repoGit = gitCache({ recent: true })
   const git = await features.ticketGit(id, repoGit)
   const t = features.getTicket(id)
+  followBranches(t.projectId)
+  if (!opts.includes) return git
   return { ...git, includes: await includedWork(t, context(t.projectId, repoGit)).catch(() => []) }
+}
+
+// --- needs the board adds itself ---
+
+const ADDED_BY = 'board'
+const sweptState = new Map<number, string>()
+const sweeping = new Map<number, { again: boolean; listed?: Listed; done: Promise<void> }>()
+
+/**
+ * Looks at every open ticket of the project with a branch: adds the need for each ticket whose unmerged
+ * work its branch certainly holds (`certainWork`), and drops the needs it added that no longer hold.
+ * Idempotent and never throws. One runs per project at a time (a call meanwhile has it run once more,
+ * on that call's `listed`, or on the current branches when it has none);
+ * a state it already swept (the repos' branches and the tickets' branches, bases and status) costs a
+ * fingerprint. A ticket git cannot answer for keeps its needs as they are.
+ *
+ * - a need that is there is kept: one added by hand is never touched, one the board added only has its
+ *   `held` commit brought up to date;
+ * - one the human removed is not added again for the commits it was removed with, only for new work;
+ * - one that would close a loop is not added;
+ * - an automatic need goes when the other ticket was cancelled or archived without landing, or when
+ *   the commits held are no longer in the branch (rebased away). The other moving on, or landing, keeps
+ *   it: it shows as merged once it is.
+ */
+export function syncAutoNeeds(projectId: number, listed?: Listed): Promise<void> {
+  const running = sweeping.get(projectId)
+  if (running) {
+    running.again = true
+    // The newest call decides what the repeat looks at: a listing, or (none) the repos' current branches.
+    running.listed = listed
+    return running.done
+  }
+  const entry: { again: boolean; listed?: Listed; done: Promise<void> } = {
+    again: false,
+    listed,
+    done: Promise.resolve(),
+  }
+  entry.done = (async () => {
+    do {
+      entry.again = false
+      const look = entry.listed
+      await sweep(projectId, look).catch((err: unknown) =>
+        console.error(`adding the needs of project ${projectId} failed:`, err),
+      )
+    } while (entry.again)
+  })().finally(() => sweeping.delete(projectId))
+  sweeping.set(projectId, entry)
+  return entry.done
+}
+
+/** A repo's branches as a fresh listing just found them. */
+type Listed = { repoPath: string; refs: Refs }
+
+/** `syncAutoNeeds` for a read to start and not wait for. */
+function followBranches(projectId: number, listed?: Listed) {
+  void syncAutoNeeds(projectId, listed)
+}
+
+// A fresh listing of a repo is a look at its branches: the projects with the repo follow them.
+onRefsListed((repoPath, refs) => {
+  const ids = new Set(
+    db
+      .select({ projectId: schema.repos.projectId })
+      .from(schema.repos)
+      .where(eq(schema.repos.repoPath, repoPath))
+      .all()
+      .map((r) => r.projectId),
+  )
+  for (const id of ids) followBranches(id, { repoPath, refs })
+})
+
+/**
+ * A fingerprint of everything the needs of a project are worked out from: the repos' branches (or that git
+ * cannot read them), the stages' kinds, and each ticket's branch, status, base, parent and repo. The same
+ * fingerprint means the same answers, so a look at it again costs nothing.
+ */
+async function projectState(ctx: Context): Promise<string> {
+  const hash = crypto.createHash('sha1')
+  for (const repo of ctx.repos) {
+    const { refs, error } = await ctx.git(repo.repoPath)
+    hash.update(`${repo.id}\0${error ?? refsKey(refs)}\n`)
+  }
+  for (const s of ctx.stages) hash.update(`${s.key}\0${s.kind}\n`)
+  for (const t of [...ctx.all].sort((a, b) => a.id - b.id))
+    hash.update(
+      [t.id, t.branch, t.status, t.archivedAt, t.baseBranch, t.parentId, t.repoId].join('\0') + '\n',
+    )
+  return hash.digest('hex')
+}
+
+async function sweep(projectId: number, listed?: Listed) {
+  // The branches only (no worktrees), as a listing that was just made found them when there is one.
+  const kept = new Map<string, Promise<RepoGit>>()
+  const git: GitCache = (repoPath) => {
+    if (!kept.has(repoPath))
+      kept.set(
+        repoPath,
+        listed?.repoPath === repoPath
+          ? Promise.resolve({ refs: listed.refs, worktrees: [], error: null })
+          : readRefs(repoPath).then((refs) =>
+              refs
+                ? { refs, worktrees: [], error: null }
+                : {
+                    refs: { local: new Map(), remote: new Map(), symrefs: new Map() },
+                    worktrees: [],
+                    error: `git cannot read ${repoPath}`,
+                  },
+            ),
+      )
+    return kept.get(repoPath)!
+  }
+  const ctx = context(projectId, git)
+  const state = await projectState(ctx)
+  if (sweptState.get(projectId) === state) return
+  sweptState.delete(projectId)
+  let complete = true
+  for (const t of ctx.all) {
+    if (t.archivedAt || isClosed(kindOf(ctx.stages, t.status))) continue
+    try {
+      await sweepTicket(t, ctx)
+    } catch (err) {
+      complete = false
+      console.error(`reading what the branch of #${t.id} holds failed:`, err)
+    }
+  }
+  // A listing that failed is tried again by the next look.
+  if (complete) sweptState.set(projectId, state)
+}
+
+async function sweepTicket(t: Ticket, ctx: Context) {
+  const certain = await certainWork(t, ctx)
+  if (!certain) return
+  const repo = ctx.repoOf(t)!
+  const { refs } = await ctx.git(repo.repoPath)
+  const a = refSha(branchRef(t.branch, refs)!, refs)!
+  const text = (id: number) => `#${id}`
+  const log = (line: string) =>
+    logActivity({
+      projectId: t.projectId,
+      actor: ADDED_BY,
+      kind: 'ticket',
+      text: line,
+      refType: 'ticket',
+      refId: t.id,
+    })
+  const rows = () => db.select().from(schema.ticketNeeds).where(eq(schema.ticketNeeds.ticketId, t.id)).all()
+  const dismissals = () =>
+    db.select().from(schema.ticketNeedDismissals).where(eq(schema.ticketNeedDismissals.ticketId, t.id)).all()
+  // What git says, before anything is written: the rows are read again as they are written.
+  const removed = new Map<number, { held: string; covers: boolean }>()
+  for (const [id, b] of certain) {
+    const gone = dismissals().find((d) => d.needsId === id)
+    // The human removed it with these commits, or with later ones that hold them: not added again.
+    if (gone)
+      removed.set(id, {
+        held: gone.held,
+        // Removed before the board had seen a commit for it (a need declared by hand): this tip is the one.
+        covers: !gone.held || gone.held === b || (await isAncestor(repo.repoPath, b, gone.held)),
+      })
+  }
+  const drops = new Map<number, string>()
+  for (const r of rows().filter((r) => r.auto && !certain.has(r.needsId))) {
+    const other = ctx.byId.get(r.needsId)
+    if (!other) continue
+    const cancelled = kindOf(ctx.stages, other.status) === 'cancelled'
+    if ((cancelled || other.archivedAt) && !(await isMet(t, other, ctx).catch(() => true)))
+      drops.set(
+        r.needsId,
+        `${text(t.id)} no longer needs ${text(other.id)}: ${text(other.id)} was ${cancelled ? 'cancelled' : 'archived'} without landing`,
+      )
+    else if (!(r.held && (await isAncestor(repo.repoPath, r.held, a))))
+      drops.set(
+        r.needsId,
+        `${text(t.id)} no longer needs ${text(other.id)}: its branch no longer holds ${text(other.id)}'s commits`,
+      )
+  }
+  const lines: string[] = []
+  db.transaction(
+    (tx) => {
+      const now = rows()
+      for (const [id, b] of certain) {
+        const row = now.find((r) => r.needsId === id)
+        if (row) {
+          if (row.auto && row.held !== b)
+            tx.update(schema.ticketNeeds)
+              .set({ held: b })
+              .where(and(eq(schema.ticketNeeds.ticketId, t.id), eq(schema.ticketNeeds.needsId, id)))
+              .run()
+          continue
+        }
+        const gone = dismissals().find((d) => d.needsId === id)
+        // Removed by the human for these commits, or removed or changed since it was looked at: not now.
+        if (gone?.held !== removed.get(id)?.held) continue
+        if (removed.get(id)?.covers) {
+          // Removed with no commit seen: the tip seen now is the one it was removed with.
+          if (gone && !gone.held)
+            tx.update(schema.ticketNeedDismissals)
+              .set({ held: b })
+              .where(
+                and(
+                  eq(schema.ticketNeedDismissals.ticketId, t.id),
+                  eq(schema.ticketNeedDismissals.needsId, id),
+                ),
+              )
+              .run()
+          continue
+        }
+        try {
+          checkNeeds(t, [id])
+        } catch {
+          continue
+        }
+        if (gone)
+          tx.delete(schema.ticketNeedDismissals)
+            .where(
+              and(
+                eq(schema.ticketNeedDismissals.ticketId, t.id),
+                eq(schema.ticketNeedDismissals.needsId, id),
+              ),
+            )
+            .run()
+        tx.insert(schema.ticketNeeds).values({ ticketId: t.id, needsId: id, auto: true, held: b }).run()
+        lines.push(`${text(t.id)} now needs ${text(id)}: its branch holds ${text(id)}'s unmerged commits`)
+      }
+      for (const r of now.filter((r) => r.auto && drops.has(r.needsId) && !certain.has(r.needsId))) {
+        tx.delete(schema.ticketNeeds)
+          .where(and(eq(schema.ticketNeeds.ticketId, t.id), eq(schema.ticketNeeds.needsId, r.needsId)))
+          .run()
+        lines.push(drops.get(r.needsId)!)
+      }
+    },
+    { behavior: 'immediate' },
+  )
+  for (const line of lines) log(line)
 }
 
 // --- the rule: not done while a need is not merged ---
@@ -470,7 +883,9 @@ export async function changeTicket(
     refuseAgentApproved(before.projectId, patch.status, before.status)
   // From Approved an agent may still not close the work of a project with no software kind.
   if (opts.agent) refuseAgentDone(before.projectId, patch.status, before.status)
-  const ids = needs !== undefined ? checkNeeds(before, needs) : needIds(id)
+  // An agent's list leaves the needs the board added as they are: they count for the move too.
+  const named = needs !== undefined ? checkNeeds(before, needs) : undefined
+  const ids = named !== undefined ? [...new Set([...named, ...(opts.agent ? autoIds(id) : [])])] : needIds(id)
   // Judged against the primary the write produces: a swap or a reordered list brings that repo's base.
   const { repos, ...fields } = patch
   const primary = features.plannedPrimary(before, repos, fields).patch
@@ -489,7 +904,7 @@ export async function changeTicket(
   // as they were.
   const row = db.transaction(
     () => {
-      if (needs !== undefined) setNeeds(id, ids, actor)
+      if (needs !== undefined) setNeeds(id, named ?? ids, actor, { agent: opts.agent })
       const changed = Object.keys(patch).length
         ? features.updateTicket(id, patch, actor, opts)
         : features.getTicket(id)
@@ -498,6 +913,7 @@ export async function changeTicket(
     { behavior: 'immediate' },
   )
   logOverride(row, unmet, actor)
+  if (patch.status !== undefined) followBranches(row.projectId)
   // Into review: the phases the board ticks are read first, so what is still open is up to date. The
   // subagent runs the timeline records with no run report are flagged here, never refused.
   if (patch.status && !row.prId && kindOf(listStages(row.projectId), row.status) === 'review') {
@@ -564,6 +980,7 @@ export async function judgeTicket(
   opts: { reopenTo?: string; force?: boolean } = {},
 ) {
   const t = features.getTicket(id)
+  features.refuseLaneVerdict(t)
   const stages = listStages(t.projectId)
   const to =
     verdict === 'approved' && features.approvalCloses(t, stages)

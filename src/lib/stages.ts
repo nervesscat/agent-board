@@ -174,17 +174,3 @@ export function positionBy(column: Card[], id: number, anchor: number, side: 'ab
   const i = rest.findIndex((t) => t.id === anchor)
   return i < 0 ? null : side === 'above' ? i + 1 : i + 2
 }
-
-/**
- * In one column in order, the tickets each card sits above while it needs them merged first: the
- * "merge after #N" a review column shows where its order and the needs disagree.
- */
-export function mergeAfter<T extends Card & { needs: { id: number; merged: boolean }[] }>(column: T[]) {
-  const out = new Map<number, number[]>()
-  column.forEach((t, i) => {
-    const below = new Set(column.slice(i + 1).map((x) => x.id))
-    const ids = t.needs.filter((n) => !n.merged && below.has(n.id)).map((n) => n.id)
-    if (ids.length) out.set(t.id, ids)
-  })
-  return out
-}

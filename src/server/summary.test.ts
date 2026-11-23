@@ -372,7 +372,9 @@ describe('needs you', () => {
     post(answered.id, 'Drafts too?', at(7, 8), { progress: false })
     post(answered.id, 'Yes', at(7, 9), { progress: false, author: HUMAN })
     const review = ticket(pid, 'Review me', { status: 'review', prNumber: 7 })
-    ticket(pid, 'Approved lane', { status: 'review', parentId: review.id, approvedAt: iso(at(7, 9)) })
+    // A lane in the Approved stage is judged: it is not waiting on the human's review, one in review is.
+    ticket(pid, 'Approved lane', { status: 'approved', parentId: review.id })
+    const reviewLane = ticket(pid, 'Lane in review', { status: 'review', parentId: review.id })
     const pr = (number: number, values: Partial<typeof schema.prs.$inferInsert>) =>
       db
         .insert(schema.prs)
@@ -406,14 +408,17 @@ describe('needs you', () => {
     ])
     expect(s.needsYou.prs.map((p) => p.number)).toEqual([7])
     expect(s.needsYou.threads).toMatchObject([{ parentType: 'ticket', parentId: asked.id, waiting: 1 }])
-    expect(s.needsYou.reviews).toMatchObject([{ id: review.id, prNumber: 7, parent: null }])
+    expect(s.needsYou.reviews).toMatchObject([
+      { id: review.id, prNumber: 7, parent: null },
+      { id: reviewLane.id, parent: { id: review.id } },
+    ])
     // The tickets in progress have no work-timeline event since long before now: stalled, and counted.
     // None is lost contact: nothing is open on them.
     expect(s.needsYou.stalled.map((x) => x.ticketId).sort()).toEqual(
       [asked.id, reported.id, answered.id].sort(),
     )
     expect(s.lostContact).toEqual([])
-    expect(s.needsYou.total).toBe(4 + 3)
+    expect(s.needsYou.total).toBe(4 + 3 + 1) // plus the lane in review
     // Each stalled row carries its ticket's activity: no open span or wait, and its state.
     for (const x of s.needsYou.stalled) {
       expect(x.activity).toMatchObject({
@@ -1021,5 +1026,72 @@ describe('approved, to merge: lanes and the review kind', () => {
     const parent = ticket(pid, 'Parent', { status: 'review' })
     const lane = ticket(pid, 'Lane', { status: 'approved', parentId: parent.id })
     expect(take(pid).approvedToMerge.map((x) => x.ticketId)).toEqual([lane.id])
+  })
+})
+
+describe('lost contact: the Overview card lists exactly the tickets whose agent is gone', () => {
+  it('lists a ticket and a lane with an open span and an expired lease, longest silent first', () => {
+    const pid = project('lost contact')
+    const { db, schema } = dbm
+    const open = (ticketId: number, phase: string, agent: string, when: Date, spanEnd?: Date) => {
+      const row = (kind: 'span_start' | 'span_end', time: Date, refId: number | null = null) =>
+        db
+          .insert(schema.ticketEvents)
+          .values({ ticketId, projectId: pid, kind, agent, by: agent, phase, refId, at: iso(time) })
+          .returning()
+          .get()
+      const start = row('span_start', when)
+      if (spanEnd) row('span_end', spanEnd, start.id)
+    }
+    const stamp = { status: 'in_progress', startedAt: iso(at(7, 9)), createdAt: iso(at(7, 8)) }
+    const parent = ticket(pid, 'Parent', stamp)
+    const older = ticket(pid, 'Lost an hour ago', stamp)
+    const newer = ticket(pid, 'Lost lately', stamp)
+    const lane = ticket(pid, 'A lane, lost', { ...stamp, parentId: parent.id })
+    const live = ticket(pid, 'Still working', stamp)
+    const ended = ticket(pid, 'Span ended', stamp)
+    const quiet = ticket(pid, 'Nothing open', stamp)
+    open(older.id, 'build', 'claude', at(7, 9, 0))
+    open(newer.id, 'review', 'codex', at(7, 14, 20))
+    open(lane.id, 'verify', 'claude', at(7, 13, 0))
+    // Within its lease: not lost. A span that ended: nothing open, so never lost.
+    open(live.id, 'build', 'claude', at(7, 14, 58))
+    open(ended.id, 'build', 'claude', at(7, 9, 0), at(7, 9, 30))
+    void quiet
+
+    const lost = take(pid).lostContact
+    // NOW is 15:00: the oldest silence (09:00) first, then the lane (13:00), then 14:20.
+    expect(lost.map((l) => l.ticketId)).toEqual([older.id, lane.id, newer.id])
+    expect(lost[1]).toMatchObject({
+      title: 'A lane, lost',
+      status: 'in_progress',
+      parent: { id: parent.id },
+      agent: 'claude',
+      phase: 'verify',
+    })
+    expect(lost[0]).toMatchObject({ agent: 'claude', phase: 'build', silentMinutes: 360 })
+  })
+
+  it('leaves a ticket out once its stage is not active, and lists none when nothing is lost', () => {
+    const pid = project('no lost contact')
+    const { db, schema } = dbm
+    expect(take(pid).lostContact).toEqual([])
+    const t = ticket(pid, 'Finished, span left open', {
+      status: 'done',
+      startedAt: iso(at(7, 9)),
+      createdAt: iso(at(7, 8)),
+    })
+    db.insert(schema.ticketEvents)
+      .values({
+        ticketId: t.id,
+        projectId: pid,
+        kind: 'span_start',
+        agent: 'claude',
+        by: 'claude',
+        phase: 'build',
+        at: iso(at(7, 9)),
+      })
+      .run()
+    expect(take(pid).lostContact).toEqual([])
   })
 })

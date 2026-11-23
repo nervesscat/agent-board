@@ -75,8 +75,6 @@ describe('lanes', () => {
     expect(top[0]!.rollup).toEqual({ done: 1, total: 4 })
     expect(top[0]!.lanes).toEqual({
       total: 2,
-      approved: 0,
-      disapproved: 0,
       byStage: { in_progress: 1, todo: 1 },
     })
 
@@ -146,21 +144,17 @@ describe('lanes', () => {
     expect(() => features.setWorkspacePreview(999_999, '', 'codex')).toThrow(/not found/)
   })
 
-  it("carry the human's verdict; disapproving cancels, taking it back reopens", () => {
-    const parent = features.createTicket(projectId, { title: 'verdicts', repoId: otherRepo }, 'me')
-    const a = features.createTicket(projectId, { title: 'a', parentId: parent.id, tasks: ['x'] }, 'claude')
-    const b = features.createTicket(projectId, { title: 'b', parentId: parent.id, tasks: ['y'] }, 'claude')
-    const row = () => features.listTickets(projectId).find((t) => t.id === parent.id)!
+  it("carry the human's verdict on a ticket; disapproving cancels, taking it back reopens", () => {
+    const a = features.createTicket(projectId, { title: 'a', repoId: otherRepo, tasks: ['x'] }, 'claude')
+    const b = features.createTicket(projectId, { title: 'b', repoId: otherRepo, tasks: ['y'] }, 'claude')
 
-    const approved = features.setVerdict(a.id, 'approved', 'enrique')
-    expect(approved).toMatchObject({ approvedBy: 'enrique', disapprovedAt: null })
-    expect(features.getTicketFull(parent.id).lanes.find((l) => l.id === a.id)!.approvedBy).toBe('enrique')
+    expect(features.setVerdict(a.id, 'approved', 'enrique')).toMatchObject({
+      approvedBy: 'enrique',
+      disapprovedAt: null,
+    })
 
     const rejected = features.setVerdict(b.id, 'disapproved', 'enrique')
     expect(rejected).toMatchObject({ status: 'cancelled', disapprovedBy: 'enrique', approvedAt: null })
-    expect(row().lanes).toMatchObject({ approved: 1, disapproved: 1, byStage: { cancelled: 1 } })
-    // The cancelled lane's task is no longer part of the work.
-    expect(row().rollup).toEqual({ done: 0, total: 1 })
 
     // Switching straight to approved clears the disapproval and reopens it.
     expect(features.setVerdict(b.id, 'approved', 'enrique')).toMatchObject({
@@ -168,7 +162,7 @@ describe('lanes', () => {
       disapprovedAt: null,
       approvedBy: 'enrique',
     })
-    // An undo puts back the stage and the call the lane had before.
+    // An undo puts back the stage and the call the ticket had before.
     features.updateTicket(b.id, { status: 'review' }, 'claude')
     features.setVerdict(b.id, 'disapproved', 'enrique')
     expect(features.setVerdict(b.id, 'approved', 'enrique', { reopenTo: 'review' })).toMatchObject({
@@ -177,7 +171,25 @@ describe('lanes', () => {
     })
     features.setVerdict(a.id, null, 'enrique')
     expect(features.getTicket(a.id)).toMatchObject({ approvedAt: null, approvedBy: '', status: 'todo' })
-    expect(row().lanes).toMatchObject({ approved: 1, disapproved: 0 })
+  })
+
+  it('refuse a verdict on a lane: its stage is the call', () => {
+    const parent = features.createTicket(projectId, { title: 'lane verdicts', repoId: otherRepo }, 'me')
+    const a = features.createTicket(projectId, { title: 'a', parentId: parent.id, tasks: ['x'] }, 'claude')
+    const b = features.createTicket(projectId, { title: 'b', parentId: parent.id, tasks: ['y'] }, 'claude')
+    for (const verdict of ['approved', 'disapproved', null] as const)
+      expect(() => features.setVerdict(a.id, verdict, 'enrique')).toThrow(/judged by its stage/)
+    expect(features.getTicket(a.id)).toMatchObject({ status: 'todo', approvedAt: null, disapprovedAt: null })
+
+    // Cancelling and moving on stages is how a lane is dropped or accepted.
+    features.updateTicket(b.id, { status: 'cancelled' }, 'enrique')
+    const row = features.listTickets(projectId).find((t) => t.id === parent.id)!
+    expect(row.lanes).toEqual({ total: 2, byStage: { cancelled: 1, todo: 1 } })
+    // The cancelled lane's task is no longer part of the work.
+    expect(row.rollup).toEqual({ done: 0, total: 1 })
+    for (const lane of features.getTicketFull(parent.id).lanes)
+      for (const key of ['approvedAt', 'approvedBy', 'disapprovedAt', 'disapprovedBy'])
+        expect(lane).not.toHaveProperty(key)
   })
 
   it('carry tags: cleaned up, filterable in any casing', () => {

@@ -36,7 +36,7 @@ export const LAYOUT_ELEMENTS = [
   { id: 'overview.agents', label: 'Agents at work', area: 'overview' },
   { id: 'overview.inProgress', label: 'In progress', area: 'overview' },
   { id: 'overview.doneToday', label: 'Done today', area: 'overview' },
-  { id: 'overview.next', label: 'Next', area: 'overview' },
+  { id: 'overview.lostContact', label: 'Lost contact', area: 'overview' },
   { id: 'overview.carryingOver', label: 'Carrying over', area: 'overview' },
   { id: 'overview.notes', label: 'Notes', area: 'overview' },
   // A ticket's page.
@@ -51,6 +51,7 @@ export const LAYOUT_ELEMENTS = [
     locked: 'Decisions and threads that wait on you are here',
   },
   { id: 'ticket.runs', label: 'Runs', area: 'ticket.side' },
+  { id: 'ticket.resume', label: 'Resume', area: 'ticket.side' },
   { id: 'ticket.details', label: 'Details', area: 'ticket.side' },
   { id: 'ticket.branch', label: 'Branch', area: 'ticket.side' },
   { id: 'ticket.workspaces', label: 'Workspaces', area: 'ticket.side' },

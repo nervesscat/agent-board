@@ -1,7 +1,7 @@
 import { openFeedTab, expect, test } from './fixtures'
 import { writeReport } from './runReports'
 
-test('a run report written through the MCP shows on the ticket’s Agents side', async ({
+test('a run report written through the MCP shows in the Timeline card’s reports window', async ({
   page,
   api,
   project,
@@ -34,15 +34,20 @@ test('a run report written through the MCP shows on the ticket’s Agents side',
   await writeReport(agent, project.id, other.id, { agent: 'verify', sections: { evidence: 'x' } })
 
   await page.goto(`/projects/${project.id}/features/${t.id}`)
+  // The Agents tab no longer lists them: the posts start right away.
   await openFeedTab(page, 'Agents')
-  const panel = page.getByRole('region', { name: 'Run reports' })
-  await expect(panel).toContainText('hunt')
-  await expect(panel).toContainText('round 2')
-  // This ticket's own report only: the other ticket's report is not here.
-  await expect(panel).not.toContainText('verify')
+  await expect(page.getByRole('region', { name: 'Run reports' })).toHaveCount(0)
+  await expect(page.getByRole('list', { name: 'Run reports' })).toHaveCount(0)
 
-  await panel.getByRole('button', { name: /hunt/ }).click()
+  await page.getByRole('region', { name: 'Timeline' }).getByRole('button', { name: 'Reports (1)' }).click()
   const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('heading', { name: 'Run reports' })).toBeVisible()
+  await expect(dialog).toContainText('hunt')
+  await expect(dialog).toContainText('round 2')
+  // This ticket's own report only: the other ticket's report is not here.
+  await expect(dialog).not.toContainText('verify')
+
+  await dialog.getByRole('button', { name: /hunt/ }).click()
   await expect(dialog.getByRole('heading', { name: 'Run report: hunt round 2' })).toBeVisible()
   await expect(dialog).toContainText('40m')
   await expect(dialog).toContainText('Difficulty')
@@ -55,12 +60,15 @@ test('a run report written through the MCP shows on the ticket’s Agents side',
   await expect(dialog).toContainText('no classification in the spec')
   await expect(dialog).toContainText('candidates: 2')
   await dialog.getByRole('button', { name: 'Close' }).click()
+  await expect(dialog).toHaveCount(0)
 
-  // A ticket no subagent reported on has no report entry at all.
+  // A ticket no subagent reported on still has the button, and its window says so.
   const quiet = await api.ticket({ title: 'Nothing reported' })
   await page.goto(`/projects/${project.id}/features/${quiet.id}`)
   await openFeedTab(page, 'Agents')
   await expect(page.getByRole('region', { name: 'Run reports' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Reports', exact: true }).click()
+  await expect(page.getByRole('dialog')).toContainText('No run reports yet.')
 })
 
 test('a project agent starts with the common part and keeps a template of its own', async ({

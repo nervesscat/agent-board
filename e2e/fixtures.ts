@@ -66,6 +66,22 @@ export async function seedProject(human: APIRequestContext, name: string) {
   return project
 }
 
+/**
+ * Deletes a project the way seeding creates one (a 5xx is tried again, as `okRetrying` does). A project the
+ * test already removed itself is a 404, which is as gone as it gets; any other answer fails the test.
+ */
+async function removeProject(human: APIRequestContext, id: number) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await human.delete(`/api/projects/${id}`)
+    const pause = RETRY_AFTER_MS[attempt]
+    if (res.status() < 500 || pause === undefined) {
+      expect(res.ok() || res.status() === 404, `deleting project ${id} answered ${res.status()}`).toBe(true)
+      return
+    }
+    await new Promise((wait) => setTimeout(wait, pause))
+  }
+}
+
 /** The project global setup seeded, for pages that only need one to exist. */
 export function seededProject(): Project {
   return JSON.parse(fs.readFileSync(e2eEnv().seedFile, 'utf8')).project as Project
@@ -160,7 +176,13 @@ export const test = base.extend<{
     await use(page)
   },
   project: async ({ human }, use, info) => {
-    await use(await seedProject(human, `${info.title.slice(0, 60)} (${info.workerIndex}.${++projects})`))
+    const project = await seedProject(human, `${info.title.slice(0, 60)} (${info.workerIndex}.${++projects})`)
+    await use(project)
+    // The whole run shares one board, and Home (and with it every request queued behind it on the
+    // board's one thread) costs time in proportion to how many projects exist: about 7 ms each, so a run
+    // that left its ~750 projects behind answered Home in 5 to 12 s by its end, and the tests after it
+    // missed their budgets. A test's project goes with the test.
+    await removeProject(human, project.id)
   },
   api: async ({ human, project }, use) => {
     await use({

@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { LayoutEditor } from '#/components/LayoutEditor'
 import { ListInput } from '#/components/ListInput'
 import { NotificationSettings } from '#/components/NotificationSettings'
+import { ResumeSettings } from '#/components/ResumeSettings'
 import { RunsSettings } from '#/components/RunsSettings'
 import { StagesEditor } from '#/components/StagesEditor'
 import { Button } from '#/components/ui/button'
@@ -56,6 +57,7 @@ export function ProjectSettings({ id }: { id: string }) {
       <NotificationSettings key={`notifications-${id}`} projectId={id} />
       <StagesEditor projectId={id} />
       <RunsSettings projectId={id} />
+      <ResumeSettings key={`resume-${id}`} projectId={id} />
       <LayoutEditor key={`layout-${id}`} projectId={id} saved={p.layout} />
     </div>
   )

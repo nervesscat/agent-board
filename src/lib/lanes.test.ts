@@ -1,22 +1,25 @@
 import { describe, expect, it } from 'vitest'
 
 import { DEFAULT_STAGES } from './constants'
-import { effectiveFilter, laneFilter, laneNeighbours, laneSearch, laneStageOrder, sortLanes } from './lanes'
+import {
+  effectiveFilter,
+  laneFilter,
+  NO_FILTER,
+  laneNeighbours,
+  laneSearch,
+  laneStageOrder,
+  sortLanes,
+  validateLaneSearch,
+} from './lanes'
 
 const stages = DEFAULT_STAGES
 
-const lane = (id: number, status: string, tags: string[] = [], verdict?: 'approved' | 'disapproved') => ({
-  id,
-  status,
-  tags,
-  approvedAt: verdict === 'approved' ? '2026-09-24T10:00:00Z' : null,
-  disapprovedAt: verdict === 'disapproved' ? '2026-09-24T10:00:00Z' : null,
-})
+const lane = (id: number, status: string, tags: string[] = []) => ({ id, status, tags })
 const lanes = [
   lane(1, 'todo', ['High']),
-  lane(2, 'done', ['Low'], 'approved'),
+  lane(2, 'done', ['Low']),
   lane(3, 'todo', ['Low']),
-  lane(4, 'cancelled', ['High'], 'disapproved'),
+  lane(4, 'cancelled', ['High']),
   lane(5, 'review', ['High']),
   lane(6, 'todo', ['high']),
 ]
@@ -61,15 +64,12 @@ describe('lanes', () => {
     expect(laneFilter({ stage: 'todo,bogus,review', tag: 'High, Forms' })).toEqual({
       stages: ['todo', 'bogus', 'review'],
       tags: ['high', 'forms'],
-      verdicts: [],
     })
     expect(effectiveFilter(lanes, laneFilter({ stage: 'todo,bogus' })).stages).toEqual(['todo'])
-    expect(laneSearch({ stages: [], tags: ['high'], verdicts: [] })).toEqual({
+    expect(laneSearch({ stages: [], tags: ['high'] })).toEqual({
       stage: undefined,
       tag: 'high',
-      verdict: undefined,
     })
-    expect(laneFilter({ verdict: 'none,bogus,approved' }).verdicts).toEqual(['none', 'approved'])
     // "forms" matches no lane, so it does not narrow anything.
     expect(laneNeighbours(lanes, stages, 2, laneFilter({ tag: 'forms' }))).toMatchObject({
       count: 6,
@@ -77,15 +77,14 @@ describe('lanes', () => {
     })
   })
 
-  it("filter by the human's call: approved, disapproved or none yet", () => {
-    const none = laneFilter({ verdict: 'none' })
-    expect(laneNeighbours(lanes, stages, 1, none)).toMatchObject({ count: 4, filtered: true })
-    expect(laneNeighbours(lanes, stages, 5, laneFilter({ verdict: 'approved,disapproved' }))).toMatchObject({
-      index: -1,
-      count: 2,
-    })
-    // Combined with a tag: High lanes nobody has judged yet are 5, 1 and 6.
-    const f = laneFilter({ verdict: 'none', tag: 'high' })
-    expect(laneNeighbours(lanes, stages, 1, f)).toMatchObject({ index: 1, count: 3 })
+  it('ignore a verdict in the URL', () => {
+    // Old links may still carry ?verdict=: it filters nothing and adds nothing back to the URL.
+    const old = validateLaneSearch({ verdict: 'approved', stage: 'todo' })
+    expect(old).toEqual({ stage: 'todo', tag: undefined })
+    expect(laneFilter(old)).toEqual({ stages: ['todo'], tags: [] })
+    expect(laneFilter(validateLaneSearch({ verdict: 'approved' }))).toEqual(NO_FILTER)
+    expect(laneSearch(laneFilter(old))).toEqual({ stage: 'todo', tag: undefined })
+    const none = laneFilter(validateLaneSearch({ verdict: 'none' }))
+    expect(laneNeighbours(lanes, stages, 1, none)).toMatchObject({ count: 6, filtered: false })
   })
 })
