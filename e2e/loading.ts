@@ -85,13 +85,27 @@ async function slowMotion(page: Page) {
   await page.clock.install({ time: new Date() })
   await page.clock.pauseAt(new Date(Date.now() + 1000))
   let open = true
+  let running = true
+  let stepping: Promise<unknown> = Promise.resolve()
   page.once('close', () => (open = false))
   void (async () => {
     while (open) {
       await new Promise((r) => setTimeout(r, REST_MS))
-      await page.clock.runFor(STEP_MS).catch(() => {})
+      if (!running) continue
+      stepping = page.clock.runFor(STEP_MS).catch(() => {})
+      await stepping
     }
   })()
+  return {
+    /** The page's clock stands still from here, until `resume`: only the test moves it (`page.clock.runFor`). */
+    async stop() {
+      running = false
+      await stepping
+    },
+    resume() {
+      running = true
+    },
+  }
 }
 
 /**
@@ -120,7 +134,7 @@ export async function watchLoading(page: Page) {
       },
     )
   }
-  await slowMotion(page)
+  const motion = await slowMotion(page)
   await page.addInitScript(() => {
     const KEY = 'sawLoading'
     const scan = () => {
@@ -135,5 +149,8 @@ export async function watchLoading(page: Page) {
   })
   return {
     seen: () => page.evaluate(() => JSON.parse(sessionStorage.getItem('sawLoading') ?? '[]') as string[]),
+    /** Stops the slow motion, so the test alone moves the page's clock; `resume` lets it run again. */
+    still: motion.stop,
+    resume: motion.resume,
   }
 }

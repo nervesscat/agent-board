@@ -115,6 +115,8 @@ test('the watcher keeps time on the page, so a placeholder comes only after its 
   await api.ticket({ title: 'Held ticket' })
   await warm(page, features(project.id, 'board'))
   const watch = await watchLoading(page)
+  // From here the test alone moves the page's clock, so what time has passed on the page is what it says.
+  await watch.still()
   // The tickets answer is held back by the test: how long the board or the runner takes is no part of it.
   let release!: () => void
   const held = new Promise<void>((resolve) => (release = resolve))
@@ -128,13 +130,14 @@ test('the watcher keeps time on the page, so a placeholder comes only after its 
   await page.goto(features(project.id, 'board'))
   await expect(page.getByRole('tab', { name: 'Board' })).toBeVisible()
 
-  // Short of the 150 ms a placeholder waits (the page's own clock, which the test moves): none yet. A
-  // page that drew it at once, or after a fraction of the delay, fails here.
-  await page.clock.runFor(60)
+  // A little under the 150 ms a placeholder waits: none yet. A page that drew it at once, or after a delay
+  // a good deal shorter than 150 ms, fails here.
+  await page.clock.runFor(100)
   expect(await watch.seen()).toEqual([])
   // Past it, with the answer still on its way: the placeholder is drawn, and the watcher saw it.
-  await page.clock.runFor(150)
+  await page.clock.runFor(80)
   await expect.poll(watch.seen).toContain('Loading tickets…')
+  watch.resume()
   release()
   await expect(page.getByText('Held ticket')).toBeVisible()
 })
