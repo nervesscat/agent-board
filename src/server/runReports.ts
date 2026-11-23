@@ -486,7 +486,9 @@ export function missingReviewPhases(ticketId: number): MissingReviewPhase[] {
   if (!timeline.spans.length && !timeline.handoffs.length && !timeline.waits.length) return []
   // A send-back (a move out of a review stage) starts the next round numbering over: older runs do not count.
   const stages = listStages(t.projectId)
-  const isReview = (key: string) => stages.some((s) => s.key === key && s.kind === 'review')
+  // Review to Approved is no send-back: the ticket is still waiting for the merge.
+  const isReview = (key: string) =>
+    stages.some((s) => s.key === key && (s.kind === 'review' || s.kind === 'approved'))
   const cut =
     events
       .filter((e) => e.kind === 'stage' && isReview(e.fromStage) && !isReview(e.toStage))

@@ -87,12 +87,16 @@ short message shape with the numbered list of what needs the human. Its line is
    who"). When the work needs a repo the project lacks (a new repository you are building), add it with
    `add_repo`; once it is added, `set_ticket_repo` moves your ticket onto it (makes it the primary).
    Its `stages[]` are the board's columns in order, each with a `key`, a `name` and a `kind`
-   (`open`, `active`, `blocked`, `review`, `done`, `cancelled`). A ticket's `status` is a stage key;
+   (`open`, `active`, `blocked`, `review`, `approved`, `done`, `cancelled`). A ticket's `status` is a stage key;
    wherever a status is asked for you can also give a stage's name or a kind (`todo` and
    `in_progress` mean `open` and `active`). A kind means the project's stage of that kind: for
    `open` the start stage (the last open stage), for `active` the stage work starts in (the
    project's `workStage`, else the first active stage), for any other kind the first stage of that
-   kind. Below, `todo`, `in_progress`, `blocked`, `review`, `done` and `cancelled` mean exactly that.
+   kind. Below, `todo`, `in_progress`, `blocked`, `review`, `approved`, `done` and `cancelled` mean exactly that. A stage's own key or
+   name wins over a kind: `done` is the stage keyed `done` when there is one (Done), and the first
+   done stage only when none is. A merged ticket goes to the project's first done stage by its key
+   (Release when the project has one); where the board itself finishes work for good (approving a PR
+   review, a merged PR's own ticket) it lands in the last done stage.
 2. **Pick up work**: starting a session, `get_summary` with your `projectId` shows where the project
    stands in one read (waiting on the human, in progress, done today, next, carrying over). Take work
    from `list_tickets` (`status: ["todo"]` with `assignee: ""`, or assigned to
@@ -276,6 +280,10 @@ short message shape with the numbered list of what needs the human. Its line is
    whichever ticket and agent it belongs to; a comment leaves it once an agent replies under it
    (a later discussion post by an agent on the ticket answers a top-level post). Read it when a
    session starts and between steps, and answer each item under it.
+   When the project has a resume command (its Settings), the board itself runs it when the human
+   answers a card on the board or moves the ticket from blocked or review to an active stage, so you
+   may be started again with the answer. If you can stay alive, `wait_for_answer` on the card returns
+   the answer instead.
    **Record your work on the ticket's timeline** as you go: the Roadmap and the ticket page draw it,
    so the human sees who worked when, who waited on what, and what is going on now. Each call takes
    `projectId` and `ticketId`, and only a ticket of that project (another project's is a 403 and
@@ -332,15 +340,26 @@ short message shape with the numbered list of what needs the human. Its line is
       `push` for every workspace's branch. (`merged`: gone from origin because its PR was merged
       into the base.)
    4. `needs` declared for any unmerged branch it builds on: when your branch is built on another
-      ticket's open branch (stacked), or you merged one in to get past a conflict, `update_ticket`
-      with `needs: [<its ticket id>]` (or `needs` on `create_ticket`), instead of only writing
-      "builds on …" in the PR. The PR queue then marks your PR "merge after #<its PR>", and the
+      ticket's open branch (stacked), or you merged one in to get past a conflict, the board adds
+      that need itself once the commits are in the branches it looks at (after a push or a fetch,
+      and when a ticket is read; it logs "now needs #N", marks the need `auto` in `get_ticket`,
+      and drops it again when the branch no longer holds those commits or the other ticket was
+      cancelled or archived without landing). It sees only what git has, at its looks (a fresh
+      listing, a ticket read, a status change), and cannot prove who owns commits two branches
+      share once they moved apart, so when you stack before your ticket's branch exists or the
+      commits are in git, declare it yourself with `update_ticket` with `needs: [<its ticket id>]`
+      (or `needs` on `create_ticket`), instead of only writing "builds on …" in the PR: the board
+      then confirms it, and a need you declared is yours, never touched by the board. Your `needs`
+      list never removes a need the board added (only the human does, and it then stays removed).
+      The PR queue then marks your PR "merge after #<its PR>", and the
       ticket cannot move to `done` until that branch is merged into its base (the refusal says
       which; only the human can mark it done anyway, but in Approved an orchestrator moves it to
-      `done` after it merges the PR, below). `get_ticket_git` → `includes` lists the
-      open tickets whose unmerged work your branch already holds; `get_ticket` → `needs` says
-      whether each is `merged`. `needs` is the enforced rule; the review column's order is the
-      merge order the agents propose, read top to bottom (top merges first). Moving your ticket to
+      `done` after it merges the PR, below). `get_ticket_git` → `includes` (HTTP: `GET /api/tickets/:id/git?includes=1`) lists only the
+      open tickets whose unmerged work your branch holds but git cannot prove is theirs (the
+      board adds no need for those, and the ticket page shows each as an amber "Includes unmerged
+      work" row with "Add as a need": declare one if it is a real dependency); `get_ticket` →
+      `needs` says whether each is `merged`. `needs` is the enforced rule; the order of the review and approved
+      columns is the merge order the agents propose, read top to bottom (top merges first). Moving your ticket to
       review, place it with `update_ticket` → `position` (1 is the top; with `status`, in the new
       stage): below every open ticket it `needs`, otherwise where it should merge relative to the
       others. The board flags a card placed above a ticket it needs ("merge after #<id>"); any move
@@ -413,10 +432,11 @@ auto}`. Merged is left out: merging is the human's, except on a ticket in Approv
    `done` is the human's call unless the instructions say otherwise, or the ticket is in Approved,
    where an orchestrator merges the PR and then moves it (below). A ticket with lanes goes to
    `review` once its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was
-   dropped: say why in a comment). The human's verdict on a lane or ticket is `approvedAt` /
+   dropped: say why in a comment). The human's verdict on a top-level ticket is `approvedAt` /
    `approvedBy` or `disapprovedAt` / `disapprovedBy` (disapproving also cancels it; approving a
-   ticket tagged `PR`, a PR review, also moves it to `done`): read it, never set it, and ask in the
-   thread before touching an approved or disapproved lane. Archiving is the human's too:
+   ticket tagged `PR`, a PR review, also moves it to `done`): read it, never set it. A lane has no
+   verdict: its stage is the call (Approved or Done is accepted, Cancelled is dropped), so ask in
+   its thread before moving one of those. Archiving is the human's too:
    `archivedAt` set means the ticket (and its lanes) is finished and off the board; `list_tickets`
    leaves those out unless `archived: "include"` or `"only"`. An agent may ask for it, never do it:
    `request_archive` (MCP; REST `POST /api/projects/:id/tickets/archive-request` `{ticketIds, as?}`)
@@ -514,7 +534,7 @@ baseBranch?}`; REST `PATCH /api/projects/:id/repos/:repoId`) changes the fields 
     the hand-off stands, except a round the build skipped because its head SHA's review had already
     survived (reused, named in the summary). A phase counts only when its span or run report carries the
     round (and the last segment of the agent name names the phase agent), so a run with no round is not counted.
-    Moving the ticket out of a review stage, to any other stage, restarts the count (only runs after the move
+    Moving the ticket out of a review stage, to any other stage but Approved, restarts the count (only runs after the move
     count, from round 1): run a missing phase while the ticket stays in review. Put the rule in every subagent's brief.
 
 ## Notifications: tracked requests and important notices
@@ -625,8 +645,9 @@ routine.
 
 Moving a ticket to **Approved** is the human's go-ahead to merge it. Only the human puts a ticket there:
 the approval verdict on a ticket in In review does it, or their move. An agent never does, and a worker
-(a sub-identity) never merges. Taking the approval back returns the ticket to In review. Approved is a
-review-kind stage, so no stage kind sends a ticket there.
+(a sub-identity) never merges. Taking the approval back returns the ticket to In review. Approved is a stage
+of its own kind, `approved` (after `review`): an agent may pass `approved` as a kind, but is refused a
+move or a new ticket there, by its kind whatever the stage's key.
 
 An orchestrator that finds a ticket in Approved merges its PR(s) without asking again, once the facts
 allow it:
@@ -638,7 +659,8 @@ allow it:
    or conflicts, that comes first. It is the ticket's own work, done by an agent on its branch: merge the
    base in, resolve the conflicts, push, and wait for CI green on the new head.
 4. **Merge the PR**, then **move the ticket to the project's first done stage** (the first stage of kind
-   done in `get_project`; Done in the default layout) and post on the ticket, naming the PR and the merge commit.
+   done in `get_project`: Release when the project has one, where a merged ticket waits for a release;
+   Done in the default layout) and post on the ticket, naming the PR and the merge commit.
 
 When something keeps it from merging (red checks, a conflict that needs a product call), say exactly
 what on the ticket, and leave it in Approved. It does not merge around it, and it does not ask whether

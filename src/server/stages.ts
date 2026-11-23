@@ -31,6 +31,14 @@ export function listStages(projectId: number): Stage[] {
 
 export const firstOfKind = (stages: Stage[], kind: StageKind) => stages.find((s) => s.kind === kind)
 
+/**
+ * The last stage of a kind. A status given as a kind means the first stage of it ("done" is the first
+ * done stage, Release in a project that has one before Done); where the board itself finishes work for
+ * good (an approval that closes a ticket, a merged PR) it lands in the last.
+ */
+export const lastOfKind = (stages: Stage[], kind: StageKind) =>
+  [...stages].reverse().find((s) => s.kind === kind)
+
 /** The stage a ticket is in; a key no stage has any more reads as the first stage. */
 export const stageOf = (stages: Stage[], key: string) => stages.find((s) => s.key === key) ?? stages[0]!
 
@@ -66,7 +74,7 @@ export const projectWorkStage = (projectId: number, stages: Stage[]) =>
   workStage(stages, chosenWorkStage(projectId))
 
 /** The kinds of stage a ticket is being worked in: in these a ticket carries over from day to day. */
-export const WORKING_KINDS: readonly StageKind[] = ['active', 'blocked', 'review']
+export const WORKING_KINDS: readonly StageKind[] = ['active', 'blocked', 'review', 'approved']
 
 export const isWorking = (stages: Stage[], key: string) => WORKING_KINDS.includes(kindOf(stages, key))
 
@@ -98,6 +106,17 @@ export function movePatch(
   startedAt: string | null,
 ): { startedAt?: string; rank?: null } {
   return { ...startedPatch(stages, from, to, startedAt), ...(from !== to ? { rank: null } : {}) }
+}
+
+/** A ticket sent back from done is no longer approved: the approval was for the work it closed. */
+export function reopenPatch(
+  stages: Stage[],
+  from: string,
+  to: string,
+): { approvedAt?: null; approvedBy?: string; closedByApproval?: boolean } {
+  return kindOf(stages, from) === 'done' && kindOf(stages, to) !== 'done'
+    ? { approvedAt: null, approvedBy: '', closedByApproval: false }
+    : {}
 }
 
 /**

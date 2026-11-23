@@ -4,7 +4,16 @@ import { db, schema } from '#/db'
 import type { StageKind } from '#/lib/constants'
 import { logActivity } from './activity'
 import { listRepos } from './repos'
-import { firstOfKind, kindOf, listStages, movePatch, startedPatch, startStage, type Stage } from './stages'
+import {
+  firstOfKind,
+  kindOf,
+  lastOfKind,
+  listStages,
+  movePatch,
+  startedPatch,
+  startStage,
+  type Stage,
+} from './stages'
 import { noteStageMove } from './workTimeline'
 
 /**
@@ -27,16 +36,13 @@ const STAGE_KIND: Record<Exclude<PrTicketStatus, 'pending'>, StageKind> = {
 
 /**
  * The stage a PR's ticket is in for its status: where new tickets start while the PR is pending (To do, not
- * Backlog), else the project's first stage of the kind the status stands for. Undefined when the project has
+ * Backlog), else the project's first stage of the kind the status stands for (the last done stage for a merged PR). Undefined when the project has
  * no stage of that kind.
  */
 export function prTicketStage(stages: Stage[], status: PrTicketStatus): Stage | undefined {
   if (status === 'pending') return startStage(stages)
-  // The Approved stage is the human's verdict, never where a PR's review lands, even when a reorder puts it first.
-  return firstOfKind(
-    stages.filter((s) => s.key !== 'approved'),
-    STAGE_KIND[status],
-  )
+  // A review lands in the first review stage; a merged PR is finished for good: the last done stage.
+  return status === 'done' ? lastOfKind(stages, 'done') : firstOfKind(stages, STAGE_KIND[status])
 }
 
 /** The title a PR's ticket starts with: its number and title, cut to 80 characters. */

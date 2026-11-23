@@ -5,6 +5,7 @@ import { retryWhileLocked } from '#/db/busy'
 import { COMMENT_PARENTS, type Complexity, DEFAULT_COMPLEXITY, type FeedTab } from '#/lib/constants'
 import type { WorkflowPresetId } from '#/lib/workflow'
 import { hasGitSide } from '#/lib/kinds'
+import { judgedByStage } from '#/lib/lanes'
 import { AUTO_PHASE_RULE, autoPhaseOf } from '#/lib/autoPhases'
 import { columnOrder, isClosed, placeInColumn, stageColumn } from '#/lib/stages'
 import { nextTask, treeTasks } from '#/lib/tasks'
@@ -50,10 +51,12 @@ import {
 } from './ticketRepos'
 import {
   firstOfKind,
+  lastOfKind,
   kindOf,
   listStages,
   matchStages,
   movePatch,
+  reopenPatch,
   projectWorkStage,
   resolveStage,
   startStage,
@@ -61,6 +64,8 @@ import {
   stageOf,
 } from './stages'
 import { assertUnattached, attachTo, attachmentView } from './uploads'
+import { answerLanded } from './answerWait'
+import { resumeAfterAnswer, resumeAfterMove } from './resume'
 import { noteBoardEvent, noteStageMove } from './workTimeline'
 
 // --- tickets ---
@@ -68,8 +73,6 @@ import { noteBoardEvent, noteStageMove } from './workTimeline'
 type Progress = { done: number; total: number }
 export type LaneCounts = {
   total: number
-  approved: number
-  disapproved: number
   /** Lanes per stage key. */
   byStage: Record<string, number>
 }
@@ -145,11 +148,9 @@ function projectTickets(projectId: number, opts: { prTickets?: boolean } = {}) {
   const blockedNext = (id: number): boolean =>
     workingLanes(id).some((lane) => blockedNext(lane.id)) || nextBlocked.get(id) === true
   return rows.map((t) => {
-    const lanes: LaneCounts = { total: 0, approved: 0, disapproved: 0, byStage: {} }
+    const lanes: LaneCounts = { total: 0, byStage: {} }
     for (const lane of children.get(t.id) ?? []) {
       lanes.total++
-      if (lane.approvedAt) lanes.approved++
-      if (lane.disapprovedAt) lanes.disapproved++
       lanes.byStage[lane.status] = (lanes.byStage[lane.status] ?? 0) + 1
     }
     // Assigned to one of the project's agents: only that agent works it.
@@ -432,7 +433,8 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     rollup: self.rollup,
     blockedTasks: self.blockedTasks,
     ancestors,
-    lanes: lanes.map((l) => {
+    // A lane is judged by its stage, so its entry carries no approval or disapproval.
+    lanes: lanes.map(({ approvedAt: _a, approvedBy: _b, disapprovedAt: _c, disapprovedBy: _d, ...l }) => {
       const u = lastUpdate.get(l.id)
       return {
         ...l,
@@ -839,10 +841,7 @@ export function updateTicket(
     .set({
       ...patch,
       ...(patch.status ? movePatch(stages, before.status, patch.status, before.startedAt) : {}),
-      // A ticket sent back from done is no longer approved: the approval was for the work it closed.
-      ...(patch.status && kindOf(stages, before.status) === 'done' && kindOf(stages, patch.status) !== 'done'
-        ? { approvedAt: null, approvedBy: '', closedByApproval: false }
-        : {}),
+      ...(patch.status ? reopenPatch(stages, before.status, patch.status) : {}),
       updatedAt: new Date().toISOString(),
     })
     .where(eq(schema.tickets.id, id))
@@ -901,6 +900,8 @@ export function updateTicket(
   })
   if (!row.prId && (patch.prNumber !== undefined || patch.branch !== undefined || patch.repoId !== undefined))
     takeOverPrTickets(row, actor)
+  // The human sends a blocked or review ticket back to work: the board continues it (resume.ts).
+  if (!opts.agent && row.status !== before.status) resumeAfterMove(id, before.status, row.status)
   return row
 }
 
@@ -1076,7 +1077,7 @@ export const verdictOf = (t: Pick<schema.Ticket, 'approvedAt' | 'disapprovedAt'>
   t.approvedAt ? 'approved' : t.disapprovedAt ? 'disapproved' : null
 
 /**
- * Whether approving this ticket closes it (to the first done stage): a PR review at any stage, and the
+ * Whether approving this ticket closes it (to the last done stage): a PR review at any stage, and the
  * hand-off of work in a project with no software kind from its review stage, where the human's approval
  * is the review.
  */
@@ -1088,25 +1089,39 @@ export function approvalCloses(
   // A hand-off is a ticket with no repo in a project with no software kind. A ticket that names a repo
   // keeps its approval as the human's call only, so taking it back never has to reopen it.
   return (
-    t.repoId === null && !hasGitSide(getProject(t.projectId).kinds) && kindOf(stages, t.status) === 'review'
+    t.repoId === null &&
+    !hasGitSide(getProject(t.projectId).kinds) &&
+    ['review', 'approved'].includes(kindOf(stages, t.status))
   )
 }
 
 /**
- * The human's call on a ticket or lane: approve it, disapprove it (which moves it to the project's
+ * A lane has no call of its own: the human judges it by its stage. Thrown for any call on one (a PR
+ * review, which sits under the review queue, keeps its approval).
+ */
+export function refuseLaneVerdict(t: Pick<schema.Ticket, 'id' | 'parentId' | 'tags'>) {
+  if (judgedByStage(t))
+    throw new HttpError(
+      409,
+      `lane #${t.id} is judged by its stage, not approved or disapproved: move it to Approved, Done or Cancelled instead`,
+    )
+}
+
+/**
+ * The human's call on a ticket: approve it, disapprove it (which moves it to the project's
  * first cancelled stage), or clear the call. Approving a ticket in a review stage moves it to Approved
- * (the review-kind stage the default layout puts after In review), where an orchestrator merges the PR
- * without asking again, the move there being the human's go-ahead; approving a PR review (a ticket tagged `PR`) finishes it in the first
+ * (the first stage of kind `approved`, which the default layout puts after In review), where an orchestrator merges the PR
+ * without asking again, the move there being the human's go-ahead; approving a PR review (a ticket tagged `PR`) finishes it in the last
  * done stage instead. Taking that back returns it to `reopenTo` or the first review stage. Taking back
  * a disapproval puts a cancelled ticket back to `reopenTo` (the stage it had, when an undo knows it) or
  * the stage new tickets start in. Callers make sure the actor is the human.
  *
- * Only the verdict and a move put a ticket in Approved: no stage kind sends one there, since it is a
- * `review` stage, the same as In review. The default `review` stage stays the first of its kind, so
- * the board's by-kind picks (the PR sync's `reviewed`, the preview filter) still land in In review.
+ * Only the verdict and a move put a ticket in Approved: a status given as a kind never names it by
+ * accident, since it has a kind of its own (`approved`), apart from `review`.
  */
 export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { reopenTo?: string } = {}) {
   const t = getTicket(id)
+  refuseLaneVerdict(t)
   if (t.prId && verdict !== null)
     throw new HttpError(
       409,
@@ -1115,8 +1130,8 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
   const before = verdictOf(t)
   const now = new Date().toISOString()
   const stages = listStages(t.projectId)
-  // The ticket's own Approved stage, when the project kept it: a key, and a review stage still.
-  const approved = stages.find((s) => s.key === 'approved' && s.kind === 'review')
+  // The project's Approved stage: its first stage of kind `approved`, whatever its key.
+  const approved = firstOfKind(stages, 'approved')
   // Approving again a ticket that a move took out of Approved puts it back there: the approval is the go-ahead.
   const reapprove =
     verdict === 'approved' &&
@@ -1126,19 +1141,19 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     kindOf(stages, t.status) === 'review'
   if (before === verdict && !reapprove) return t
   const cancel = firstOfKind(stages, 'cancelled')
-  // A PR review (tagged PR) is finished by the call: approving it closes it as done. So is the hand-off
+  // A PR review (tagged PR) is finished by the call: approving it closes it as done, in the last done stage. So is the hand-off
   // of work in a project with no software kind: the files are the deliverable, and the human's approval
   // is its review.
   const pr = t.tags.some((tag) => tag.toLowerCase() === 'pr')
   const kind = kindOf(stages, t.status)
-  const finish = verdict === 'approved' && approvalCloses(t, stages) ? firstOfKind(stages, 'done') : undefined
+  const finish = verdict === 'approved' && approvalCloses(t, stages) ? lastOfKind(stages, 'done') : undefined
   const approve = verdict === 'approved' && kind === 'review' && approved ? approved : undefined
   const reopen =
     (before === 'disapproved' && kind === 'cancelled') ||
     // Taking back the approval of a ticket that closed on it: a PR review, or a hand-off (closedByApproval).
     (before === 'approved' && (pr || t.closedByApproval) && kind === 'done' && verdict === null) ||
     // Taking back an approval returns a ticket in Approved to the review column it came from.
-    (before === 'approved' && verdict === null && t.status === 'approved')
+    (before === 'approved' && verdict === null && kind === 'approved')
   const reopenTo = opts.reopenTo
     ? resolveStage(stages, opts.reopenTo, projectWorkStage(t.projectId, stages))
     : before === 'approved'
@@ -1169,10 +1184,9 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     .where(eq(schema.tickets.id, id))
     .returning()
     .get()!
-  if (t.parentId) touch(t.parentId)
   noteStageMove(id, t.status, row.status)
   if (row.status !== t.status) stopIfClosed(row, stages, actor)
-  const what = `${t.parentId ? 'lane' : 'ticket'} #${id} ${t.title}`
+  const what = `ticket #${id} ${t.title}`
   logActivity({
     projectId: t.projectId,
     actor,
@@ -2604,6 +2618,10 @@ export function decide(
   const repo = row.repoRequest && option === 0 ? repoRequested(row, actor, opts.origin) : null
   const words = `${changed ? 'Changed the decision to' : 'Decided'}: **${picked.label}**${note.trim() ? `\n\n${note.trim()}` : ''}${archiveWords(archive)}${repoWords(repo)}`
   settleDecision(row, actor, words, `decided "${picked.label}"`)
+  // The agent that asked has ended its turn: the board continues the work (resume.ts).
+  resumeAfterAnswer(row, words, changed)
+  // An agent waiting for this answer (wait_for_answer) gets it now: the resume above saw it registered.
+  answerLanded(row.ticketId, row.id)
   return { ...row, archive, repo }
 }
 
@@ -2646,6 +2664,8 @@ export function relayDecision(
       decidedAt: new Date().toISOString(),
       relayedBy: actor,
       relayedText: words,
+      // The session that asked has it: an edit of this answer starts no second agent (resume.ts).
+      answerDelivered: 'chat',
     })
     .where(and(eq(schema.updates.id, postId), isNull(schema.updates.decidedAt)))
     .returning()
@@ -2666,6 +2686,8 @@ export function relayDecision(
     `Decided in chat: **${picked.label}**\n\n${words}${archiveWords(archive)}${repoWords(repo)}`,
     `relayed the decision "${picked.label}"`,
   )
+  // A relayed answer is an answer: an agent waiting for it (wait_for_answer) gets it.
+  answerLanded(row.ticketId, row.id)
   return { ...row, archive, repo }
 }
 

@@ -390,6 +390,11 @@ describe('workLine: the one work-state line', () => {
       state: 'your-turn',
       text: 'Your turn · waiting 2d',
     })
+    // An approved-kind stage is not the human's turn: the go-ahead is given, only the merge is left.
+    expect(workLine(timeline({ stage: stage('approved', '2026-10-18T12:30:00.000Z') }), NOW)).toMatchObject({
+      state: 'nothing',
+      text: 'Nothing open · approved, waiting to merge',
+    })
     // A blocked-kind stage is the human's turn too.
     expect(workLine(timeline({ stage: stage('blocked') }), NOW)).toMatchObject({
       state: 'waiting',

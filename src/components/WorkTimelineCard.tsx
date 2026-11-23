@@ -4,6 +4,7 @@ import { ChevronDown } from 'lucide-react'
 
 import { ClaimedActor } from '#/components/Actor'
 import { DelayedLoading, SkeletonText } from '#/components/Loading'
+import { RunReportsWindow } from '#/components/RunReportsWindow'
 import { WorkTimelineBar, hasWork } from '#/components/WorkTimeline'
 import { LastHeard, WorkLine, WorkSummary } from '#/components/WorkStatus'
 import { Button } from '#/components/ui/button'
@@ -43,7 +44,10 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
   const rows = data ? storyRows(events, data.timeline, now, stageName) : []
   return (
     <section className="rounded-lg border p-4" aria-label="Timeline">
-      <h2 className="mb-3 text-sm font-medium">Timeline</h2>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-sm font-medium">Timeline</h2>
+        <RunReportsWindow reports={t.runReports} serverNow={data?.timeline.now} />
+      </div>
       {error ? (
         <p className="text-sm text-destructive">{errorMessage(error)}</p>
       ) : !data ? (

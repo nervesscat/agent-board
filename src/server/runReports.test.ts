@@ -707,6 +707,22 @@ describe('the review phases flag', () => {
     expect(missingReviewPhases(t.id)).toEqual([])
   })
 
+  it('does not read the move from review to Approved as a send-back', async () => {
+    const pid = newProject()
+    const t = ticketOf(pid, 'high')
+    for (const round of [1, 2, 3])
+      spans(pid, t.id, round, ['spec', 'env', 'verify', 'hunt', 'hunt', 'refute', 'merge'])
+    await toReview(t.id)
+    await needs.changeTicket(t.id, { status: 'approved' }, HUMAN, { agent: false })
+    dbm.db
+      .update(dbm.schema.ticketEvents)
+      .set({ at: ago(300) })
+      .where(and(eq(dbm.schema.ticketEvents.ticketId, t.id), eq(dbm.schema.ticketEvents.kind, 'stage')))
+      .run()
+    // The old rounds still count: with a send-back the count would restart and every phase read missing.
+    expect(missingReviewPhases(t.id)).toEqual([])
+  })
+
   describe('after a send-back', () => {
     const full = ['spec', 'env', 'verify', 'hunt', 'hunt', 'refute', 'merge']
     const sendBack = async (id: number) => {
