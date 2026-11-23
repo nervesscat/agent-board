@@ -275,11 +275,11 @@ export const RELEASE_DUE_DAYS = 3
 /** This many tickets in the Release stage make a release due. */
 export const RELEASE_DUE_TICKETS = 5
 
-/** The stage tickets wait in until they are released: a review stage with the key or the name "release". */
+/** The stage tickets wait in until they are released: a done stage with the key or the name "release". */
 export const releaseStageOf = (stages: Stage[]) =>
   stages.find(
     (s) =>
-      s.kind === 'review' && (s.key.toLowerCase() === 'release' || s.name.trim().toLowerCase() === 'release'),
+      s.kind === 'done' && (s.key.toLowerCase() === 'release' || s.name.trim().toLowerCase() === 'release'),
   )
 
 const releaseType: AlertType = {

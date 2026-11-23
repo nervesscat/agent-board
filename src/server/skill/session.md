@@ -30,7 +30,7 @@ What you do with it:
 
 - **Before anything else, call it.** It is your first read of the project, and it is cheaper than
   learning the same thing from five tickets.
-- **approved, to merge** (`approvedToMerge`): the tickets in Approved are the human's go-ahead to merge; an orchestrator merges them without asking again. Name them; they are not waiting on the human.
+- **approved, to merge** (`approvedToMerge`): the tickets in Approved (the stage of kind `approved`) are the human's go-ahead to merge; an orchestrator merges them without asking again. Name them; they are not waiting on the human.
 - **Do not take or duplicate a ticket a live entry names.** Another session's agent is on it: wait,
   ask in its thread, or work something else, and never claim it behind its back.
 - **Pick up what nobody holds**: the first ticket with no live entry, no open span and no wait.

@@ -1435,7 +1435,8 @@ describe('0053_approved_stage', () => {
     ])
     expect(stages(a).find((s) => s.key === 'approved')).toMatchObject({
       name: 'Approved',
-      kind: 'review',
+      // 0053 made it a review stage; 0064 gives it a kind of its own.
+      kind: 'approved',
       color: 'teal',
       position: 5,
     })
@@ -1893,7 +1894,17 @@ describe('0060_lane_verdicts_to_stages', () => {
     const read = (id: number) =>
       sqlite.prepare('SELECT * FROM tickets WHERE id = ?').get(id) as Record<string, unknown>
     const before = [topApproved, topRejected, topClosed, parent, otherParent, prReview].map(read)
-    const others = sqlite.prepare('SELECT * FROM stages ORDER BY id').all()
+    // The stages are not touched by this migration; a later one (0064) only gives Approved its own kind and
+    // makes Release done, so the stages are compared as that one leaves them.
+    const others = (
+      sqlite.prepare('SELECT * FROM stages ORDER BY id').all() as Record<string, unknown>[]
+    ).map((s) =>
+      s.kind === 'review' && s.key === 'approved'
+        ? { ...s, kind: 'approved' }
+        : s.kind === 'review' && s.key === 'release'
+          ? { ...s, kind: 'done' }
+          : s,
+    )
 
     migrate(drizzle(sqlite), { migrationsFolder: folder })
 
@@ -2084,5 +2095,95 @@ describe('0063_auto_needs', () => {
       .run(upper, lower, 'abc')
     sqlite.prepare('DELETE FROM tickets WHERE id = ?').run(lower)
     expect(sqlite.prepare('SELECT count(*) AS n FROM ticket_need_dismissals').get()).toEqual({ n: 0 })
+  })
+})
+
+describe('0064_approved_kind', () => {
+  it('gives Approved its own kind and makes Release done, changing nothing else', () => {
+    const sqlite = databaseAt('0063_auto_needs')
+    const project = (name: string) =>
+      Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run(name).lastInsertRowid)
+    const stage = sqlite.prepare(
+      'INSERT INTO stages (project_id, key, name, kind, color, position) VALUES (?, ?, ?, ?, ?, ?)',
+    )
+    const seed = (pid: number, stages: string[][]) => stages.forEach((s, i) => stage.run(pid, ...s, i))
+    // The stages a board with a release stage had: Approved and Release were review stages.
+    const layout = [
+      ['backlog', 'Backlog', 'open', 'slate'],
+      ['bug_found', 'Bug found', 'open', 'rose'],
+      ['todo', 'To do', 'open', 'gray'],
+      ['in_progress', 'In progress', 'active', 'sky'],
+      ['next_release_work', 'Next release work', 'active', 'lime'],
+      ['blocked', 'Blocked', 'blocked', 'amber'],
+      ['review', 'In review', 'review', 'violet'],
+      ['approved', 'Approved', 'review', 'teal'],
+      ['release', 'Release', 'review', 'orange'],
+      ['done', 'Done', 'done', 'emerald'],
+      ['cancelled', 'Cancelled', 'cancelled', 'slate'],
+    ]
+    const a = project('crossboard')
+    seed(a, layout)
+    // Other keys with the kind review stay review, whatever they are named.
+    const b = project('named otherwise')
+    seed(b, [
+      ['review', 'In review', 'review', 'violet'],
+      ['qa', 'Approved', 'review', 'teal'],
+      ['ship', 'Release', 'review', 'orange'],
+      ['approved_2', 'Approved too', 'review', 'teal'],
+    ])
+    // A release stage of another kind, and an approved stage that is not a review one, are kept.
+    const c = project('other kinds')
+    seed(c, [
+      ['approved', 'Approved', 'active', 'teal'],
+      ['release', 'Release', 'blocked', 'orange'],
+    ])
+    const d = project('release done already')
+    seed(d, [
+      ['approved', 'Approved', 'approved', 'teal'],
+      ['release', 'Release', 'done', 'orange'],
+    ])
+    const ticket = sqlite.prepare(
+      'INSERT INTO tickets (project_id, title, created_by, status) VALUES (?, ?, ?, ?)',
+    )
+    ticket.run(a, 'Waiting for a release', 'claude', 'release')
+    const read = (pid: number) =>
+      sqlite
+        .prepare(
+          'SELECT key, name, kind, color, position FROM stages WHERE project_id = ? ORDER BY position, id',
+        )
+        .all(pid) as { key: string; name: string; kind: string; color: string; position: number }[]
+    const before = [a, b, c, d].map(read)
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    const after = [a, b, c, d].map(read)
+    // Only the kind of the two stages changes: names, colours and places are what they were.
+    const changed = (i: number) =>
+      after[i]!.flatMap((s, at) =>
+        s.kind !== before[i]![at]!.kind ? [`${s.key}:${before[i]![at]!.kind}>${s.kind}`] : [],
+      )
+    expect(changed(0)).toEqual(['approved:review>approved', 'release:review>done'])
+    for (const [i, rows] of after.entries())
+      expect(rows.map(({ kind: _k, ...rest }) => rest)).toEqual(
+        before[i]!.map(({ kind: _k, ...rest }) => rest),
+      )
+    expect(after[0]!.map((s) => s.kind)).toEqual([
+      'open',
+      'open',
+      'open',
+      'active',
+      'active',
+      'blocked',
+      'review',
+      'approved',
+      'done',
+      'done',
+      'cancelled',
+    ])
+    expect(changed(1)).toEqual([])
+    expect(changed(2)).toEqual([])
+    expect(changed(3)).toEqual([])
+    // A ticket keeps its stage.
+    expect(sqlite.prepare('SELECT status FROM tickets').all()).toEqual([{ status: 'release' }])
   })
 })

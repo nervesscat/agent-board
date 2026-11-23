@@ -613,7 +613,7 @@ describe('the review texts the board ships', () => {
 
     it('every text that describes the flag says a move out of review restarts the count', async () => {
       const restart =
-        'Moving the ticket out of a review stage, to any other stage, restarts the count (only runs after the move count, from round 1): run a missing phase while the ticket stays in review.'
+        'Moving the ticket out of a review stage, to any other stage but Approved, restarts the count (only runs after the move count, from round 1): run a missing phase while the ticket stays in review.'
       expect(flat(boardSkill)).toContain(restart)
       expect(flat(agentsDoc)).toContain(restart)
       expect(flat(ticketAgent)).toContain('while the ticket stays in review: moving it out of a review stage')

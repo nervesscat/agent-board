@@ -48,6 +48,16 @@ describe('roadmap', () => {
     ])
   })
 
+  it('lists a ticket in an approved-kind stage too, whatever its key', async () => {
+    const { createStage } = await import('./stages')
+    const go = createStage(projectId, { name: 'Go ahead', kind: 'approved' }, 'enrique')
+    const approved = ticket('approved', 'approved')
+    const elsewhere = ticket('approved elsewhere', go.key)
+    const ids = roadmapModule.roadmap(projectId).map((t) => t.id)
+    expect(ids).toContain(approved.id)
+    expect(ids).toContain(elsewhere.id)
+  })
+
   it('lists the tickets last updated first, wherever they are placed in their column', async () => {
     const { db, schema } = await import('#/db')
     const { eq } = await import('drizzle-orm')

@@ -28,7 +28,7 @@ type Stalled = NeedsYou['stalled'][number]
  * The stage kinds whose tickets can ask the human for something: work going on, handed off for a look,
  * or stopped on them. A ticket still lined up (`open`), finished or dropped asks nothing.
  */
-export const ASKING_KINDS: readonly StageKind[] = ['active', 'review', 'blocked']
+export const ASKING_KINDS: readonly StageKind[] = ['active', 'review', 'approved', 'blocked']
 
 /** Whether a ticket in a stage of this kind asks the human; a status no stage has (no kind) does not. */
 export const asksHuman = (kind: StageKind | undefined) => kind !== undefined && ASKING_KINDS.includes(kind)
