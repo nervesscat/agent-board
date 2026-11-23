@@ -107,13 +107,49 @@ test('the Roadmap shows a labeled chart skeleton while it loads, then the chart'
   await expect(loading).toHaveCount(0)
 })
 
+test('the watcher keeps time on the page, so a placeholder comes only after its delay and is then seen', async ({
+  page,
+  project,
+  api,
+}) => {
+  await api.ticket({ title: 'Held ticket' })
+  await warm(page, features(project.id, 'board'))
+  const watch = await watchLoading(page)
+  // The tickets answer is held back by the test: how long the board or the runner takes is no part of it.
+  let release!: () => void
+  const held = new Promise<void>((resolve) => (release = resolve))
+  await page.route(
+    (url) => url.pathname === `/api/projects/${project.id}/tickets` && url.search === '?parent=root',
+    async (route) => {
+      await held
+      await route.fallback()
+    },
+  )
+  await page.goto(features(project.id, 'board'))
+  await expect(page.getByRole('tab', { name: 'Board' })).toBeVisible()
+
+  // Short of the 150 ms a placeholder waits (the page's own clock, which the test moves): none yet. A
+  // page that drew it at once, or after a fraction of the delay, fails here.
+  await page.clock.runFor(60)
+  expect(await watch.seen()).toEqual([])
+  // Past it, with the answer still on its way: the placeholder is drawn, and the watcher saw it.
+  await page.clock.runFor(150)
+  await expect.poll(watch.seen).toContain('Loading tickets…')
+  release()
+  await expect(page.getByText('Held ticket')).toBeVisible()
+})
+
 test('a fast load of the Features page and the Roadmap draws no placeholder', async ({
   page,
   project,
   api,
 }) => {
   await api.ticket({ title: 'Quick ticket', status: 'in_progress' })
-  await warm(page, ...['board', 'list', 'archived'].map((view) => features(project.id, view)))
+  await warm(
+    page,
+    ...['board', 'list', 'archived'].map((view) => features(project.id, view)),
+    `/projects/${project.id}/roadmap`,
+  )
   const watch = await watchLoading(page)
 
   for (const view of ['board', 'list', 'archived']) {
