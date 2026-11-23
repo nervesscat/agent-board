@@ -796,8 +796,7 @@ describe('a step runs the Team agent the workflow names (B9, B11, B14)', () => {
       "brief its subagent with the instructions of `acme-dev` (`get_project` -> `agents`) and, besides them, only what the intent step lists: the human's own words and the result",
     )
     expect(text).toContain('Brief it with only two things besides them')
-    const intent = flat(read(skillDir, 'workflow', 'intent.md'))
-    expect(intent).toContain("Never give it the builder's plan, the spec, the review's findings")
+    expect(text).toContain("Never give it the builder's plan, the spec, the review's findings")
   })
 
   it('has spans, run reports and agentName named by the role, never by the picked agent (B11)', async () => {

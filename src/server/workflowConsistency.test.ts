@@ -461,29 +461,36 @@ describe('the served workflow text for every preset, complexity and tweak', () =
   })
 
   it('has a turned-off preview leave the screenshots to the review, in the summary, the hand-off and the intent brief (C3)', () => {
-    for (const preset of WORKFLOW_PRESETS)
-      for (const complexity of ['low', 'mid'] as const) {
-        const on = flat(render(resolveWorkflow(preset, undefined, complexity)))
-        const text = flat(render(resolveWorkflow(preset, { steps: off('preview') }, complexity)))
-        const at = `${preset}/${complexity}`
-        // The summary: the screenshots are the review's own and it says the preview was turned off.
-        expect(text, at).toContain(
-          "the screenshots of a UI change in `files`, which come from the review's own run (its `shots/` folder, the verify phase)",
-        )
-        expect(text, at).toContain('the summary says this workflow runs no preview for the ticket')
-        // The hand-off checklist.
-        expect(text, at).toContain(
-          "With no preview, the screenshots of a UI change are the review's own (`shots/`, the verify phase)",
-        )
-        // The intent brief.
-        expect(text, at).toContain("the screenshots of a UI change come from the review's own run")
-        // With the preview on, none of it is said.
-        expect(on, at).not.toContain("which come from the review's own run")
-        expect(on, at).not.toContain('With no preview, the screenshots')
-      }
-    // A ticket with no review has none of the review's screenshots to name as a source.
-    const low = flat(render(resolveWorkflow('standard', { steps: off('preview') }, 'low')))
-    expect(low).toContain('if it took any (this ticket has no review)')
+    for (const preset of WORKFLOW_PRESETS) {
+      const on = flat(render(resolveWorkflow(preset, undefined, 'mid')))
+      const text = flat(render(resolveWorkflow(preset, { steps: off('preview') }, 'mid')))
+      const at = `${preset}/mid`
+      // The summary: the screenshots are the review's own and it says the preview was turned off.
+      expect(text, at).toContain(
+        "the screenshots of a UI change in `files`, which come from the review's own run (its `shots/` folder, the verify phase)",
+      )
+      expect(text, at).toContain('the summary says this workflow runs no preview for the ticket')
+      // The hand-off checklist.
+      expect(text, at).toContain(
+        "With no preview, the screenshots of a UI change are the review's own (`shots/`, the verify phase)",
+      )
+      // The intent brief.
+      expect(text, at).toContain("the screenshots of a UI change come from the review's own run")
+      // With the preview on, none of it is said.
+      expect(on, at).not.toContain("which come from the review's own run")
+      expect(on, at).not.toContain('With no preview, the screenshots')
+    }
+    // A ticket with no review has none of the review's screenshots to name as a source: the builder's own, if any.
+    for (const preset of WORKFLOW_PRESETS) {
+      const low = flat(render(resolveWorkflow(preset, { steps: off('preview') }, 'low')))
+      const at = `${preset}/low`
+      expect(low, at).toContain(
+        'any screenshots of a UI change in `files` (this workflow runs no preview and no review for the ticket, so there are none unless the builder took them)',
+      )
+      expect(low, at).toContain('With no preview and no review, no screenshots are required.')
+      expect(low, at).toContain('any screenshots the builder took')
+      expect(low, at).not.toContain('`shots/`')
+    }
   })
 
   it('reads the conditions of a procedure: if, else, not, nested, and refuses a broken one', () => {

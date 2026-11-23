@@ -960,7 +960,10 @@ function flowText(id: WorkflowStepId, flow: FlowState): { what?: string; handoff
         ...(flow.preview
           ? {}
           : {
-              what: 'The intent agent compares what the human asked, in their own words and attachments, with what was built (the diff and any screenshots the review took), and says for each thing asked whether it was done as asked, done differently or not done.',
+              what:
+                'The intent agent compares what the human asked, in their own words and attachments, with what was built (the diff' +
+                (flow.review ? ' and any screenshots the review took' : '') +
+                '), and says for each thing asked whether it was done as asked, done differently or not done.',
             }),
         ...(flow.review ? {} : { handoff: INTENT_WITHOUT_REVIEW }),
       }
@@ -1186,12 +1189,20 @@ export function customNameProblem(
   // Characters that draw nothing (control, zero-width and bidi marks) are not part of a name: a name made
   // only of them is empty, and one that differs from another only by them is that name.
   const cleaned = typeof name === 'string' ? withoutInvisible(name) : ''
-  if (!cleaned.trim()) return { ok: false, error: 'name: give the workflow a name (1 to 60 characters)' }
+  // The joiners (U+200C, U+200D) stay in a name, as they are part of some words and emoji, but they draw
+  // nothing alone: a name with nothing else is empty, and they do not make a name another one.
+  const key = (text: string) =>
+    text
+      .replace(/[\u200c\u200d]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase()
+  if (!key(cleaned)) return { ok: false, error: 'name: give the workflow a name (1 to 60 characters)' }
   const trimmed = cleaned.trim().replace(/\s+/g, ' ')
   if (trimmed.length > CUSTOM_NAME_MAX)
     return { ok: false, error: `name: at most ${CUSTOM_NAME_MAX} characters` }
   const taken = [...WORKFLOW_PRESET_LIST.map((p) => p.label), ...others.map((o) => o.name)]
-  if (taken.some((t) => t.toLowerCase() === trimmed.toLowerCase()))
+  if (taken.some((t) => key(t) === key(trimmed)))
     return { ok: false, error: `name: "${trimmed}" is already the name of a workflow of this project` }
   return { ok: true, name: trimmed }
 }

@@ -5,13 +5,14 @@ preview step is skipped for this ticket, so there is no preview link; the summar
 and the e2e summary; {{if review}}the review's verdict and counts{{else}}the builder's evidence per
 criterion{{end}}), any fake used at an edge and any contract hit you judged legitimate, and {{if intent}}the intent check's
 verdict in one line{{else}}one line saying the intent check was turned off on
-the Workflow page{{end}}, with {{if preview}}the screenshots in `files`{{else}}the screenshots of a UI change in `files`, which come from the review's own
-run (its `shots/` folder, the verify phase){{if !review}}, if it took any (this ticket has no review){{end}}, since the preview that would take them is turned off{{end}}.
+the Workflow page{{end}}, with {{if preview}}the screenshots in `files`{{else}}{{if review}}the screenshots of a UI change in `files`, which come from the review's own
+run (its `shots/` folder, the verify phase), since the preview that would take them is turned off{{else}}any screenshots of a UI change in `files` (this workflow runs no preview and no review for the ticket, so there are
+none unless the builder took them){{end}}{{end}}.
 
-"How it was tested" names the level (`low`, `mid`, `high` or `max`) and the workflow's preset. With a
+"How it was tested" names the level (`low`, `mid`, `high` or `max`) and the workflow's preset. {{if review}}With a
 review it also says which review depth ran and why: the depth, and the measure that put the change there
-(lines and files, the classes that decided it), or that the human chose it (`DEPTH`). With no review it
-names the gate's results and no review depth.
+(lines and files, the classes that decided it), or that the human chose it (`DEPTH`).{{else}}It names the gate's
+results and no review depth.{{end}}
 
 When a summary is already there (an earlier round, a rework), rewrite it to the state now, with `change`
 saying in one line what changed; the board keeps the earlier versions. Then the result reply under each of

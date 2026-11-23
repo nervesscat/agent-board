@@ -1,9 +1,10 @@
 Start the preview of this head here: it is the one build of this head for the preview, and it keeps
 running. {{if roundIntent}}When a review round's end-of-round intent check already started it for this head (the review
 step's text says when it does), it runs: reuse it, take only the screenshots still missing and build
-nothing. {{end}}The review's `shots/` folder has the verify phase's screenshots. For a UI change you also need
-one of the finished thing in that preview at the state the ticket is about. A ticket with no review has no
-review folder, so its screenshots come from the preview. {{if intent}}The intent check is given this preview, these
+nothing. {{end}}{{if review}}The review's `shots/` folder has the verify phase's screenshots. {{end}}For a UI change you also need
+one of the finished thing in that preview at the state the ticket is about. {{if review}}A ticket with no review has no
+review folder, so its screenshots come from the preview.{{else}}This workflow runs no review for the ticket, so its
+screenshots come from the preview.{{end}} {{if intent}}The intent check is given this preview, these
 screenshots and the diff. {{end}}With `BROWSER=no` and a UI change, your always-on `needs-browser` rule applies: you cannot take
 these screenshots, so stop as it says.
 
@@ -26,8 +27,8 @@ checks the artifact (`test -d .output-e2e`, or `true`) and its start command to
 `start_run` it and wait for `running`; once it runs, put back the run's original build and start
 commands — the running process keeps serving the artifact. A checkout served under the board's preview
 base (the board's own case) builds its own: the artifact is built for `/`, so its assets and client routes
-would not match that link. Either way, never build the head twice for the preview; the gate's artifact is
-the review's build, not the preview's, so a commit is built twice overall where the preview must build.
+would not match that link. Either way, never build the head twice for the preview{{if review}}; the gate's artifact is
+the review's build, not the preview's, so a commit is built twice overall where the preview must build{{end}}.
 
 A repo with no preview run the board can start: start it from the artifact by hand in the worktree with
 the repo's preview environment (a free loopback port from `PORTS` as `PORT` and `NITRO_PORT`,

@@ -221,6 +221,11 @@ describe('making, renaming and deleting a custom workflow', () => {
     })
     expect(persian.status).toBe(201)
     expect(persian.body.presets.map((p: { label: string }) => p.label)).toContain('گردش\u200cکار')
+    // Joiners alone are no name, and they do not make a taken name another one.
+    for (const name of ['\u200d', '\u200c\u200d', 'گردش\u200dکار', 'Standard\u200d', 'LIGHT\u200c']) {
+      const refused = await call('POST', `/api/projects/${pid}/workflow/custom`, { name, from: 'light' })
+      expect(refused.status, name).toBe(400)
+    }
   })
 
   it('renames a custom workflow, refuses a taken name, and leaves the presets as they are', async () => {
@@ -582,6 +587,60 @@ describe('the steps of a custom workflow', () => {
         }
       }
     expect(problems).toEqual([])
+  })
+
+  it('sends the agent to nothing of a review when the workflow has none for the ticket', async () => {
+    const { resolveWorkflow, customSource, WORKFLOW_PRESETS, WORKFLOW_STEP_IDS } = await import(
+      '#/lib/workflow'
+    )
+    const { renderWorkflowText } = await import('./workflow')
+    const full = [...WORKFLOW_STEP_IDS]
+    // What only a review has: its screenshots, its rounds, its depth line, its checks at hand-off, its skill.
+    const review =
+      /`shots\/`|review round|missingReviewPhases|post_review_result|depth\.md|\/feature-review(?!-)|review's (?:build|findings|folder|own)|the review took/i
+    const problems: string[] = []
+    const check = (at: string, text: string) => {
+      for (const line of text.split('\n')) {
+        // The budget line and the skipped lines say there is none.
+        if (/^(?:Complexity:|- Review - skipped)/.test(line)) continue
+        const hit = line.match(review)
+        if (hit) problems.push(`${at}: "${hit[0]}" in: ${line.trim().slice(0, 120)}`)
+      }
+    }
+    const text = (w: ReturnType<typeof resolveWorkflow>) =>
+      renderWorkflowText(w, { source: 'project', projectPreset: 'standard' })
+    for (const base of WORKFLOW_PRESETS)
+      for (const complexity of ['low', 'mid', 'high', 'max'] as const) {
+        const source = customSource({ id: 'custom-abcdef0123', name: 'Same', base, seed: { order: full } })
+        const without = (extra: string[]) => full.filter((id) => id !== 'review' && !extra.includes(id))
+        // The review removed, with and without the preview and the CI step; the review kept but with no rounds.
+        for (const gone of [[], ['preview'], ['preview', 'ci'], ['preview', 'ci', 'spec', 'spec2', 'tests']])
+          check(
+            `${base}/${complexity}/-review,${gone.join(',')}`,
+            text(resolveWorkflow(source, { order: without(gone) }, complexity)),
+          )
+        check(
+          `${base}/${complexity}/0 rounds`,
+          text(resolveWorkflow(source, { order: full, rounds: { [complexity]: 0 } }, complexity)),
+        )
+        check(
+          `${base}/${complexity}/0 rounds, no preview`,
+          text(
+            resolveWorkflow(
+              source,
+              { order: full, rounds: { [complexity]: 0 }, steps: { preview: { enabled: false } } },
+              complexity,
+            ),
+          ),
+        )
+      }
+    // A low ticket of a preset has no review rounds either.
+    for (const base of WORKFLOW_PRESETS) check(`${base}/low`, text(resolveWorkflow(base, undefined, 'low')))
+    expect(problems).toEqual([])
+    // And with the review in, the same words are said.
+    const withReview = text(resolveWorkflow('standard', undefined, 'mid'))
+    expect(withReview).toContain('`shots/`')
+    expect(withReview).toContain('missingReviewPhases')
   })
 
   it('resets a custom workflow to how it was made, name included, and a preset to what ships', async () => {

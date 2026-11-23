@@ -316,6 +316,12 @@ describe('naming a custom workflow', () => {
     expect(customNameProblem('گردش\u200cکار', [])).toEqual({ ok: true, name: 'گردش\u200cکار' })
     const family = '\u{1F468}\u200d\u{1F469}\u200d\u{1F467}'
     expect(customNameProblem(`Our ${family}`, [])).toEqual({ ok: true, name: `Our ${family}` })
+    // The joiners alone draw nothing: they are not a name, and they do not make a name another one.
+    expect(customNameProblem('\u200c', [])).toMatchObject({ ok: false })
+    expect(customNameProblem('\u200d\u200c \u200d', [])).toMatchObject({ ok: false })
+    expect(customNameProblem('My flow\u200d', [{ name: 'My flow' }])).toMatchObject({ ok: false })
+    expect(customNameProblem('My flow', [{ name: 'My\u200c flow' }])).toMatchObject({ ok: false })
+    expect(customNameProblem('Standard\u200d', [])).toMatchObject({ ok: false })
     // The limit counts the cleaned name.
     expect(customNameProblem(`${'x'.repeat(60)}\u200b`, [])).toMatchObject({ ok: true })
     expect(customNameProblem(`${'x'.repeat(61)}\u200b`, [])).toMatchObject({ ok: false })
