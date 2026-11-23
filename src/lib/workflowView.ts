@@ -30,6 +30,14 @@ export const AUTO_EFFORT_HINT =
 export const roundsText = (rounds: number): string =>
   rounds === 0 ? 'no review rounds' : `${rounds} round${rounds === 1 ? '' : 's'}`
 
+/** The card line's review part: the rounds per level, or that the workflow has no review step at all. */
+export const reviewRoundsLine = (order: readonly string[], rounds: readonly number[]): string =>
+  order.includes('review') ? `review rounds ${rounds.join(' / ')}` : 'no review'
+
+/** The page header's review part: the rounds for the level shown, or that the workflow has no review step. */
+export const reviewHeaderText = (order: readonly string[], rounds: number): string =>
+  order.includes('review') ? `review: ${roundsText(rounds)}` : 'no review'
+
 /** The effort chip of a step: what is set, and with `auto` the level it comes to for the complexity shown. */
 export function effortText(step: Pick<ResolvedStep, 'effort' | 'effortLevel'>): string | null {
   if (step.effort === null) return null

@@ -51,7 +51,7 @@ import {
   withoutStep,
 } from '#/lib/workflowEdit'
 import { findNode } from '#/lib/workflowGraph'
-import { COMPLEXITY_NAMES, roundsText } from '#/lib/workflowView'
+import { COMPLEXITY_NAMES, reviewHeaderText } from '#/lib/workflowView'
 
 /** The project's workflow: the overview of every preset, read once and kept as each change answers with the new one. */
 const overviewKey = (projectId: string) => ['workflow', projectId] as const
@@ -365,8 +365,8 @@ export function WorkflowPage({
             )}
           </h2>
           <p className="text-xs text-muted-foreground" data-summary>
-            {workflow.numbered} steps for a {COMPLEXITY_NAMES[complexity].toLowerCase()} ticket · review:{' '}
-            {roundsText(rounds)}
+            {workflow.numbered} steps for a {COMPLEXITY_NAMES[complexity].toLowerCase()} ticket ·{' '}
+            {reviewHeaderText(workflow.order, rounds)}
           </p>
           {current.custom && (
             <div className="ml-auto w-full sm:w-auto">

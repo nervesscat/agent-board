@@ -206,8 +206,14 @@ test('a step of a kind it lacks is added where it belongs, and a step that is no
   await panel.getByRole('button', { name: 'Remove step' }).click()
   await expect(node(page, 'review')).toHaveCount(0)
   await expect(page.locator('[data-round="review"]')).toHaveCount(0)
+  // Nothing on the page counts review rounds for a workflow that has no review: not the header, not its card.
+  await expect(page.locator('[data-summary]')).toContainText('no review')
+  await expect(page.locator('[data-summary]')).not.toContainText('round')
+  await expect(cards(page).locator('[data-preset][aria-pressed="true"]')).toContainText('no review')
+  await expect(cards(page).locator('[data-preset][aria-pressed="true"]')).not.toContainText('review rounds')
   await page.reload()
   expect(await labels(page)).not.toContain('Review')
+  await expect(page.locator('[data-summary]')).toContainText('no review')
   expect(await labels(page)).toContain('Test-writing pass')
 })
 
@@ -249,6 +255,9 @@ test('a step that has settings saved is removed too, and so is the review with i
   await page.getByRole('combobox', { name: 'Add a step' }).click()
   await page.getByRole('option', { name: 'Review', exact: true }).click()
   await expect(node(page, 'review')).toBeVisible()
+  // With the review back, the header and the card count rounds again.
+  await expect(page.locator('[data-summary]')).toContainText('review: ')
+  await expect(cards(page).locator(`[data-preset="${id}"]`)).toContainText('review rounds')
   const back = (await overview(human, project.id)).presets.find((p) => p.id === id)!
   expect(back.rounds).toEqual(back.defaultRounds)
   expect(back.tweaks).not.toHaveProperty('rounds')

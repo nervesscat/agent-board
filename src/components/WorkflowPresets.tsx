@@ -6,7 +6,7 @@ import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { COMPLEXITIES, type Complexity } from '#/lib/constants'
 import type { WorkflowOverview } from '#/lib/api'
 import { WORKFLOW_PRESET_DEFS } from '#/lib/workflow'
-import { COMPLEXITY_NAMES } from '#/lib/workflowView'
+import { COMPLEXITY_NAMES, reviewRoundsLine } from '#/lib/workflowView'
 import { cn } from '#/lib/utils'
 
 type Preset = WorkflowOverview['presets'][number]
@@ -67,7 +67,11 @@ export function PresetSwitcher({
                   : p.description}
               </span>
               <span className="mt-auto text-[11px] text-muted-foreground">
-                {steps} steps · review rounds {COMPLEXITIES.map((level) => p.rounds[level]).join(' / ')}
+                {steps} steps ·{' '}
+                {reviewRoundsLine(
+                  p.order,
+                  COMPLEXITIES.map((level) => p.rounds[level]),
+                )}
               </span>
             </button>
           )
