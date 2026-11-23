@@ -57,7 +57,9 @@ test('the Roadmap draws each ticket’s work timeline, its totals and a stalled 
 
   // From the keyboard: Tab reaches the span, which has its story as its name and shows its tooltip.
   // It ran for 40 minutes and is closed now.
-  const named = ticket.getByRole('button', { name: /^build by claude, .* to .*, 40 min$/ })
+  const named = ticket.getByRole('button', {
+    name: /^Open the claude report: build by claude, .* to .*, 40 min$/,
+  })
   await expect(named).toHaveCount(1)
   await ticket.getByRole('button', { name: '1 lane' }).focus()
   for (let i = 0; i < 6 && !(await named.evaluate((el) => el === document.activeElement)); i++)

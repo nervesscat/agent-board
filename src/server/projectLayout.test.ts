@@ -80,7 +80,6 @@ describe("a project's layout", () => {
       'nav.gallery',
       'nav.agents',
       'nav.workflow',
-      'nav.runReports',
       'nav.daily',
       'nav.cleanup',
       'nav.repositories',

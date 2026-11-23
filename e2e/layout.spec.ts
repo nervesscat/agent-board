@@ -12,7 +12,6 @@ const MENU = [
   'Gallery',
   'Team',
   'Workflow',
-  'Run reports',
   'Daily',
   'Cleanup',
   'Repositories',
@@ -81,23 +80,12 @@ test('the human hides a page and reorders the menu from the keyboard; both persi
   )
   await expect(status).toHaveText('Unsaved changes. 1 hidden.')
 
-  // Daily up twice with Enter: the focus stays on its button as it moves.
+  // Daily up with Enter: the focus stays on its button as it moves.
   const up = layout.getByRole('button', { name: 'Move Daily up in the menu' })
   await up.focus()
   await page.keyboard.press('Enter')
   await expect(up).toBeFocused()
-  await page.keyboard.press('Enter')
-  await expect(up).toBeFocused()
-  const order = [
-    ...MENU.slice(0, 6),
-    'Team',
-    'Daily',
-    'Workflow',
-    'Run reports',
-    'Cleanup',
-    'Repositories',
-    'Instructions',
-  ]
+  const order = [...MENU.slice(0, 6), 'Team', 'Daily', 'Workflow', 'Cleanup', 'Repositories', 'Instructions']
   await expect(tiles(layout, 'Project menu')).toHaveText(order)
   // At the top, the focus moves to its other arrow.
   const instructionsUp = layout.getByRole('button', { name: 'Move Instructions up in the menu' })
@@ -175,16 +163,7 @@ test('an edit made while a Save or a Reset is on its way stays, unsaved, and a s
   await expect(saving).toBeDisabled()
   await roadmap.click()
   await layout.getByRole('button', { name: 'Move Daily up in the menu' }).click()
-  const order = [
-    ...MENU.slice(0, 6),
-    'Team',
-    'Workflow',
-    'Daily',
-    'Run reports',
-    'Cleanup',
-    'Repositories',
-    'Instructions',
-  ]
+  const order = [...MENU.slice(0, 6), 'Team', 'Daily', 'Workflow', 'Cleanup', 'Repositories', 'Instructions']
   await expect(tiles(layout, 'Project menu')).toHaveText(order)
   await expect(status).toHaveText('Unsaved changes. 2 hidden.')
   release()

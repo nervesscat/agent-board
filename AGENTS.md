@@ -502,8 +502,9 @@ baseBranch?}`; REST `PATCH /api/projects/:id/repos/:repoId`) changes the fields 
     project agent's own template is on the Team page (`get_project` → `agents[].reportTemplate`).
     The run writes it with `write_run_report` (structured fields: times, duration, ratings, steps,
     counts; prose in named sections) before it hands back, and the board reads it back with
-    `get_run_report`. Both the ticket's Agents side and `list_run_reports` (one kind of agent across
-    tickets) show them. `update_ticket` → `review` answers with `missingRunReports` for each
+    `get_run_report`. The ticket's Agents side and `list_run_reports` (one kind of agent across
+    tickets) show them, and a work bar on the timeline (the ticket's and the Roadmap's) opens the report
+    written for that run: same ticket, agent and round. `update_ticket` → `review` answers with `missingRunReports` for each
     subagent run the work timeline records with no report: that is a flag, not a refusal — get them
     written before the hand-off. It also answers with `missingReviewPhases`: for a ticket whose workflow lists a review,
     each phase of that workflow its last review round lacks (`{round, phase, expected, found}`), another flag to clear before
