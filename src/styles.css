@@ -401,3 +401,50 @@ button:focus-visible .trash-icon .trash-icon-lid {
     transform: none;
   }
 }
+
+/*
+ * The pets of the Overview's Agents at work (components/AgentPet.tsx): pixel art, each pose two frames
+ * flipped in turn in whole steps (never tweened), each pet shifted by its own --pet-delay so a row of
+ * them does not move in step. Only the visibility of a frame changes, from CSS alone. Without motion
+ * (reduced motion) a pet holds its first frame.
+ */
+.pet-frame-b {
+  visibility: hidden;
+}
+.pet {
+  --pet-period: 0.6s;
+}
+.pet[data-pet='waiting'] {
+  --pet-period: 1s;
+}
+.pet[data-pet='asleep'] {
+  --pet-period: 1.8s;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pet-frame-a,
+  .pet-frame-b {
+    animation-duration: var(--pet-period);
+    animation-delay: var(--pet-delay, 0s);
+    animation-timing-function: steps(1, end);
+    animation-iteration-count: infinite;
+  }
+  .pet-frame-a {
+    animation-name: pet-frame-a;
+  }
+  .pet-frame-b {
+    animation-name: pet-frame-b;
+  }
+}
+@keyframes pet-frame-a {
+  50% {
+    visibility: hidden;
+  }
+}
+@keyframes pet-frame-b {
+  0% {
+    visibility: hidden;
+  }
+  50% {
+    visibility: visible;
+  }
+}

@@ -184,6 +184,7 @@ const ghPr = (number: number, over: Partial<MyGhPr> = {}): MyGhPr => ({
   comments: [],
   requested: false,
   assigned: false,
+  involvesMe: true,
   ...over,
 })
 const failingRun = {

@@ -466,6 +466,19 @@ describe('what may start', () => {
     expect(fake.calls).toEqual([])
   })
 
+  it("starts nothing for a run stopped while it was still clearing the last run's files, with no install or build", async () => {
+    useFake()
+    const repo = addRepo('stopped-early')
+    const worker = run(repo, { name: 'Worker', type: 'job', start: 'python w.py', healthPath: '' })
+    const { ws } = ticketIn(repo)
+    runs.startRun(ws.id, worker.id, 'claude')
+    await runs.stopRun(ws.id, worker.id, 'changed my mind', 'enrique')
+    // Let everything the start left behind finish: a server spawned now would be one nobody tracks.
+    await new Promise((r) => setTimeout(r, 300))
+    expect(fake.calls).toEqual([])
+    expect(status(ws.id, worker.id)).toBe('stopped')
+  })
+
   it('the preview limit counts jobs and building runs; a restart of a running one is allowed at it', async () => {
     useFake()
     setLimit(2)
@@ -666,6 +679,7 @@ describe('a ticket that spans two repos', () => {
       comments: [],
       requested: false,
       assigned: true,
+      involvesMe: true,
     }) satisfies MyGhPr
 
   it('lists every run of both repos, starts them all at once and stops them by repo', async () => {
