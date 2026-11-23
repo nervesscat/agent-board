@@ -8,6 +8,7 @@ import { AnnotateImage, useAnnotations } from '#/components/AnnotateImage'
 import { Attachments } from '#/components/Attachments'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
+import { DelayedLoading, SkeletonText } from '#/components/Loading'
 import { Markdown } from '#/components/Markdown'
 import { ActionButton, EditBox, Edited, PostActions } from '#/components/PostTools'
 import { RichEditor } from '#/components/RichEditor'
@@ -21,12 +22,13 @@ export type Parent = 'ticket' | 'update' | 'review'
 /** The comments under one parent, all levels, refreshed every 10 s. */
 export function useComments(parentType: Parent, parentId: number) {
   const key = ['comments', parentType, parentId]
-  const { data: comments = [] } = useQuery({
+  const { data, isPending } = useQuery({
     queryKey: key,
     queryFn: () => get<CommentRow[]>(`/api/comments?parentType=${parentType}&parentId=${parentId}`),
     refetchInterval: 10_000,
   })
-  return { key, comments }
+  // `loading` until the first answer for this parent: the thread is not empty yet, it is unknown.
+  return { key, comments: data ?? [], loading: isPending }
 }
 
 /**
@@ -131,7 +133,7 @@ export function Thread({
   compact?: boolean
 }) {
   const qc = useQueryClient()
-  const { key, comments } = useComments(parentType, parentId)
+  const { key, comments, loading } = useComments(parentType, parentId)
   const [replyTo, setReplyTo] = useState<number | null>(null)
   const [body, setBody] = useState('')
   const [files, setFiles] = useState<File[]>([])
@@ -160,7 +162,14 @@ export function Thread({
   const roots = comments.filter((c) => !c.replyTo)
   return (
     <div className="space-y-4">
-      {roots.length === 0 && !compact && <p className="text-sm text-muted-foreground">No comments yet.</p>}
+      {loading && (
+        <DelayedLoading label="Loading replies…">
+          <SkeletonText lines={2} />
+        </DelayedLoading>
+      )}
+      {!loading && roots.length === 0 && !compact && (
+        <p className="text-sm text-muted-foreground">No comments yet.</p>
+      )}
       {roots.map((c) => (
         <CommentItem key={c.id} c={c} comments={comments} threadKey={key} onReply={() => setReplyTo(c.id)} />
       ))}

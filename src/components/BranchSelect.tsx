@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
+import { ControlSkeleton } from '#/components/ControlSkeleton'
 import { Input } from '#/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { get } from '#/lib/api'
@@ -18,20 +19,36 @@ interface Props {
   className?: string
 }
 
-/** The local branches of a checkout as a dropdown; a plain text box until the branches are known. */
+/** The local branches of a checkout as a dropdown; a disabled one while they load, a plain text box when there are none. */
 export function BranchSelect({ value, onChange, repoId, repoPath, id, optional, className = '' }: Props) {
   const source = repoId
     ? `/api/repos/${repoId}/branches`
     : repoPath
       ? `/api/branches?path=${encodeURIComponent(repoPath)}`
       : null
-  const { data: branches } = useQuery({
+  const { data: branches, isPending } = useQuery({
     queryKey: ['branches', source],
     queryFn: () => get<string[]>(source!),
     enabled: Boolean(source),
     staleTime: 30_000,
     retry: false,
   })
+  // The same kind of control while the branches load as after, showing the branch it holds now.
+  if (source && isPending) {
+    return (
+      <Select value={value || null} items={value ? { [value]: value } : {}} disabled>
+        <SelectTrigger id={id} className={`w-full font-mono ${className}`}>
+          <SelectValue>
+            {value ? (
+              <span className="truncate">{value}</span>
+            ) : (
+              <ControlSkeleton label="Loading branches…" />
+            )}
+          </SelectValue>
+        </SelectTrigger>
+      </Select>
+    )
+  }
   if (!branches?.length) {
     return (
       <Input
@@ -39,7 +56,7 @@ export function BranchSelect({ value, onChange, repoId, repoPath, id, optional, 
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={`font-mono ${className}`}
-        placeholder={source ? 'loading branches…' : 'main'}
+        placeholder="main"
       />
     )
   }
