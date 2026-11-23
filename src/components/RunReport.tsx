@@ -1,10 +1,8 @@
 import { Check, ClipboardList, X } from 'lucide-react'
-import { useState } from 'react'
 
 import { Actor } from '#/components/Actor'
 import { Markdown } from '#/components/Markdown'
 import { Badge } from '#/components/ui/badge'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '#/components/ui/dialog'
 import { Tip } from '#/components/ui/tooltip'
 import { ago, shortSha, stamp } from '#/lib/format'
 import {
@@ -163,24 +161,6 @@ export function RunReportView({ r }: { r: RunReport }) {
   )
 }
 
-/** The dialog a report opens in; `report` null keeps it closed. */
-export function RunReportDialog({ report, onClose }: { report: RunReport | null; onClose: () => void }) {
-  // Keeps showing the last one while the dialog animates closed.
-  const [last, setLast] = useState(report)
-  if (report && report.id !== last?.id) setLast(report)
-  const shown = report ?? last
-  return (
-    <Dialog open={report !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{shown ? `Run report: ${runReportLabel(shown)}` : 'Run report'}</DialogTitle>
-        </DialogHeader>
-        {shown && <RunReportView r={shown} />}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 /** One report as a row: what ran, its round, its numbers; opening it shows the whole report. */
 export function RunReportRowButton({ r, onOpen }: { r: RunReport; onOpen: () => void }) {
   return (
@@ -203,29 +183,5 @@ export function RunReportRowButton({ r, onOpen }: { r: RunReport; onOpen: () => 
         <span className="ml-auto text-xs text-muted-foreground">{ago(r.createdAt)}</span>
       </span>
     </button>
-  )
-}
-
-/**
- * A ticket's run reports on the feed's Agents side: one report per subagent run, newest first. Nothing
- * is shown for a ticket no subagent reported on.
- */
-export function RunReportsPanel({ reports }: { reports: RunReport[] }) {
-  const [open, setOpen] = useState<RunReport | null>(null)
-  if (!reports.length) return null
-  return (
-    <section aria-label="Run reports" className="mb-4 space-y-2">
-      <h3 className="text-xs font-medium text-muted-foreground">
-        Run reports · {reports.length} run{reports.length === 1 ? '' : 's'}
-      </h3>
-      <ul className="space-y-1">
-        {reports.map((r) => (
-          <li key={r.id}>
-            <RunReportRowButton r={r} onOpen={() => setOpen(r)} />
-          </li>
-        ))}
-      </ul>
-      <RunReportDialog report={open} onClose={() => setOpen(null)} />
-    </section>
   )
 }
