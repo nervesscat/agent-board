@@ -198,6 +198,7 @@ const ghPr = (f: Fixture, over: Partial<MyGhPr> = {}): MyGhPr => ({
   comments: [],
   requested: false,
   assigned: false,
+  involvesMe: true,
   ...over,
 })
 

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4480832f-55ad-40a9-934e-daddfe036358",
+  "id": "24dd8fcd-d37d-4464-8673-3dbc50a39a7e",
   "prevId": "a999ff5d-7c49-42fe-9aae-133bc148bfef",
   "tables": {
     "account": {
@@ -1601,21 +1601,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'[\"software\"]'"
-        },
-        "workflow_preset": {
-          "name": "workflow_preset",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'standard'"
-        },
-        "workflow_tweaks": {
-          "name": "workflow_tweaks",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {},
@@ -1727,6 +1712,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
+        },
+        "involves_me": {
+          "name": "involves_me",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
         },
         "waiting_on": {
           "name": "waiting_on",
@@ -3581,13 +3574,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'mid'"
-        },
-        "workflow_preset": {
-          "name": "workflow_preset",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         },
         "assignee": {
           "name": "assignee",

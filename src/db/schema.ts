@@ -214,6 +214,10 @@ export const prs = sqliteTable(
     // GitHub still asks me for a review (its `review-requested:@me` search found it): what the To
     // review switch's Just me as reviewer narrows to. GitHub drops the request once the review is given.
     requested: integer({ mode: 'boolean' }).notNull().default(false),
+    // One of the searches for the human's own PRs found it (authored, review requested, reviewed,
+    // assigned), as of the last refresh. False: it is open and found only by the repo's plain open
+    // list, so it shows under All PRs alone and no other reader counts it.
+    involvesMe: integer('involves_me', { mode: 'boolean' }).notNull().default(true),
     // `me`: someone else's PR, for the human to review. `others`: the human authored it.
     waitingOn: text('waiting_on').$type<'me' | 'others'>().notNull().default('me'),
     // Where its reviews stand on GitHub as of the last refresh; a hold or a merge overrides it.

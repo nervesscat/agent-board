@@ -734,8 +734,10 @@ describe('0036_pr_left_as', () => {
 
     const prs = sqlite.prepare('SELECT * FROM prs').all() as Record<string, unknown>[]
     expect(prs.map((p) => p.left_as)).toEqual([null, null, null])
-    // A later migration adds the review request column.
-    expect(prs.map(({ left_as: _l, requested: _r, ...rest }) => rest)).toEqual(before)
+    // Every PR that existed involved me: the queue held only what the searches found.
+    expect(prs.map((p) => p.involves_me)).toEqual(prs.map(() => 1))
+    // Later migrations add the review request and involves-me columns.
+    expect(prs.map(({ left_as: _l, requested: _r, involves_me: _i, ...rest }) => rest)).toEqual(before)
     sqlite.close()
   })
 })
@@ -1780,9 +1782,9 @@ describe('0051_agent_cards', () => {
   })
 })
 
-describe('0059_project_workflow', () => {
+describe('0060_project_workflow', () => {
   it('reads every project that existed as Standard with no tweaks and every ticket as following its project, changing nothing else', () => {
-    const sqlite = databaseAt('0058_task_blocked_at')
+    const sqlite = databaseAt('0059_prs_involves_me')
     const project = (name: string) =>
       Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run(name).lastInsertRowid)
     const ticket = (projectId: number, title: string) =>
@@ -1829,7 +1831,7 @@ describe('0059_project_workflow', () => {
   })
 })
 
-describe('0060_drop_workflow_instruction_edits', () => {
+describe('0061_drop_workflow_instruction_edits', () => {
   const tweaks = (sqlite: Database.Database, id: number) =>
     (
       sqlite.prepare('SELECT workflow_tweaks FROM projects WHERE id = ?').get(id) as {
@@ -1838,7 +1840,7 @@ describe('0060_drop_workflow_instruction_edits', () => {
     ).workflow_tweaks
 
   it("strips a step's saved instruction from every preset and keeps the order, rounds, switches and efforts exactly", () => {
-    const sqlite = databaseAt('0059_project_workflow')
+    const sqlite = databaseAt('0060_project_workflow')
     const project = (name: string, value: string | null, preset = 'thorough') =>
       Number(
         sqlite
@@ -1940,7 +1942,7 @@ describe('0060_drop_workflow_instruction_edits', () => {
 
   it('reads as it should: the reader sees no instruction and the step is as the preset ships it', async () => {
     const { readProjectTweaks } = await import('../lib/workflow')
-    const sqlite = databaseAt('0059_project_workflow')
+    const sqlite = databaseAt('0060_project_workflow')
     const id = Number(
       sqlite.prepare('INSERT INTO projects (name, workflow_tweaks) VALUES (?, ?)').run(
         'p',
