@@ -299,8 +299,8 @@ export interface TicketGit {
     worktree: Worktree | null
     lane: { id: number; title: string } | null
   })[]
-  /** Open tickets whose unmerged work the ticket's branch holds. */
-  includes: number[]
+  /** Open tickets whose unmerged work the ticket's branch holds, that the board could not tell for sure and added no need for. Only there with `?includes=1`. */
+  includes?: number[]
 }
 
 /** `/api/daily`: a day's activity, every write in order, with its project's name. */

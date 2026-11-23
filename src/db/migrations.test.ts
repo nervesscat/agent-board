@@ -73,6 +73,17 @@ function updatesWithDelivered(rows: Record<string, unknown>[]) {
   return rows.map(({ answer_delivered: _d, ...rest }) => rest)
 }
 
+/**
+ * The needs of a database migrated past 0063: each has the columns it added, `auto` (0: written before the
+ * board added any) and `held` (empty), and the other columns are compared as they were.
+ */
+function needsWithAutoColumns(rows: Record<string, unknown>[]) {
+  // Before 0063 the table has no such columns: the rows are compared as they are.
+  if (!rows.length || !('auto' in rows[0]!)) return rows
+  expect(rows.map((r) => [r.auto, r.held])).toEqual(rows.map(() => [0, '']))
+  return rows.map(({ auto: _a, held: _h, ...rest }) => rest)
+}
+
 describe('0023_daily_reports_and_shifts', () => {
   it('turns the daily summaries into report versions and the due time into the shift end', () => {
     const sqlite = databaseAt('0022_pr_review_stages')
@@ -1557,9 +1568,11 @@ describe('0050_widen_ticket_complexity', () => {
 
     // Every ticket kept its id, its level and the rest of its columns, and so did each row that refers to one.
     const after = rows()
-    expect({ ...after, tickets: ticketsWithClosedFlag(after.tickets as Record<string, unknown>[]) }).toEqual(
-      before,
-    )
+    expect({
+      ...after,
+      tickets: ticketsWithClosedFlag(after.tickets as Record<string, unknown>[]),
+      ticket_needs: needsWithAutoColumns(after.ticket_needs as Record<string, unknown>[]),
+    }).toEqual(before)
     expect(
       Object.fromEntries(
         (after.tickets as { id: number; complexity: string }[]).map((t) => [t.id, t.complexity]),
@@ -2042,5 +2055,34 @@ describe('0061_ticket_resumes', () => {
       { resume_command: '', resume_timeout_minutes: 240 },
     ])
     expect(sqlite.prepare('SELECT COUNT(*) AS n FROM ticket_resumes').get()).toEqual({ n: 0 })
+  })
+})
+
+describe('0063_auto_needs', () => {
+  it('adds the automatic and held columns to the needs a board already has and a table of dismissals', () => {
+    const sqlite = databaseAt('0062_overview_next_to_lost_contact')
+    const project = Number(
+      sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('kept').lastInsertRowid,
+    )
+    const ticket = sqlite.prepare("INSERT INTO tickets (project_id, title, created_by) VALUES (?, ?, 'a')")
+    const lower = Number(ticket.run(project, 'lower').lastInsertRowid)
+    const upper = Number(ticket.run(project, 'upper').lastInsertRowid)
+    sqlite.prepare('INSERT INTO ticket_needs (ticket_id, needs_id) VALUES (?, ?)').run(upper, lower)
+    expect(columns(sqlite, 'ticket_needs')).toEqual(['ticket_id', 'needs_id'])
+    expect(columns(sqlite, 'ticket_need_dismissals')).toEqual([])
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    // A need written before is the human's or an agent's: not automatic, and nothing held for it.
+    expect(sqlite.prepare('SELECT ticket_id, needs_id, auto, held FROM ticket_needs').all()).toEqual([
+      { ticket_id: upper, needs_id: lower, auto: 0, held: '' },
+    ])
+    expect(columns(sqlite, 'ticket_need_dismissals')).toEqual(['ticket_id', 'needs_id', 'held', 'createdAt'])
+    // A dismissal goes with either ticket.
+    sqlite
+      .prepare('INSERT INTO ticket_need_dismissals (ticket_id, needs_id, held) VALUES (?, ?, ?)')
+      .run(upper, lower, 'abc')
+    sqlite.prepare('DELETE FROM tickets WHERE id = ?').run(lower)
+    expect(sqlite.prepare('SELECT count(*) AS n FROM ticket_need_dismissals').get()).toEqual({ n: 0 })
   })
 })

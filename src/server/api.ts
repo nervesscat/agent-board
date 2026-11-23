@@ -879,7 +879,9 @@ api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
   )
   return json(features.claimTicket(id(params), actor, body))
 })
-api.get('/api/tickets/:id/git', async ({ params }) => json(await needs.ticketGitView(id(params))))
+api.get('/api/tickets/:id/git', async ({ params, url }) =>
+  json(await needs.ticketGitView(id(params), { includes: url.searchParams.get('includes') === '1' })),
+)
 // Whether the branch of every ticket in work is on origin, one batch of git per repo; refresh fetches now.
 api.get('/api/projects/:id/push', async ({ params }) => json(await projectPush(id(params))))
 api.post('/api/projects/:id/push/refresh', async ({ params }) => json(await refreshProjectPush(id(params))))
