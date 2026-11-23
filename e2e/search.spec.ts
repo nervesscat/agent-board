@@ -115,7 +115,7 @@ test('the first search shows a skeleton, not the whole list, and the next keeps 
     .getByRole('main')
     .getByRole('listitem')
     .filter({ has: page.locator('a[href*="/features/"]') })
-  const skeleton = page.getByRole('main').locator('[data-slot="skeleton"]')
+  const skeleton = page.getByRole('main').getByRole('status', { name: 'Loading tickets…' })
   const field = page.getByRole('searchbox', { name: 'Search tickets' })
   await page.goto(`/projects/${project.id}/features?view=list`)
   await expect(rows).toHaveCount(4)

@@ -11,8 +11,10 @@ import {
   Archive,
   ArchiveRestore,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   ExternalLink,
   Flag,
   FlagOff,
@@ -29,12 +31,13 @@ import {
   RefreshCw,
   Scale,
   ScrollText,
-  TriangleAlert,
   X,
 } from 'lucide-react'
 import {
   Fragment,
   type ReactNode,
+  type Ref,
+  type RefObject,
   createContext,
   useCallback,
   useContext,
@@ -61,10 +64,15 @@ import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { ResumeCard, useTicketResume } from '#/components/ResumeCard'
 import { RunsCard, useTicketRuns } from '#/components/RunsCard'
+import { DelayedLoading, SkeletonCard, SkeletonText } from '#/components/Loading'
+import { TicketSkeleton } from '#/components/TicketSkeleton'
+import { isOtherTicket } from '#/lib/delayedFlag'
+import { useDelayedFlag } from '#/lib/useDelayedFlag'
 import { PrState } from '#/components/PrState'
 import type { FeedTab } from '#/lib/constants'
 import { PushBadge, PushDot, RefreshPush } from '#/components/PushDot'
 import { Tag, compareTags } from '#/components/Tag'
+import { TicketLine } from '#/components/TicketLine'
 import { TrashIcon } from '#/components/TrashIcon'
 import { TagsInput, useTagChoices } from '#/components/TagsInput'
 import { ReachBadge } from '#/components/ReachBadge'
@@ -114,19 +122,16 @@ import {
   laneStageOrder,
   type LaneFilter,
   type LaneSearch,
-  type LaneVerdict,
-  LANE_VERDICTS,
   NO_FILTER,
   effectiveFilter,
   isFiltering,
-  laneVerdict,
+  judgedByStage,
   laneFilter,
   laneNeighbours,
   laneSearch,
   sortLanes,
   stageOk,
   tagOk,
-  verdictOk,
   validateLaneSearch,
 } from '#/lib/lanes'
 import { type AreaId, type Layout, defaultLayout, layoutElement, shownIn } from '#/lib/layout'
@@ -134,6 +139,7 @@ import { useProject, useStages } from '#/lib/project'
 import { type Anchor, anchorId, cameBack, useAnchor, useReveal } from '#/lib/reveal'
 import { addTags, overTagLimits } from '#/lib/tags'
 import { type StepList, columnNeighbours, isClosed, stageBadge, stageOf } from '#/lib/stages'
+import { scrolledAway } from '#/lib/scrolledAway'
 import { ticketsKey, ticketsQuery } from '#/lib/tickets'
 
 export const Route = createFileRoute('/projects/$id/features/$ticketId')({
@@ -188,7 +194,7 @@ function TicketPage() {
     placeholderData: keepPreviousData,
     refetchInterval: 10_000,
   })
-  const { data: ticketGit } = useQuery({
+  const { data: ticketGit, error: ticketGitError } = useQuery({
     queryKey: ['ticket-git', ticketId],
     queryFn: () => get<TicketGit>(`/api/tickets/${ticketId}/git`),
     refetchInterval: 30_000,
@@ -306,6 +312,9 @@ function TicketPage() {
   // once per anchor, so turning it off again stays off.
   const anchoredPost = anchorId(anchor?.holder ?? anchor?.target, 'post')
   const foldedFor = useRef<string | null>(null)
+  // The page's own breadcrumbs: the floating header shows them while these are scrolled out of view.
+  const crumbs = useRef<HTMLElement>(null)
+  const crumbsAway = useCrumbsAway(crumbs, t !== undefined)
   useEffect(() => {
     if (!drawn || !anchor || anchoredPost === null || laneFeed || foldedFor.current === anchor.hash) return
     if (t.lanes.length && !t.updates.some((u) => u.id === anchoredPost)) {
@@ -321,50 +330,45 @@ function TicketPage() {
   const runs = useTicketRuns(t, git)
   const resume = useTicketResume(t)
 
+  // The ticket asked for is not on screen yet: after a short wait, placeholders take the place of the
+  // previous ticket (or of nothing), never its data under the next one's number.
+  const slow = useDelayedFlag(isOtherTicket(t, ticketId) && !error)
+
   if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
+  if (slow) return <TicketSkeleton layout={layout ?? defaultLayout()} />
   if (!t) return null
 
   /**
-   * Record a verdict. Disapproving cancels the lane, which can drop it out of the filtered list, so
-   * from inside a lane it moves on to the next one (worked out before the change), and a toast
-   * offers to undo: the lane gets back its stage and earlier call.
+   * Record the human's call on this ticket. Disapproving cancels it, and a toast offers to undo: the
+   * ticket gets back its stage and earlier call.
    */
   const decide = (
-    lane: Pick<TicketFull, 'id' | 'status' | 'approvedAt' | 'approvedBy' | 'disapprovedAt' | 'disapprovedBy'>,
+    ticket: Pick<
+      TicketFull,
+      'id' | 'status' | 'approvedAt' | 'approvedBy' | 'disapprovedAt' | 'disapprovedBy'
+    >,
     verdict: Verdict,
   ) => {
-    if (verdict !== 'disapproved') return judge.mutate({ ticketId: lane.id, verdict })
-    const before = { verdict: verdictOf(lane), status: lane.status }
-    const around = lane.id === t.id && parent ? laneNeighbours(parent.lanes, stages, lane.id, filter) : null
-    const go = around?.next ?? around?.prev ?? null
+    if (verdict !== 'disapproved') return judge.mutate({ ticketId: ticket.id, verdict })
+    const before = { verdict: verdictOf(ticket), status: ticket.status }
     judge.mutate(
-      { ticketId: lane.id, verdict },
+      { ticketId: ticket.id, verdict },
       {
         onSuccess: () => {
-          if (go)
-            navigate({
-              to: '/projects/$id/features/$ticketId',
-              params: { id, ticketId: String(go.id) },
-              search: laneSearch(filter),
-            })
-          toast(`#${lane.id} disapproved and cancelled`, {
-            description: `Undo takes back the disapproval and returns it to ${stageOf(stages, before.status).name}${
-              go ? `. Moved on to #${go.id}.` : '.'
-            }`,
+          toast(`#${ticket.id} disapproved and cancelled`, {
+            description: `Undo takes back the disapproval and returns it to ${stageOf(stages, before.status).name}.`,
             duration: 10_000,
             action: {
               label: 'Undo',
               onClick: () =>
-                judge.mutate({ ticketId: lane.id, verdict: before.verdict, reopenTo: before.status }),
+                judge.mutate({ ticketId: ticket.id, verdict: before.verdict, reopenTo: before.status }),
             },
           })
         },
       },
     )
   }
-  const openLanes = t.lanes.filter((l) => !isClosed(stageOf(stages, l.status).kind)).length
   const kind = stageOf(stages, t.status).kind
-  const lanesWarning = openLanes > 0 && (kind === 'review' || kind === 'done')
   // null: a section with nothing to show on this ticket. It is left out of its column, so a column
   // with nothing left to show is not drawn and the other one takes the page's width.
   const sections: Record<AreaId<'ticket.main'>, ReactNode> = {
@@ -381,7 +385,7 @@ function TicketPage() {
     ),
     'ticket.lanes': (
       <div id="lanes" className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)]">
-        <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
+        <Lanes t={t} filter={filter} onFilter={setFilter} />
       </div>
     ),
     'ticket.activity': (
@@ -392,13 +396,22 @@ function TicketPage() {
         </ShownAnchor>
       </div>
     ),
-    'ticket.runs': gitSide && runs.shown ? <RunsCard t={t} git={git} onChange={invalidate} /> : null,
+    'ticket.runs':
+      gitSide && runs.shown ? (
+        <RunsCard t={t} git={git} onChange={invalidate} />
+      ) : gitSide && runs.loading ? (
+        <DelayedLoading label="Loading runs…">
+          <SkeletonCard className="p-3" lines={2} />
+        </DelayedLoading>
+      ) : null,
     'ticket.resume': resume.shown ? <ResumeCard t={t} onChange={invalidate} /> : null,
     'ticket.details': (
       <Details key={t.id} t={t} git={gitSide} includes={git?.includes} onSave={(p) => update.mutate(p)} />
     ),
-    'ticket.branch': gitSide ? <BranchPanel t={t} git={git} /> : null,
-    'ticket.workspaces': gitSide ? <WorkspacesPanel t={t} git={git} onChange={invalidate} /> : null,
+    'ticket.branch': gitSide ? <BranchPanel t={t} git={git} gitFailed={Boolean(ticketGitError)} /> : null,
+    'ticket.workspaces': gitSide ? (
+      <WorkspacesPanel t={t} git={git} gitFailed={Boolean(ticketGitError)} onChange={invalidate} />
+    ) : null,
   }
   const main = layout ? shownIn(layout, 'ticket.main').filter((s) => sections[s] != null) : []
   const side = layout ? shownIn(layout, 'ticket.side').filter((s) => sections[s] != null) : []
@@ -412,45 +425,30 @@ function TicketPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-        <Link to="/projects/$id/features" params={{ id }} className="hover:text-foreground">
-          Ongoing features
-        </Link>
-        {t.ancestors.map((a) => (
-          <span key={a.id} className="inline-flex min-w-0 items-center gap-1">
-            <ChevronRight className="size-3.5 shrink-0" />
-            <Link
-              to="/projects/$id/features/$ticketId"
-              params={{ id, ticketId: String(a.id) }}
-              // Back to the parent's list with the filter it had.
-              search={a.id === t.parentId ? laneSearch(filter) : {}}
-              className="max-w-64 truncate hover:text-foreground"
-            >
-              #{a.id} {a.title}
-            </Link>
-          </span>
-        ))}
-        <ChevronRight className="size-3.5" />
-        <span className="text-foreground">#{t.id}</span>
-      </nav>
+      <Breadcrumbs ref={crumbs} projectId={id} t={t} filter={filter} />
 
       {/* The header stays in view once scrolled up to the top bar (h-12 and its border), with the
             page scrolling under it: opaque, above the feed's positioned bits, below the top bar.
             Its padding keeps the title off the top bar's edge; the margins take it back at rest. */}
       <header
         ref={measureHeader}
-        className="sticky top-[calc(3rem+1px+env(safe-area-inset-top))] z-10 -my-2 flex flex-wrap items-start gap-3 bg-background py-2"
+        className="sticky top-[calc(3rem+1px+env(safe-area-inset-top))] z-10 -mb-2 -mt-6 flex flex-wrap items-start gap-3 bg-background pb-2 pt-6"
       >
+        {/* The page's breadcrumbs, on a line above the title, while the page's own are scrolled away. The
+              header's top padding is the page's gap above it (the margin takes it back at rest), so this
+              line takes no room of its own: the header's height does not change when it comes and goes. It
+              sticks exactly when the page's own go under the top bar. */}
+        {crumbsAway && (
+          <div className="absolute inset-x-0 top-1 flex min-w-0 items-center">
+            <Breadcrumbs projectId={id} t={t} filter={filter} compact />
+          </div>
+        )}
         {/* At least 12rem wide: a toolbar too wide to sit beside it wraps under it, not squeezes the title. */}
         <div className="min-w-48 flex-1">
           <InlineTitle key={t.id} t={t} onSave={(title) => update.mutate({ title })} />
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <span>
-              opened by <Actor name={t.createdBy} short /> {ago(t.createdAt)}
-            </span>
-            <span>updated {ago(t.updatedAt)}</span>
+          <TicketLine createdBy={t.createdBy} createdAt={t.createdAt} updatedAt={t.updatedAt}>
             <InlineTags key={t.id} t={t} projectId={id} onSave={(tags) => update.mutate({ tags })} />
-          </div>
+          </TicketLine>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {t.archivedAt && (
@@ -472,21 +470,14 @@ function TicketPage() {
               <ArchiveRestore /> Restore
             </Button>
           )}
-          {lanesWarning && (
-            <Tip content="This ticket is marked further along than its lanes">
-              <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
-                <TriangleAlert className="size-3.5" /> {openLanes} lane{openLanes === 1 ? '' : 's'} not done
-              </span>
-            </Tip>
-          )}
           <NeedsStatus t={t} />
           {t.updates.some((u) => u.decision && !u.decidedAt) && (
             <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
               <Scale className="size-3.5" /> decision needed
             </span>
           )}
-          {/* Without a git side the human's approval is the hand-off: shown on every ticket, not only lanes. */}
-          {(t.parentId || verdictOf(t) || (!gitSide && kind === 'review')) && (
+          {/* Without a git side the human's approval is the hand-off. A lane has none: its stage is the call. A PR review (a lane tagged PR) keeps it, with or without a git side. */}
+          {!judgedByStage(t) && (t.parentId || verdictOf(t) || (!gitSide && kind === 'review')) && (
             <VerdictButtons t={t} disabled={judge.isPending} onSet={(verdict) => decide(t, verdict)} />
           )}
           <StatusSelect
@@ -600,13 +591,230 @@ function TicketPage() {
           </div>
         )}
         {side.length > 0 && (
-          <aside data-ticket-column="side" className="min-w-0 space-y-4">
+          <SideColumn>
             {side.map((s) => (
               <Fragment key={s}>{sections[s]}</Fragment>
             ))}
-          </aside>
+          </SideColumn>
         )}
       </div>
+    </div>
+  )
+}
+
+type CrumbsProps = { projectId: string; t: TicketFull; filter: LaneFilter }
+
+/**
+ * The path to the ticket: Ongoing features, the tickets it is a lane of, the ticket. At the top of the page,
+ * and again in the floating header (`compact`) while the page's own is scrolled away.
+ */
+function Breadcrumbs({
+  projectId,
+  t,
+  filter,
+  compact = false,
+  ref,
+}: CrumbsProps & { compact?: boolean; ref?: Ref<HTMLElement> }) {
+  return (
+    <nav
+      ref={ref}
+      aria-label="Breadcrumb"
+      className={cn(
+        'flex items-center gap-1 text-muted-foreground',
+        // The bar is one line: the path shortens (each ticket's title cut off) instead of wrapping.
+        compact ? 'min-w-0 flex-nowrap overflow-hidden text-xs' : 'flex-wrap text-sm',
+      )}
+    >
+      <Link
+        to="/projects/$id/features"
+        params={{ id: projectId }}
+        className={cn('hover:text-foreground', compact && 'shrink-0')}
+      >
+        Ongoing features
+      </Link>
+      {t.ancestors.map((a) => (
+        <span key={a.id} className="inline-flex min-w-0 items-center gap-1">
+          <ChevronRight className="size-3.5 shrink-0" />
+          <Link
+            to="/projects/$id/features/$ticketId"
+            params={{ id: projectId, ticketId: String(a.id) }}
+            // Back to the parent's list with the filter it had.
+            search={a.id === t.parentId ? laneSearch(filter) : {}}
+            className={cn('truncate hover:text-foreground', compact ? 'max-w-32 sm:max-w-48' : 'max-w-64')}
+          >
+            #{a.id} {a.title}
+          </Link>
+        </span>
+      ))}
+      <ChevronRight className="size-3.5 shrink-0" />
+      <span className={cn('shrink-0', !compact && 'text-foreground')}>#{t.id}</span>
+    </nav>
+  )
+}
+
+/**
+ * Whether the page's own breadcrumbs (`page`) are scrolled out of view, up under the top bar: the floating
+ * header then shows them, and only then, so they are never on screen twice. The header's stuck offset is the
+ * top bar's height, which is where the page's breadcrumbs go out of sight. `drawn`: the page has its
+ * breadcrumbs and header.
+ */
+function useCrumbsAway(page: RefObject<HTMLElement | null>, drawn: boolean) {
+  const [away, setAway] = useState(false)
+  useEffect(() => {
+    const crumbs = page.current
+    const header = crumbs?.parentElement?.querySelector('header')
+    if (!drawn || !crumbs || !header) return
+    let seen: IntersectionObserver | undefined
+    const watch = () => {
+      seen?.disconnect()
+      const bar = parseFloat(getComputedStyle(header).top)
+      seen = new IntersectionObserver(([entry]) => setAway(scrolledAway(entry!, bar)), {
+        rootMargin: `-${bar}px 0px 0px 0px`,
+      })
+      seen.observe(crumbs)
+    }
+    watch()
+    // The top bar's height follows the device's safe area, which turns with the screen.
+    window.addEventListener('resize', watch)
+    return () => {
+      window.removeEventListener('resize', watch)
+      seen?.disconnect()
+    }
+  }, [page, drawn])
+  return away
+}
+
+/**
+ * The ticket page's side column. Side by side, it stays under the stuck header while the main column scrolls
+ * with the page, and scrolls by itself when it is taller than what is left of the window. Its scrollbar is
+ * not drawn, so it never stands beside the window's: the edge that has more behind it is blurred and faded
+ * instead, with a tiny arrow on it that scrolls a screenful that way. Stacked, it is part of the page's one
+ * scroll, with no fade and no arrow. The padding and the negative margin keep the focus rings of its cards
+ * inside the box the scroll clips to.
+ */
+function SideColumn({ children }: { children: ReactNode }) {
+  const column = useRef<HTMLElement>(null)
+  const up = useRef<HTMLButtonElement>(null)
+  const down = useRef<HTMLButtonElement>(null)
+  const [more, setMore] = useState({ above: false, below: false })
+  useEffect(() => {
+    const el = column.current
+    if (!el) return
+    const read = () => {
+      const above = el.scrollTop > 1
+      const below = el.scrollTop + el.clientHeight < el.scrollHeight - 1
+      setMore((m) => (m.above === above && m.below === below ? m : { above, below }))
+    }
+    read()
+    el.addEventListener('scroll', read, { passive: true })
+    // Its cards grow and shrink, and the window's height changes how much of it shows.
+    const resized = new ResizeObserver(read)
+    resized.observe(el)
+    for (const c of Array.from(el.children)) resized.observe(c)
+    const added = new MutationObserver(() => {
+      for (const c of Array.from(el.children)) resized.observe(c)
+      read()
+    })
+    added.observe(el, { childList: true })
+    return () => {
+      el.removeEventListener('scroll', read)
+      resized.disconnect()
+      added.disconnect()
+    }
+  }, [])
+  // An arrow that goes away under the keyboard (the end was reached) hands the focus to the other one.
+  useEffect(() => {
+    if (!more.below && document.activeElement === down.current) up.current?.focus()
+    if (!more.above && document.activeElement === up.current) down.current?.focus()
+  }, [more])
+  const go = (direction: 1 | -1) => {
+    const el = column.current
+    if (!el) return
+    const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    el.scrollBy({ top: direction * el.clientHeight * 0.85, behavior: calm ? 'auto' : 'smooth' })
+  }
+  return (
+    <div className="relative min-w-0 lg:sticky lg:top-[calc(var(--ticket-header,4rem)+1rem)] lg:-m-1 lg:self-start">
+      <aside
+        ref={column}
+        data-ticket-column="side"
+        data-more-above={more.above}
+        data-more-below={more.below}
+        className="min-w-0 space-y-4 lg:max-h-[calc(100dvh-var(--ticket-header,4rem)-1.5rem)] lg:overflow-y-auto lg:p-1 lg:[scrollbar-width:none] lg:[&::-webkit-scrollbar]:hidden"
+      >
+        {children}
+      </aside>
+      <SideEdge
+        edge="top"
+        shown={more.above}
+        label="Scroll the side column up"
+        onGo={() => go(-1)}
+        button={up}
+      />
+      <SideEdge
+        edge="bottom"
+        shown={more.below}
+        label="Scroll the side column down"
+        onGo={() => go(1)}
+        button={down}
+      />
+    </div>
+  )
+}
+
+/**
+ * One edge of the side column that has more behind it: the cards under it are blurred and fade into the
+ * page's background, and a tiny arrow sits centred on it. Side by side only; never in the way of the
+ * pointer except on the arrow itself.
+ */
+function SideEdge({
+  edge,
+  shown,
+  label,
+  onGo,
+  button,
+}: {
+  edge: 'top' | 'bottom'
+  shown: boolean
+  label: string
+  onGo: () => void
+  button: RefObject<HTMLButtonElement | null>
+}) {
+  const top = edge === 'top'
+  const Arrow = top ? ChevronUp : ChevronDown
+  return (
+    <div
+      data-side-edge={edge}
+      aria-hidden={!shown}
+      className={cn(
+        'pointer-events-none absolute inset-x-0 hidden h-11 transition-opacity duration-150 motion-reduce:transition-none lg:block',
+        top ? 'top-0' : 'bottom-0',
+        shown ? 'opacity-100' : 'invisible opacity-0',
+      )}
+    >
+      <div
+        className={cn(
+          'absolute inset-0 bg-linear-to-b backdrop-blur-[3px]',
+          top
+            ? 'from-background via-background/70 to-transparent [mask-image:linear-gradient(to_bottom,#000_30%,transparent)]'
+            : 'from-transparent via-background/70 to-background [mask-image:linear-gradient(to_top,#000_30%,transparent)]',
+        )}
+      />
+      <Tip content={label}>
+        <button
+          ref={button}
+          type="button"
+          tabIndex={shown ? 0 : -1}
+          aria-label={label}
+          onClick={onGo}
+          className={cn(
+            'pointer-events-auto absolute left-1/2 flex size-5 -translate-x-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+            top ? 'top-0.5' : 'bottom-0.5',
+          )}
+        >
+          <Arrow className="size-3.5" aria-hidden />
+        </button>
+      </Tip>
     </div>
   )
 }
@@ -919,7 +1127,7 @@ function Instructions({
       ) : t.body ? (
         <>
           {/* Clicking the text edits it; a link inside still opens. */}
-          <Tip content="Click to edit">
+          <Tip content="Click to edit" followPointer>
             <div
               role="button"
               tabIndex={0}
@@ -1502,17 +1710,6 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
 const BLOCKED_CHIP =
   'shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] leading-none font-medium text-amber-700 dark:text-amber-400'
 
-const VERDICT_LABEL: Record<LaneVerdict, string> = {
-  approved: 'Approved',
-  disapproved: 'Disapproved',
-  none: 'No call',
-}
-const VERDICT_TAG: Record<LaneVerdict, string> = {
-  approved: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
-  disapproved: 'bg-red-500/15 text-red-700 dark:text-red-400',
-  none: 'bg-muted text-muted-foreground',
-}
-
 /** One row of filter chips: "All" clears it, each chip toggles; a chip with nothing to show dims. */
 function FilterRow<K extends string>({
   label,
@@ -1725,22 +1922,16 @@ function Lanes({
   t,
   filter: wanted,
   onFilter,
-  onVerdict,
-  judging,
 }: {
   t: TicketFull
   filter: LaneFilter
   onFilter: (f: LaneFilter) => void
-  onVerdict: (lane: TicketFull['lanes'][number], verdict: Verdict) => void
-  judging: boolean
 }) {
   const stages = useStages(t.projectId)
   const kindOf = (l: { status: string }) => stageOf(stages, l.status).kind
   const done = t.lanes.filter((l) => kindOf(l) === 'done').length
   const cancelled = t.lanes.filter((l) => kindOf(l) === 'cancelled').length
-  const approved = t.lanes.filter((l) => l.approvedAt).length
-  const disapproved = t.lanes.filter((l) => l.disapprovedAt).length
-  // Filter by stage, tag and verdict: within a row any picked chip matches, across rows all must.
+  // Filter by stage and tag: within a row any picked chip matches, across rows all must.
   // Each row counts the lanes the other rows let through, so a number is what clicking it would show.
   const filter = effectiveFilter(t.lanes, wanted)
   const toggled = <T,>(list: T[], key: T) =>
@@ -1751,7 +1942,7 @@ function Lanes({
     for (const tag of l.tags) {
       const key = tag.toLowerCase()
       const entry = tagCounts.get(key) ?? { tag, count: 0 }
-      if (stageOk(l, filter) && verdictOk(l, filter)) entry.count++
+      if (stageOk(l, filter)) entry.count++
       tagCounts.set(key, entry)
     }
   const tags = [...tagCounts.values()].sort((a, b) => compareTags(a.tag, b.tag))
@@ -1762,20 +1953,11 @@ function Lanes({
       label: (
         <span className={`rounded-full px-1.5 py-px text-[11px] font-medium ${stageBadge(s)}`}>{s.name}</span>
       ),
-      count: t.lanes.filter((l) => l.status === s.key && tagOk(l, filter) && verdictOk(l, filter)).length,
+      count: t.lanes.filter((l) => l.status === s.key && tagOk(l, filter)).length,
     }))
-  const verdictChips = LANE_VERDICTS.filter((v) => t.lanes.some((l) => laneVerdict(l) === v)).map((v) => ({
-    key: v,
-    label: (
-      <span className={`rounded-full px-1.5 py-px text-[11px] font-medium ${VERDICT_TAG[v]}`}>
-        {VERDICT_LABEL[v]}
-      </span>
-    ),
-    count: t.lanes.filter((l) => laneVerdict(l) === v && stageOk(l, filter) && tagOk(l, filter)).length,
-  }))
   const filtering = isFiltering(filter)
   const lanes = sortLanes(
-    t.lanes.filter((l) => stageOk(l, filter) && tagOk(l, filter) && verdictOk(l, filter)),
+    t.lanes.filter((l) => stageOk(l, filter) && tagOk(l, filter)),
     stages,
   )
   return (
@@ -1786,8 +1968,7 @@ function Lanes({
         </h2>
         {t.lanes.length > 0 && (
           <span className="text-xs tabular-nums text-muted-foreground">
-            {done}/{t.lanes.length - cancelled} done · {approved} approved
-            {disapproved > 0 && ` · ${disapproved} disapproved`}
+            {done}/{t.lanes.length - cancelled} done
             {cancelled > 0 && ` · ${cancelled} cancelled`}
             {t.rollup.total > t.progress.total && ` · all tasks ${t.rollup.done}/${t.rollup.total}`}
           </span>
@@ -1811,15 +1992,6 @@ function Lanes({
               onToggle={(s) => onFilter({ ...filter, stages: toggled(filter.stages, s) })}
               onClear={() => onFilter({ ...filter, stages: [] })}
             />
-            {verdictChips.length > 1 && (
-              <FilterRow
-                label="Verdict"
-                chips={verdictChips}
-                active={filter.verdicts}
-                onToggle={(v) => onFilter({ ...filter, verdicts: toggled(filter.verdicts, v) })}
-                onClear={() => onFilter({ ...filter, verdicts: [] })}
-              />
-            )}
             {tags.length > 0 && (
               <FilterRow
                 label="Tags"
@@ -1852,19 +2024,11 @@ function Lanes({
                 key={l.id}
                 className="flex flex-col gap-1 p-3 transition-colors hover:bg-muted/50 sm:flex-row sm:items-start sm:p-0"
               >
-                <span className="order-3 shrink-0 pt-1 sm:order-none sm:py-2 sm:pr-1 sm:pl-3">
-                  <VerdictButtons
-                    t={l}
-                    compact
-                    disabled={judging}
-                    onSet={(verdict) => onVerdict(l, verdict)}
-                  />
-                </span>
                 <Link
                   to="/projects/$id/features/$ticketId"
                   params={{ id: String(t.projectId), ticketId: String(l.id) }}
                   search={laneSearch(filter)}
-                  className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-3 sm:py-2.5 sm:pr-3 sm:pl-2"
+                  className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-3 sm:py-2.5 sm:pr-3 sm:pl-3"
                 >
                   <Tip content={stageOf(stages, l.status).name}>
                     <span
@@ -2355,7 +2519,13 @@ function SummaryCard({ t }: { t: TicketFull }) {
       {!s.fallback && <SummaryReplies key={s.postId} postId={s.postId} count={replies(s.postId)} />}
       {history && (
         <ol aria-label="Earlier versions" className="mt-3 space-y-3 border-t pt-3">
-          {!data && <li className="text-xs text-muted-foreground">Loading…</li>}
+          {!data && (
+            <li>
+              <DelayedLoading label="Loading earlier versions…">
+                <SkeletonText lines={2} />
+              </DelayedLoading>
+            </li>
+          )}
           {earlier.map((v) => (
             <li
               key={v.postId}
@@ -2787,7 +2957,7 @@ function PrLine({ pr }: { pr: NonNullable<TicketFull['pr']> }) {
 }
 
 /** The ticket's branch: its git state and its PR; one panel per repo when it spans several. */
-function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
+function BranchPanel({ t, git, gitFailed }: { t: TicketFull; git?: TicketGit; gitFailed?: boolean }) {
   if ((git?.repos.length ?? 0) > 1)
     return (
       <>
@@ -2843,6 +3013,11 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
             </div>
           )}
           {git && <Info info={git.info} />}
+          {!git && !gitFailed && (
+            <DelayedLoading label="Loading branch state…" className="mt-1">
+              <SkeletonText lines={2} />
+            </DelayedLoading>
+          )}
         </>
       ) : (
         <p className="text-xs text-muted-foreground">No branch yet: pick one above, or the agent sets it.</p>
@@ -2854,7 +3029,17 @@ function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
 }
 
 /** The worktrees, sub-branches and sandboxes opened for the ticket and its lanes. */
-function WorkspacesPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
+function WorkspacesPanel({
+  t,
+  git,
+  gitFailed,
+  onChange,
+}: {
+  t: TicketFull
+  git?: TicketGit
+  gitFailed?: boolean
+  onChange: () => void
+}) {
   const remove = useMutation({
     mutationFn: (id: number) => del(`/api/workspaces/${id}`),
     onSuccess: onChange,
@@ -2863,6 +3048,11 @@ function WorkspacesPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
   return (
     <section className="rounded-lg border p-3">
       <h2 className="mb-2 text-sm font-medium">Workspaces</h2>
+      {!git && !gitFailed && (
+        <DelayedLoading label="Loading workspaces…" className="mb-2">
+          <SkeletonText lines={1} />
+        </DelayedLoading>
+      )}
       <p className="mb-2 text-xs text-muted-foreground">
         Worktrees, sub-branches and subagent sandboxes the agents opened for this ticket
         {t.lanes.length > 0 && ' and its lanes'}.

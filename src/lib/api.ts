@@ -35,6 +35,10 @@ import type { Gallery, GalleryFile } from '#/server/gallery'
 import type { HostTool, HostTools } from '#/server/hostTools'
 import type { JobState } from '#/server/jobs'
 import type { AgentCard, NoticeCard, TrackedCard } from '#/server/agentCards'
+import type { AlertTypeView } from '#/server/alerts/actions'
+import type { FeedItem } from '#/server/alerts/feed'
+import type { AlertGroup, AlertSeverity } from '#/lib/alerts'
+import type { AlertButton } from '#/server/alerts/registry'
 import type { ManagedPreview } from '#/server/managedPreview'
 import type { OpencodeConfig } from '#/server/opencodeConfig'
 import type { ResumeView, ticketResume } from '#/server/resume'
@@ -58,6 +62,7 @@ import type { ProjectNote } from '#/server/notes'
 import type { CarryOver, ProjectSummary, Summary } from '#/server/summary'
 import type { ActorRole, ActorRow } from '#/server/actors'
 import type { AgentTokenRow } from '#/server/tokens'
+import type { LiveWork } from '#/server/liveWork'
 import type { ProjectWork, TicketEvent } from '#/server/workTimeline'
 import type { WorkTimeline } from './workTimeline'
 
@@ -72,6 +77,8 @@ export type Project = ProjectFull
  * which Needs you entries that actor has opened (`needsYou.ts`), per actor.
  */
 export type SummaryPayload = Summary & { actor: string }
+/** `/api/projects/:id/live-work`: who is on which ticket right now, and how long since each was heard. */
+export type LiveWorkPayload = LiveWork
 /** A row of `/api/projects`: the project, its repos, and how many tickets and open PRs it holds. */
 export type ProjectRow = ReturnType<typeof listProjects>[number]
 
@@ -109,7 +116,7 @@ export type {
   WorkspacePreview,
 }
 export type { ActorRole, ActorRow, AgentTokenRow, ProjectInstructionChange }
-export type { RunReport, RunReportRow } from './runReports'
+export type { RunReport } from './runReports'
 export type {
   PushedToday,
   ReportDue,
@@ -124,6 +131,11 @@ export type {
 
 export type {
   AgentCard,
+  AlertButton,
+  AlertGroup,
+  AlertSeverity,
+  AlertTypeView,
+  FeedItem,
   NoticeCard,
   TrackedCard,
   Attachment,

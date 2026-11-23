@@ -73,18 +73,16 @@ describe("a project's layout", () => {
     const res = await call('PATCH', `/api/projects/${p}`, { layout })
     expect(res.status, JSON.stringify(res.body)).toBe(200)
     const nav = inArea(res.body.layout, 'nav')
-    // The pages it left out, each after the one before it by default: Team to Settings (Repositories and
-    // Instructions among them) after Gallery, PR queue to Previews after Overview, which shows though it
+    // The pages it left out, each after the one before it by default: Team to Instructions (Repositories among
+    // them) after Gallery, PR queue to Previews after Overview, which shows though it
     // was sent hidden.
     expect(nav.map((it) => it.id)).toEqual([
       'nav.gallery',
       'nav.agents',
-      'nav.runReports',
       'nav.daily',
       'nav.cleanup',
       'nav.repositories',
       'nav.instructions',
-      'nav.settings',
       'nav.overview',
       'nav.prs',
       'nav.features',
@@ -116,6 +114,7 @@ describe("a project's layout", () => {
     const summary = await call('GET', `/api/summary?projectId=${p}`)
     expect(summary.body.projects[0].project.overview).toEqual([
       'overview.needsYou',
+      'overview.agents',
       'overview.inProgress',
       'overview.next',
       'overview.carryingOver',

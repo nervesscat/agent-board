@@ -20,6 +20,5 @@ CREATE TABLE `ticket_resumes` (
 --> statement-breakpoint
 CREATE INDEX `ticket_resumes_ticket` ON `ticket_resumes` (`ticket_id`);--> statement-breakpoint
 ALTER TABLE `projects` ADD `resume_command` text DEFAULT '' NOT NULL;--> statement-breakpoint
-ALTER TABLE `projects` ADD `resume_timeout_minutes` integer DEFAULT 240 NOT NULL;
---> statement-breakpoint
+ALTER TABLE `projects` ADD `resume_timeout_minutes` integer DEFAULT 240 NOT NULL;--> statement-breakpoint
 ALTER TABLE `updates` ADD `answer_delivered` text DEFAULT '' NOT NULL;

@@ -334,21 +334,24 @@ export function timelinesFor(
       ...(posts.get(p.ticketId) ?? []),
       { at: p.createdAt, agent: p.author, human: humans.has(p.author) },
     ])
+  // Every decision card: when it was posted and answered. One still unanswered makes the ticket wait on the human.
+  const cards = new Map<number, { at: string; decidedAt: string | null }[]>()
+  if (ids.length)
+    for (const r of db
+      .select({
+        ticketId: schema.updates.ticketId,
+        createdAt: schema.updates.createdAt,
+        decidedAt: schema.updates.decidedAt,
+      })
+      .from(schema.updates)
+      .where(and(inArray(schema.updates.ticketId, ids), isNotNull(schema.updates.decision)))
+      .all())
+      cards.set(r.ticketId, [
+        ...(cards.get(r.ticketId) ?? []),
+        { at: r.createdAt, decidedAt: r.decidedAt ?? null },
+      ])
   const deciding = new Set(
-    ids.length
-      ? db
-          .select({ ticketId: schema.updates.ticketId })
-          .from(schema.updates)
-          .where(
-            and(
-              inArray(schema.updates.ticketId, ids),
-              isNotNull(schema.updates.decision),
-              isNull(schema.updates.decidedAt),
-            ),
-          )
-          .all()
-          .map((r) => r.ticketId)
-      : [],
+    [...cards].flatMap(([id, list]) => (list.some((c) => c.decidedAt === null) ? [id] : [])),
   )
   const projects = new Map<number, { stages: Stage[]; stallMinutes: number }>()
   const projectOf = (id: number) => {
@@ -463,6 +466,7 @@ export function timelinesFor(
         stallMinutes,
         posts: posts.get(t.id) ?? [],
         waiting: { decision: deciding.has(t.id), blockedTask: blockedNext(t.id) },
+        decisions: cards.get(t.id) ?? [],
         progressAt: progressAt(t.id),
       })
       return [t.id, { events, timeline }] as const

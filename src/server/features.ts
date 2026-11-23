@@ -4,6 +4,7 @@ import { db, schema } from '#/db'
 import { retryWhileLocked } from '#/db/busy'
 import { COMMENT_PARENTS, type Complexity, DEFAULT_COMPLEXITY, type FeedTab } from '#/lib/constants'
 import { hasGitSide } from '#/lib/kinds'
+import { judgedByStage } from '#/lib/lanes'
 import { AUTO_PHASE_RULE, autoPhaseOf } from '#/lib/autoPhases'
 import { columnOrder, isClosed, placeInColumn, stageColumn } from '#/lib/stages'
 import { nextTask, treeTasks } from '#/lib/tasks'
@@ -70,8 +71,6 @@ import { noteBoardEvent, noteStageMove } from './workTimeline'
 type Progress = { done: number; total: number }
 export type LaneCounts = {
   total: number
-  approved: number
-  disapproved: number
   /** Lanes per stage key. */
   byStage: Record<string, number>
 }
@@ -147,11 +146,9 @@ function projectTickets(projectId: number, opts: { prTickets?: boolean } = {}) {
   const blockedNext = (id: number): boolean =>
     workingLanes(id).some((lane) => blockedNext(lane.id)) || nextBlocked.get(id) === true
   return rows.map((t) => {
-    const lanes: LaneCounts = { total: 0, approved: 0, disapproved: 0, byStage: {} }
+    const lanes: LaneCounts = { total: 0, byStage: {} }
     for (const lane of children.get(t.id) ?? []) {
       lanes.total++
-      if (lane.approvedAt) lanes.approved++
-      if (lane.disapprovedAt) lanes.disapproved++
       lanes.byStage[lane.status] = (lanes.byStage[lane.status] ?? 0) + 1
     }
     // Assigned to one of the project's agents: only that agent works it.
@@ -434,7 +431,8 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     rollup: self.rollup,
     blockedTasks: self.blockedTasks,
     ancestors,
-    lanes: lanes.map((l) => {
+    // A lane is judged by its stage, so its entry carries no approval or disapproval.
+    lanes: lanes.map(({ approvedAt: _a, approvedBy: _b, disapprovedAt: _c, disapprovedBy: _d, ...l }) => {
       const u = lastUpdate.get(l.id)
       return {
         ...l,
@@ -1088,7 +1086,19 @@ export function approvalCloses(
 }
 
 /**
- * The human's call on a ticket or lane: approve it, disapprove it (which moves it to the project's
+ * A lane has no call of its own: the human judges it by its stage. Thrown for any call on one (a PR
+ * review, which sits under the review queue, keeps its approval).
+ */
+export function refuseLaneVerdict(t: Pick<schema.Ticket, 'id' | 'parentId' | 'tags'>) {
+  if (judgedByStage(t))
+    throw new HttpError(
+      409,
+      `lane #${t.id} is judged by its stage, not approved or disapproved: move it to Approved, Done or Cancelled instead`,
+    )
+}
+
+/**
+ * The human's call on a ticket: approve it, disapprove it (which moves it to the project's
  * first cancelled stage), or clear the call. Approving a ticket in a review stage moves it to Approved
  * (the review-kind stage the default layout puts after In review), where an orchestrator merges the PR
  * without asking again, the move there being the human's go-ahead; approving a PR review (a ticket tagged `PR`) finishes it in the first
@@ -1102,6 +1112,7 @@ export function approvalCloses(
  */
 export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { reopenTo?: string } = {}) {
   const t = getTicket(id)
+  refuseLaneVerdict(t)
   if (t.prId && verdict !== null)
     throw new HttpError(
       409,
@@ -1164,10 +1175,9 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     .where(eq(schema.tickets.id, id))
     .returning()
     .get()!
-  if (t.parentId) touch(t.parentId)
   noteStageMove(id, t.status, row.status)
   if (row.status !== t.status) stopIfClosed(row, stages, actor)
-  const what = `${t.parentId ? 'lane' : 'ticket'} #${id} ${t.title}`
+  const what = `ticket #${id} ${t.title}`
   logActivity({
     projectId: t.projectId,
     actor,
@@ -1534,20 +1544,26 @@ type BlockedTag = { blocked?: boolean; blockedReason?: string }
  */
 function blockedTag(
   input: BlockedTag,
-  current: Pick<schema.Task, 'blocked' | 'blockedReason'> | null,
-): { blocked: boolean; blockedReason: string } | null {
+  current: Pick<schema.Task, 'blocked' | 'blockedReason' | 'blockedAt'> | null,
+): { blocked: boolean; blockedReason: string; blockedAt: string | null } | null {
   const reason = input.blockedReason?.trim()
   if (reason !== undefined && reason.length > MAX_BLOCKED_REASON)
     throw new HttpError(400, `blockedReason is longer than ${MAX_BLOCKED_REASON} characters`)
-  if (input.blocked === false) return { blocked: false, blockedReason: '' }
+  if (input.blocked === false) return { blocked: false, blockedReason: '', blockedAt: null }
   const blocked = input.blocked ?? current?.blocked ?? false
   if (reason && !blocked) throw new HttpError(400, 'blockedReason goes with blocked: true')
   if (!blocked || (input.blocked === undefined && reason === undefined)) return null
-  return { blocked: true, blockedReason: reason ?? (current?.blocked ? current.blockedReason : '') }
+  return {
+    blocked: true,
+    blockedReason: reason ?? (current?.blocked ? current.blockedReason : ''),
+    // The wait began when the tag first went on: a reworded reason keeps it.
+    blockedAt: (current?.blocked && current.blockedAt) || new Date().toISOString(),
+  }
 }
 
 /** What a tick writes besides `done`: a done task waits on nobody, so its tag goes. */
-const ticked = (done: boolean) => (done ? { done, blocked: false, blockedReason: '' } : { done })
+const ticked = (done: boolean) =>
+  done ? { done, blocked: false, blockedReason: '', blockedAt: null } : { done }
 
 /** Each new task's tag, null for a plain text; one bad tag refuses them all. */
 function newTaskTags(items: NewTask[]) {
