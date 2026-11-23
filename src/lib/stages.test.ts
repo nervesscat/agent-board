@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { DEFAULT_STAGES } from './constants'
 import {
+  carryingOverStages,
   columnNeighbours,
   mergeAfter,
   newTicketStage,
@@ -269,5 +270,30 @@ describe('the stage a new ticket starts on', () => {
 
   it('is none until the stages have loaded', () => {
     expect(newTicketStage([])).toBeUndefined()
+  })
+})
+
+describe('carrying over stages', () => {
+  it('are the blocked stage and In review, not Approved or Release', () => {
+    const stages: StageLike[] = [
+      ...DEFAULT_STAGES,
+      { key: 'release', name: 'Release', kind: 'review', color: 'gray' },
+    ]
+    expect([...carryingOverStages(stages)].sort()).toEqual(['blocked', 'review'])
+  })
+
+  it('count every blocked stage and only the first review stage', () => {
+    const stages: StageLike[] = [
+      { key: 'todo', name: 'To do', kind: 'open', color: 'gray' },
+      { key: 'waiting', name: 'Waiting', kind: 'blocked', color: 'amber' },
+      { key: 'stuck', name: 'Stuck', kind: 'blocked', color: 'amber' },
+      { key: 'checking', name: 'Checking', kind: 'review', color: 'violet' },
+      { key: 'approved', name: 'Approved', kind: 'review', color: 'teal' },
+    ]
+    expect([...carryingOverStages(stages)].sort()).toEqual(['checking', 'stuck', 'waiting'])
+  })
+
+  it('are none when the project has neither', () => {
+    expect(carryingOverStages([{ key: 'todo', name: 'To do', kind: 'open', color: 'gray' }]).size).toBe(0)
   })
 })

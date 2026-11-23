@@ -14,11 +14,11 @@ import {
 
 /**
  * The work timeline on the ticket page: the Timeline card's header (what is open, stalled and why, last
- * heard), its story (behind "Show more", oldest first, folded runs, paired waits), its heartbeats, and an
+ * heard), its story (behind "Show more", oldest first, folded runs, paired waits, no heartbeats), and an
  * event row on a phone.
  */
 
-test('the ticket page has a Timeline card: what is open, the story, heartbeats folded', async ({
+test('the ticket page has a Timeline card: what is open and the story, with no heartbeats row', async ({
   page,
   project,
   human,
@@ -67,17 +67,10 @@ test('the ticket page has a Timeline card: what is open, the story, heartbeats f
   await expect(events).toContainText('waited for the lock (test lock) · 20 min')
   await expect(events).toContainText('created in In progress')
   await expect(events).not.toContainText('stopped waiting')
-  // The heartbeats are folded away: the count and the button say so, and their notes are not rows yet.
-  await expect(events).not.toContainText('heartbeat: ')
-  await expect(card.getByText(/^3 heartbeats, last /)).toBeVisible()
-  await expect(card.getByRole('button', { name: 'Show heartbeats' })).toHaveAttribute(
-    'aria-expanded',
-    'false',
-  )
-  await card.getByRole('button', { name: 'Show heartbeats' }).click()
-  await expect(events.getByText(/^heartbeat: /)).toHaveCount(3)
-  await expect(events).toContainText('heartbeat: running the tests')
-  await expect(card.getByRole('button', { name: 'Hide heartbeats' })).toHaveAttribute('aria-expanded', 'true')
+  // The heartbeats are not in the card at all: no button, no count, and their notes are not rows.
+  await expect(events).not.toContainText('heartbeat')
+  await expect(card.getByRole('button', { name: /heartbeats/ })).toHaveCount(0)
+  await expect(card.getByText(/\d heartbeats?, last /)).toHaveCount(0)
 
   // Each actor's run has its actor line once; the board's own run names the board, with its own badge.
   const created = events.locator(':scope > li').filter({ hasText: 'created in In progress' })
@@ -120,7 +113,7 @@ test('the ticket page has a Timeline card: what is open, the story, heartbeats f
   expect(errors).toEqual([])
 })
 
-test('consecutive rows of one actor fold under one actor line; the heartbeats fold into the run', async ({
+test('consecutive rows of one actor fold under one actor line, and the heartbeats are not rows of it', async ({
   page,
   project,
   human,
@@ -142,16 +135,12 @@ test('consecutive rows of one actor fold under one actor line; the heartbeats fo
   await expect(runs).toHaveCount(2)
   const agentRun = runs.last()
   await expect(agentRun.locator(':scope > div')).toHaveCount(1)
-  // Heartbeats stay out of the run until they are asked for; the rows keep their order, start to end.
+  // Heartbeats are never rows; the rows keep their order, start to end.
   await expect(agentRun.locator(':scope > ul > li')).toHaveCount(3)
   await expect(agentRun.locator(':scope > ul > li').nth(0)).toContainText('started spec')
   await expect(agentRun.locator(':scope > ul > li').nth(1)).toContainText('ended spec: spec written')
   await expect(agentRun.locator(':scope > ul > li').nth(2)).toContainText('started build')
-  await page.getByRole('button', { name: 'Show heartbeats' }).click()
-  await expect(runs).toHaveCount(2)
-  await expect(agentRun.locator(':scope > ul > li')).toHaveCount(5)
-  await expect(agentRun.locator(':scope > ul > li').nth(1)).toContainText('heartbeat: drafting the spec')
-  await expect(agentRun.locator(':scope > ul > li').nth(4)).toContainText('heartbeat: writing the importer')
+  await expect(page.getByRole('button', { name: /heartbeats/ })).toHaveCount(0)
 })
 
 test('the story is folded behind Show more, and reads from the start to the end', async ({

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Empty } from '#/components/Empty'
+import { DelayedLoading } from '#/components/Loading'
 import { ReachBadge } from '#/components/ReachBadge'
 import { TrashIcon } from '#/components/TrashIcon'
 import {
@@ -24,6 +25,7 @@ import { Progress } from '#/components/ui/progress'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '#/components/ui/table'
 import { Tip } from '#/components/ui/tooltip'
+import { useDelayedFlag } from '#/lib/useDelayedFlag'
 import {
   del,
   errorMessage,
@@ -136,6 +138,8 @@ function Cleanup() {
     queryKey: ['cleanup', id],
     queryFn: () => get<CleanupReport>(`/api/projects/${id}/cleanup`),
   })
+  // A refresh that is quick, or one that keeps the rows, shows no spinner.
+  const spinning = useDelayedFlag(isFetching)
   const rows = (data?.tickets ?? []).flatMap<Row>((ticket) =>
     ticket.branches.length
       ? ticket.branches.map((branch) => ({ ticket, branch }))
@@ -243,7 +247,8 @@ function Cleanup() {
           onClick={() => refetch()}
           disabled={isFetching}
         >
-          <RefreshCw data-icon="inline-start" className={isFetching ? 'animate-spin' : ''} /> Refresh
+          <RefreshCw data-icon="inline-start" className={spinning ? 'motion-safe:animate-spin' : ''} />{' '}
+          Refresh
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
@@ -308,7 +313,23 @@ function Cleanup() {
         />
       )}
       {isLoading ? (
-        <Skeleton className="h-64" />
+        <DelayedLoading label="Loading cleanup…">
+          <div aria-hidden className="space-y-1.5">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-4 w-2/3" />
+            <div className="space-y-2">
+              {Array.from({ length: 4 }, (_, i) => (
+                <div key={i} className="flex items-center gap-3 rounded-lg border p-3">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Skeleton className="h-4 w-1/2" />
+                    <Skeleton className="h-3 w-1/3" />
+                  </div>
+                  <Skeleton className="h-7 w-20" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </DelayedLoading>
       ) : !rows.length && !data?.untracked.length ? (
         <Empty>Nothing left behind. Every closed ticket is cleaned up.</Empty>
       ) : (
