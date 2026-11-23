@@ -3,7 +3,6 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { db, schema } from '#/db'
 import { retryWhileLocked } from '#/db/busy'
 import { COMMENT_PARENTS, type Complexity, DEFAULT_COMPLEXITY, type FeedTab } from '#/lib/constants'
-import type { WorkflowPresetId } from '#/lib/workflow'
 import { hasGitSide } from '#/lib/kinds'
 import { AUTO_PHASE_RULE, autoPhaseOf } from '#/lib/autoPhases'
 import { columnOrder, isClosed, placeInColumn, stageColumn } from '#/lib/stages'
@@ -62,6 +61,7 @@ import {
 } from './stages'
 import { assertUnattached, attachTo, attachmentView } from './uploads'
 import { noteBoardEvent, noteStageMove } from './workTimeline'
+import { assertWorkflowId } from './workflow'
 
 // --- tickets ---
 
@@ -593,8 +593,8 @@ export function createTicket(
     status?: string
     /** How much review it gets; a lane's parent's when left out, else the default. */
     complexity?: Complexity
-    /** The workflow preset it follows instead of its project's; a lane's parent's when left out, null follows the project's. */
-    workflowPreset?: WorkflowPresetId | null
+    /** The workflow (a preset's id or one of the project's own) it follows instead of its project's; a lane's parent's when left out, null follows the project's. */
+    workflowPreset?: string | null
     assignee?: string
     branch?: string
     baseBranch?: string
@@ -620,6 +620,8 @@ export function createTicket(
       input.repos,
     )
   if (parent?.prId) throw new HttpError(400, `ticket ${parent.id} is a PR's: it has no lanes`)
+  // Likewise the workflow it names: a preset, or one of this project's own.
+  assertWorkflowId(projectId, input.workflowPreset)
   // Checked before the ticket exists, so a bad file does not leave a ticket behind without its files.
   const attachmentIds = input.attachmentIds ?? []
   assertUnattached(attachmentIds)
@@ -827,6 +829,7 @@ export function updateTicket(
     if (agent) patch = { ...patch, assignee: agent.name }
   }
   if (patch.repoId) resolveRepo(before.projectId, patch.repoId)
+  if (patch.workflowPreset !== undefined) assertWorkflowId(before.projectId, patch.workflowPreset)
   if (patch.tags) patch = { ...patch, tags: cleanTags(patch.tags) }
   const stages = listStages(before.projectId)
   if (patch.status)

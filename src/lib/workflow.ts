@@ -26,6 +26,13 @@ export const DEFAULT_WORKFLOW_PRESET: WorkflowPresetId = 'standard'
 export const isWorkflowPreset = (value: unknown): value is WorkflowPresetId =>
   typeof value === 'string' && (WORKFLOW_PRESETS as readonly string[]).includes(value)
 
+/** A project's own workflow has an id of this shape: never one of the four presets' ids, never reused. */
+export const CUSTOM_ID_PREFIX = 'custom-'
+export const isCustomWorkflowId = (value: unknown): value is string =>
+  typeof value === 'string' && /^custom-[a-z0-9]{6,32}$/.test(value)
+/** The longest name a custom workflow has, after trimming. */
+export const CUSTOM_NAME_MAX = 60
+
 /** Every step the cycle can have, in the order the fullest preset runs them. Ids are stable. */
 export const WORKFLOW_STEP_IDS = [
   'claim',
@@ -744,15 +751,83 @@ export interface PresetTweak {
 /** A project's saved tweaks: one per preset it changed. */
 export type ProjectTweaks = Partial<Record<WorkflowPresetId, PresetTweak>>
 
+/**
+ * A project's own workflow: a copy of a preset (or of another custom workflow) that is then changed on its
+ * own. `base` is the built-in preset it descends from, which keeps supplying what a custom workflow cannot
+ * edit: the review's phases and rounds table, the default effort of a step, the preset's wording and the
+ * variants of the step procedures. `tweak.order` is always there: for a custom workflow it is the set of
+ * steps it has, in its order. `seed` is the tweak it was created with, which Reset returns it to.
+ */
+export interface CustomWorkflow {
+  id: string
+  name: string
+  base: WorkflowPresetId
+  tweak: PresetTweak
+  seed: PresetTweak
+}
+
+/**
+ * What the model works from: a preset, or a custom workflow. `base` is the built-in preset def, `steps` the
+ * default step set and order (a preset's own; a custom workflow's as created), `custom` whether the step set
+ * can differ from `steps`.
+ */
+export interface WorkflowSource {
+  id: string
+  label: string
+  description: string
+  base: WorkflowPresetDef
+  steps: readonly WorkflowStepId[]
+  custom: boolean
+  /** A custom workflow's tweak as created (Reset returns to it); null for a preset. */
+  seed: PresetTweak | null
+}
+
+/** A preset's id, or the source of a workflow (a custom one's) the caller built with `customSource`. */
+export type WorkflowRef = WorkflowPresetId | WorkflowSource
+
+const presetSource = (def: WorkflowPresetDef): WorkflowSource => ({
+  id: def.id,
+  label: def.label,
+  description: def.description,
+  base: def,
+  steps: def.steps,
+  custom: false,
+  seed: null,
+})
+
+/** The source of a custom workflow: its base preset's review and wording, its created order as the default. */
+export function customSource(custom: {
+  id: string
+  name: string
+  base: WorkflowPresetId
+  seed?: PresetTweak | null
+}): WorkflowSource {
+  const base = workflowPreset(custom.base)
+  const seedOrder = custom.seed?.order
+  return {
+    id: custom.id,
+    label: custom.name,
+    description: `Your own workflow, copied from ${base.label}.`,
+    base,
+    steps: seedOrder && !customOrderProblem(seedOrder) ? seedOrder : base.steps,
+    custom: true,
+    seed: custom.seed ?? null,
+  }
+}
+
+/** The source behind a ref; an id that is not a preset reads as Standard. */
+const sourceOf = (ref: WorkflowRef): WorkflowSource =>
+  typeof ref === 'string' ? presetSource(workflowPreset(ref)) : ref
+
 /** The preset's own default effort for a step with an agent (`auto` when it names none), null with no agent. */
-export function defaultEffort(preset: WorkflowPresetId, id: WorkflowStepId): WorkflowEffort | null {
+export function defaultEffort(ref: WorkflowRef, id: WorkflowStepId): WorkflowEffort | null {
   if (WORKFLOW_STEPS[id].agent === 'you') return null
-  return WORKFLOW_PRESET_DEFS[preset].effort[id] ?? 'auto'
+  return sourceOf(ref).base.effort[id] ?? 'auto'
 }
 
 /** The hand-off of a step before what else runs changes it: the preset's wording, else the catalogue's. */
-export const stepHandoff = (preset: WorkflowPresetId, id: WorkflowStepId) =>
-  WORKFLOW_PRESET_DEFS[preset].text[id]?.handoff ?? WORKFLOW_STEPS[id].handoff
+export const stepHandoff = (ref: WorkflowRef, id: WorkflowStepId) =>
+  sourceOf(ref).base.text[id]?.handoff ?? WORKFLOW_STEPS[id].handoff
 
 // --- Team agents ---
 
@@ -795,16 +870,20 @@ const stepNamesTeamAgent = (id: WorkflowStepId) => {
  * their own (not `you`, not the review step) and the review's phases with one. Groups (Maximum's two
  * reviews) and the ticket agent's own steps and phases are not nodes of that kind.
  */
-export function bindableNodes(presetId: WorkflowPresetId): WorkflowNode[] {
-  const preset = WORKFLOW_PRESET_DEFS[presetId]
+export function bindableNodes(
+  ref: WorkflowRef,
+  steps: readonly WorkflowStepId[] = sourceOf(ref).steps,
+): WorkflowNode[] {
+  const preset = sourceOf(ref).base
   return [
-    ...preset.steps.flatMap((id): WorkflowNode[] => {
+    ...steps.flatMap((id): WorkflowNode[] => {
       const def = WORKFLOW_STEPS[id]
       return def.agent === 'you' || !stepNamesTeamAgent(id)
         ? []
         : [{ id, label: def.label, agent: def.agent, kind: 'step' }]
     }),
-    ...planPhases(preset).flatMap((d): WorkflowNode[] =>
+    // The review's phases belong to the workflow only while it has the review step.
+    ...(steps.includes('review') ? planPhases(preset) : []).flatMap((d): WorkflowNode[] =>
       d.agent === 'you' || d.children.length
         ? []
         : [{ id: d.id, label: d.label, agent: d.agent, kind: 'phase' }],
@@ -851,8 +930,8 @@ export function teamAgentFor(
 }
 
 /** The text of what a step does for the preset: its own wording, else the catalogue's. */
-export const stepWhat = (preset: WorkflowPresetId, id: WorkflowStepId) =>
-  WORKFLOW_PRESET_DEFS[preset].text[id]?.what ?? WORKFLOW_STEPS[id].what
+export const stepWhat = (ref: WorkflowRef, id: WorkflowStepId) =>
+  sourceOf(ref).base.text[id]?.what ?? WORKFLOW_STEPS[id].what
 
 /**
  * What runs for a ticket, read from the resolved steps: the served text and the review's phases are built
@@ -947,9 +1026,36 @@ export function effortLevel(effort: WorkflowEffort, complexity: Complexity | nul
   return complexity ? COMPLEXITY_EFFORT[complexity] : null
 }
 
-/** What the order of a preset breaks, in words naming the pair, or null when it holds. */
-export function orderProblem(preset: WorkflowPresetId, order: readonly string[]): string | null {
-  const def = WORKFLOW_PRESET_DEFS[preset]
+/**
+ * What the order of steps breaks for a custom workflow, in words naming the step, or null when it holds. A
+ * custom workflow's steps are its own list: each a known kind once, every step with a lock kept (a locked
+ * step cannot be removed), `claim` first, `handoff` last, and each step after the ones it must follow.
+ */
+export function customOrderProblem(order: readonly string[]): string | null {
+  const seen = new Set<string>()
+  for (const id of order) {
+    if (!isWorkflowStep(id)) return `order: "${id}" is not a kind of step the workflow has`
+    if (seen.has(id)) return `order: "${id}" is listed twice`
+    seen.add(id)
+  }
+  for (const id of WORKFLOW_STEP_IDS)
+    if (WORKFLOW_STEPS[id].lock !== null && !seen.has(id)) return `${id} is locked: it cannot be removed`
+  if (order[0] !== 'claim') return 'claim must stay first'
+  if (order.at(-1) !== 'handoff') return 'handoff must stay last'
+  for (const id of order as readonly WorkflowStepId[]) {
+    for (const dep of WORKFLOW_STEPS[id].after) {
+      if (!seen.has(dep)) continue
+      if (order.indexOf(dep) > order.indexOf(id)) return `${id} must come after ${dep}`
+    }
+  }
+  return null
+}
+
+/** What the order of a preset (or a custom workflow's step list) breaks, in words naming the pair, or null when it holds. */
+export function orderProblem(ref: WorkflowRef, order: readonly string[]): string | null {
+  const source = sourceOf(ref)
+  if (source.custom) return customOrderProblem(order)
+  const def = source.base
   const own = new Set<string>(def.steps)
   const seen = new Set<string>()
   for (const id of order) {
@@ -977,7 +1083,7 @@ export function orderProblem(preset: WorkflowPresetId, order: readonly string[])
  * a swap that breaks `orderProblem` is refused with its words. A step already at an end cannot go past it.
  */
 export function moveStep(
-  preset: WorkflowPresetId,
+  ref: WorkflowRef,
   order: readonly WorkflowStepId[],
   id: WorkflowStepId,
   direction: 'up' | 'down',
@@ -989,15 +1095,81 @@ export function moveStep(
   if (to >= order.length) return { ok: false, reason: `${id} is already last` }
   const next = [...order]
   ;[next[at], next[to]] = [next[to]!, next[at]!]
-  const problem = orderProblem(preset, next)
+  const problem = orderProblem(ref, next)
   return problem ? { ok: false, reason: problem } : { ok: true, order: next }
+}
+
+// --- the steps of a custom workflow ---
+
+/** Whether a step can be taken out of a custom workflow: the ones with no lock. */
+export const removableStep = (id: WorkflowStepId): boolean =>
+  WORKFLOW_STEPS[id].lock === null && WORKFLOW_STEPS[id].pinned === null
+
+/** The kinds of step a custom workflow does not have yet, in the catalogue's order. */
+export const addableSteps = (order: readonly WorkflowStepId[]): WorkflowStepId[] =>
+  WORKFLOW_STEP_IDS.filter((id) => !order.includes(id))
+
+/**
+ * The order with a step of a kind the workflow lacks added where it belongs: after the steps that come before
+ * it in the catalogue, else the first place the dependencies allow. Refused with words for a kind that is
+ * not one of the catalogue's or one the workflow has already.
+ */
+export function addStep(
+  order: readonly WorkflowStepId[],
+  id: string,
+): { ok: true; order: WorkflowStepId[] } | { ok: false; reason: string } {
+  if (!isWorkflowStep(id)) return { ok: false, reason: `"${id}" is not a kind of step the workflow has` }
+  if (order.includes(id)) return { ok: false, reason: `${id} is already a step of this workflow` }
+  const canon = (x: WorkflowStepId) => WORKFLOW_STEP_IDS.indexOf(x)
+  let preferred = 1
+  order.forEach((other, i) => {
+    if (canon(other) < canon(id)) preferred = i + 1
+  })
+  const places = [preferred, ...Array.from({ length: order.length }, (_, i) => i)]
+  for (const at of places) {
+    if (at < 1 || at > order.length - 1) continue
+    const next = [...order.slice(0, at), id, ...order.slice(at)]
+    if (!customOrderProblem(next)) return { ok: true, order: next }
+  }
+  return { ok: false, reason: `${id} has no place in this workflow's order` }
+}
+
+/** The order without a step, or why it cannot go: a locked step stays, and so does one that is not there. */
+export function removeStep(
+  order: readonly WorkflowStepId[],
+  id: string,
+): { ok: true; order: WorkflowStepId[] } | { ok: false; reason: string } {
+  if (!isWorkflowStep(id)) return { ok: false, reason: `"${id}" is not a kind of step the workflow has` }
+  if (!order.includes(id)) return { ok: false, reason: `${id} is not a step of this workflow` }
+  if (!removableStep(id)) return { ok: false, reason: `${id} is locked: it cannot be removed` }
+  return { ok: true, order: order.filter((x) => x !== id) }
+}
+
+/**
+ * The name of a custom workflow checked: trimmed, 1 to 60 characters, and not the name of a preset or of
+ * another workflow of the project (in any casing). `others` are the project's workflows without the one
+ * being renamed.
+ */
+export function customNameProblem(
+  name: unknown,
+  others: readonly { name: string }[],
+): { ok: true; name: string } | { ok: false; error: string } {
+  if (typeof name !== 'string' || !name.trim())
+    return { ok: false, error: 'name: give the workflow a name (1 to 60 characters)' }
+  const trimmed = name.trim().replace(/\s+/g, ' ')
+  if (trimmed.length > CUSTOM_NAME_MAX)
+    return { ok: false, error: `name: at most ${CUSTOM_NAME_MAX} characters` }
+  const taken = [...WORKFLOW_PRESET_LIST.map((p) => p.label), ...others.map((o) => o.name)]
+  if (taken.some((t) => t.toLowerCase() === trimmed.toLowerCase()))
+    return { ok: false, error: `name: "${trimmed}" is already the name of a workflow of this project` }
+  return { ok: true, name: trimmed }
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
 
-const stepWord = (id: string, preset: WorkflowPresetDef) =>
-  `${id} is not a step of the ${preset.label} workflow`
+const stepWord = (id: string, source: WorkflowSource) =>
+  `${id} is not a step of the ${source.label} workflow`
 
 /**
  * What `validateTweaks` needs to know about the project: the names of its Team agents (a pick must be one of
@@ -1007,6 +1179,8 @@ const stepWord = (id: string, preset: WorkflowPresetDef) =>
 export interface TweakContext {
   team?: readonly string[]
   stored?: Readonly<Record<string, string>> | null
+  /** A custom workflow's steps as stored: the step set a body without an `order` keeps. */
+  order?: readonly WorkflowStepId[] | null
 }
 
 /**
@@ -1018,11 +1192,12 @@ export interface TweakContext {
  * before saving it.
  */
 export function validateTweaks(
-  presetId: WorkflowPresetId,
+  ref: WorkflowRef,
   input: unknown,
   context: TweakContext = {},
 ): { ok: true; tweak: PresetTweak } | { ok: false; error: string; errors: string[] } {
-  const preset = WORKFLOW_PRESET_DEFS[presetId]
+  const source = sourceOf(ref)
+  const preset = source.base
   const errors: string[] = []
   const tweak: PresetTweak = {}
   if (!isRecord(input))
@@ -1035,11 +1210,17 @@ export function validateTweaks(
     if (!Array.isArray(input.order) || input.order.some((x) => typeof x !== 'string'))
       errors.push('order: a list of step ids')
     else {
-      const problem = orderProblem(presetId, input.order as string[])
+      const problem = orderProblem(source, input.order as string[])
       if (problem) errors.push(problem)
       else tweak.order = input.order as WorkflowStepId[]
     }
   }
+  // The steps the workflow has: a preset's own; a custom workflow's as sent, else as stored.
+  const own: readonly WorkflowStepId[] = source.custom
+    ? (tweak.order ?? (context.order && !customOrderProblem(context.order) ? context.order : source.steps))
+    : source.steps
+  // A custom workflow always keeps its step list, so a body that leaves it out keeps the stored one.
+  if (source.custom && tweak.order === undefined && input.order === undefined) tweak.order = [...own]
 
   if (input.steps !== undefined) {
     if (!isRecord(input.steps)) errors.push('steps: an object keyed by step id')
@@ -1050,15 +1231,15 @@ export function validateTweaks(
           errors.push(`steps: unknown step "${id}"`)
           continue
         }
-        if (!preset.steps.includes(id)) {
-          errors.push(`steps: ${stepWord(id, preset)}`)
+        if (!own.includes(id)) {
+          errors.push(`steps: ${stepWord(id, source)}`)
           continue
         }
         if (!isRecord(value)) {
           errors.push(`steps.${id}: an object with enabled and effort`)
           continue
         }
-        const own: StepTweak = {}
+        const mine: StepTweak = {}
         for (const key of Object.keys(value))
           if (!['enabled', 'effort'].includes(key))
             errors.push(`steps.${id}: unknown key "${key}" (enabled and effort)`)
@@ -1066,7 +1247,7 @@ export function validateTweaks(
           if (typeof value.enabled !== 'boolean') errors.push(`steps.${id}.enabled: true or false`)
           else if (!value.enabled && WORKFLOW_STEPS[id].lock === 'always')
             errors.push(`${id} is locked: it cannot be turned off`)
-          else own.enabled = value.enabled
+          else mine.enabled = value.enabled
         }
         if (value.effort !== undefined) {
           if (
@@ -1076,9 +1257,9 @@ export function validateTweaks(
             errors.push(`steps.${id}.effort: one of ${WORKFLOW_EFFORTS.join(', ')}`)
           else if (WORKFLOW_STEPS[id].agent === 'you')
             errors.push(`steps.${id}.effort: ${id} runs no agent of its own, so it has no effort`)
-          else own.effort = value.effort as WorkflowEffort
+          else mine.effort = value.effort as WorkflowEffort
         }
-        steps[id] = own
+        steps[id] = mine
       }
       tweak.steps = steps
     }
@@ -1088,11 +1269,15 @@ export function validateTweaks(
     if (!isRecord(input.agents)) errors.push('agents: an object keyed by node id, each a Team agent name')
     else {
       const agents: Record<string, string> = {}
-      const nodes = new Map(bindableNodes(presetId).map((n) => [n.id, n]))
+      const nodes = new Map(bindableNodes(source, own).map((n) => [n.id, n]))
       const phases = new Map(planPhases(preset).map((d) => [d.id, d]))
       for (const [id, value] of Object.entries(input.agents)) {
-        if (isWorkflowStep(id) && !preset.steps.includes(id)) {
-          errors.push(`agents: ${stepWord(id, preset)}`)
+        if (isWorkflowStep(id) && !own.includes(id)) {
+          errors.push(`agents: ${stepWord(id, source)}`)
+          continue
+        }
+        if (!isWorkflowStep(id) && phases.has(id) && !own.includes('review')) {
+          errors.push(`agents: ${id} is a phase of the review, and this workflow has no review step`)
           continue
         }
         if (!nodes.has(id)) {
@@ -1146,22 +1331,27 @@ export function validateTweaks(
  * a tweak with nothing left is null. Expects a tweak `validateTweaks` accepted.
  */
 export function normalizeTweaks(
-  presetId: WorkflowPresetId,
+  ref: WorkflowRef,
   tweak: PresetTweak | null | undefined,
 ): PresetTweak | null {
   if (!tweak) return null
-  const preset = WORKFLOW_PRESET_DEFS[presetId]
+  const source = sourceOf(ref)
+  const preset = source.base
   const out: PresetTweak = {}
-  if (tweak.order && tweak.order.some((id, i) => id !== preset.steps[i])) out.order = [...tweak.order]
+  // A custom workflow's order is its step list: always kept, and the steps below are those it has.
+  const own: readonly WorkflowStepId[] = source.custom ? (tweak.order ?? source.steps) : preset.steps
+  if (source.custom) out.order = [...own]
+  else if (tweak.order && tweak.order.some((id, i) => id !== preset.steps[i])) out.order = [...tweak.order]
   const steps: Partial<Record<WorkflowStepId, StepTweak>> = {}
-  for (const [id, own] of Object.entries(tweak.steps ?? {}) as [WorkflowStepId, StepTweak][]) {
+  for (const [id, mine] of Object.entries(tweak.steps ?? {}) as [WorkflowStepId, StepTweak][]) {
+    if (!own.includes(id)) continue
     const kept: StepTweak = {}
-    if (own.enabled === false) kept.enabled = false
-    if (own.effort !== undefined && own.effort !== defaultEffort(presetId, id)) kept.effort = own.effort
+    if (mine.enabled === false) kept.enabled = false
+    if (mine.effort !== undefined && mine.effort !== defaultEffort(source, id)) kept.effort = mine.effort
     if (Object.keys(kept).length) steps[id] = kept
   }
   if (Object.keys(steps).length) out.steps = steps
-  const roles = new Map(bindableNodes(presetId).map((n) => [n.id, n.agent]))
+  const roles = new Map(bindableNodes(source, own).map((n) => [n.id, n.agent]))
   const agents: Record<string, string> = {}
   for (const [id, name] of Object.entries(tweak.agents ?? {})) {
     const role = roles.get(id)
@@ -1182,34 +1372,40 @@ export function normalizeTweaks(
  * keys the page no longer has (a step's instruction text) are dropped, an order that no longer holds is dropped (the default order stands), and a locked step's off
  * switch is ignored. Stored data outlives the catalogue, so reading it never throws.
  */
-function readSaved(presetId: WorkflowPresetId, saved: unknown): PresetTweak | null {
-  if (!isRecord(saved)) return null
-  const preset = WORKFLOW_PRESET_DEFS[presetId]
+function readSaved(ref: WorkflowRef, saved: unknown): PresetTweak | null {
+  const source = sourceOf(ref)
+  const preset = source.base
   const tweak: PresetTweak = {}
-  if (Array.isArray(saved.order)) {
+  if (source.custom) {
+    // A custom workflow keeps its own step list; one that no longer holds is read as the one it was created with.
+    const known = isRecord(saved) && Array.isArray(saved.order) ? saved.order.filter(isWorkflowStep) : []
+    tweak.order = known.length && !customOrderProblem(known) ? known : [...source.steps]
+  } else if (isRecord(saved) && Array.isArray(saved.order)) {
     const known = saved.order.filter(
       (id): id is WorkflowStepId => isWorkflowStep(id) && preset.steps.includes(id),
     )
-    if (!orderProblem(presetId, known)) tweak.order = known
+    if (!orderProblem(source, known)) tweak.order = known
   }
+  if (!isRecord(saved)) return source.custom ? normalizeTweaks(source, tweak) : null
+  const own: readonly WorkflowStepId[] = tweak.order ?? source.steps
   if (isRecord(saved.steps)) {
     const steps: Partial<Record<WorkflowStepId, StepTweak>> = {}
     for (const [id, value] of Object.entries(saved.steps)) {
-      if (!isWorkflowStep(id) || !preset.steps.includes(id) || !isRecord(value)) continue
-      const own: StepTweak = {}
-      if (value.enabled === false && WORKFLOW_STEPS[id].lock !== 'always') own.enabled = false
+      if (!isWorkflowStep(id) || !own.includes(id) || !isRecord(value)) continue
+      const mine: StepTweak = {}
+      if (value.enabled === false && WORKFLOW_STEPS[id].lock !== 'always') mine.enabled = false
       if (
         typeof value.effort === 'string' &&
         (WORKFLOW_EFFORTS as readonly string[]).includes(value.effort) &&
         WORKFLOW_STEPS[id].agent !== 'you'
       )
-        own.effort = value.effort as WorkflowEffort
-      steps[id] = own
+        mine.effort = value.effort as WorkflowEffort
+      steps[id] = mine
     }
     tweak.steps = steps
   }
   if (isRecord(saved.agents)) {
-    const ids = new Set(bindableNodes(presetId).map((n) => n.id))
+    const ids = new Set(bindableNodes(source, own).map((n) => n.id))
     const agents: Record<string, string> = {}
     for (const [id, name] of Object.entries(saved.agents))
       if (ids.has(id) && typeof name === 'string' && name.trim()) agents[id] = name.trim()
@@ -1223,7 +1419,7 @@ function readSaved(presetId: WorkflowPresetId, saved: unknown): PresetTweak | nu
     }
     tweak.rounds = rounds
   }
-  return normalizeTweaks(presetId, tweak)
+  return normalizeTweaks(source, tweak)
 }
 
 /** The tweaks of a project as stored: what is not a known preset's tweak is dropped, each one cleaned. */
@@ -1233,6 +1429,27 @@ export function readProjectTweaks(saved: unknown): ProjectTweaks {
   for (const id of WORKFLOW_PRESETS) {
     const tweak = readSaved(id, saved[id])
     if (tweak) out[id] = tweak
+  }
+  return out
+}
+
+/**
+ * The custom workflows of a project as stored, each cleaned: an entry with no valid id or name is dropped, a
+ * base that is not a preset reads as Standard, and its tweak and seed are read as any saved tweak is. Never throws.
+ */
+export function readCustomWorkflows(saved: unknown): CustomWorkflow[] {
+  if (!Array.isArray(saved)) return []
+  const out: CustomWorkflow[] = []
+  const seen = new Set<string>()
+  for (const entry of saved) {
+    if (!isRecord(entry) || !isCustomWorkflowId(entry.id) || seen.has(entry.id)) continue
+    const name = typeof entry.name === 'string' ? entry.name.trim().slice(0, CUSTOM_NAME_MAX) : ''
+    if (!name) continue
+    seen.add(entry.id)
+    const base = isWorkflowPreset(entry.base) ? entry.base : DEFAULT_WORKFLOW_PRESET
+    const seed = readSaved(customSource({ id: entry.id, name, base }), entry.seed)!
+    const tweak = readSaved(customSource({ id: entry.id, name, base, seed }), entry.tweak)!
+    out.push({ id: entry.id, name, base, tweak, seed })
   }
   return out
 }
@@ -1318,7 +1535,12 @@ export interface ResolvedStep {
 }
 
 export interface ResolvedWorkflow {
-  preset: WorkflowPresetId
+  /** The workflow's id: a preset's, or a custom workflow's. */
+  preset: string
+  /** The built-in preset that supplies the review plan and the wording: the preset itself for a preset. */
+  base: WorkflowPresetId
+  /** A project's own workflow, not one of the four presets. */
+  custom: boolean
   label: string
   description: string
   /** The ticket's complexity this was resolved for; null for the preset as such. */
@@ -1326,7 +1548,7 @@ export interface ResolvedWorkflow {
   /** The saved tweak in force, as it is stored (normalized); null when the preset is as shipped. */
   tweak: PresetTweak | null
   tweaked: boolean
-  /** The order in force, and the preset's own. */
+  /** The order in force, and the preset's own (a custom workflow's: the one it was created with). */
   order: WorkflowStepId[]
   defaultOrder: WorkflowStepId[]
   /** Every step in order, the skipped ones included (they carry `skipped` and no number). */
@@ -1426,15 +1648,17 @@ function resolveReview(
  * named like the node's role, else the built-in agent of that role. With no `team` nothing is in the Team.
  */
 export function resolveWorkflow(
-  presetId: WorkflowPresetId,
+  ref: WorkflowRef,
   tweak?: unknown,
   complexity: Complexity | null = null,
   team: readonly string[] = [],
 ): ResolvedWorkflow {
-  const preset = workflowPreset(presetId)
-  const id = preset.id
-  const saved = readSaved(id, tweak)
-  const order = saved?.order ? [...saved.order] : [...preset.steps]
+  const source = sourceOf(ref)
+  const preset = source.base
+  const id = source.id
+  const saved = readSaved(source, tweak)
+  const order = saved?.order ? [...saved.order] : [...source.steps]
+  const defaultOrder = [...source.steps]
   const rounds = { ...preset.rounds, ...saved?.rounds }
   const teamOf: TeamOf = (nodeId, role) =>
     role === 'you' ? null : teamAgentFor(role, saved?.agents?.[nodeId], team)
@@ -1458,7 +1682,7 @@ export function resolveWorkflow(
         : { reason: 'rounds', note: `skipped: no review rounds for a ${complexity} ticket` }
     return null
   }
-  const runs = (stepId: WorkflowStepId) => preset.steps.includes(stepId) && !skipOf(stepId)
+  const runs = (stepId: WorkflowStepId) => order.includes(stepId) && !skipOf(stepId)
   const flow: FlowState = {
     spec: runs('spec') || runs('spec2'),
     firstSpec: runs('spec'),
@@ -1477,11 +1701,15 @@ export function resolveWorkflow(
     const enabled = def.lock === 'always' ? true : own?.enabled !== false
     const skipped = skipOf(stepId)
     const number = skipped ? null : ++counter
-    const effortDefaultValue = defaultEffort(id, stepId)
+    const effortDefaultValue = defaultEffort(source, stepId)
     const effort = effortDefaultValue === null ? null : (own?.effort ?? effortDefaultValue)
     const flowOwn = flowText(stepId, flow)
-    const handoff = flowOwn?.handoff ?? stepHandoff(id, stepId)
-    const moved = order.indexOf(stepId) !== preset.steps.indexOf(stepId)
+    const handoff = flowOwn?.handoff ?? stepHandoff(source, stepId)
+    // Moved: its place among the steps both orders have differs from the default's.
+    const moved =
+      defaultOrder.includes(stepId) &&
+      order.filter((x) => defaultOrder.includes(x)).indexOf(stepId) !==
+        defaultOrder.filter((x) => order.includes(x)).indexOf(stepId)
     const edited = {
       enabled: own?.enabled === false,
       effort: own?.effort !== undefined,
@@ -1490,12 +1718,12 @@ export function resolveWorkflow(
       any: false,
     }
     edited.any = edited.enabled || edited.effort || edited.agent || edited.moved
-    const up = moveStep(id, order, stepId, 'up')
-    const down = moveStep(id, order, stepId, 'down')
+    const up = moveStep(source, order, stepId, 'up')
+    const down = moveStep(source, order, stepId, 'down')
     return {
       id: stepId,
       label: def.label,
-      what: flowOwn?.what ?? stepWhat(id, stepId),
+      what: flowOwn?.what ?? stepWhat(source, stepId),
       agent: def.agent,
       agentLabel: AGENT_LABELS[def.agent],
       handoff,
@@ -1518,16 +1746,22 @@ export function resolveWorkflow(
       moveBlocked: { up: up.ok ? null : up.reason, down: down.ok ? null : down.reason },
     }
   })
-  const normalized = normalizeTweaks(id, saved)
+  const normalized = normalizeTweaks(source, saved)
+  // A custom workflow always has its step list stored: it is tweaked when it differs from the one it was created with.
+  const tweaked = source.custom
+    ? JSON.stringify(normalized) !== JSON.stringify(normalizeTweaks(source, source.seed ?? { order: defaultOrder }))
+    : normalized !== null
   return {
     preset: id,
-    label: preset.label,
-    description: preset.description,
+    base: preset.id,
+    custom: source.custom,
+    label: source.label,
+    description: source.description,
     complexity,
     tweak: normalized,
-    tweaked: normalized !== null,
+    tweaked,
     order,
-    defaultOrder: [...preset.steps],
+    defaultOrder,
     steps,
     numbered: counter,
     rounds,

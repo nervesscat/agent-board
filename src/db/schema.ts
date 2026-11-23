@@ -28,7 +28,7 @@ import {
 } from '#/lib/constants'
 import type { AnnotationDoc } from '#/lib/annotations'
 import type { SavedLayout } from '#/lib/layout'
-import type { ProjectTweaks, WorkflowPresetId } from '#/lib/workflow'
+import type { CustomWorkflow, ProjectTweaks } from '#/lib/workflow'
 import type { Kind } from '#/lib/kinds'
 import type { RunReportDurationSource, RunReportStep, RunReportTime } from '#/lib/runReports'
 import type { RunType } from '#/lib/runs'
@@ -70,8 +70,11 @@ export const projects = sqliteTable('projects', {
   kinds: text('kinds', { mode: 'json' }).$type<Kind[]>().notNull().default(['software']),
   // The workflow its tickets' agents follow (`#/lib/workflow`): the active preset, and what the human changed
   // in each preset (order, switches, efforts, the Team agent of each node, review rounds). Null is no change.
-  workflowPreset: text('workflow_preset').$type<WorkflowPresetId>().notNull().default('standard'),
+  // The id is a preset's or one of the project's own workflows (`workflowCustom`): one that is gone reads as Standard.
+  workflowPreset: text('workflow_preset').$type<string>().notNull().default('standard'),
   workflowTweaks: text('workflow_tweaks', { mode: 'json' }).$type<ProjectTweaks>(),
+  // The project's own workflows: copies of a preset that are changed on their own (`#/lib/workflow`). Null is none.
+  workflowCustom: text('workflow_custom', { mode: 'json' }).$type<CustomWorkflow[]>(),
 })
 
 // The columns of a project's board, in order. A ticket's status is the key of one of them; the key
@@ -273,9 +276,10 @@ export const tickets = sqliteTable(
     // How much review the ticket gets: low none, mid one round, high three, max up to ten
     // (COMPLEXITIES).
     complexity: text().$type<Complexity>().notNull().default(DEFAULT_COMPLEXITY),
-    // The preset of the workflow this ticket follows instead of its project's; null follows the project's.
-    // Checked in code (`#/lib/workflow`), not by a column CHECK: a table CHECK would have drizzle rebuild tickets.
-    workflowPreset: text('workflow_preset').$type<WorkflowPresetId>(),
+    // The workflow this ticket follows instead of its project's (a preset's id or one of the project's own
+    // workflows); null follows the project's. Checked in code (`#/lib/workflow`), not by a column CHECK: a
+    // table CHECK would have drizzle rebuild tickets. An id whose workflow was deleted follows the project's.
+    workflowPreset: text('workflow_preset').$type<string>(),
     assignee: text().notNull().default(''),
     branch: text().notNull().default(''),
     baseBranch: text('base_branch').notNull().default('main'),

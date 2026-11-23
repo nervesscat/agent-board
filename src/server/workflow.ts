@@ -1,17 +1,24 @@
+import { randomUUID } from 'node:crypto'
+
 import { eq } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { COMPLEXITIES, type Complexity } from '#/lib/constants'
 import { hasGitSide } from '#/lib/kinds'
 import {
+  CUSTOM_ID_PREFIX,
   DEFAULT_WORKFLOW_PRESET,
   WORKFLOW_PRESETS,
   WORKFLOW_PRESET_DEFS,
+  customNameProblem,
+  customSource,
   isWorkflowPreset,
   normalizeTweaks,
+  readCustomWorkflows,
   readProjectTweaks,
   resolveWorkflow,
   validateTweaks,
+  type CustomWorkflow,
   type FlowState,
   type ProjectTweaks,
   type ResolvedStep,
@@ -19,6 +26,7 @@ import {
   type TeamAgentRef,
   type ResolvedWorkflow,
   type WorkflowPresetId,
+  type WorkflowRef,
 } from '#/lib/workflow'
 import { logActivity } from './activity'
 import { HttpError, notFound } from './http'
@@ -126,8 +134,9 @@ function softwareProject(projectId: number) {
   return project
 }
 
-const activePreset = (row: { workflowPreset: string | null }): WorkflowPresetId =>
-  isWorkflowPreset(row.workflowPreset) ? row.workflowPreset : DEFAULT_WORKFLOW_PRESET
+/** The id (a preset's, or a custom workflow's) of the preset or workflow the id names, when the project has it. */
+const known = (customs: readonly CustomWorkflow[], id: unknown): id is string =>
+  isWorkflowPreset(id) || (typeof id === 'string' && customs.some((c) => c.id === id))
 
 function projectRow(projectId: number) {
   const row = db.select().from(schema.projects).where(eq(schema.projects.id, projectId)).get()
@@ -138,63 +147,98 @@ function projectRow(projectId: number) {
 /** The names of the project's Team agents, as the Team page spells them. */
 export const teamNames = (projectId: number): string[] => listAgents(projectId).map((a) => a.name)
 
-/** The preset a project's tickets follow, and its saved tweaks as they read today (stale ones cleaned). */
+/**
+ * The workflow the project's tickets follow (`active`, a preset's id or a custom workflow's; a stored one whose
+ * workflow was deleted reads as Standard, and `fellBack` names it), the saved tweaks of each preset as they read
+ * today (stale ones cleaned) and the project's own workflows.
+ */
 export function projectWorkflow(projectId: number) {
   const row = projectRow(projectId)
-  return { active: activePreset(row), tweaks: readProjectTweaks(row.workflowTweaks) }
-}
-
-/** One preset of the project resolved with its tweaks, for a ticket of `complexity` (null: the preset as such). */
-export function resolveFor(
-  projectId: number,
-  preset: WorkflowPresetId,
-  complexity: Complexity | null = null,
-) {
-  return resolveWorkflow(preset, projectWorkflow(projectId).tweaks[preset], complexity, teamNames(projectId))
-}
-
-/**
- * The workflow the project's tickets follow: every preset with its tweaks, its rounds and its steps as
- * a tree (resolved with no complexity: nothing is dropped for being low; `skipsOnLow` says what is), each
- * node with the Team agent that runs it, and `team`: the names of the project's Team agents, for the
- * picker of a node.
- */
-export function workflowOverview(projectId: number) {
-  softwareProject(projectId)
-  const { active, tweaks } = projectWorkflow(projectId)
-  const team = teamNames(projectId)
+  const customs = readCustomWorkflows(row.workflowCustom)
+  const stored = row.workflowPreset
+  const active = known(customs, stored) ? stored : DEFAULT_WORKFLOW_PRESET
   return {
     active,
-    team,
-    presets: WORKFLOW_PRESETS.map((id) => {
-      const w = resolveWorkflow(id, tweaks[id], null, team)
-      return {
-        id,
-        label: w.label,
-        description: w.description,
-        tweaked: w.tweaked,
-        tweaks: w.tweak,
-        rounds: w.rounds,
-        defaultRounds: w.defaultRounds,
-        order: w.order,
-        defaultOrder: w.defaultOrder,
-        steps: w.steps,
-      }
-    }),
+    fellBack: known(customs, stored) ? null : { id: stored },
+    tweaks: readProjectTweaks(row.workflowTweaks),
+    customs,
   }
 }
 
-/** The human sets which preset the project's tickets follow. */
+type ProjectWorkflow = ReturnType<typeof projectWorkflow>
+
+/** A preset or a custom workflow of the project: what to resolve (`source`) and the tweak saved for it. */
+function findWorkflow(w: ProjectWorkflow, id: string) {
+  if (isWorkflowPreset(id)) return { source: id as WorkflowRef, tweak: w.tweaks[id] as unknown, custom: null }
+  const custom = w.customs.find((c) => c.id === id)
+  if (!custom) return null
+  return { source: customSource(custom) as WorkflowRef, tweak: custom.tweak as unknown, custom }
+}
+
+/** The ids a workflow can be named by in this project: the four presets, then its own workflows. */
+const validIds = (w: ProjectWorkflow) => [...WORKFLOW_PRESETS, ...w.customs.map((c) => c.id)]
+const unknownWorkflow = (field: string, w: ProjectWorkflow) =>
+  new HttpError(400, `${field}: one of ${validIds(w).join(', ')}`)
+
+/** The label of a workflow of the project, or its id when it is gone. */
+const labelOf = (w: ProjectWorkflow, id: string) =>
+  isWorkflowPreset(id) ? WORKFLOW_PRESET_DEFS[id].label : (w.customs.find((c) => c.id === id)?.name ?? id)
+
+/** One workflow of the project resolved with its tweaks, for a ticket of `complexity` (null: the workflow as such). */
+export function resolveFor(projectId: number, id: string, complexity: Complexity | null = null) {
+  const w = projectWorkflow(projectId)
+  const found = findWorkflow(w, id) ?? findWorkflow(w, DEFAULT_WORKFLOW_PRESET)!
+  return resolveWorkflow(found.source, found.tweak, complexity, teamNames(projectId))
+}
+
+/**
+ * The workflows of the project: every preset with its tweaks, its rounds and its steps as a tree (resolved with
+ * no complexity: nothing is dropped for being low; `skipsOnLow` says what is), then the project's own, each node
+ * with the Team agent that runs it, `active` (the id the tickets follow, `fellBack` the deleted one it stood
+ * for) and `team`: the names of the project's Team agents, for the picker of a node. An entry with `custom`
+ * set is a project's own workflow and says which preset it descends from.
+ */
+export function workflowOverview(projectId: number) {
+  softwareProject(projectId)
+  const w = projectWorkflow(projectId)
+  const team = teamNames(projectId)
+  const entry = (id: string) => {
+    const found = findWorkflow(w, id)!
+    const r = resolveWorkflow(found.source, found.tweak, null, team)
+    return {
+      id,
+      label: r.label,
+      description: r.description,
+      custom: found.custom ? { base: found.custom.base } : null,
+      tweaked: r.tweaked,
+      tweaks: r.tweak,
+      rounds: r.rounds,
+      defaultRounds: r.defaultRounds,
+      order: r.order,
+      defaultOrder: r.defaultOrder,
+      steps: r.steps,
+    }
+  }
+  return {
+    active: w.active,
+    fellBack: w.fellBack,
+    team,
+    presets: validIds(w).map(entry),
+  }
+}
+
+/** The human sets which workflow (a preset or one of the project's own) the project's tickets follow. */
 export function setActivePreset(projectId: number, preset: string, actor: string) {
-  const project = softwareProject(projectId)
-  if (!isWorkflowPreset(preset)) throw new HttpError(400, `preset: one of ${WORKFLOW_PRESETS.join(', ')}`)
-  if (activePreset(project) !== preset) {
+  softwareProject(projectId)
+  const w = projectWorkflow(projectId)
+  if (!known(w.customs, preset)) throw unknownWorkflow('preset', w)
+  if (projectRow(projectId).workflowPreset !== preset) {
     db.update(schema.projects).set({ workflowPreset: preset }).where(eq(schema.projects.id, projectId)).run()
     logActivity({
       projectId,
       actor,
       kind: 'project',
-      text: `set the project's workflow to ${WORKFLOW_PRESET_DEFS[preset].label}`,
+      text: `set the project's workflow to ${labelOf(w, preset)}`,
       refType: 'project',
       refId: projectId,
     })
@@ -209,66 +253,177 @@ function writeTweaks(projectId: number, tweaks: ProjectTweaks) {
     .run()
 }
 
+function writeCustoms(projectId: number, customs: readonly CustomWorkflow[]) {
+  db.update(schema.projects)
+    .set({ workflowCustom: customs.length ? [...customs] : null })
+    .where(eq(schema.projects.id, projectId))
+    .run()
+}
+
+const note = (projectId: number, actor: string, text: string) =>
+  logActivity({ projectId, actor, kind: 'project', text, refType: 'project', refId: projectId })
+
 /**
- * Replaces one preset's saved tweaks with `input` (no merge with what was saved; the other presets are
- * untouched). A body the rules refuse is a 400 with the first problem's words and nothing is saved: a Team
- * agent picked for a node must be one of the project's, though a pick already saved for the node whose agent
- * has since left the Team may be sent back as it is. What equals the preset's defaults is not kept: a body
- * that changes nothing resets the preset.
+ * Replaces one workflow's saved tweaks with `input` (no merge with what was saved; the others are untouched).
+ * A body the rules refuse is a 400 with the first problem's words and nothing is saved: a Team agent picked
+ * for a node must be one of the project's, though a pick already saved for the node whose agent has since
+ * left the Team may be sent back as it is. What equals the preset's defaults is not kept: a body that changes
+ * nothing resets a preset. A custom workflow's `order` is its step list: a step left out of it is removed, a
+ * kind it did not have is added, and a locked step cannot go; a body with no `order` keeps the stored one.
  */
-export function saveTweaks(projectId: number, preset: string, input: unknown, actor: string) {
+export function saveTweaks(projectId: number, id: string, input: unknown, actor: string) {
   softwareProject(projectId)
-  if (!isWorkflowPreset(preset)) throw new HttpError(400, `preset: one of ${WORKFLOW_PRESETS.join(', ')}`)
-  const tweaks = { ...projectWorkflow(projectId).tweaks }
-  const checked = validateTweaks(preset, input, {
-    team: teamNames(projectId),
-    stored: tweaks[preset]?.agents,
-  })
+  const w = projectWorkflow(projectId)
+  const team = teamNames(projectId)
+  const custom = w.customs.find((c) => c.id === id)
+  if (custom) {
+    const source = customSource(custom)
+    const checked = validateTweaks(source, input, {
+      team,
+      stored: custom.tweak.agents,
+      order: custom.tweak.order,
+    })
+    if (!checked.ok) throw new HttpError(400, checked.error)
+    const tweak = normalizeTweaks(source, checked.tweak)!
+    writeCustoms(
+      projectId,
+      w.customs.map((c) => (c.id === id ? { ...c, tweak } : c)),
+    )
+    note(projectId, actor, `changed the ${custom.name} workflow`)
+    return workflowOverview(projectId)
+  }
+  if (!isWorkflowPreset(id)) throw unknownWorkflow('preset', w)
+  const tweaks = { ...w.tweaks }
+  const checked = validateTweaks(id, input, { team, stored: tweaks[id]?.agents })
   if (!checked.ok) throw new HttpError(400, checked.error)
-  const kept = normalizeTweaks(preset, checked.tweak)
-  if (kept) tweaks[preset] = kept
-  else delete tweaks[preset]
+  const kept = normalizeTweaks(id, checked.tweak)
+  if (kept) tweaks[id] = kept
+  else delete tweaks[id]
   writeTweaks(projectId, tweaks)
-  logActivity({
-    projectId,
-    actor,
-    kind: 'project',
-    text: `changed the ${WORKFLOW_PRESET_DEFS[preset].label} workflow`,
-    refType: 'project',
-    refId: projectId,
-  })
+  note(projectId, actor, `changed the ${WORKFLOW_PRESET_DEFS[id].label} workflow`)
   return workflowOverview(projectId)
 }
 
-/** Removes one preset's saved tweaks, so it is as shipped again; a preset with none is left as it is. */
-export function resetTweaks(projectId: number, preset: string, actor: string) {
+/**
+ * Takes one workflow back to where it started: a preset to what ships (its saved tweaks removed; a preset with
+ * none is left as it is), a custom workflow to the state it was created in, name and all.
+ */
+export function resetTweaks(projectId: number, id: string, actor: string) {
   softwareProject(projectId)
-  if (!isWorkflowPreset(preset)) throw new HttpError(400, `preset: one of ${WORKFLOW_PRESETS.join(', ')}`)
-  const tweaks = { ...projectWorkflow(projectId).tweaks }
-  if (tweaks[preset]) {
-    delete tweaks[preset]
-    writeTweaks(projectId, tweaks)
-    logActivity({
+  const w = projectWorkflow(projectId)
+  const custom = w.customs.find((c) => c.id === id)
+  if (custom) {
+    writeCustoms(
       projectId,
-      actor,
-      kind: 'project',
-      text: `reset the ${WORKFLOW_PRESET_DEFS[preset].label} workflow`,
-      refType: 'project',
-      refId: projectId,
-    })
+      w.customs.map((c) => (c.id === id ? { ...c, tweak: structuredClone(c.seed) } : c)),
+    )
+    note(projectId, actor, `reset the ${custom.name} workflow`)
+    return workflowOverview(projectId)
+  }
+  if (!isWorkflowPreset(id)) throw unknownWorkflow('preset', w)
+  const tweaks = { ...w.tweaks }
+  if (tweaks[id]) {
+    delete tweaks[id]
+    writeTweaks(projectId, tweaks)
+    note(projectId, actor, `reset the ${WORKFLOW_PRESET_DEFS[id].label} workflow`)
+  }
+  return workflowOverview(projectId)
+}
+
+// --- the project's own workflows ---
+
+const newCustomId = () => `${CUSTOM_ID_PREFIX}${randomUUID().replace(/-/g, '').slice(0, 10)}`
+
+/**
+ * Duplicates a workflow of the project (a preset with the project's tweaks on it, or another of its own
+ * workflows: whatever the page shows) into a new one named `input.name`; `input.from` is the id of the source.
+ * The copy descends from the same built-in preset, so it keeps its review, and is changed on its own from
+ * here. Its id is new and never used again.
+ */
+export function createCustom(projectId: number, input: unknown, actor: string) {
+  softwareProject(projectId)
+  const body = (typeof input === 'object' && input !== null ? input : {}) as { name?: unknown; from?: unknown }
+  const w = projectWorkflow(projectId)
+  const name = customNameProblem(body.name, w.customs)
+  if (!name.ok) throw new HttpError(400, name.error)
+  const from = typeof body.from === 'string' ? findWorkflow(w, body.from) : null
+  if (!from) throw unknownWorkflow('from', w)
+  const resolved = resolveWorkflow(from.source, from.tweak, null, teamNames(projectId))
+  const id = newCustomId()
+  const source = customSource({ id, name: name.name, base: resolved.base })
+  const tweak = normalizeTweaks(source, { ...resolved.tweak, order: resolved.order })!
+  const custom: CustomWorkflow = { id, name: name.name, base: resolved.base, tweak, seed: structuredClone(tweak) }
+  writeCustoms(projectId, [...w.customs, custom])
+  note(projectId, actor, `made the workflow ${custom.name} from ${resolved.label}`)
+  return { ...workflowOverview(projectId), created: id }
+}
+
+/** Renames one of the project's own workflows; a preset cannot be renamed. */
+export function renameCustom(projectId: number, id: string, input: unknown, actor: string) {
+  softwareProject(projectId)
+  const w = projectWorkflow(projectId)
+  const custom = w.customs.find((c) => c.id === id)
+  if (!custom) {
+    if (isWorkflowPreset(id)) throw new HttpError(400, `${id} is one of the four presets: it cannot be renamed`)
+    throw notFound('workflow')
+  }
+  const body = (typeof input === 'object' && input !== null ? input : {}) as { name?: unknown }
+  const name = customNameProblem(
+    body.name,
+    w.customs.filter((c) => c.id !== id),
+  )
+  if (!name.ok) throw new HttpError(400, name.error)
+  if (name.name !== custom.name) {
+    writeCustoms(
+      projectId,
+      w.customs.map((c) => (c.id === id ? { ...c, name: name.name } : c)),
+    )
+    note(projectId, actor, `renamed the workflow ${custom.name} to ${name.name}`)
   }
   return workflowOverview(projectId)
 }
 
 /**
- * The workflow a ticket's agent follows: the ticket's own preset when it names one (`source: ticket`),
- * else the project's active one (`source: project`), with that preset's saved tweaks, resolved for the
- * ticket's complexity; `text` is what the agent reads. With no ticket, the project's workflow for no
- * complexity (the rounds table). A ticket of another project is refused.
+ * Deletes one of the project's own workflows; a preset cannot be deleted. The project and the tickets that
+ * named it are left as they are and follow the project's default when read (Standard for the project's own
+ * pick, the project's workflow for a ticket's), which the Workflow page and the ticket say.
+ */
+export function deleteCustom(projectId: number, id: string, actor: string) {
+  softwareProject(projectId)
+  const w = projectWorkflow(projectId)
+  const custom = w.customs.find((c) => c.id === id)
+  if (!custom) {
+    if (isWorkflowPreset(id)) throw new HttpError(400, `${id} is one of the four presets: it cannot be deleted`)
+    throw notFound('workflow')
+  }
+  writeCustoms(
+    projectId,
+    w.customs.filter((c) => c.id !== id),
+  )
+  note(projectId, actor, `deleted the workflow ${custom.name}`)
+  return workflowOverview(projectId)
+}
+
+/**
+ * A ticket's workflow id checked before it is saved: null (follow the project's), a preset, or one of the
+ * ticket's own project's workflows; anything else is a 400 naming the valid ids.
+ */
+export function assertWorkflowId(projectId: number, id: string | null | undefined) {
+  if (id === null || id === undefined || isWorkflowPreset(id)) return
+  const w = projectWorkflow(projectId)
+  if (!known(w.customs, id)) throw unknownWorkflow('workflowPreset', w)
+}
+
+/**
+ * The workflow a ticket's agent follows: the ticket's own when it names one of the project's (`source: ticket`),
+ * else the project's active one (`source: project`; a ticket naming a deleted workflow lands here, `fellBack`
+ * says which), with that workflow's saved tweaks, resolved for the ticket's complexity; `text` is what the agent
+ * reads. With no ticket, the project's workflow for no complexity (the rounds table). A ticket of another
+ * project is refused.
  *
- * Without a ticket, `view` picks the preset and the complexity to show (the Workflow page reads its
+ * Without a ticket, `view` picks the workflow and the complexity to show (the Workflow page reads its
  * "What agents read" panel this way): the text is what a ticket of that complexity reads, which for a
- * preset other than the project's is a ticket that names it (`source: ticket`).
+ * workflow other than the project's is a ticket that names it (`source: ticket`).
  */
 export function effectiveWorkflow(
   projectId: number,
@@ -276,10 +431,13 @@ export function effectiveWorkflow(
   view: { preset?: string | null; complexity?: string | null } = {},
 ) {
   softwareProject(projectId)
-  const { active, tweaks } = projectWorkflow(projectId)
-  let preset = active
+  const w = projectWorkflow(projectId)
+  let id = w.active
   let source: 'ticket' | 'project' = 'project'
   let complexity: Complexity | null = null
+  let fellBack: { id: string; of: 'project' | 'ticket' } | null = w.fellBack
+    ? { id: w.fellBack.id, of: 'project' }
+    : null
   if (ticketId != null) {
     if (view.preset || view.complexity)
       throw new HttpError(
@@ -291,16 +449,16 @@ export function effectiveWorkflow(
     if (ticket.projectId !== projectId)
       throw new HttpError(403, `#${ticketId} is not a ticket of this project`)
     complexity = ticket.complexity
-    if (isWorkflowPreset(ticket.workflowPreset)) {
-      preset = ticket.workflowPreset
+    if (known(w.customs, ticket.workflowPreset)) {
+      id = ticket.workflowPreset
       source = 'ticket'
-    }
+      fellBack = null
+    } else if (ticket.workflowPreset) fellBack = { id: ticket.workflowPreset, of: 'ticket' }
   } else {
     if (view.preset) {
-      if (!isWorkflowPreset(view.preset))
-        throw new HttpError(400, `preset: one of ${WORKFLOW_PRESETS.join(', ')}`)
-      preset = view.preset
-      if (preset !== active) source = 'ticket'
+      if (!known(w.customs, view.preset)) throw unknownWorkflow('preset', w)
+      id = view.preset
+      if (id !== w.active) source = 'ticket'
     }
     if (view.complexity) {
       if (!(COMPLEXITIES as readonly string[]).includes(view.complexity))
@@ -308,9 +466,15 @@ export function effectiveWorkflow(
       complexity = view.complexity as Complexity
     }
   }
-  const workflow = resolveWorkflow(preset, tweaks[preset], complexity, teamNames(projectId))
-  const context = { source, projectPreset: active, ticketId: ticketId ?? null }
-  return { ...workflow, ...context, text: renderWorkflowText(workflow, context) }
+  const found = findWorkflow(w, id)!
+  const workflow = resolveWorkflow(found.source, found.tweak, complexity, teamNames(projectId))
+  const context = {
+    source,
+    projectPreset: w.active,
+    projectLabel: labelOf(w, w.active),
+    ticketId: ticketId ?? null,
+  }
+  return { ...workflow, ...context, fellBack, text: renderWorkflowText(workflow, context) }
 }
 
 /** What the rest of the board checks a ticket's review against (`runReports.missingReviewPhases`). */
@@ -319,14 +483,15 @@ export function ticketWorkflow(ticket: {
   projectId: number
   complexity: Complexity
 }): ResolvedWorkflow {
-  const { active, tweaks } = projectWorkflow(ticket.projectId)
+  const w = projectWorkflow(ticket.projectId)
   const own = db
     .select({ workflowPreset: schema.tickets.workflowPreset })
     .from(schema.tickets)
     .where(eq(schema.tickets.id, ticket.id))
     .get()?.workflowPreset
-  const preset = isWorkflowPreset(own) ? own : active
-  return resolveWorkflow(preset, tweaks[preset], ticket.complexity, teamNames(ticket.projectId))
+  // A ticket naming a workflow that is gone follows the project's.
+  const found = findWorkflow(w, known(w.customs, own) ? own : w.active)!
+  return resolveWorkflow(found.source, found.tweak, ticket.complexity, teamNames(ticket.projectId))
 }
 
 // --- the text an agent follows ---
@@ -459,13 +624,27 @@ function reviewLines(step: ResolvedStep): string[] {
  */
 export function renderWorkflowText(
   workflow: ResolvedWorkflow,
-  context: { source: 'ticket' | 'project'; projectPreset: WorkflowPresetId; ticketId?: number | null },
+  context: {
+    source: 'ticket' | 'project'
+    /** The id of the project's workflow, and its name when it is not a preset's (a custom workflow's). */
+    projectPreset: string
+    projectLabel?: string
+    ticketId?: number | null
+  },
 ): string {
   const review = workflow.steps.find((s) => s.id === 'review')
+  const projectLabel =
+    context.projectLabel ??
+    (isWorkflowPreset(context.projectPreset)
+      ? WORKFLOW_PRESET_DEFS[context.projectPreset].label
+      : context.projectPreset)
+  const own = workflow.custom
+    ? `a custom workflow of the project, based on ${WORKFLOW_PRESET_DEFS[workflow.base].label}: its review and wording are that preset's; `
+    : ''
   const where =
     context.source === 'ticket'
-      ? `set on the ticket; the project's workflow is ${WORKFLOW_PRESET_DEFS[context.projectPreset].label}`
-      : "the project's workflow"
+      ? `${own}set on the ticket; the project's workflow is ${projectLabel}`
+      : `${own}the project's workflow`
   const complexity = workflow.complexity
   const budget = !review
     ? 'Review: none.'
@@ -491,7 +670,7 @@ export function renderWorkflowText(
     if (line) out.push(line)
     out.push(`Hand-off: ${step.handoff}`)
     if (step.review) out.push(...reviewLines(step))
-    out.push('How it runs:', '', stepProcedure(step.id, workflow.preset, workflow.flow), '')
+    out.push('How it runs:', '', stepProcedure(step.id, workflow.base, workflow.flow), '')
   }
   return `${out.join('\n').trim()}\n`
 }
