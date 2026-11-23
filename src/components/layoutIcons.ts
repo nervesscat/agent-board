@@ -23,6 +23,7 @@ import {
   ScrollText,
   SquareCheckBig,
   StickyNote,
+  Workflow,
 } from 'lucide-react'
 
 import type { LayoutId } from '#/lib/layout'
@@ -36,6 +37,7 @@ export const LAYOUT_ICONS: Record<LayoutId, typeof Home> = {
   'nav.previews': MonitorPlay,
   'nav.gallery': Images,
   'nav.agents': Bot,
+  'nav.workflow': Workflow,
   'nav.daily': CalendarDays,
   'nav.cleanup': BrushCleaning,
   'nav.repositories': FolderGit2,

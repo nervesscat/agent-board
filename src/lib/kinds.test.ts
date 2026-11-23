@@ -74,7 +74,15 @@ describe('presetPhases', () => {
 })
 
 describe('visibleNavPages', () => {
-  const pages = ['nav.overview', 'nav.prs', 'nav.features', 'nav.previews', 'nav.cleanup', 'nav.repositories']
+  const pages = [
+    'nav.overview',
+    'nav.prs',
+    'nav.features',
+    'nav.previews',
+    'nav.workflow',
+    'nav.cleanup',
+    'nav.repositories',
+  ]
   it('keeps every page of a software project', () => {
     expect(visibleNavPages(pages, ['software'])).toEqual(pages)
   })
@@ -82,7 +90,13 @@ describe('visibleNavPages', () => {
     expect(visibleNavPages(pages, ['music'])).toEqual(['nav.overview', 'nav.features'])
   })
   it('names the git-side pages it hides', () => {
-    expect([...GIT_SIDE_PAGES].sort()).toEqual(['nav.cleanup', 'nav.previews', 'nav.prs', 'nav.repositories'])
+    expect([...GIT_SIDE_PAGES].sort()).toEqual([
+      'nav.cleanup',
+      'nav.previews',
+      'nav.prs',
+      'nav.repositories',
+      'nav.workflow',
+    ])
   })
 })
 

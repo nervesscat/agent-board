@@ -94,6 +94,7 @@ import { getSummary } from './summary'
 import { deleteUnattachedUploads } from './unattached'
 import * as unanswered from './unanswered'
 import * as work from './workTimeline'
+import * as workflow from './workflow'
 import * as uploads from './uploads'
 
 const json = (data: unknown, status = 200) => Response.json(data, { status })
@@ -131,6 +132,9 @@ const TicketPatch = z.object({
   status: Status.optional(),
   // Exactly low, mid, high or max; a lane created without one copies its parent's (features.ts createTicket).
   complexity: z.enum(COMPLEXITIES).optional(),
+  // The workflow this ticket follows instead of its project's (a preset's id or one of the project's own
+  // workflows, checked against the project when saved); null follows the project's again.
+  workflowPreset: z.string().max(60).nullable().optional(),
   assignee: z.string().max(80).optional(),
   branch: z.string().max(200).optional(),
   baseBranch: z.string().max(200).optional(),
@@ -439,6 +443,56 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
     throw new HttpError(403, "only the human sets the project's layout")
   // Instructions: the human's or an orchestrator's, with their history (as the PUT below).
   return json(projects.updateProject(id(params), body, actor, callerInfo(request)))
+})
+
+// --- the project's workflow (src/server/workflow.ts): read by everyone, changed by the human only ---
+const humanWorkflow = (request: Request) => {
+  if (isAgent(request)) throw new HttpError(403, "only the human sets the project's workflow")
+}
+// Every preset with its saved tweaks and its steps as a tree, and the active one.
+api.get('/api/projects/:id/workflow', ({ params }) => json(workflow.workflowOverview(id(params))))
+// What a ticket's agent follows (the ticket's own preset, else the project's, for its complexity), with the text.
+// With no ticket, `preset` and `complexity` pick what to show (the Workflow page's "What agents read").
+api.get('/api/projects/:id/workflow/effective', ({ params, url }) => {
+  const ticketId = url.searchParams.get('ticketId')
+  return json(
+    workflow.effectiveWorkflow(id(params), ticketId ? intParam(ticketId, 'ticketId') : null, {
+      preset: url.searchParams.get('preset'),
+      complexity: url.searchParams.get('complexity'),
+    }),
+  )
+})
+api.put('/api/projects/:id/workflow', async ({ request, params, actor }) => {
+  humanWorkflow(request)
+  const body = await readJson(request, z.object({ preset: z.string().max(40) }))
+  return json(workflow.setActivePreset(id(params), body.preset, actor))
+})
+// The project's own workflows: duplicate a workflow ({name, from}), rename one ({name}) or delete one.
+api.post('/api/projects/:id/workflow/custom', async ({ request, params, actor }) => {
+  humanWorkflow(request)
+  const body = await readJson(request, z.unknown())
+  return json(workflow.createCustom(id(params), body, actor), 201)
+})
+api.patch('/api/projects/:id/workflow/custom/:workflowId', async ({ request, params, actor }) => {
+  humanWorkflow(request)
+  const body = await readJson(request, z.unknown())
+  return json(workflow.renameCustom(id(params), params.workflowId!, body, actor))
+})
+api.delete('/api/projects/:id/workflow/custom/:workflowId', ({ request, params, actor }) => {
+  humanWorkflow(request)
+  return json(workflow.deleteCustom(id(params), params.workflowId!, actor))
+})
+// Replaces that workflow's saved tweaks ({order?, steps?, agents?, rounds?}); the others keep theirs. A custom
+// workflow's `order` is its list of steps: leave a step out to remove it, name a new kind to add it.
+api.put('/api/projects/:id/workflow/:preset', async ({ request, params, actor }) => {
+  humanWorkflow(request)
+  const body = await readJson(request, z.unknown())
+  return json(workflow.saveTweaks(id(params), params.preset!, body, actor))
+})
+// A preset back to as shipped (nothing to reset is not an error), a custom workflow back to how it was made.
+api.delete('/api/projects/:id/workflow/:preset', ({ request, params, actor }) => {
+  humanWorkflow(request)
+  return json(workflow.resetTweaks(id(params), params.preset!, actor))
 })
 
 // --- the project's instructions: changed by the human or an orchestrator, every change kept ---

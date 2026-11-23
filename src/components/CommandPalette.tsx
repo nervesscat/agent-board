@@ -54,6 +54,7 @@ const PROJECT_PATHS = {
   previews: '/projects/$id/previews',
   gallery: '/projects/$id/gallery',
   team: '/projects/$id/agents',
+  workflow: '/projects/$id/workflow',
   daily: '/projects/$id/daily',
   cleanup: '/projects/$id/cleanup',
   repositories: '/projects/$id/repositories',
@@ -124,6 +125,13 @@ const PROJECT_PAGES: {
     title: 'Team',
     subtitle: 'The agents the project works with',
     keywords: ['agents', 'personas', 'reservations'],
+  },
+  {
+    key: 'workflow',
+    to: PROJECT_PATHS.workflow,
+    title: 'Workflow',
+    subtitle: 'The steps agents follow for a ticket, as a tree',
+    keywords: ['steps', 'presets', 'review rounds', 'hand-off', 'delegation', 'order'],
   },
   {
     key: 'daily',

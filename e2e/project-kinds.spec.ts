@@ -63,6 +63,7 @@ test('a project with no software kind hides its git pages in the menu, and its s
   await expect(nav.getByRole('link', { name: 'Overview' })).toBeVisible()
   await expect(nav.getByRole('link', { name: 'PR queue' })).toHaveCount(0)
   await expect(nav.getByRole('link', { name: 'Previews' })).toHaveCount(0)
+  await expect(nav.getByRole('link', { name: 'Workflow' })).toHaveCount(0)
   await expect(nav.getByRole('link', { name: 'Cleanup' })).toHaveCount(0)
   await expect(nav.getByRole('link', { name: 'Repositories' })).toHaveCount(0)
 

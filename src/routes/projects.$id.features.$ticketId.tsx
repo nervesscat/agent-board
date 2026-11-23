@@ -50,6 +50,7 @@ import { toast } from 'sonner'
 import { Actor, useActorKinds } from '#/components/Actor'
 import { AnnotateImage, useAnnotations } from '#/components/AnnotateImage'
 import { ComplexitySelect } from '#/components/Complexity'
+import { WorkflowSelect, useWorkflowChoices } from '#/components/WorkflowSelect'
 import { RichEditor } from '#/components/RichEditor'
 import { AssigneeSelect } from '#/components/AssigneeSelect'
 import { BranchSelect } from '#/components/BranchSelect'
@@ -1299,6 +1300,8 @@ function Details({
   const { data: project } = useProject(t.projectId)
   const repos = project?.repos ?? []
   const repoId = String(t.repoId ?? repos[0]?.id ?? '')
+  const workflows = useWorkflowChoices(t.projectId)
+  const workflowPick = workflows.pickOf(t.workflowPreset)
   const [branch, setBranch] = useState(t.branch)
   const [baseBranch, setBaseBranch] = useState(t.baseBranch)
   // A branch typed by hand (when the repo's branches cannot be listed) saves once typing stops.
@@ -1391,6 +1394,38 @@ function Details({
         </div>
       )}
       {git && repos.length > 1 && !t.prId && <OtherRepos t={t} repos={repos} onSave={onSave} />}
+      {git && (
+        <div className="space-y-1">
+          <Label htmlFor="workflow" className="text-xs text-muted-foreground">
+            Workflow
+          </Label>
+          <WorkflowSelect
+            id="workflow"
+            projectId={t.projectId}
+            value={t.workflowPreset}
+            onChange={(preset) => onSave({ workflowPreset: preset })}
+            className="w-full"
+          />
+          <p className="text-xs text-muted-foreground wrap-anywhere" data-workflow-line>
+            {workflowPick.kind === 'own'
+              ? `Follows the ${workflowPick.label} workflow, set on this ticket. `
+              : workflowPick.kind === 'deleted'
+                ? `The workflow set on this ticket was deleted, so it follows the project's workflow (${workflows.activeLabel}). `
+                : `Follows the project's workflow (${workflows.activeLabel}). `}
+            <Link
+              to="/projects/$id/workflow"
+              params={{ id: String(t.projectId) }}
+              search={{
+                preset: workflowPick.kind === 'own' ? t.workflowPreset! : workflows.active,
+                complexity: t.complexity,
+              }}
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              See the steps
+            </Link>
+          </p>
+        </div>
+      )}
       {git && (
         <div className="space-y-1">
           <Tip content="Tickets whose branches must be merged into this one's base before it can be done">

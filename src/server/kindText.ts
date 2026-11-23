@@ -64,6 +64,8 @@ export const FILES_HIDDEN_TOOLS: ReadonlySet<string> = new Set([
   'delete_repo',
   'set_ticket_repo',
   'get_ticket_git',
+  // the workflow orders the build-and-review cycle of code
+  'get_workflow',
   'list_prs',
   'set_pr_hold',
   'post_review_result',
@@ -92,8 +94,17 @@ export const FILES_HIDDEN_TOOLS: ReadonlySet<string> = new Set([
 
 /** The parameters of a tool that only a git project uses, left out of the tool's schema for these projects. */
 export const FILES_OMITTED_KEYS: Readonly<Record<string, readonly string[]>> = {
-  create_ticket: ['repoId', 'branch', 'baseBranch', 'repos', 'prNumber', 'needs', 'defaultPhases'],
-  update_ticket: ['repoId', 'branch', 'baseBranch', 'repos', 'prNumber', 'needs'],
+  create_ticket: [
+    'repoId',
+    'branch',
+    'baseBranch',
+    'repos',
+    'prNumber',
+    'needs',
+    'defaultPhases',
+    'workflowPreset',
+  ],
+  update_ticket: ['repoId', 'branch', 'baseBranch', 'repos', 'prNumber', 'needs', 'workflowPreset'],
   claim_ticket: ['branch', 'repos'],
   list_tickets: ['repoId'],
 }
@@ -106,6 +117,8 @@ export const FILES_KEY_TEXT: Readonly<Record<string, string>> = {
     'make this a lane of that ticket: a parallel piece of it, with its own assignee, tasks and posts. A lane starts without phases unless defaultPhases is true.',
   position:
     "1 is the top: the place in its stage's column, after any status change in the same call; the others keep their order.",
+  complexity:
+    "how much review the ticket gets (low, mid, high or max); a ticket of a project with no software kind is low unless you say otherwise, and a lane without one copies its parent's.",
 }
 
 /** The descriptions of the tools whose software text names code, for these projects. */
@@ -126,7 +139,7 @@ export const FILES_DESCRIPTIONS: Readonly<Record<string, string>> = {
   list_tickets:
     "Tickets of a project with status, assignee, reserved (assigned to one of the project's agents: only that agent works it), parentId, complexity (low, mid, high or max: how much review it gets), tags, task progress (own and rolled up over lanes), blockedTasks (its open tasks and subtasks tagged blocked on the human) and blockedNext (true when the next step to work in the ticket, or in a lane it counts, is blocked: when its card badge shows, and Needs you lists that step while the ticket it is on is being worked), lane counts (total, byStage: per stage key), the human's call: approvedAt/approvedBy or disapprovedAt/disapprovedBy (a disapproved ticket is moved to the cancelled stage), startedAt (when work on it last started), lastSignalAt (the latest of its work-timeline events, its agents' posts, startedAt and createdAt), lastWordAt (the latest agent event or agent post), and liveness (its state and the per-agent facts: {state: waiting | working | lost | stalled | idle, agent, phase, since, lastSignalAt, lastWordAt, silentMinutes, spans}; null outside an active stage). Filter with status, tags, parentId or a text to find.",
   create_ticket:
-    "Create a ticket (a piece of work) with optional initial tasks. A top-level ticket starts with its project's default phases (get_project's defaultPhases: Implementation, then Summary unless the project changed them): tasks given as plain texts become the steps under the first phase, and {text, subtasks} items are phases of yours that go right after it. With parentId it is a lane of that ticket: a parallel piece of it with its own assignee, tasks and posts, which starts without phases unless defaultPhases is true. defaultPhases false stores the tasks exactly as given. complexity sets how much review the ticket gets (low, mid, high or max: low none, mid one review round, high three, max up to ten for work built from scratch; a ticket of a project with no software kind is low unless you say otherwise, and a lane without one copies its parent's).",
+    "Create a ticket (a piece of work) with optional initial tasks. A top-level ticket starts with its project's default phases (get_project's defaultPhases: Implementation, then Summary unless the project changed them): tasks given as plain texts become the steps under the first phase, and {text, subtasks} items are phases of yours that go right after it. With parentId it is a lane of that ticket: a parallel piece of it with its own assignee, tasks and posts, which starts without phases unless defaultPhases is true. defaultPhases false stores the tasks exactly as given. complexity sets how much review the ticket gets (low, mid, high or max; a ticket of a project with no software kind is low unless you say otherwise, and a lane without one copies its parent's).",
   update_ticket:
     "Change a ticket's status, assignee, tags, title, instructions or complexity (the review level, low, mid, high or max), or where it sits in its board column (position). Use claim_ticket to pick a ticket up. Changing the assignee of a ticket reserved for one of the project's agents fails: only the human reassigns those. Status blocked means you are waiting on the human: say what for in a comment on the ticket. A move to a review stage goes through and answers with open: [{taskId, ticketId, text, auto}], every task and subtask still open, in tree order (the Summary phase included when no summary was written since your last post); fix what it lists. position puts the ticket at that place (1 is the top) in its stage's column, after any status change in the same call; in a review stage the column's order is the order the human reads them in, top first.",
   claim_ticket:

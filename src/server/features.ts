@@ -65,6 +65,7 @@ import { assertUnattached, attachTo, attachmentView } from './uploads'
 import { answerLanded } from './answerWait'
 import { resumeAfterAnswer, resumeAfterMove } from './resume'
 import { noteBoardEvent, noteStageMove } from './workTimeline'
+import { assertWorkflowId } from './workflow'
 
 // --- tickets ---
 
@@ -593,6 +594,8 @@ export function createTicket(
     status?: string
     /** How much review it gets; a lane's parent's when left out, else the default. */
     complexity?: Complexity
+    /** The workflow (a preset's id or one of the project's own) it follows instead of its project's; a lane's parent's when left out, null follows the project's. */
+    workflowPreset?: string | null
     assignee?: string
     branch?: string
     baseBranch?: string
@@ -618,6 +621,8 @@ export function createTicket(
       input.repos,
     )
   if (parent?.prId) throw new HttpError(400, `ticket ${parent.id} is a PR's: it has no lanes`)
+  // Likewise the workflow it names: a preset, or one of this project's own.
+  assertWorkflowId(projectId, input.workflowPreset)
   // Checked before the ticket exists, so a bad file does not leave a ticket behind without its files.
   const attachmentIds = input.attachmentIds ?? []
   assertUnattached(attachmentIds)
@@ -650,6 +655,9 @@ export function createTicket(
             // A lane copies its parent's level as it is now; a later change to the parent does not reach it.
             // Work with no repo (a project with no software kind) has no review rounds: low, the builder's own check.
             complexity: input.complexity ?? parent?.complexity ?? (repo ? DEFAULT_COMPLEXITY : 'low'),
+            // Likewise copied from the parent once, and null (the project's) for a top-level ticket.
+            workflowPreset:
+              input.workflowPreset !== undefined ? input.workflowPreset : (parent?.workflowPreset ?? null),
             assignee: input.assignee ?? '',
             branch: input.branch ?? '',
             baseBranch,
@@ -731,6 +739,7 @@ type TicketFieldsPatch = Partial<
     | 'body'
     | 'status'
     | 'complexity'
+    | 'workflowPreset'
     | 'assignee'
     | 'branch'
     | 'baseBranch'
@@ -821,6 +830,7 @@ export function updateTicket(
     if (agent) patch = { ...patch, assignee: agent.name }
   }
   if (patch.repoId) resolveRepo(before.projectId, patch.repoId)
+  if (patch.workflowPreset !== undefined) assertWorkflowId(before.projectId, patch.workflowPreset)
   if (patch.tags) patch = { ...patch, tags: cleanTags(patch.tags) }
   const stages = listStages(before.projectId)
   if (patch.status)
