@@ -1,33 +1,5 @@
-import type { APIRequestContext } from '@playwright/test'
-
-import { expect, ok, openFeedTab, test } from './fixtures'
-
-/**
- * One run report written through the board's MCP, as an agent, and answered by the stored row. This is
- * the path a subagent takes before it hands back.
- */
-async function writeReport(
-  agent: APIRequestContext,
-  projectId: number,
-  ticketId: number,
-  fields: Record<string, unknown>,
-) {
-  const res = await agent.post('/api/mcp', {
-    headers: { accept: 'application/json, text/event-stream' },
-    data: {
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'tools/call',
-      params: {
-        name: 'write_run_report',
-        arguments: { projectId, ticketId, ...fields },
-      },
-    },
-  })
-  const body = await ok<{ result: { isError?: boolean; content: { text: string }[] } }>(res)
-  expect(body.result.isError, body.result.content[0]?.text).toBeUndefined()
-  return JSON.parse(body.result.content[0]!.text) as { id: number; durationMs: number }
-}
+import { openFeedTab, expect, test } from './fixtures'
+import { writeReport } from './runReports'
 
 test('a run report written through the MCP shows on the ticket’s Agents side', async ({
   page,
@@ -89,48 +61,6 @@ test('a run report written through the MCP shows on the ticket’s Agents side',
   await page.goto(`/projects/${project.id}/features/${quiet.id}`)
   await openFeedTab(page, 'Agents')
   await expect(page.getByRole('region', { name: 'Run reports' })).toHaveCount(0)
-})
-
-test('the project lists one kind of agent’s reports side by side across tickets', async ({
-  page,
-  api,
-  project,
-  agent,
-}) => {
-  const first = await api.ticket({ title: 'Import the ledger' })
-  const second = await api.ticket({ title: 'Export the ledger' })
-  await writeReport(agent, project.id, first.id, { agent: 'hunt', round: 1, durationMs: 15 * 60_000 })
-  await writeReport(agent, project.id, second.id, {
-    agent: 'hunt',
-    round: 2,
-    durationMs: 25 * 60_000,
-    difficulty: 3,
-  })
-  await writeReport(agent, project.id, first.id, { agent: 'verify', durationMs: 5 * 60_000 })
-
-  await page.goto(`/projects/${project.id}/run-reports`)
-  await expect(page.getByRole('heading', { name: 'Run reports' })).toBeVisible()
-  const rows = page.getByRole('list', { name: 'Run reports' }).getByRole('listitem')
-  // Newest first, and both tickets' hunt reports in one list.
-  await expect(rows).toHaveCount(3)
-  await expect(rows.first()).toContainText('verify')
-  // Two reports on the first ticket (hunt and verify), one on the second.
-  await expect(rows.filter({ hasText: `#${first.id}` })).toHaveCount(2)
-  await expect(rows.filter({ hasText: `#${second.id}` })).toContainText('Export the ledger')
-
-  // One kind of agent: both hunt reports, from the two tickets, and nothing else.
-  await page.getByRole('combobox', { name: 'Agent' }).click()
-  await page.getByRole('option', { name: 'hunt', exact: true }).click()
-  await expect(rows).toHaveCount(2)
-  await expect(rows.filter({ hasText: `#${first.id}` })).toContainText('round 1')
-  await expect(rows.filter({ hasText: `#${second.id}` })).toContainText('round 2')
-  await expect(rows.filter({ hasText: 'verify' })).toHaveCount(0)
-
-  // And a ticket filter narrows it further.
-  await page.getByRole('textbox', { name: 'Ticket number' }).fill(String(second.id))
-  await page.getByRole('button', { name: 'Filter' }).click()
-  await expect(rows).toHaveCount(1)
-  await expect(rows.first()).toContainText(`#${second.id} Export the ledger`)
 })
 
 test('a project agent starts with the common part and keeps a template of its own', async ({

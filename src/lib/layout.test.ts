@@ -100,7 +100,6 @@ describe('mergeLayout', () => {
       'nav.roadmap',
       'nav.previews',
       'nav.agents',
-      'nav.runReports',
       'nav.daily',
       'nav.cleanup',
       'nav.repositories',
@@ -135,7 +134,6 @@ describe('mergeLayout', () => {
       'nav.previews',
       'nav.gallery',
       'nav.agents',
-      'nav.runReports',
       'nav.cleanup',
       'nav.repositories',
       'nav.instructions',
@@ -203,6 +201,14 @@ describe('mergeLayout', () => {
   it('drops ids the catalogue does not have', () => {
     const saved = [{ id: 'nav.gone', area: 'nav', hidden: true }, ...defaultLayout()]
     expect(mergeLayout(saved)).toEqual(defaultLayout())
+  })
+
+  it('merges a layout saved with the removed Run reports page as one saved without it', () => {
+    const without = defaultLayout()
+    const at = without.findIndex((it) => it.id === 'nav.agents') + 1
+    const saved = [...without.slice(0, at), { id: 'nav.runReports', area: 'nav' }, ...without.slice(at)]
+    expect(mergeLayout(saved)).toEqual(mergeLayout(without))
+    expect(mergeLayout(saved).map((it) => String(it.id))).not.toContain('nav.runReports')
   })
 
   it('keeps the first of a repeated id', () => {

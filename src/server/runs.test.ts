@@ -666,6 +666,7 @@ describe('a ticket that spans two repos', () => {
       comments: [],
       requested: false,
       assigned: true,
+      involvesMe: true,
     }) satisfies MyGhPr
 
   it('lists every run of both repos, starts them all at once and stops them by repo', async () => {
