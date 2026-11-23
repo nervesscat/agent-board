@@ -582,7 +582,7 @@ async function guardOf(repoPath: string, git: RepoGit, key: (p: string) => strin
  * why, and to `using` with the ticket; each workspace path registered on one to `registered`; each
  * ticket, with its branch names and base chain, to `ticket`.
  */
-function workOf(
+export function workOf(
   rows: RepoRow[],
   keep: (name: string, why: string) => void,
   using: (name: string, ticketId: number) => void = () => {},
@@ -591,6 +591,16 @@ function workOf(
 ) {
   const rowIds = new Set(rows.map((r) => r.id))
   for (const projectId of new Set(rows.map((r) => r.projectId))) {
+    // `rows` were read before the report waited on git: a project deleted since has nothing left to keep,
+    // and reading its stages would seed them for a project that is gone (a foreign key error, a 500).
+    if (
+      !db
+        .select({ id: schema.projects.id })
+        .from(schema.projects)
+        .where(eq(schema.projects.id, projectId))
+        .get()
+    )
+      continue
     const stages = listStages(projectId)
     const projectRepos = listRepos(projectId)
     const all = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, projectId)).all()
@@ -627,7 +637,9 @@ function workOf(
     const open = db
       .select()
       .from(schema.prs)
-      .where(and(eq(schema.prs.projectId, projectId), eq(schema.prs.open, true)))
+      .where(
+        and(eq(schema.prs.projectId, projectId), eq(schema.prs.open, true), eq(schema.prs.involvesMe, true)),
+      )
       .all()
       .filter((pr) => (pr.repoId ? rowIds.has(pr.repoId) : true))
     for (const pr of open) {

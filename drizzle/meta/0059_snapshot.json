@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2215b3c9-fe68-48f5-b23a-68aaa7789ac4",
+  "id": "24dd8fcd-d37d-4464-8673-3dbc50a39a7e",
   "prevId": "a999ff5d-7c49-42fe-9aae-133bc148bfef",
   "tables": {
     "account": {
@@ -1713,6 +1713,14 @@
           "autoincrement": false,
           "default": false
         },
+        "involves_me": {
+          "name": "involves_me",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
         "waiting_on": {
           "name": "waiting_on",
           "type": "text",
@@ -3333,81 +3341,6 @@
         }
       }
     },
-    "ticket_need_dismissals": {
-      "name": "ticket_need_dismissals",
-      "columns": {
-        "ticket_id": {
-          "name": "ticket_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "needs_id": {
-          "name": "needs_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "held": {
-          "name": "held",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "''"
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "ticket_need_dismissals_ticket_id_tickets_id_fk": {
-          "name": "ticket_need_dismissals_ticket_id_tickets_id_fk",
-          "tableFrom": "ticket_need_dismissals",
-          "tableTo": "tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "ticket_need_dismissals_needs_id_tickets_id_fk": {
-          "name": "ticket_need_dismissals_needs_id_tickets_id_fk",
-          "tableFrom": "ticket_need_dismissals",
-          "tableTo": "tickets",
-          "columnsFrom": [
-            "needs_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "ticket_need_dismissals_ticket_id_needs_id_pk": {
-          "columns": [
-            "ticket_id",
-            "needs_id"
-          ],
-          "name": "ticket_need_dismissals_ticket_id_needs_id_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "ticket_needs": {
       "name": "ticket_needs",
       "columns": {
@@ -3424,22 +3357,6 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
-        },
-        "auto": {
-          "name": "auto",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "held": {
-          "name": "held",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "''"
         }
       },
       "indexes": {

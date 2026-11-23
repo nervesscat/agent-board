@@ -170,6 +170,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       and(
         eq(schema.prs.projectId, project.id),
         eq(schema.prs.open, true),
+        eq(schema.prs.involvesMe, true),
         eq(schema.prs.waitingOn, 'me'),
         eq(schema.prs.reviewStage, 'pending'),
         eq(schema.prs.hold, false),
@@ -292,8 +293,10 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       ]
     })
     .sort((a, b) => Date.parse(a.lastSignalAt) - Date.parse(b.lastSignalAt))
+  // Not what is approved already: a ticket judged by the human, or one in the Approved stage (a lane
+  // is judged by moving there), which is listed as approved, to merge below.
   const reviews = tickets
-    .filter((t) => kind(t.status) === 'review' && !t.approvedAt)
+    .filter((t) => kind(t.status) === 'review' && !t.approvedAt && t.status !== 'approved')
     .map((t) => ({
       id: t.id,
       title: t.title,
@@ -444,6 +447,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       and(
         eq(schema.prs.projectId, project.id),
         eq(schema.prs.open, false),
+        eq(schema.prs.involvesMe, true),
         gte(schema.prs.closedAt, from),
         lt(schema.prs.closedAt, to),
       ),

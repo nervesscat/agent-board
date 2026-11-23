@@ -63,11 +63,22 @@ function ticketsWithClosedFlag(rows: Record<string, unknown>[]) {
 }
 
 /**
- * The needs of a database migrated past 0059: each has the columns it added, `auto` (0: written before the
+ * Posts gained answer_delivered in 0057: no answer had reached an agent by it, so the column is '' on every
+ * one, and the other columns are compared as they were.
+ */
+function updatesWithDelivered(rows: Record<string, unknown>[]) {
+  // Before 0057 the table has no such column: the rows are compared as they are.
+  if (!rows.length || !('answer_delivered' in rows[0]!)) return rows
+  expect(rows.map((r) => r.answer_delivered)).toEqual(rows.map(() => ''))
+  return rows.map(({ answer_delivered: _d, ...rest }) => rest)
+}
+
+/**
+ * The needs of a database migrated past 0063: each has the columns it added, `auto` (0: written before the
  * board added any) and `held` (empty), and the other columns are compared as they were.
  */
 function needsWithAutoColumns(rows: Record<string, unknown>[]) {
-  // Before 0059 the table has no such columns: the rows are compared as they are.
+  // Before 0063 the table has no such columns: the rows are compared as they are.
   if (!rows.length || !('auto' in rows[0]!)) return rows
   expect(rows.map((r) => [r.auto, r.held])).toEqual(rows.map(() => [0, '']))
   return rows.map(({ auto: _a, held: _h, ...rest }) => rest)
@@ -406,7 +417,9 @@ describe('0029_ticket_pr_link', () => {
           'SELECT id, ticket_id, parent_id, text, done, position, blocked, blocked_reason FROM tasks ORDER BY id',
         )
         .all(),
-      updates: sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+      updates: updatesWithDelivered(
+        sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+      ),
     })
     const before = rows()
     expect(before.tickets).toHaveLength(3)
@@ -504,7 +517,9 @@ describe('0030_post_tabs_and_summary', () => {
         "INSERT INTO attachments (update_id, name, mime, size, stored_as, uploaded_by) VALUES (?, 'a.png', 'image/png', 1, 'x', 'claude')",
       )
       .run(progress)
-    const before = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
+    const before = updatesWithDelivered(
+      sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+    )
 
     migrate(drizzle(sqlite), { migrationsFolder: folder })
 
@@ -531,7 +546,9 @@ describe('0030_post_tabs_and_summary', () => {
     })
     // Every other column reads as it did (later migrations add the archive and repo request ones); no post
     // is a summary.
-    const after = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
+    const after = updatesWithDelivered(
+      sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+    )
     expect(
       after.map(
         ({ tab: _t, summary: _s, summary_change: _c, archive_tickets: _a, repo_request: _r, ...rest }) =>
@@ -612,11 +629,15 @@ describe('0033_archive_requests', () => {
         "INSERT INTO attachments (update_id, name, mime, size, stored_as, uploaded_by) VALUES (?, 'a.png', 'image/png', 1, 'x', 'claude')",
       )
       .run(card)
-    const before = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
+    const before = updatesWithDelivered(
+      sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+    )
 
     migrate(drizzle(sqlite), { migrationsFolder: folder })
 
-    const after = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
+    const after = updatesWithDelivered(
+      sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+    )
     // A later migration adds the repo request column.
     expect(after.map(({ archive_tickets: _a, repo_request: _r, ...rest }) => withoutDropped(rest))).toEqual(
       before.map(withoutDropped),
@@ -729,8 +750,10 @@ describe('0036_pr_left_as', () => {
 
     const prs = sqlite.prepare('SELECT * FROM prs').all() as Record<string, unknown>[]
     expect(prs.map((p) => p.left_as)).toEqual([null, null, null])
-    // A later migration adds the review request column.
-    expect(prs.map(({ left_as: _l, requested: _r, ...rest }) => rest)).toEqual(before)
+    // Every PR that existed involved me: the queue held only what the searches found.
+    expect(prs.map((p) => p.involves_me)).toEqual(prs.map(() => 1))
+    // Later migrations add the review request and involves-me columns.
+    expect(prs.map(({ left_as: _l, requested: _r, involves_me: _i, ...rest }) => rest)).toEqual(before)
     sqlite.close()
   })
 })
@@ -1071,11 +1094,15 @@ describe('0041_repo_requests', () => {
         "INSERT INTO attachments (update_id, name, mime, size, stored_as, uploaded_by) VALUES (?, 'a.png', 'image/png', 1, 'x', 'claude')",
       )
       .run(card)
-    const before = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
+    const before = updatesWithDelivered(
+      sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+    )
 
     migrate(drizzle(sqlite), { migrationsFolder: folder })
 
-    const after = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
+    const after = updatesWithDelivered(
+      sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+    )
     expect(after.map(({ repo_request: _r, ...rest }) => withoutDropped(rest))).toEqual(
       before.map(withoutDropped),
     )
@@ -1524,7 +1551,9 @@ describe('0050_widen_ticket_complexity', () => {
           'SELECT id, ticket_id, parent_id, text, done, position, blocked, blocked_reason FROM tasks ORDER BY id',
         )
         .all(),
-      updates: sqlite.prepare('SELECT * FROM updates ORDER BY id').all(),
+      updates: updatesWithDelivered(
+        sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+      ),
       attachments: sqlite.prepare('SELECT * FROM attachments ORDER BY id').all(),
       comments: sqlite.prepare('SELECT * FROM comments ORDER BY id').all(),
       ticket_repos: sqlite.prepare('SELECT * FROM ticket_repos ORDER BY ticket_id, position').all(),
@@ -1604,19 +1633,21 @@ describe('0051_agent_cards', () => {
           'SELECT id, ticket_id, parent_id, text, done, position, blocked, blocked_reason FROM tasks ORDER BY id',
         )
         .all(),
-      updates: sqlite.prepare('SELECT * FROM updates ORDER BY id').all(),
+      updates: updatesWithDelivered(
+        sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+      ),
     }
 
     migrate(drizzle(sqlite), { migrationsFolder: folder })
 
-    // The existing tables are exactly what they were. Projects gained a column later (0055 kinds): every
-    // project that existed is software now, and every column 0050 had is unchanged.
+    // The existing tables are exactly what they were. Projects gained columns later (0055 kinds, 0061 the
+    // resume command): every project that existed is software now, and every column 0050 had is unchanged.
     expect(before.projects.length).toBeGreaterThan(0)
     const projects = sqlite.prepare('SELECT * FROM projects ORDER BY id').all() as Record<string, unknown>[]
     expect(projects.map((row) => row.kinds)).toEqual(before.projects.map(() => '["software"]'))
     expect(
       projects.map((row) => {
-        const { kinds: _kinds, ...kept } = row
+        const { kinds: _kinds, resume_command: _command, resume_timeout_minutes: _timeout, ...kept } = row
         return kept
       }),
     ).toEqual(before.projects)
@@ -1632,7 +1663,11 @@ describe('0051_agent_cards', () => {
         )
         .all(),
     ).toEqual(before.tasks)
-    expect(sqlite.prepare('SELECT * FROM updates ORDER BY id').all()).toEqual(before.updates)
+    expect(
+      updatesWithDelivered(
+        sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+      ),
+    ).toEqual(before.updates)
 
     expect(columns(sqlite, 'agent_cards')).toEqual([
       'id',
@@ -1783,6 +1818,117 @@ describe('0051_agent_cards', () => {
   })
 })
 
+describe('0060_lane_verdicts_to_stages', () => {
+  it('moves approved lanes to Approved and clears every lane call, leaving top-level tickets alone', () => {
+    const sqlite = databaseAt('0059_prs_involves_me')
+    const project = (name: string) =>
+      Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run(name).lastInsertRowid)
+    const stage = sqlite.prepare(
+      'INSERT INTO stages (project_id, key, name, kind, color, position) VALUES (?, ?, ?, ?, ?, ?)',
+    )
+    const layout = [
+      ['todo', 'To do', 'open'],
+      ['in_progress', 'In progress', 'active'],
+      ['review', 'In review', 'review'],
+      ['approved', 'Approved', 'review'],
+      ['done', 'Done', 'done'],
+      ['cancelled', 'Cancelled', 'cancelled'],
+    ]
+    const withApproved = project('with approved')
+    layout.forEach((s, i) => stage.run(withApproved, ...s, 'gray', i))
+    // No Approved stage here: its lanes stay where they are.
+    const without = project('without approved')
+    layout.filter((s) => s[0] !== 'approved').forEach((s, i) => stage.run(without, ...s, 'gray', i))
+
+    const insert = sqlite.prepare(
+      `INSERT INTO tickets (project_id, parent_id, title, created_by, status, rank, approved_at, approved_by,
+         disapproved_at, disapproved_by, closed_by_approval) VALUES (?, ?, ?, 'claude', ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    const at = '2026-10-01T10:00:00.000Z'
+    const add = (
+      pid: number,
+      parent: number | null,
+      title: string,
+      status: string,
+      call: 'approved' | 'disapproved' | 'closed' | null,
+    ) =>
+      Number(
+        insert.run(
+          pid,
+          parent,
+          title,
+          status,
+          3,
+          call === 'approved' || call === 'closed' ? at : null,
+          call === 'approved' || call === 'closed' ? 'enrique' : '',
+          call === 'disapproved' ? at : null,
+          call === 'disapproved' ? 'enrique' : '',
+          call === 'closed' ? 1 : 0,
+        ).lastInsertRowid,
+      )
+    const parent = add(withApproved, null, 'Parent', 'in_progress', null)
+    const lane = (title: string, status: string, call: 'approved' | 'disapproved' | 'closed' | null) =>
+      add(withApproved, parent, title, status, call)
+    const lanes = {
+      todo: lane('approved in To do', 'todo', 'approved'),
+      active: lane('approved in progress', 'in_progress', 'approved'),
+      review: lane('approved in review', 'review', 'approved'),
+      inApproved: lane('approved in Approved', 'approved', 'approved'),
+      done: lane('approved done', 'done', 'approved'),
+      closed: lane('closed on its approval', 'done', 'closed'),
+      cancelled: lane('approved then cancelled', 'cancelled', 'approved'),
+      rejected: lane('rejected', 'cancelled', 'disapproved'),
+      plain: lane('no call', 'in_progress', null),
+    }
+    const otherParent = add(without, null, 'Other parent', 'in_progress', null)
+    const noStage = add(without, otherParent, 'approved, no Approved stage', 'review', 'approved')
+    // A PR review (a lane tagged PR) keeps its approval and its place.
+    const prReview = add(withApproved, parent, 'PR review', 'done', 'closed')
+    sqlite.prepare('UPDATE tickets SET tags = \'["PR"]\' WHERE id = ?').run(prReview)
+    // Top-level tickets keep their approval, their stage and their place.
+    const topApproved = add(withApproved, null, 'Top approved', 'todo', 'approved')
+    const topRejected = add(withApproved, null, 'Top rejected', 'cancelled', 'disapproved')
+    const topClosed = add(withApproved, null, 'Top closed', 'done', 'closed')
+
+    const read = (id: number) =>
+      sqlite.prepare('SELECT * FROM tickets WHERE id = ?').get(id) as Record<string, unknown>
+    const before = [topApproved, topRejected, topClosed, parent, otherParent, prReview].map(read)
+    const others = sqlite.prepare('SELECT * FROM stages ORDER BY id').all()
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    const moved = (id: number) => ({ status: read(id).status, rank: read(id).rank })
+    // Approved lanes that were still open or in review move to Approved, unplaced.
+    for (const id of [lanes.todo, lanes.active, lanes.review])
+      expect(moved(id)).toEqual({ status: 'approved', rank: null })
+    // Already in Approved or Done, or cancelled afterwards, or in a project with no Approved stage: kept.
+    expect(moved(lanes.inApproved)).toEqual({ status: 'approved', rank: 3 })
+    expect(moved(lanes.done)).toEqual({ status: 'done', rank: 3 })
+    expect(moved(lanes.closed)).toEqual({ status: 'done', rank: 3 })
+    expect(moved(lanes.cancelled)).toEqual({ status: 'cancelled', rank: 3 })
+    expect(moved(lanes.rejected)).toEqual({ status: 'cancelled', rank: 3 })
+    expect(moved(lanes.plain)).toEqual({ status: 'in_progress', rank: 3 })
+    expect(moved(noStage)).toEqual({ status: 'review', rank: 3 })
+
+    // No lane keeps a call, whichever stage it ended in.
+    for (const id of [...Object.values(lanes), noStage])
+      expect(read(id)).toMatchObject({
+        approved_at: null,
+        approved_by: '',
+        disapproved_at: null,
+        disapproved_by: '',
+        closed_by_approval: 0,
+      })
+    // Top-level tickets, parents included, and the PR review are as they were: every column.
+    expect([topApproved, topRejected, topClosed, parent, otherParent, prReview].map(read)).toEqual(before)
+    expect(read(prReview)).toMatchObject({ closed_by_approval: 1, approved_by: 'enrique' })
+    expect(read(topApproved)).toMatchObject({ approved_by: 'enrique', status: 'todo' })
+    expect(read(topClosed)).toMatchObject({ closed_by_approval: 1 })
+    expect(sqlite.prepare('SELECT * FROM stages ORDER BY id').all()).toEqual(others)
+    sqlite.close()
+  })
+})
+
 describe('0057_alerts', () => {
   it('adds the alert tables beside the rows a board already has, and keeps a board-wide alert unique', () => {
     const sqlite = databaseAt('0056_closed_by_approval')
@@ -1846,9 +1992,75 @@ describe('0058_task_blocked_at', () => {
   })
 })
 
-describe('0059_auto_needs', () => {
+describe('0061_ticket_resumes', () => {
+  it('adds the resume table and the project settings, off for every project that existed', () => {
+    const sqlite = databaseAt('0060_lane_verdicts_to_stages')
+    const project = Number(
+      sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('resumes').lastInsertRowid,
+    )
+    const ticket = Number(
+      sqlite
+        .prepare('INSERT INTO tickets (project_id, title, created_by) VALUES (?, ?, ?)')
+        .run(project, 'Kept', 'claude').lastInsertRowid,
+    )
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+    expect(
+      sqlite.prepare('SELECT resume_command, resume_timeout_minutes FROM projects WHERE id = ?').get(project),
+    ).toEqual({ resume_command: '', resume_timeout_minutes: 240 })
+    sqlite
+      .prepare(
+        "INSERT INTO ticket_resumes (ticket_id, trigger, state, reason) VALUES (?, 'answer', 'skipped', 'off')",
+      )
+      .run(ticket)
+    expect(() =>
+      sqlite
+        .prepare("INSERT INTO ticket_resumes (ticket_id, trigger, state) VALUES (?, 'answer', 'lost')")
+        .run(ticket),
+    ).toThrow(/CHECK/)
+    // The process identity is optional: a row without one is as it was.
+    sqlite
+      .prepare(
+        "INSERT INTO ticket_resumes (ticket_id, trigger, state, pid, pid_identity) VALUES (?, 'move', 'running', 1, '12345')",
+      )
+      .run(ticket)
+    expect(sqlite.prepare('SELECT pid_identity FROM ticket_resumes ORDER BY id').all()).toEqual([
+      { pid_identity: null },
+      { pid_identity: '12345' },
+    ])
+    // A ticket that goes takes its resumes with it.
+    sqlite.prepare('DELETE FROM tickets WHERE id = ?').run(ticket)
+    expect(sqlite.prepare('SELECT count(*) AS n FROM ticket_resumes').get()).toEqual({ n: 0 })
+    sqlite.close()
+  })
+})
+
+describe('0061_ticket_resumes', () => {
+  it('adds the delivered mark to the posts as empty, and the resume settings and table, keeping every row', () => {
+    const sqlite = databaseAt('0060_lane_verdicts_to_stages')
+    sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('shop')
+    sqlite
+      .prepare("INSERT INTO tickets (project_id, title, created_by) VALUES (1, 'A ticket', 'enrique')")
+      .run()
+    sqlite
+      .prepare(
+        "INSERT INTO updates (ticket_id, author, body, decision, decided_option, decided_at) VALUES (1, 'claude', 'Which?', '[{\"label\":\"A\"}]', 0, '2026-01-01T00:00:00.000Z')",
+      )
+      .run()
+    const before = sqlite.prepare('SELECT * FROM updates').all() as Record<string, unknown>[]
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+    const after = sqlite.prepare('SELECT * FROM updates').all() as Record<string, unknown>[]
+    expect(after.map((r) => r.answer_delivered)).toEqual([''])
+    expect(updatesWithDelivered(after)).toEqual(before)
+    expect(sqlite.prepare('SELECT resume_command, resume_timeout_minutes FROM projects').all()).toEqual([
+      { resume_command: '', resume_timeout_minutes: 240 },
+    ])
+    expect(sqlite.prepare('SELECT COUNT(*) AS n FROM ticket_resumes').get()).toEqual({ n: 0 })
+  })
+})
+
+describe('0063_auto_needs', () => {
   it('adds the automatic and held columns to the needs a board already has and a table of dismissals', () => {
-    const sqlite = databaseAt('0058_task_blocked_at')
+    const sqlite = databaseAt('0062_overview_next_to_lost_contact')
     const project = Number(
       sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('kept').lastInsertRowid,
     )

@@ -441,7 +441,7 @@ test('the features view (board or list) survives a reload, kept in the URL and r
   await expect(card).toBeVisible()
 })
 
-test('the author sits on the line of the text around it: "opened by"', async ({
+test('the line under the title is icons and short values on one line: author, opened, updated', async ({
   page,
   api,
   agent,
@@ -455,27 +455,35 @@ test('the author sits on the line of the text around it: "opened by"', async ({
   const byHuman = await api.ticket({ title: 'Opened by the human', status: 'in_progress' })
 
   for (const { ticket, name, title } of [
-    // A bot glyph, as in the ticket's screenshot, and the Agent badge after the name.
-    { ticket: byAgent, name: 'claude', title: /agent, signed in with a token/ },
-    // A person glyph, and the Human badge after the name.
-    { ticket: byHuman, name: 'enrique', title: /signed in with a passkey/ },
+    // A bot glyph, as in the ticket's screenshot; the role is in the tooltip, not a badge.
+    { ticket: byAgent, name: 'claude', title: /^Opened by claude \(Agent\) on / },
+    // A person glyph.
+    { ticket: byHuman, name: 'enrique', title: /^Opened by enrique \(Human\) on / },
   ]) {
     await page.goto(`/projects/${project.id}/features/${ticket.id}`)
-    const line = page.locator('span').filter({ hasText: /^opened by / })
-    const actor = line.locator('span[data-slot="tooltip-trigger"]')
-    await expect(actor).toContainText(name)
-    await expectTooltip(actor, title)
+    const facts = page.locator('[data-fact] > [aria-hidden]')
+    await expect(facts).toHaveCount(3)
+    const author = facts.first()
+    await expect(author).toContainText(name)
+    await expectTooltip(author.locator('span[data-slot="tooltip-trigger"]'), title)
+    // No role badge on the line, and no "opened by" or "updated" words: what shows is the name and two times.
+    await expect(author.getByText(/^(Human|Orchestrator|Agent|Board)$/)).toHaveCount(0)
+    await expect(facts.nth(1)).toHaveText(/^(just now|\d+ (min|h|d) ago)$/)
+    await expect(facts.nth(2)).toHaveText(/^(just now|\d+ (min|h|d) ago)$/)
 
-    // The row: "opened by <author> <time>", "updated <time>", the tags.
-    const { texts, ...author } = await measure(line.locator('..'))
-    const [openedBy, ago] = texts
-    expect(openedBy!.text).toBe('opened by')
-    aligned(`${name}: the name on the baseline of "opened by"`, author.name.bottom, openedBy!.bottom)
-    aligned(`${name}: the name on the baseline of the time`, author.name.bottom, ago!.bottom)
-    aligned(`${name}: the icon centred on the text`, author.icon.mid, openedBy!.mid)
-    if (author.after) aligned(`${name}: the badge centred on the text`, author.after.box.mid, openedBy!.mid)
-    const updated = texts.find((t) => t.text === 'updated')
-    aligned(`${name}: "opened by" on the baseline of "updated"`, openedBy!.bottom, updated!.bottom)
+    // Each fact's glyphs and its icon share one line: centred on each other, within a pixel.
+    const mids = await facts.evaluateAll(async (els) => {
+      await document.fonts.ready
+      return els.map((e) => {
+        const r = e.getBoundingClientRect()
+        const icon = e.querySelector('svg')!.getBoundingClientRect()
+        return { fact: (r.top + r.bottom) / 2, icon: (icon.top + icon.bottom) / 2 }
+      })
+    })
+    for (const m of mids) {
+      aligned(`${name}: the icon centred on its fact`, m.icon, m.fact)
+      aligned(`${name}: the facts on one line`, m.fact, mids[0]!.fact)
+    }
   }
 })
 

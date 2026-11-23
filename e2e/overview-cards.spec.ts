@@ -5,7 +5,7 @@ import { expect, expectTooltip, ok, section, test } from './fixtures'
 import { create, quietTicket, record, reviewTicket, stalledTicket } from './workTimeline'
 
 /**
- * On a desktop the Overview's first row is Needs you alone, and the second row is Next, In progress
+ * On a desktop the Overview's first row is Needs you alone, and the second row is Lost contact, In progress
  * and Done today in that order; every card is as tall as the others whatever it holds, and what does
  * not fit scrolls under the card's header. On a phone the cards keep the layout's order, stacked,
  * and grow with their content instead: the page scrolls, not the card.
@@ -49,46 +49,45 @@ test('the Overview cards are as tall as each other and scroll what does not fit'
   // Many tickets waiting for a look fill Needs you; one is in progress.
   for (let i = 1; i <= 24; i++) await api.ticket({ title: `Ready for a look ${i}`, status: 'review' })
   await api.ticket({ title: 'Being built', status: 'in_progress' })
-  // Enough finished today and lined up next to run past the cap, as Needs you does.
+  // Enough finished today to run past the cap, as Needs you does.
   for (let i = 1; i <= 8; i++) {
     const t = await api.ticket({ title: `Shipped today ${i}`, status: 'todo' })
     await ok(human.patch(`/api/tickets/${t.id}`, { data: { status: 'done' } }))
   }
-  for (let i = 1; i <= 5; i++) await api.ticket({ title: `Lined up ${i}`, status: 'todo' })
 
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.goto(`/projects/${project.id}`)
   const needsYou = section(page, 'Needs you')
   const inProgress = section(page, 'In progress')
   const doneToday = section(page, 'Done today')
-  const next = section(page, 'Next: To do')
+  const lost = section(page, 'Lost contact')
   await expect(needsYou).toContainText('Ready for a look 24')
   await expect(inProgress).toContainText('Being built')
   await expect(doneToday).toContainText('Shipped today 8')
-  await expect(next).toContainText('Lined up 5')
+  await expect(lost).toContainText('No lost contact')
 
   // Every card of the grid is the same fixed height, whatever it holds.
   const desktop = await height(needsYou)
   expect(desktop).toBeGreaterThan(300)
   expect(desktop).toBeLessThan(500)
-  for (const card of [inProgress, doneToday, next]) expect(await height(card)).toBe(desktop)
+  for (const card of [inProgress, doneToday, lost]) expect(await height(card)).toBe(desktop)
   // Needs you has the first row to itself, across the grid's width.
   const needsBox = (await needsYou.boundingBox())!
-  const nextBox = (await next.boundingBox())!
-  expect(nextBox.y).toBeGreaterThan(needsBox.y + needsBox.height - 1)
-  // The second row, left to right: Next, In progress, Done today.
+  const lostBox = (await lost.boundingBox())!
+  expect(lostBox.y).toBeGreaterThan(needsBox.y + needsBox.height - 1)
+  // The second row, left to right: Lost contact, In progress, Done today.
   const inProgressBox = (await inProgress.boundingBox())!
   const doneBox = (await doneToday.boundingBox())!
-  expect(inProgressBox.y).toBe(nextBox.y)
-  expect(doneBox.y).toBe(nextBox.y)
-  expect(nextBox.x).toBeLessThan(inProgressBox.x)
+  expect(inProgressBox.y).toBe(lostBox.y)
+  expect(doneBox.y).toBe(lostBox.y)
+  expect(lostBox.x).toBeLessThan(inProgressBox.x)
   expect(inProgressBox.x).toBeLessThan(doneBox.x)
-  expect(Math.round(nextBox.x)).toBe(Math.round(needsBox.x))
+  expect(Math.round(lostBox.x)).toBe(Math.round(needsBox.x))
   expect(Math.round(doneBox.x + doneBox.width)).toBe(Math.round(needsBox.x + needsBox.width))
   await overflows(needsYou)
   await overflows(doneToday)
-  // In progress and Next fit, and do not scroll; their areas still scroll once they need to.
-  for (const card of [inProgress, next]) {
+  // In progress and Lost contact fit, and do not scroll; their areas still scroll once they need to.
+  for (const card of [inProgress, lost]) {
     expect(await content(card).evaluate((el) => getComputedStyle(el).overflowY)).toBe('auto')
     expect(await content(card).evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true)
   }
@@ -101,10 +100,10 @@ test('the Overview cards are as tall as each other and scroll what does not fit'
   const phoneY = async (card: Locator) => (await card.boundingBox())!.y
   expect(await phoneY(needsYou)).toBeLessThan(await phoneY(inProgress))
   expect(await phoneY(inProgress)).toBeLessThan(await phoneY(doneToday))
-  expect(await phoneY(doneToday)).toBeLessThan(await phoneY(next))
+  expect(await phoneY(doneToday)).toBeLessThan(await phoneY(lost))
   await shot(page, 'phone-capped', true)
   // On a phone each card shows its first three entries and a way to see the rest; no nested scroll.
-  for (const card of [needsYou, doneToday, next]) {
+  for (const card of [needsYou, doneToday]) {
     const rows = content(card).locator('li')
     await expect(rows.nth(3)).toBeHidden()
     const more = card.getByRole('button', { name: /View all/ })
@@ -114,7 +113,7 @@ test('the Overview cards are as tall as each other and scroll what does not fit'
     await expect(card.getByRole('button', { name: 'Show fewer' })).toBeVisible()
   }
   // Every card and its scrolling area stay within the phone's width.
-  for (const card of [needsYou, inProgress, doneToday, next]) {
+  for (const card of [needsYou, inProgress, doneToday, lost]) {
     const b = (await card.boundingBox())!
     expect(b.x + b.width).toBeLessThanOrEqual(390)
     expect(await content(card).evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
@@ -166,12 +165,15 @@ test('a stalled ticket says why and since when, in the same words on Needs you, 
     .filter({ hasText: `#${quiet.t.id} Quiet importer` })
   await expect(quietRow.getByTestId('work-line')).toHaveAttribute('data-state', 'quiet')
   await expect(quietRow.getByTestId('work-line')).toHaveAccessibleName(/Quiet 1d/)
-  // It started yesterday, so Carrying over draws the same line for it.
-  const carried = section(page, 'Carrying over')
-    .getByRole('listitem')
-    .filter({ hasText: `#${quiet.t.id} Quiet importer` })
-  await expect(carried.getByTestId('work-line')).toHaveAttribute('data-state', 'quiet')
-  await expect(carried.getByTestId('work-line')).toHaveAccessibleName(/Quiet 1d/)
+  // It started yesterday but is still being worked, so Carrying over leaves it out. The ticket in review
+  // that started yesterday is there, with the same line as the Needs you row.
+  startedAt(turn.t.id, yesterdayNoon())
+  await page.reload()
+  const carrying = section(page, 'Carrying over')
+  await expect(carrying.getByRole('listitem').filter({ hasText: 'Quiet importer' })).toHaveCount(0)
+  const carried = carrying.getByRole('listitem').filter({ hasText: `#${turn.t.id} Waiting for a look` })
+  await expect(carried.getByTestId('work-line')).toHaveAttribute('data-state', 'your-turn')
+  await expect(carried.getByTestId('work-line')).toHaveAccessibleName(/Your turn · waiting 2d/)
   await ok(
     agent.post(`/api/tickets/${quiet.lane.id}/updates`, {
       data: { body: 'lane: tests pass', progress: true },
@@ -296,11 +298,14 @@ test('Carrying over is a full row of its own and caps the same way, at desktop a
   project,
   api,
 }) => {
-  // Twelve tickets started yesterday: enough to run past the phone cap, and the desktop height.
+  // Twelve blocked tickets started yesterday: enough to run past the phone cap, and the desktop height.
   for (let i = 1; i <= 12; i++) {
-    const t = await api.ticket({ title: `Carried over ${i}`, status: 'in_progress' })
+    const t = await api.ticket({ title: `Carried over ${i}`, status: 'blocked' })
     startedAt(t.id, yesterdayNoon())
   }
+  // One that started yesterday and is still being worked is not carried over.
+  const working = await api.ticket({ title: 'Still being worked', status: 'in_progress' })
+  startedAt(working.id, yesterdayNoon())
 
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.goto(`/projects/${project.id}`)
@@ -308,20 +313,21 @@ test('Carrying over is a full row of its own and caps the same way, at desktop a
   const needsYou = section(page, 'Needs you')
   const inProgress = section(page, 'In progress')
   const doneToday = section(page, 'Done today')
-  const next = section(page, 'Next: To do')
+  const lost = section(page, 'Lost contact')
   await expect(carrying).toContainText('Carried over 12')
+  await expect(carrying).not.toContainText('Still being worked')
   // One line per carried-over ticket, the same one every row draws.
   await expect(carrying.getByTestId('work-line')).toHaveCount(12)
 
   // Its own row, below every other card.
   const box = (await carrying.boundingBox())!
-  for (const card of [needsYou, inProgress, doneToday, next]) {
+  for (const card of [needsYou, inProgress, doneToday, lost]) {
     const b = (await card.boundingBox())!
     expect(box.y).toBeGreaterThan(b.y + b.height - 1)
   }
   // Full row: from the grid's left edge to its right edge.
   const above = await Promise.all(
-    [needsYou, inProgress, doneToday, next].map(async (card) => (await card.boundingBox())!),
+    [needsYou, inProgress, doneToday, lost].map(async (card) => (await card.boundingBox())!),
   )
   expect(Math.round(box.x)).toBe(Math.round(Math.min(...above.map((b) => b.x))))
   expect(Math.round(box.x + box.width)).toBe(Math.round(Math.max(...above.map((b) => b.x + b.width))))

@@ -6,71 +6,9 @@ import { delayApi, warm, watchLoading } from './loading'
 
 const status = (page: Page | Locator, name: string) => page.getByRole('status', { name, exact: true })
 
-async function writeReport(agent: APIRequestContext, projectId: number, ticketId: number, name: string) {
-  const res = await agent.post('/api/mcp', {
-    headers: { accept: 'application/json, text/event-stream' },
-    data: {
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'tools/call',
-      params: { name: 'write_run_report', arguments: { projectId, ticketId, agent: name } },
-    },
-  })
-  await ok(res)
-}
-
 async function upload(ctx: APIRequestContext, name: string, data: Buffer) {
   return ok<{ id: number }>(ctx.post('/api/uploads', { data: { name, base64: data.toString('base64') } }))
 }
-
-test('Run reports: a slow load shows a labeled placeholder, and a filter keeps the rows dimmed', async ({
-  page,
-  project,
-  api,
-  agent,
-}) => {
-  const t = await api.ticket({ title: 'Reported work' })
-  await writeReport(agent, project.id, t.id, 'hunt')
-  await writeReport(agent, project.id, t.id, 'verify')
-  await delayApi(page, new RegExp(`^/api/projects/${project.id}/run-reports`))
-  await page.goto(`/projects/${project.id}/run-reports`)
-
-  await expect(page.getByRole('heading', { name: 'Run reports' })).toBeVisible()
-  await expect(status(page, 'Loading run reports…')).toBeVisible()
-  await expect(page.getByText('No run reports')).toHaveCount(0)
-  const list = page.getByRole('list', { name: 'Run reports' })
-  await expect(list.getByRole('listitem')).toHaveCount(2)
-  await expect(status(page, 'Loading run reports…')).toHaveCount(0)
-
-  await page.getByRole('combobox', { name: 'Agent' }).click()
-  await page.getByRole('option', { name: 'hunt', exact: true }).click()
-  // The rows stay, dimmed, until the filtered ones arrive: no placeholder, no blank.
-  await expect(list).toHaveAttribute('aria-busy', 'true')
-  await expect(list.getByRole('listitem')).toHaveCount(2)
-  await expect(status(page, 'Loading run reports…')).toHaveCount(0)
-  await expect(list.getByRole('listitem')).toHaveCount(1)
-  await expect(list).not.toHaveAttribute('aria-busy', 'true')
-})
-
-test('Run reports: a fast load and a fast filter draw no placeholder', async ({
-  page,
-  project,
-  api,
-  agent,
-}) => {
-  const t = await api.ticket({ title: 'Reported work' })
-  await writeReport(agent, project.id, t.id, 'hunt')
-  await writeReport(agent, project.id, t.id, 'verify')
-  await warm(page, `/projects/${project.id}/run-reports`)
-  const watch = await watchLoading(page)
-  await page.goto(`/projects/${project.id}/run-reports`)
-  const list = page.getByRole('list', { name: 'Run reports' })
-  await expect(list.getByRole('listitem')).toHaveCount(2)
-  await page.getByRole('combobox', { name: 'Agent' }).click()
-  await page.getByRole('option', { name: 'hunt', exact: true }).click()
-  await expect(list.getByRole('listitem')).toHaveCount(1)
-  expect(await watch.seen()).toEqual([])
-})
 
 test('Gallery: slow tiles are labeled, a filter dims the tiles, and a text file shows a delayed placeholder', async ({
   page,
@@ -220,22 +158,13 @@ test('Roadmap: counts read as a dash, not 0, until the tickets are there', async
   await expect(stats.filter({ hasText: '–' })).toHaveCount(0)
 })
 
-test('Run reports and Gallery: an empty result kept for a new filter is not its empty state', async ({
+test('Gallery: an empty result kept for a new filter is not its empty state', async ({
   page,
   project,
   api,
   agent,
 }) => {
   const t = await api.ticket({ title: 'Reported work' })
-  await writeReport(agent, project.id, t.id, 'hunt')
-  await page.goto(`/projects/${project.id}/run-reports?agent=nobody`)
-  await expect(page.getByText('No run reports for that filter.')).toBeVisible()
-  await delayApi(page, new RegExp(`^/api/projects/${project.id}/run-reports`))
-  await page.getByRole('button', { name: 'Clear' }).click()
-  await expect(status(page, 'Loading run reports…')).toBeVisible()
-  await expect(page.getByText('No run reports')).toHaveCount(0)
-  await expect(page.getByRole('list', { name: 'Run reports' }).getByRole('listitem')).toHaveCount(1)
-
   const image = await upload(agent, 'shot.png', png(16))
   await ok(
     agent.post(`/api/tickets/${t.id}/updates`, { data: { body: 'Files.', attachmentIds: [image.id] } }),

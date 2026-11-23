@@ -67,6 +67,12 @@ export const projects = sqliteTable('projects', {
   // What the project is for (`#/lib/kinds`): one or more kinds. Software is the git side; a project
   // with none of software hides it. The migration gives every existing project software.
   kinds: text('kinds', { mode: 'json' }).$type<Kind[]>().notNull().default(['software']),
+  // The command the board runs, on its own machine, to continue a ticket's work once the human answers a
+  // decision card or moves it back to an active stage (src/server/resume.ts). '' is off. Only the
+  // signed-in human writes it.
+  resumeCommand: text('resume_command').notNull().default(''),
+  // How many minutes a resumed run may go on before the board stops it and calls it failed.
+  resumeTimeoutMinutes: integer('resume_timeout_minutes').notNull().default(240),
 })
 
 // The columns of a project's board, in order. A ticket's status is the key of one of them; the key
@@ -209,6 +215,10 @@ export const prs = sqliteTable(
     // GitHub still asks me for a review (its `review-requested:@me` search found it): what the To
     // review switch's Just me as reviewer narrows to. GitHub drops the request once the review is given.
     requested: integer({ mode: 'boolean' }).notNull().default(false),
+    // One of the searches for the human's own PRs found it (authored, review requested, reviewed,
+    // assigned), as of the last refresh. False: it is open and found only by the repo's plain open
+    // list, so it shows under All PRs alone and no other reader counts it.
+    involvesMe: integer('involves_me', { mode: 'boolean' }).notNull().default(true),
     // `me`: someone else's PR, for the human to review. `others`: the human authored it.
     waitingOn: text('waiting_on').$type<'me' | 'others'>().notNull().default('me'),
     // Where its reviews stand on GitHub as of the last refresh; a hold or a merge overrides it.
@@ -467,6 +477,13 @@ export const updates = sqliteTable(
     // it, and the words as the human gave them. Both '' on a decision the human made on the board.
     relayedBy: text('relayed_by').notNull().default(''),
     relayedText: text('relayed_text').notNull().default(''),
+    // Who has the answer on this card already, so an edit of it starts no second agent: 'chat' (relayed to the
+    // session that asked), 'waiter' (handed to an agent waiting on it) or 'resume' (a process the board
+    // started was given it); '' until one did. A skipped start never sets it, and an edit never clears it.
+    answerDelivered: text('answer_delivered')
+      .$type<'' | 'chat' | 'waiter' | 'resume'>()
+      .notNull()
+      .default(''),
     // On a decision an agent posted to have tickets archived (features.requestArchive): the top-level tickets
     // it names. Answering its Archive option archives those still finished then. Null on any other post.
     archiveTickets: text('archive_tickets', { mode: 'json' }).$type<number[] | null>(),
@@ -719,6 +736,43 @@ export const reports = sqliteTable(
   },
   (t) => [index('reports_project_period').on(t.projectId, t.period)],
 )
+
+// One resume: the board continuing a ticket's work by running the project's resume command (see
+// src/server/resume.ts). A skipped row is the board saying why it did not start one.
+export const ticketResumes = sqliteTable(
+  'ticket_resumes',
+  {
+    id: id(),
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    // The decision card whose answer set it off; null for a stage move or a retry of one.
+    postId: integer('post_id').references(() => updates.id, { onDelete: 'set null' }),
+    // What set it off: the human's answer, the human's stage move, or the Resume / Retry button.
+    trigger: text().$type<'answer' | 'move' | 'retry'>().notNull(),
+    state: text().$type<'queued' | 'running' | 'succeeded' | 'failed' | 'skipped'>().notNull(),
+    // The process, while it runs and after (the board that restarted looks it up by this).
+    pid: integer(),
+    // The process's start time as the OS reports it, to tell it from a later process that got the same pid
+    // (null where the OS gives none).
+    pidIdentity: text('pid_identity'),
+    // The command's name as shown (its first word); the command itself is the project's setting.
+    command: text().notNull().default(''),
+    exitCode: integer('exit_code'),
+    // Why it was skipped or failed, or what is unknown about how it ended.
+    reason: text().notNull().default(''),
+    // Where its output goes, under the board's logs folder.
+    logPath: text('log_path').notNull().default(''),
+    createdAt: now(),
+    startedAt: text('started_at'),
+    endedAt: text('ended_at'),
+  },
+  (t) => [
+    index('ticket_resumes_ticket').on(t.ticketId),
+    check('ticket_resumes_state', sql`${t.state} IN ('queued', 'running', 'succeeded', 'failed', 'skipped')`),
+  ],
+)
+export type TicketResume = typeof ticketResumes.$inferSelect
 
 // A card an agent opened for the human's notification center (src/server/agentCards.ts): a tracked
 // request the human asked to watch, or an important notice. It is not a board job: it survives a
