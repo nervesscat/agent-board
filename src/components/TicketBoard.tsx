@@ -130,7 +130,7 @@ export function TicketBoard({
           const own = dragging !== null && draggedStatus === status
           // The line where a card dragged in its own column would land; none where it would not move.
           const line = own && slot !== null && slotPlacement(column, dragging, slot) ? slot : null
-          const after = kind === 'review' ? mergeAfter(column) : null
+          const after = kind === 'review' || kind === 'approved' ? mergeAfter(column) : null
           // Taking both dragenter and dragover is what marks the column as a place to drop.
           const dragOver = (e: DragEvent<HTMLDivElement>) => {
             if (dragging === null) return

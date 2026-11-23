@@ -786,9 +786,8 @@ test('the Stage filter starts on the review stage by its kind, renamed or not, a
   await page.keyboard.press('Escape')
 
   // No stage of kind review any more: every preview shows.
-  const approved = project.stages.find((s) => s.key === 'approved')!
+  // Approved is of its own kind, so it does not count as a review stage.
   await ok(human.patch(`/api/projects/${project.id}/stages/${review.id}`, { data: { kind: 'active' } }))
-  await ok(human.patch(`/api/projects/${project.id}/stages/${approved.id}`, { data: { kind: 'active' } }))
   await page.goto(`/projects/${project.id}/previews`)
   await expect(shownStage(page)).toHaveText(/^All stages\s*2$/)
   await expect(previewRows(page)).toHaveCount(2)

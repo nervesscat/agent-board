@@ -1,7 +1,7 @@
 import type { StageKind } from '#/lib/constants'
 
 /** Finished lanes first, then the ones closest to finishing; cancelled ones last. */
-const KIND_ORDER: StageKind[] = ['done', 'review', 'blocked', 'active', 'open', 'cancelled']
+const KIND_ORDER: StageKind[] = ['done', 'approved', 'review', 'blocked', 'active', 'open', 'cancelled']
 
 type Stage = { key: string; kind: StageKind }
 

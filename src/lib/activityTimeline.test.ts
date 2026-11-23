@@ -216,10 +216,11 @@ describe('stallStage and hasWork', () => {
     expect(stallStage(stages, 'gone')).toBeNull()
   })
 
-  it('has work in active, blocked and review stages only', () => {
+  it('has work in active, blocked, review and approved stages only', () => {
     expect(hasWork('active')).toBe(true)
     expect(hasWork('blocked')).toBe(true)
     expect(hasWork('review')).toBe(true)
+    expect(hasWork('approved')).toBe(true)
     expect(hasWork('open')).toBe(false)
     expect(hasWork('done')).toBe(false)
   })

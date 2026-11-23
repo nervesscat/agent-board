@@ -369,7 +369,7 @@ function TicketPage() {
   }
   const openLanes = t.lanes.filter((l) => !isClosed(stageOf(stages, l.status).kind)).length
   const kind = stageOf(stages, t.status).kind
-  const lanesWarning = openLanes > 0 && (kind === 'review' || kind === 'done')
+  const lanesWarning = openLanes > 0 && (kind === 'review' || kind === 'approved' || kind === 'done')
   // null: a section with nothing to show on this ticket. It is left out of its column, so a column
   // with nothing left to show is not drawn and the other one takes the page's width.
   const sections: Record<AreaId<'ticket.main'>, ReactNode> = {
@@ -499,7 +499,7 @@ function TicketPage() {
             </span>
           )}
           {/* Without a git side the human's approval is the hand-off: shown on every ticket, not only lanes. */}
-          {(t.parentId || verdictOf(t) || (!gitSide && kind === 'review')) && (
+          {(t.parentId || verdictOf(t) || (!gitSide && (kind === 'review' || kind === 'approved'))) && (
             <VerdictButtons t={t} disabled={judge.isPending} onSet={(verdict) => decide(t, verdict)} />
           )}
           <StatusSelect

@@ -29,7 +29,7 @@ import { timelinesFor } from './workTimeline'
 const DAY_MS = 86_400_000
 
 /** Worked on, waiting on the human, or handed off: a ticket in any of these is in progress. */
-const IN_PROGRESS: StageKind[] = ['active', 'blocked', 'review']
+const IN_PROGRESS: StageKind[] = ['active', 'blocked', 'review', 'approved']
 const inProgress = (kind: StageKind | undefined) => !!kind && IN_PROGRESS.includes(kind)
 
 /** A stage that parks work for later instead of lining it up next (Backlog, Icebox, Someday…). */
@@ -403,6 +403,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         activity: activityOf(timelines.get(t.id)!.timeline),
         stale:
           kind(t.status) !== 'review' &&
+          kind(t.status) !== 'approved' &&
           now.getTime() - new Date(post?.createdAt ?? since).getTime() > STALE_MS,
         updatedAt: t.updatedAt,
       }
@@ -522,16 +523,16 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         instructionChanges.length +
         stalled.length,
     },
-    // The tickets in Approved: the human's go-ahead to merge, which an orchestrator merges without asking again.
+    // The tickets in an approved-kind stage: the human's go-ahead to merge, which an orchestrator merges without asking again.
     approvedToMerge: tickets
-      .filter((t) => t.status === 'approved' && kind(t.status) === 'review')
+      .filter((t) => kind(t.status) === 'approved')
       .map((t) => ({
         ticketId: t.id,
         title: t.title,
         prNumber: t.prNumber,
         label: 'approved, to merge' as const,
       })),
-    inProgress: progress.filter((t) => t.kind !== 'review'),
+    inProgress: progress.filter((t) => t.kind !== 'review' && t.kind !== 'approved'),
     // Lost contact: outside Needs you and its count (the facts are per agent, not per ticket).
     lostContact,
     doneToday: { tickets: doneTickets, prs: closedPrs, activity },

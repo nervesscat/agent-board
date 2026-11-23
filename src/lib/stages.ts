@@ -21,6 +21,7 @@ export const STAGE_KIND_LABEL: Record<StageKind, string> = {
   active: 'Active',
   blocked: 'Blocked',
   review: 'Review',
+  approved: 'Approved',
   done: 'Done',
   cancelled: 'Cancelled',
 }

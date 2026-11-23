@@ -569,6 +569,22 @@ describe('approved, to merge', () => {
   })
 })
 
+describe('approved, to merge, by kind', () => {
+  it('follows the stage kind, not the key, and keeps Approved out of the review list', () => {
+    const pid = project('approved-kind-live')
+    const go = stagesMod.createStage(pid, { name: 'Go ahead', kind: 'approved' }, 'enrique')
+    expect(go.key).not.toBe('approved')
+    const moved = ticket(pid, 'In the other approved stage', { status: go.key, prNumber: 11 })
+    const plain = ticket(pid, 'In Approved', { status: 'approved', prNumber: 12 })
+    const waiting = ticket(pid, 'Waiting for a look', { status: 'review', prNumber: 13 })
+    const payload = read(pid)
+    expect(payload.approvedToMerge.map((x) => x.ticketId).sort()).toEqual([moved.id, plain.id].sort())
+    expect(payload.totals.approvedToMerge).toBe(2)
+    // Only the review-kind ticket is waiting for the human's review.
+    expect(payload.inReview.map((x) => x.ticketId)).toEqual([waiting.id])
+  })
+})
+
 describe('recent posts', () => {
   it('lists the newest few across the project, newest first, each as one line', () => {
     const pid = project('posts')

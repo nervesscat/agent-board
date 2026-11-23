@@ -336,10 +336,10 @@ describe('idea 2: a board update is available', () => {
 
 describe('idea 3: release due', () => {
   /** A project with a Release stage, and a ticket put in it `days` ago by a real move. */
-  function releaseProject(stage: { key: string; name: string; kind?: 'review' | 'active' }) {
+  function releaseProject(stage: { key: string; name: string; kind?: 'done' | 'review' | 'active' }) {
     const projectId = projectWithOneRepo('release')
     db.insert(schema.stages)
-      .values({ projectId, key: stage.key, name: stage.name, kind: stage.kind ?? 'review', position: 30 })
+      .values({ projectId, key: stage.key, name: stage.name, kind: stage.kind ?? 'done', position: 30 })
       .run()
     const put = (title: string, days: number) => {
       const ticket = features.createTicket(projectId, { title }, 'human')
@@ -364,10 +364,18 @@ describe('idea 3: release due', () => {
     for (let i = 0; i < 6; i++)
       features.createTicket(projectId, { title: `t${i}`, status: 'review' }, 'human')
     expect(await check(release(), projectId)).toEqual([])
-    // An active stage that merely has the name is not a review stage.
+    // An active stage that merely has the name is not a done stage.
     const { projectId: other, put } = releaseProject({ key: 'release', name: 'Release', kind: 'active' })
     put('x', 30)
     expect(await check(release(), other)).toEqual([])
+    // Nor is a review stage: Release counts as finished only as a done stage.
+    const { projectId: review, put: putReview } = releaseProject({
+      key: 'release',
+      name: 'Release',
+      kind: 'review',
+    })
+    putReview('y', 30)
+    expect(await check(release(), review)).toEqual([])
   })
 
   it('is raised when a ticket has waited the default days, listing it, with a link to the tickets', async () => {

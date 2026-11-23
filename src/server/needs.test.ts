@@ -386,6 +386,29 @@ describe("Approved is the human's to put a ticket in", () => {
   })
 })
 
+describe('an approved-kind stage with another key', () => {
+  it('is refused to an agent by its kind, and the human may move there', async () => {
+    const { createStage } = await import('./stages')
+    const go = createStage(projectId, { name: 'Go ahead', kind: 'approved' }, 'enrique')
+    expect(go.key).not.toBe('approved')
+    const t = ticket('go-other-key', 'feat/go-other-key', { status: 'review' })
+    await expect(needs.changeTicket(t.id, { status: go.key }, 'orch', agent)).rejects.toThrow(
+      'only the human puts a ticket in Approved',
+    )
+    await expect(needs.changeTicket(t.id, { status: 'approved' }, 'orch', agent)).rejects.toThrow(
+      'only the human puts a ticket in Approved',
+    )
+    await expect(
+      needs.newTicket(projectId, { title: 'born there', status: go.key }, 'orch', agent),
+    ).rejects.toThrow('only the human puts a ticket in Approved')
+    expect(features.getTicket(t.id).status).toBe('review')
+    // Only a move into a review stage answers with the hand-off facts: one into Approved answers none.
+    const moved = await needs.changeTicket(t.id, { status: go.key }, 'enrique', { agent: false })
+    expect(moved.status).toBe(go.key)
+    expect(moved).not.toHaveProperty('open')
+  })
+})
+
 describe("Approved, on create and in the PR sync: the human's alone", () => {
   it('refuses an agent that creates a ticket in Approved', async () => {
     await expect(

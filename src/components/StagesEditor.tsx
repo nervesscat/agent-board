@@ -34,6 +34,7 @@ const KIND_HINT: Record<StageKind, string> = {
   active: 'being worked on',
   blocked: 'waiting on you',
   review: 'handed off for review',
+  approved: 'your go-ahead to merge; no agent moves a ticket here',
   done: 'finished; cannot be claimed',
   cancelled: 'dropped; disapproving moves a ticket here, and its tasks leave the progress',
 }

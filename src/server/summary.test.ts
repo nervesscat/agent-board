@@ -304,6 +304,23 @@ describe('approved, to merge', () => {
   })
 })
 
+describe('approved, to merge, by kind', () => {
+  it('follows the stage kind, not the key, and leaves Approved out of the reviews and the in-progress list', () => {
+    const pid = project('approved-kind-summary')
+    const go = stagesMod.createStage(pid, { name: 'Go ahead', kind: 'approved' }, 'enrique')
+    expect(go.key).not.toBe('approved')
+    const moved = ticket(pid, 'In the other approved stage', { status: go.key, prNumber: 11 })
+    const plain = ticket(pid, 'In Approved', { status: 'approved', prNumber: 12 })
+    const waiting = ticket(pid, 'Waiting for a look', { status: 'review', prNumber: 10 })
+    const s = take(pid)
+    expect(s.approvedToMerge.map((x) => x.ticketId).sort()).toEqual([moved.id, plain.id].sort())
+    expect(s.needsYou.reviews.map((r) => r.id)).toEqual([waiting.id])
+    // Approved tickets are in progress like any being merged, but never listed among the ones to look at.
+    expect(s.inProgress.map((t) => t.id)).not.toContain(plain.id)
+    expect(s.inProgress.map((t) => t.id)).not.toContain(moved.id)
+  })
+})
+
 describe('next', () => {
   it('lists the head of the first open stage that is not a backlog, in board order, with the counts', () => {
     const pid = project('next')
