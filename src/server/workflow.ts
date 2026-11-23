@@ -362,7 +362,9 @@ function agentLine(step: ResolvedStep): string | null {
   const ref = step.teamAgent
   if (!ref) return null
   const role = step.agent
-  const named = `Name its span, its run report and its \`agentName\` by the role \`${role}\`, never by \`${ref.name}\`: the board counts this step's runs by role.`
+  // The role is also the agent's name when the two match: "never by" is only said of a name that differs.
+  const same = ref.name.toLowerCase() === role
+  const named = `Name its span, its run report and its \`agentName\` by the role \`${role}\`${same ? " (which is also the agent's name)" : `, never by \`${ref.name}\``}: the board counts this step's runs by role.`
   const posts =
     ref.source === 'default'
       ? 'It is no Team agent, so post its work with `progress: true` and no `as`.'

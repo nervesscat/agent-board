@@ -322,6 +322,15 @@ describe('the served workflow text for every preset, complexity and tweak', () =
               expect(text, `${at} ${s.id}`).toContain(
                 `Name its span, its run report and its \`agentName\` by the role \`${s.agent}\``,
               )
+            // "Never by" is said only of a name that differs from the role: never "by the role `x`, never by `x`".
+            for (const [, role, name] of text.matchAll(/by the role `([^`]+)`, never by `([^`]+)`/g))
+              expect(name!.toLowerCase(), `${at} says ${role} twice`).not.toBe(role)
+            for (const s of w.steps.filter((x) => !x.skipped && x.teamAgent)) {
+              const sentence = `Name its span, its run report and its \`agentName\` by the role \`${s.agent}\``
+              if (s.teamAgent!.name.toLowerCase() === s.agent)
+                expect(text, `${at} ${s.id}`).toContain(`${sentence} (which is also the agent's name):`)
+              else expect(text, `${at} ${s.id}`).toContain(`${sentence}, never by \`${s.teamAgent!.name}\`:`)
+            }
             // Without a review no phase of it is named, with or without a Team.
             if (w.steps.find((s) => s.id === 'review')!.skipped) expect(text, at).not.toContain('agents=')
             else expect(text, at).toContain('agents=')
