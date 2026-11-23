@@ -718,8 +718,10 @@ describe('0036_pr_left_as', () => {
 
     const prs = sqlite.prepare('SELECT * FROM prs').all() as Record<string, unknown>[]
     expect(prs.map((p) => p.left_as)).toEqual([null, null, null])
-    // A later migration adds the review request column.
-    expect(prs.map(({ left_as: _l, requested: _r, ...rest }) => rest)).toEqual(before)
+    // Every PR that existed involved me: the queue held only what the searches found.
+    expect(prs.map((p) => p.involves_me)).toEqual(prs.map(() => 1))
+    // Later migrations add the review request and involves-me columns.
+    expect(prs.map(({ left_as: _l, requested: _r, involves_me: _i, ...rest }) => rest)).toEqual(before)
     sqlite.close()
   })
 })
