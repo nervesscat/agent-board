@@ -203,8 +203,8 @@ export function DeleteWorkflowButton({ name, onDelete }: { name: string; onDelet
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete the {name} workflow?</AlertDialogTitle>
-          <AlertDialogDescription>
+          <AlertDialogTitle className="wrap-anywhere">Delete the {name} workflow?</AlertDialogTitle>
+          <AlertDialogDescription className="wrap-anywhere">
             The project, if it follows it, goes back to Standard, and a ticket that names it follows the
             project&apos;s workflow instead. The four presets are not touched. This cannot be undone.
           </AlertDialogDescription>

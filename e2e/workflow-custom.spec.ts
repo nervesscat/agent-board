@@ -412,6 +412,61 @@ test('a workflow can be named on a new ticket, and Reset returns a custom one to
   expect(rows.find((r) => r.title === 'Made on our flow')!.workflowPreset).toBe(id)
 })
 
+test('a name of sixty characters with no break wraps where it is shown: the page, the Details card, the dialogs (C12)', async ({
+  page,
+  project,
+  human,
+}) => {
+  const long = 'W'.repeat(60)
+  const made = await ok<WorkflowOverview>(
+    human.post(`/api/projects/${project.id}/workflow/custom`, { data: { name: long, from: 'standard' } }),
+  )
+  const id = made.presets.find((p) => p.label === long)!.id
+  const t = await ok<TicketFull>(
+    human.post(`/api/projects/${project.id}/tickets`, { data: { title: 'On the long one' } }),
+  )
+  await ok(human.patch(`/api/tickets/${t.id}`, { data: { workflowPreset: id } }))
+  const inside = (page: Page, name: string) =>
+    page.evaluate((label) => {
+      const box = [...document.querySelectorAll<HTMLElement>('[role="alertdialog"] button')]
+        .find((b) => b.textContent?.trim() === label)!
+        .getBoundingClientRect()
+      return box.left >= 0 && box.right <= window.innerWidth
+    }, name)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await open(page, project.id, `?preset=${id}`)
+  expect(await scrollsSideways(page), 'the Workflow page').toBe(false)
+  await page.getByRole('button', { name: 'Delete' }).click()
+  await expect(page.getByRole('alertdialog')).toBeVisible()
+  expect(await scrollsSideways(page), 'with the delete dialog open').toBe(false)
+  expect(await inside(page, 'Cancel'), 'Cancel at 390px').toBe(true)
+  expect(await inside(page, 'Delete workflow'), 'Delete workflow at 390px').toBe(true)
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Rename' }).click()
+  expect(await scrollsSideways(page), 'with the rename dialog open').toBe(false)
+  await page.keyboard.press('Escape')
+
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  await expect(page.locator('[data-workflow-line]')).toContainText(`Follows the ${long} workflow`)
+  expect(await scrollsSideways(page), 'the Details card').toBe(false)
+
+  await page.goto(`/projects/${project.id}/features`)
+  await page.getByRole('button', { name: 'New ticket' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByRole('combobox', { name: 'Workflow' }).click()
+  await page.getByRole('option', { name: long, exact: true }).click()
+  await expect(dialog.getByRole('combobox', { name: 'Workflow' })).toContainText('WWWW')
+  expect(await scrollsSideways(page), 'the new-ticket dialog').toBe(false)
+
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await open(page, project.id, `?preset=${id}`)
+  await page.getByRole('button', { name: 'Delete' }).click()
+  await expect(page.getByRole('alertdialog')).toBeVisible()
+  expect(await inside(page, 'Cancel'), 'Cancel at 1280px').toBe(true)
+  expect(await inside(page, 'Delete workflow'), 'Delete workflow at 1280px').toBe(true)
+})
+
 for (const scheme of ['light', 'dark'] as const)
   test.describe(`in the ${scheme}`, () => {
     test.use({ colorScheme: scheme })

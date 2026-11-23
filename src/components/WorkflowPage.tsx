@@ -333,8 +333,10 @@ export function WorkflowPage({
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Reset the {current.label} workflow?</AlertDialogTitle>
-                <AlertDialogDescription>
+                <AlertDialogTitle className="wrap-anywhere">
+                  Reset the {current.label} workflow?
+                </AlertDialogTitle>
+                <AlertDialogDescription className="wrap-anywhere">
                   {current.custom
                     ? `Its steps, order, switches, efforts, Team agents and review rounds go back to how the ${current.label} workflow was made. Its name stays and the other workflows keep what was changed in them.`
                     : `Its order, switches, efforts, Team agents and review rounds go back to what the ${current.label} preset ships with. The other presets keep what was changed in them.`}

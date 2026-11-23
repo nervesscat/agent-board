@@ -187,7 +187,21 @@ describe('making, renaming and deleting a custom workflow', () => {
   it('refuses a bad name, a taken one in any casing, a preset’s and an unknown source, saving nothing', async () => {
     const pid = await newProject()
     await duplicate(pid, 'Ours')
-    for (const name of ['', '   ', 'x'.repeat(61), 'ours', 'OURS ', 'Light', 'standard', 7]) {
+    for (const name of [
+      '',
+      '   ',
+      'x'.repeat(61),
+      'ours',
+      'OURS ',
+      'Light',
+      'standard',
+      7,
+      // Names that draw nothing, or a preset's name with a mark that draws nothing.
+      '\u200b',
+      '\u202e\u2060',
+      'standard\u200b',
+      'Li\u0000ght',
+    ]) {
       const res = await call('POST', `/api/projects/${pid}/workflow/custom`, { name, from: 'light' })
       expect(res.status, String(name)).toBe(400)
       expect(res.body.error).toContain('name')

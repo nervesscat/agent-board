@@ -1417,7 +1417,7 @@ function Details({
             onChange={(preset) => onSave({ workflowPreset: preset })}
             className="w-full"
           />
-          <p className="text-xs text-muted-foreground" data-workflow-line>
+          <p className="text-xs text-muted-foreground wrap-anywhere" data-workflow-line>
             {workflowPick.kind === 'own'
               ? `Follows the ${workflowPick.label} workflow, set on this ticket. `
               : workflowPick.kind === 'deleted'

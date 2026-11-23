@@ -292,6 +292,18 @@ describe('naming a custom workflow', () => {
     expect(customNameProblem('Our flow', [{ name: 'our FLOW' }])).toMatchObject({ ok: false })
   })
 
+  it('takes out what draws nothing before it judges a name, and keeps tabs and line breaks as spaces', () => {
+    expect(customNameProblem('\u200b', [])).toMatchObject({ ok: false })
+    expect(customNameProblem('\u202e\u2060\ufeff', [])).toMatchObject({ ok: false })
+    expect(customNameProblem('standard\u200b', [])).toMatchObject({ ok: false })
+    expect(customNameProblem('Our\u200b flow\u0000', [{ name: 'our flow' }])).toMatchObject({ ok: false })
+    expect(customNameProblem('Our\u202e flow', [])).toEqual({ ok: true, name: 'Our flow' })
+    expect(customNameProblem('Our\tflow\nhere', [])).toEqual({ ok: true, name: 'Our flow here' })
+    // The limit counts the cleaned name.
+    expect(customNameProblem(`${'x'.repeat(60)}\u200b`, [])).toMatchObject({ ok: true })
+    expect(customNameProblem(`${'x'.repeat(61)}\u200b`, [])).toMatchObject({ ok: false })
+  })
+
   it('knows its ids from the presets’ ids', () => {
     expect(isCustomWorkflowId('custom-abcdef0123')).toBe(true)
     for (const id of [...WORKFLOW_PRESETS, 'custom-', 'custom-ABC', 'x', null, 3])

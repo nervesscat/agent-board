@@ -1145,6 +1145,25 @@ export function removeStep(
   return { ok: true, order: order.filter((x) => x !== id) }
 }
 
+/** The ranges of characters that draw nothing: control (tab and line breaks aside: those are spaces), zero-width, bidi and byte-order marks. */
+const INVISIBLE: readonly (readonly [number, number])[] = [
+  [0x00, 0x08],
+  [0x0e, 0x1f],
+  [0x7f, 0x9f],
+  [0x200b, 0x200f],
+  [0x202a, 0x202e],
+  [0x2060, 0x2064],
+  [0x2066, 0x2069],
+  [0xfeff, 0xfeff],
+]
+const withoutInvisible = (text: string) =>
+  [...text]
+    .filter((ch) => {
+      const code = ch.codePointAt(0)!
+      return !INVISIBLE.some(([from, to]) => code >= from && code <= to)
+    })
+    .join('')
+
 /**
  * The name of a custom workflow checked: trimmed, 1 to 60 characters, and not the name of a preset or of
  * another workflow of the project (in any casing). `others` are the project's workflows without the one
@@ -1154,9 +1173,11 @@ export function customNameProblem(
   name: unknown,
   others: readonly { name: string }[],
 ): { ok: true; name: string } | { ok: false; error: string } {
-  if (typeof name !== 'string' || !name.trim())
-    return { ok: false, error: 'name: give the workflow a name (1 to 60 characters)' }
-  const trimmed = name.trim().replace(/\s+/g, ' ')
+  // Characters that draw nothing (control, zero-width and bidi marks) are not part of a name: a name made
+  // only of them is empty, and one that differs from another only by them is that name.
+  const cleaned = typeof name === 'string' ? withoutInvisible(name) : ''
+  if (!cleaned.trim()) return { ok: false, error: 'name: give the workflow a name (1 to 60 characters)' }
+  const trimmed = cleaned.trim().replace(/\s+/g, ' ')
   if (trimmed.length > CUSTOM_NAME_MAX)
     return { ok: false, error: `name: at most ${CUSTOM_NAME_MAX} characters` }
   const taken = [...WORKFLOW_PRESET_LIST.map((p) => p.label), ...others.map((o) => o.name)]
