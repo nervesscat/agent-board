@@ -4,17 +4,24 @@
  * the chips count through it.
  */
 
-/** The two sides of the queue: others' PRs for me to review, and mine waiting on others. */
-export const PR_FILTERS = ['me', 'others'] as const
+/**
+ * The queue's choices: others' PRs for me to review (`me`), mine waiting on others (`others`), and
+ * every open PR of the repos, whoever wrote it and involving me or not (`all`).
+ */
+export const PR_FILTERS = ['me', 'others', 'all'] as const
 export type PrFilter = (typeof PR_FILTERS)[number]
+
+/** The two sides a PR waits on; `waitingOn` is one of them, never `all`. */
+export type PrSide = Exclude<PrFilter, 'all'>
 
 /** A row's stage on GitHub (a hold or a merge overrides it), as `status` on the queue's rows. */
 export const PR_STAGES = ['pending', 'reviewed', 'on_hold', 'done'] as const
 export type PrStage = (typeof PR_STAGES)[number]
 
 /**
- * The To review switch: every PR of that side, or only the ones whose review GitHub still asks of me
- * (`requested`, from its `review-requested:@me` search). Waiting on others has no switch.
+ * The To review switch: every PR of that side that involves me (shown as Involving me), or only the
+ * ones whose review GitHub still asks of me (`requested`, from its `review-requested:@me` search).
+ * Waiting on others and All PRs have no switch.
  */
 export const PR_REVIEWERS = ['all', 'mine'] as const
 export type PrReviewer = (typeof PR_REVIEWERS)[number]
@@ -27,25 +34,31 @@ export const WAITING_STAGES = ['pending', 'on_hold'] as const
 
 /** What the queue reads of a row. */
 export interface QueueRow {
-  waitingOn: PrFilter
+  waitingOn: PrSide
   status: PrStage
   requested: boolean
+  /** One of my searches found it (authored, review requested, reviewed, assigned). */
+  involvesMe: boolean
 }
 
-/** Whether the PR is on the filter's side of the queue. */
-export const onSide = (row: Pick<QueueRow, 'waitingOn'>, filter: PrFilter) => row.waitingOn === filter
+/** Whether the PR involves me and is on the side's of the queue. */
+export const onSide = (row: Pick<QueueRow, 'waitingOn' | 'involvesMe'>, side: PrSide) =>
+  row.involvesMe && row.waitingOn === side
 
-/** Whether the switch shows the PR: All PRs shows every one of the side, Just me only the requested ones. */
+/** Whether the switch shows the PR: Involving me shows every one of the side, Just me only the requested ones. */
 export const inReviewer = (row: Pick<QueueRow, 'requested'>, reviewer: PrReviewer) =>
   reviewer === 'all' || row.requested
 
 /**
- * Whether a filter shows the PR: its side of the queue, narrowed by the switch where the switch
- * belongs. The two options are the whole In review list's narrowing, so Waiting on others always
- * shows every row of its side, whatever the switch says.
+ * Whether a filter shows the PR. All PRs: every open one, whatever the switch says. A side: the PRs
+ * of mine on it, narrowed by the switch where the switch belongs (To review only), so Waiting on
+ * others always shows every row of its side. A merged PR is in no queue stage but Done, which only
+ * the sides have.
  */
 export const inQueue = (row: QueueRow, filter: PrFilter, reviewer: PrReviewer) =>
-  onSide(row, filter) && (filter !== 'me' || inReviewer(row, reviewer))
+  filter === 'all'
+    ? row.status !== 'done'
+    : onSide(row, filter) && (filter !== 'me' || inReviewer(row, reviewer))
 
 /** What a filter's counter says: the rows that still wait on someone, under the switch it shows. */
 export const waitingCount = (rows: readonly QueueRow[], filter: PrFilter, reviewer: PrReviewer) =>
