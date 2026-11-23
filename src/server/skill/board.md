@@ -228,10 +228,10 @@ Lanes of a ticket you are working are yours to create (next section).
   their last update; `laneUpdates: true` folds their updates into the feed; `get_ticket_git` shows
   every workspace under the ticket.
 - The human's verdict: `approvedAt` / `approvedBy` (approved) or `disapprovedAt` /
-  `disapprovedBy` (disapproved, which also moves it to `cancelled`) on a lane or ticket; both null
-  means no call yet, and `lanes.approved` / `lanes.disapproved` count them. Read it, never set it:
-  an approved lane is settled and a disapproved one is dropped, so ask in its thread before
-  touching either.
+  `disapprovedBy` (disapproved, which also moves it to `cancelled`) on a top-level ticket; both
+  null means no call yet. Read it, never set it. A lane has no verdict: its stage is the call
+  (Approved or Done is accepted, Cancelled is dropped), and the parent's `lanes` counts are
+  `total` and `byStage`. Ask in a lane's thread before moving one of those.
 - The archive: the human takes finished tickets (done or cancelled) off the board, their lanes with
   them; `archivedAt` / `archivedBy` show it. `list_tickets` leaves them out unless `archived` is
   `"include"` (with the rest) or `"only"`; `get_ticket` still opens them. Only the human archives
@@ -390,7 +390,8 @@ name>"` (e.g. `orch/builder-1`) on every board tool call, so what it posts is fi
   difficulty and confidence, steps as `{name, done, note}`, counts) and its prose in named sections
   (`brief`, `readRan`, `problems`, `gaps`, `moreTime`, `improvements`, then the ones of that agent).
   One report per run: a ticket with three review rounds has three `hunt` reports, each with its
-  round. The ticket's Agents side shows them and `list_run_reports` reads one kind across tickets.
+  round. The ticket's Agents side shows them, a work bar on the timeline opens the report written for
+  that run (same ticket, agent and round), and `list_run_reports` reads one kind across tickets.
   Put this in every brief. `update_ticket` → `review` answers with `missingRunReports` for each run
   the work timeline records with no report — a span, a hand-off, or a second run of one agent and
   round that only one report covers: flagged, not refused; get them written before the hand-off.
@@ -524,9 +525,8 @@ After that:
 1. `done` is the human's call unless the project instructions say otherwise, or the ticket is in
    Approved, where an orchestrator merges the PR and then moves it: see
    [Approved](#approved-the-go-ahead-to-merge).
-2. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the
-   board flags a ticket that is further along than its lanes. Say in the summary which lanes it
-   covers.
+2. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`. Say in the
+   summary which lanes it covers.
 3. Dropping work: `status: cancelled`, with a comment saying why. A cancelled or done lane's tasks
    leave the parent's progress.
 4. Clean up your lane before it goes to `done` (or when the human moves it there): see

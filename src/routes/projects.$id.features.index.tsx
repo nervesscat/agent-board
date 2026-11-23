@@ -1,11 +1,24 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { cn } from 'cn'
-import { Archive, ChevronDown, CircleDot, Columns3, List, Loader2, Search, Tags, X } from 'lucide-react'
+import {
+  Archive,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CircleDot,
+  Columns3,
+  List,
+  Loader2,
+  Search,
+  Tags,
+  X,
+} from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
+import { DelayedLoading } from '#/components/Loading'
 import { NewTicket } from '#/components/NewTicket'
 import { toastRefusal } from '#/components/Needs'
 import { tagTextClass } from '#/components/Tag'
@@ -229,7 +242,8 @@ function Features() {
             </TabsList>
           </Tabs>
           {/* The board's stage buttons: shown only while the board is on screen and scrolls sideways. */}
-          {view === 'board' && !isLoading && <StageScroll scroller={boardScroller} />}
+          {view === 'board' &&
+            (isLoading ? <StageScrollPlaceholder /> : <StageScroll scroller={boardScroller} />)}
           <NewTicket projectId={id} />
         </div>
       </div>
@@ -242,7 +256,7 @@ function Features() {
           found.isError ? (
             <p className="text-sm text-destructive">{errorMessage(found.error)}</p>
           ) : (
-            <Skeleton className="h-64" />
+            <RowsLoading />
           )
         ) : listed.length === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -267,7 +281,7 @@ function Features() {
         )
       ) : view === 'archived' ? (
         archiveLoading ? (
-          <Skeleton className="h-64" />
+          <RowsLoading />
         ) : (
           <ArchivedList
             projectId={id}
@@ -277,7 +291,11 @@ function Features() {
           />
         )
       ) : isLoading ? (
-        <Skeleton className="h-64" />
+        view === 'list' ? (
+          <RowsLoading />
+        ) : (
+          <BoardLoading projectId={id} />
+        )
       ) : view === 'list' ? (
         <TicketList projectId={id} items={shown} />
       ) : (
@@ -291,6 +309,67 @@ function Features() {
         />
       )}
     </div>
+  )
+}
+
+/** The board's stage buttons, disabled, while the tickets load: the header keeps its place. */
+function StageScrollPlaceholder() {
+  return (
+    <div className="hidden gap-1 md:flex">
+      <Button variant="outline" size="icon" disabled aria-label="Previous stage">
+        <ChevronLeft />
+      </Button>
+      <Button variant="outline" size="icon" disabled aria-label="Next stage">
+        <ChevronRight />
+      </Button>
+    </div>
+  )
+}
+
+/** The board while its tickets load: a column per stage, each with a few cards, as wide as the real ones. */
+function BoardLoading({ projectId }: { projectId: string }) {
+  const stages = useStages(projectId)
+  const columns = stages.length > 0 ? stages.map((s) => s.name) : [null, null, null, null, null]
+  return (
+    <DelayedLoading label="Loading tickets…">
+      <div className="flex flex-col gap-3 overflow-x-hidden pb-2 md:min-h-80 md:flex-row" aria-hidden>
+        {columns.map((name, i) => (
+          <div
+            key={i}
+            className={cn(
+              'flex w-full shrink-0 flex-col rounded-lg bg-muted/40 p-2 md:w-72',
+              i > 0 && 'max-md:hidden',
+            )}
+          >
+            <div className="mb-2 flex h-4 items-center justify-between px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {name ? <span className="truncate">{name}</span> : <Skeleton className="h-3 w-20" />}
+              <Skeleton className="h-3 w-4" />
+            </div>
+            <div className="space-y-2">
+              {Array.from({ length: 6 }, (_, j) => (
+                <Skeleton key={j} className="h-20 w-full" />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </DelayedLoading>
+  )
+}
+
+/** The List or the Archived tickets while they load: bordered rows as tall as the real ones. */
+function RowsLoading() {
+  return (
+    <DelayedLoading label="Loading tickets…">
+      <ul className="divide-y rounded-md border" aria-hidden>
+        {Array.from({ length: 6 }, (_, i) => (
+          <li key={i} className="flex h-[46px] items-center gap-3 px-3">
+            <Skeleton className="h-5 w-20 shrink-0" />
+            <Skeleton className="h-4 w-2/3" />
+          </li>
+        ))}
+      </ul>
+    </DelayedLoading>
   )
 }
 
@@ -487,7 +566,13 @@ function TagFilter({
             {error && !isFetchNextPageError ? (
               <TagsError onRetry={() => void refetch()} />
             ) : waiting ? (
-              <MoreTags loading />
+              <div className="min-h-7">
+                <DelayedLoading label="Loading tags…" className="flex min-h-7 items-center justify-center">
+                  <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="size-3.5 motion-safe:animate-spin" /> Loading tags…
+                  </span>
+                </DelayedLoading>
+              </div>
             ) : (
               <>
                 {shown.length === 0 && (

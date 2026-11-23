@@ -1,6 +1,8 @@
 import { Readable } from 'node:stream'
 import { z } from 'zod'
 
+import { db, schema } from '#/db'
+
 import {
   AGENT_CLIENTS,
   COMMENT_PARENTS,
@@ -14,8 +16,12 @@ import {
 } from '#/lib/constants'
 import { AGENT_TOKEN_NAME } from '#/lib/agents'
 import { KINDS } from '#/lib/kinds'
+import { RESUME_COMMAND_MAX, RESUME_TIMEOUT, resumeCommandProblem } from '#/lib/resume'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import * as agentCards from './agentCards'
+import * as alertActions from './alerts/actions'
+import { notificationFeed } from './alerts/feed'
+import { registerForTest } from './alerts/registry'
 import * as agents from './agents'
 import { roadmap } from './roadmap'
 import * as runConfig from './runConfig'
@@ -38,11 +44,13 @@ import { cleanupReport } from './cleanup'
 import { DeleteItems, startCleanupDelete } from './cleanupActions'
 import { authMode, servedEntrance } from './config'
 import { dailyReport, today } from './daily'
+import { WAIT_MAX_SECONDS, waitAndReport } from './answerWait'
 import * as features from './features'
 import { GalleryQuery, listGallery } from './gallery'
 import { listDirs } from './fs'
 import { assertRepo, listBranches } from './git'
 import { checkHostTools, readyHostTools } from './hostTools'
+import { presetTools, retryResume, ticketResume } from './resume'
 import { HttpError, intParam, notFound, readJson } from './http'
 import * as jobs from './jobs'
 import * as instructions from './instructionsHistory'
@@ -403,8 +411,18 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
       layout: projects.LayoutBody.optional(),
       workStage: z.string().min(1).max(100).nullable().optional(),
       kinds: ProjectKinds.optional(),
+      resumeCommand: z
+        .string()
+        .max(RESUME_COMMAND_MAX)
+        .refine((c) => resumeCommandProblem(c) === null, { message: 'the command is one line' })
+        .optional(),
+      resumeTimeoutMinutes: z.number().int().min(RESUME_TIMEOUT.min).max(RESUME_TIMEOUT.max).optional(),
     }),
   )
+  // The command runs on this machine with the board user's rights: only the signed-in human writes it,
+  // never an agent token, and no MCP tool sets it.
+  if ((body.resumeCommand !== undefined || body.resumeTimeoutMinutes !== undefined) && isAgent(request))
+    throw new HttpError(403, "only the human sets the project's resume command")
   // What the project is for decides which of the board is in use: the human's to choose.
   if (body.kinds !== undefined && isAgent(request))
     throw new HttpError(403, 'only the human sets what the project is for')
@@ -766,6 +784,7 @@ api.delete('/api/tickets/:id', ({ params, url, actor }) => {
   return json({ ok: true })
 })
 // Approval is the human's: agents read approvedAt/approvedBy on the ticket but cannot set them.
+// A lane has none (409): its stage is the call.
 api.put('/api/tickets/:id/approval', async ({ request, params, actor }) => {
   if (isAgent(request)) throw new HttpError(403, 'only the human approves')
   // approved, disapproved (which cancels the ticket), or null to take the call back; reopenTo is the
@@ -1008,6 +1027,101 @@ api.delete('/api/projects/:id/agent-cards/:cardId', ({ request, params, actor })
   return json({ ok: true })
 })
 
+// --- notifications: the one feed of jobs, agent cards and alerts, and what the human does with alerts (alerts/) ---
+// The project's jobs, cards and active alerts as one list of the same item shape, newest first. An agent
+// sees its own jobs and cards and no alerts. Reads only.
+api.get('/api/projects/:id/notifications', ({ request, params, actor }) =>
+  json(notificationFeed(id(params), { agent: isAgent(request) ? actor : null })),
+)
+// Marks every alert on show in the project seen. Every route below this one is the human's: an agent gets 403.
+api.post('/api/projects/:id/notifications/seen', ({ request, params }) =>
+  json(alertActions.markProjectSeen({ agent: isAgent(request) }, id(params))),
+)
+api.post('/api/alerts/:id/seen', ({ request, params }) => {
+  alertActions.markSeen({ agent: isAgent(request) }, id(params))
+  return json({ ok: true })
+})
+api.post('/api/alerts/:id/dismiss', ({ request, params }) => {
+  alertActions.dismissAlert({ agent: isAgent(request) }, id(params))
+  return json({ ok: true })
+})
+api.post('/api/alerts/:id/snooze', async ({ request, params }) => {
+  const body = await readJson(request, z.object({ ms: z.number().int().positive() }))
+  return json(alertActions.snoozeAlert({ agent: isAgent(request) }, id(params), body.ms))
+})
+// Runs the handler behind a button of kind action.
+api.post('/api/alerts/:id/actions/:buttonId', async ({ request, params }) =>
+  json(await alertActions.runAlertAction({ agent: isAgent(request) }, id(params), params.buttonId!)),
+)
+// Every alert type with its group and whether the project muted it, and the switch to mute one.
+api.get('/api/projects/:id/alert-types', ({ params }) => json(alertActions.alertTypesOf(id(params))))
+api.put('/api/projects/:id/alert-mutes/:type', ({ request, params }) => {
+  alertActions.muteType({ agent: isAgent(request) }, id(params), params.type!)
+  return json({ ok: true })
+})
+api.delete('/api/projects/:id/alert-mutes/:type', ({ request, params }) => {
+  alertActions.unmuteType({ agent: isAgent(request) }, id(params), params.type!)
+  return json({ ok: true })
+})
+// Test mode only, for the browser tests: writes an alert row of a test type (registered on first use)
+// without waiting for a check. Anywhere but a test-mode board this is a 404.
+const TestAlert = z.object({
+  projectId: z.number().int().nullable(),
+  subject: z.string().max(100).default(''),
+  severity: z.enum(['info', 'warning', 'problem']).default('warning'),
+  title: z.string().min(1).max(200),
+  body: z.string().max(2_000).default(''),
+  seen: z.boolean().default(false),
+})
+let removeTestAlertType: (() => void) | null = null
+api.post('/api/test/alerts', async ({ request }) => {
+  if (!testOnlyAllowed(authMode().boardEnv)) throw notFound('endpoint')
+  const body = await readJson(request, TestAlert)
+  if (body.projectId !== null) projects.getProject(body.projectId)
+  removeTestAlertType ??= registerForTest({
+    type: 'test-alert',
+    idea: 0,
+    group: 'work',
+    label: 'Test alert',
+    description: 'An alert the browser tests write by hand',
+    scope: 'project',
+    check: () => [],
+    actions: {
+      ack: () => ({ message: 'Acknowledged', resolve: true }),
+      nope: () => ({ ok: false, message: 'It did not work' }),
+    },
+  })
+  const at = new Date().toISOString()
+  const row = db
+    .insert(schema.alerts)
+    .values({
+      projectId: body.projectId,
+      type: 'test-alert',
+      subject: body.subject,
+      severity: body.severity,
+      title: body.title,
+      body: body.body,
+      data: JSON.stringify({ details: [] }),
+      buttons: JSON.stringify([
+        {
+          id: 'open',
+          label: 'Open',
+          kind: 'link',
+          href: body.projectId ? `/projects/${body.projectId}` : '/',
+        },
+        { id: 'copy', label: 'Copy command', kind: 'copy', text: 'echo test' },
+        { id: 'ack', label: 'Acknowledge', kind: 'action', primary: true },
+        { id: 'nope', label: 'Try and fail', kind: 'action' },
+      ]),
+      createdAt: at,
+      updatedAt: at,
+      seenAt: body.seen ? at : null,
+    })
+    .returning()
+    .get()
+  return json(row, 201)
+})
+
 // Every preview of the project's tickets, running or not, running first, and the board-wide use of the
 // preview limit; reads only.
 api.get('/api/projects/:id/previews', async ({ params }) => json(await projectPreviewsPage(id(params))))
@@ -1102,6 +1216,33 @@ api.get('/api/workspaces/:id/preview/log', ({ params, url }) => {
     headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
   })
 })
+// The board continues a ticket's work by running the project's resume command (resume.ts): what happened
+// the last times, and the Resume / Retry button, which is the human's alone.
+// Wait for the human's answer on a decision card (the MCP tool wait_for_answer): the answer at once when
+// the card is answered, else when it lands, else {answered: false, timedOut: true} after timeoutSeconds.
+api.get('/api/tickets/:id/answer', async ({ request, params, url, actor }) => {
+  const post = url.searchParams.get('postId')
+  const seconds = url.searchParams.get('timeoutSeconds')
+  return json(
+    await waitAndReport({
+      ticketId: id(params),
+      postId: post === null ? undefined : intParam(post, 'postId'),
+      timeoutSeconds:
+        seconds === null
+          ? undefined
+          : query(z.coerce.number().int().min(1).max(WAIT_MAX_SECONDS), seconds, 'timeoutSeconds'),
+      signal: request.signal,
+      actor,
+    }),
+  )
+})
+api.get('/api/tickets/:id/resume', ({ params }) => json(ticketResume(id(params))))
+api.post('/api/tickets/:id/resume', ({ request, params }) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human resumes a ticket')
+  return json(retryResume(id(params)), 202)
+})
+// Which agent CLIs the resume presets name are on this machine's PATH.
+api.get('/api/resume/tools', () => json(presetTools()))
 // Every run of every repo of the ticket, each with the workspace it runs from, its state and why it
 // would not start; Start all and Stop all (repoId: one repo's only) answer each run's outcome.
 api.get('/api/tickets/:id/runs', ({ params }) => json(ticketRuns.ticketRuns(id(params))))

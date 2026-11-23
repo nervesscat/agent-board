@@ -564,6 +564,7 @@ export async function judgeTicket(
   opts: { reopenTo?: string; force?: boolean } = {},
 ) {
   const t = features.getTicket(id)
+  features.refuseLaneVerdict(t)
   const stages = listStages(t.projectId)
   const to =
     verdict === 'approved' && features.approvalCloses(t, stages)

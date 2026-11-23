@@ -400,8 +400,8 @@ test('on a 375 and a 440px phone the PR queue fits without sideways scroll, and 
     await expect(tab('Just me as reviewer'), `${width}px`).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByText('Nothing pending to review.'), `${width}px`).toBeVisible()
     expect(await scrollsSideways(page), `${width}px`).toBe(false)
-    await tab('All PRs').tap()
-    await expect(tab('All PRs'), `${width}px`).toHaveAttribute('aria-selected', 'true')
+    await tab('Involving me').tap()
+    await expect(tab('Involving me'), `${width}px`).toHaveAttribute('aria-selected', 'true')
     for (const stage of ['Reviewed', 'On hold', 'Done']) {
       await tab(stage).tap()
       await expect(tab(stage), `${width}px`).toHaveAttribute('aria-selected', 'true')
@@ -413,6 +413,10 @@ test('on a 375 and a 440px phone the PR queue fits without sideways scroll, and 
     await expect(page.getByText('Nothing done waiting on others.'), `${width}px`).toBeVisible()
     await tab('Pending').tap()
     await expect(page.getByText('Nothing pending waiting on others.'), `${width}px`).toBeVisible()
+    expect(await scrollsSideways(page), `${width}px`).toBe(false)
+    await tab('All PRs').tap()
+    await expect(tab('All PRs'), `${width}px`).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByText('Nothing pending among the open PRs.'), `${width}px`).toBeVisible()
     expect(await scrollsSideways(page), `${width}px`).toBe(false)
   }
 })

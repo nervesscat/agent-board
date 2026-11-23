@@ -20,6 +20,7 @@ import {
 import { useState, type ReactNode } from 'react'
 
 import { Actor, ClaimedActor } from '#/components/Actor'
+import { AgentsAtWork } from '#/components/AgentsAtWork'
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { Empty } from '#/components/Empty'
 import { GettingStarted } from '#/components/GettingStarted'
@@ -46,7 +47,7 @@ import {
 import { ago, clock } from '#/lib/format'
 import { needKeys, undismissed, useDismissedNeeds } from '#/lib/needsYou'
 import { projectTabSearch } from '#/lib/settingsTabs'
-import { stageBadge, stageOf } from '#/lib/stages'
+import { carryingOverStages, stageBadge, stageOf } from '#/lib/stages'
 import { useServerOffset } from '#/lib/useNow'
 import { lastHeard, onServerClock, workDuration, type WorkTimelineLike } from '#/lib/workStatus'
 import type { Stalled } from '#/lib/workTimeline'
@@ -123,6 +124,7 @@ const headline = (p: ProjectSummary) =>
 /** Each card of the block; which show and in what order is the project's layout. */
 const CARDS: Record<AreaId<'overview'>, (props: CardProps) => ReactNode> = {
   'overview.needsYou': NeedsYou,
+  'overview.agents': Agents,
   'overview.inProgress': InProgress,
   'overview.doneToday': DoneToday,
   'overview.lostContact': LostContact,
@@ -355,6 +357,11 @@ function HeardLine({ timeline }: { timeline: WorkTimelineLike }) {
 }
 
 // --- the sections ---
+
+/** Right after Needs you: the order class is the same, and cards of one order keep the layout's order. */
+function Agents({ p }: CardProps) {
+  return <AgentsAtWork p={p} className="lg:order-1 lg:col-span-full" />
+}
 
 function NeedsYou({ p, now, dismiss }: CardProps) {
   const { decisions, humanWaits, prs, threads, reviews, blockedTasks, instructionChanges, stalled, total } =
@@ -834,7 +841,9 @@ function DoneToday({ p }: { p: ProjectSummary }) {
 }
 
 function CarryingOver({ p, now }: CardProps) {
-  const items = p.carryingOver
+  // The summary carries every ticket from before today; Overview lists the Blocked and In review ones.
+  const shown = carryingOverStages(p.stages)
+  const items = p.carryingOver.filter((t) => shown.has(t.status))
   return (
     <Section
       icon={Clock}
@@ -844,7 +853,7 @@ function CarryingOver({ p, now }: CardProps) {
       scroll
     >
       {!items.length ? (
-        <Quiet>Nothing carried over from before today.</Quiet>
+        <Quiet>Nothing blocked or in review from before today.</Quiet>
       ) : (
         <Rows>
           {items.map((t) => {

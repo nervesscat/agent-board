@@ -118,14 +118,13 @@ test("a worker's event under the name 'board' is a claim: no Board badge, and wh
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   const card = page.getByRole('region', { name: 'Timeline' })
   await card.getByRole('button', { name: 'Show more' }).click()
-  await card.getByRole('button', { name: 'Show heartbeats' }).click()
   // The story folds one actor's consecutive rows under one actor line: the claimed name and who
   // recorded it show once for the run, not on every row.
   const list = card.getByRole('list', { name: 'Timeline story' })
   const run = list
     .locator(':scope > li')
     .filter({ hasText: /board\s*by\s*claude\s*Agent/ })
-    .filter({ hasText: 'heartbeat' })
+    .filter({ hasText: 'started build' })
   await expect(run).toHaveCount(1)
   await expect(run.getByTestId('claimed-name')).toHaveText('board')
   await expect(run.getByTestId('event-by')).toContainText(/^by\s*claude\s*Agent$/)

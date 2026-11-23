@@ -165,12 +165,15 @@ test('a stalled ticket says why and since when, in the same words on Needs you, 
     .filter({ hasText: `#${quiet.t.id} Quiet importer` })
   await expect(quietRow.getByTestId('work-line')).toHaveAttribute('data-state', 'quiet')
   await expect(quietRow.getByTestId('work-line')).toHaveAccessibleName(/Quiet 1d/)
-  // It started yesterday, so Carrying over draws the same line for it.
-  const carried = section(page, 'Carrying over')
-    .getByRole('listitem')
-    .filter({ hasText: `#${quiet.t.id} Quiet importer` })
-  await expect(carried.getByTestId('work-line')).toHaveAttribute('data-state', 'quiet')
-  await expect(carried.getByTestId('work-line')).toHaveAccessibleName(/Quiet 1d/)
+  // It started yesterday but is still being worked, so Carrying over leaves it out. The ticket in review
+  // that started yesterday is there, with the same line as the Needs you row.
+  startedAt(turn.t.id, yesterdayNoon())
+  await page.reload()
+  const carrying = section(page, 'Carrying over')
+  await expect(carrying.getByRole('listitem').filter({ hasText: 'Quiet importer' })).toHaveCount(0)
+  const carried = carrying.getByRole('listitem').filter({ hasText: `#${turn.t.id} Waiting for a look` })
+  await expect(carried.getByTestId('work-line')).toHaveAttribute('data-state', 'your-turn')
+  await expect(carried.getByTestId('work-line')).toHaveAccessibleName(/Your turn · waiting 2d/)
   await ok(
     agent.post(`/api/tickets/${quiet.lane.id}/updates`, {
       data: { body: 'lane: tests pass', progress: true },
@@ -295,11 +298,14 @@ test('Carrying over is a full row of its own and caps the same way, at desktop a
   project,
   api,
 }) => {
-  // Twelve tickets started yesterday: enough to run past the phone cap, and the desktop height.
+  // Twelve blocked tickets started yesterday: enough to run past the phone cap, and the desktop height.
   for (let i = 1; i <= 12; i++) {
-    const t = await api.ticket({ title: `Carried over ${i}`, status: 'in_progress' })
+    const t = await api.ticket({ title: `Carried over ${i}`, status: 'blocked' })
     startedAt(t.id, yesterdayNoon())
   }
+  // One that started yesterday and is still being worked is not carried over.
+  const working = await api.ticket({ title: 'Still being worked', status: 'in_progress' })
+  startedAt(working.id, yesterdayNoon())
 
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.goto(`/projects/${project.id}`)
@@ -309,6 +315,7 @@ test('Carrying over is a full row of its own and caps the same way, at desktop a
   const doneToday = section(page, 'Done today')
   const lost = section(page, 'Lost contact')
   await expect(carrying).toContainText('Carried over 12')
+  await expect(carrying).not.toContainText('Still being worked')
   // One line per carried-over ticket, the same one every row draws.
   await expect(carrying.getByTestId('work-line')).toHaveCount(12)
 

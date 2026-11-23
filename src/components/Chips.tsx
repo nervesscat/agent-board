@@ -7,7 +7,7 @@ export interface Chip<K extends string> {
   key: K
   label: ReactNode
   /** A count shown in a badge after the label; none without it. */
-  count?: number
+  count?: number | string
 }
 
 // A tab's underline, drawn by the line style only (chips are the default style), hangs 5px below it:
@@ -33,23 +33,36 @@ export function ChipTabs<K extends string>({
   value,
   onChange,
   listClassName,
+  trailing,
   children,
 }: {
   chips: readonly Chip<K>[]
   value: K
   onChange: (key: K) => void
   listClassName?: string
+  /** Shown on the chips' row, to their right (it wraps under them when the row is full). */
+  trailing?: ReactNode
   children?: ReactNode
 }) {
+  const list = (
+    <TabsList className={listClassName}>
+      {chips.map((c) => (
+        <TabsTrigger key={c.key} value={c.key} className={NO_UNDERLINE}>
+          <ChipLabel label={c.label} count={c.count} />
+        </TabsTrigger>
+      ))}
+    </TabsList>
+  )
   return (
     <Tabs value={value} onValueChange={(v) => onChange(v as K)}>
-      <TabsList className={listClassName}>
-        {chips.map((c) => (
-          <TabsTrigger key={c.key} value={c.key} className={NO_UNDERLINE}>
-            <ChipLabel label={c.label} count={c.count} />
-          </TabsTrigger>
-        ))}
-      </TabsList>
+      {trailing ? (
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {list}
+          {trailing}
+        </div>
+      ) : (
+        list
+      )}
       {children}
     </Tabs>
   )
