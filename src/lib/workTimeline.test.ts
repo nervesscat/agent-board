@@ -236,6 +236,47 @@ describe('buildTimeline', () => {
     expect(build([span, hb], '11:00', { status: 'review' }).totals.workingMs).toBe(60 * MIN)
   })
 
+  it("lists each stay in a review-kind stage with the stage's own name", () => {
+    const events = [
+      event('span_start', '09:30', { phase: 'build' }),
+      event('stage', '10:00', { agent: 'board', by: 'board', fromStage: 'in_progress', toStage: 'review' }),
+      event('stage', '10:30', { agent: 'board', by: 'board', fromStage: 'review', toStage: 'approved' }),
+      event('stage', '11:00', { agent: 'board', by: 'board', fromStage: 'approved', toStage: 'in_progress' }),
+      event('stage', '11:20', { agent: 'board', by: 'board', fromStage: 'in_progress', toStage: 'review' }),
+    ]
+    const t = build(events, '12:00', { status: 'review' })
+    expect(t.reviewStretches).toEqual([
+      { start: at('10:00'), end: at('10:30'), name: 'In review' },
+      { start: at('10:30'), end: at('11:00'), name: 'Approved' },
+      { start: at('11:20'), end: at('12:00'), name: 'In review' },
+    ])
+    expect(t.blockedStretches).toEqual([])
+  })
+
+  it('lists the human waits and the decision cards as one set of stretches', () => {
+    const events = [
+      event('span_start', '09:30', { phase: 'build' }),
+      event('wait_start', '09:40', { reason: 'human' }),
+      event('wait_end', '09:50', { refId: next - 1 }),
+      event('wait_start', '10:10', { reason: 'human' }),
+    ]
+    const t = buildTimeline(events, {
+      now: ms('11:00'),
+      stages,
+      ticket: ticket(),
+      stallMinutes: 30,
+      decisions: [
+        { at: at('10:00'), decidedAt: at('10:20') },
+        { at: at('10:40'), decidedAt: null },
+      ],
+    })
+    expect(t.humanStretches).toEqual([
+      { start: at('09:40'), end: at('09:50'), card: false },
+      // The open wait from 10:10 and the two cards overlap: one stretch, with a card in it.
+      { start: at('10:00'), end: at('11:00'), card: true },
+    ])
+  })
+
   it('counts time in a blocked stage as blocked on human, until the next stage move', () => {
     const events = [
       event('span_start', '09:30', { phase: 'build' }),

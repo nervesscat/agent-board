@@ -405,6 +405,8 @@ export const tasks = sqliteTable(
     // Only an open task is blocked: ticking it done clears both.
     blocked: integer({ mode: 'boolean' }).notNull().default(false),
     blockedReason: text('blocked_reason').notNull().default(''),
+    // When it was tagged blocked, kept while it stays blocked (a reworded reason does not move it); null when not blocked.
+    blockedAt: text('blocked_at'),
   },
   (t) => [index('tasks_parent').on(t.parentId)],
 )
@@ -744,6 +746,58 @@ export const agentCards = sqliteTable(
   ],
 )
 
+// An alert the board raised for the human (src/server/alerts): one row per (project, type, subject), kept
+// while its condition holds. A null project is board-wide and shows in every project. The evaluator
+// inserts, updates and resolves rows; the human sees, snoozes and dismisses them.
+export const alerts = sqliteTable(
+  'alerts',
+  {
+    id: id(),
+    projectId: integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    type: text().notNull(),
+    // What the alert is about inside its type ('' when the type raises at most one).
+    subject: text().notNull().default(''),
+    severity: text().$type<'info' | 'warning' | 'problem'>().notNull(),
+    title: text().notNull(),
+    body: text().notNull().default(''),
+    // JSON text: the details lines and whatever the type keeps with the row.
+    data: text().notNull().default('{}'),
+    // JSON text: the buttons the card shows.
+    buttons: text().notNull().default('[]'),
+    createdAt: now(),
+    updatedAt: now(),
+    seenAt: text(),
+    dismissedAt: text(),
+    snoozedUntil: text(),
+    // Set when the condition ended; the row is hidden until it comes back.
+    resolvedAt: text(),
+  },
+  (t) => [
+    // SQLite treats nulls as distinct in a unique index: a board-wide alert has an index of its own.
+    uniqueIndex('alerts_project_type_subject')
+      .on(t.projectId, t.type, t.subject)
+      .where(sql`${t.projectId} IS NOT NULL`),
+    uniqueIndex('alerts_board_type_subject')
+      .on(t.type, t.subject)
+      .where(sql`${t.projectId} IS NULL`),
+    index('alerts_project').on(t.projectId),
+    check('alerts_severity', sql`${t.severity} IN ('info', 'warning', 'problem')`),
+  ],
+)
+
+// A project's muted alert types: the evaluator still runs them, the feed hides them.
+export const alertMutes = sqliteTable(
+  'alert_mutes',
+  {
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    type: text().notNull(),
+    createdAt: now(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.type] })],
+)
+
 // Origin's branches of a repo as the board last saw them, and each move it saw since (a branch that
 // appeared, moved or went away): what reached origin on a given day.
 export const originRefs = sqliteTable(
@@ -905,6 +959,8 @@ export type RunReportRecord = typeof runReports.$inferSelect
 export type ReportSettings = typeof reportSettings.$inferSelect
 export type Report = typeof reports.$inferSelect
 export type AgentCardRow = typeof agentCards.$inferSelect
+export type AlertRow = typeof alerts.$inferSelect
+export type AlertMute = typeof alertMutes.$inferSelect
 export type ReportSettingsChange = typeof reportSettingsChanges.$inferSelect
 export type ProjectInstructionChange = typeof projectInstructionChanges.$inferSelect
 export type OriginRef = typeof originRefs.$inferSelect
