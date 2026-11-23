@@ -141,8 +141,23 @@ async function expectBackspaceJoinUnderHeadingInSight(page: Page, dialog: Locato
   const lines = dialog.getByRole('textbox', { name: 'Instructions' }).locator('p')
   // Line `n + 1` is the paragraph at index `n`.
   const n = 20
-  await page.keyboard.press('Control+Home')
-  for (let i = 1; i <= n; i++) await page.keyboard.press('ArrowDown')
+  // The caret goes to the start of line `n + 1` by clicking it and pressing Home, not by pressing
+  // ArrowDown `n` times: on a slow runner some of those presses did not move the caret, and the Backspace
+  // joined two other lines. It is read back before anything else is done with it.
+  await lines.nth(n).click()
+  await page.keyboard.press('Home')
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const sel = getSelection()
+          const node = sel?.focusNode
+          const p = (node instanceof Element ? node : node?.parentElement)?.closest('p')
+          return p ? { text: p.textContent, offset: sel!.focusOffset, collapsed: sel!.isCollapsed } : null
+        }),
+      { message: `the caret is at the start of line ${n + 1}` },
+    )
+    .toEqual({ text: `Line ${n + 1} of the instructions`, offset: 0, collapsed: true })
   await lines.nth(n).evaluate((next) => {
     const form = next.closest('form')!
     const head = form.querySelector('[data-slot="dialog-header"]')!
