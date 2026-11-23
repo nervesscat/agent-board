@@ -47,7 +47,7 @@ import { toast } from 'sonner'
 import { Actor, useActorKinds } from '#/components/Actor'
 import { AnnotateImage, useAnnotations } from '#/components/AnnotateImage'
 import { ComplexitySelect } from '#/components/Complexity'
-import { WorkflowSelect } from '#/components/WorkflowSelect'
+import { WorkflowSelect, useWorkflowChoices } from '#/components/WorkflowSelect'
 import { RichEditor } from '#/components/RichEditor'
 import { AssigneeSelect } from '#/components/AssigneeSelect'
 import { BranchSelect } from '#/components/BranchSelect'
@@ -58,7 +58,6 @@ import { Markdown } from '#/components/Markdown'
 import { NeedsField, NeedsStatus, toastRefusal } from '#/components/Needs'
 import { NewTicket } from '#/components/NewTicket'
 import { hasGitSide } from '#/lib/kinds'
-import { DEFAULT_WORKFLOW_PRESET, workflowPreset } from '#/lib/workflow'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { RunsCard, useTicketRuns } from '#/components/RunsCard'
@@ -1111,7 +1110,8 @@ function Details({
   const { data: project } = useProject(t.projectId)
   const repos = project?.repos ?? []
   const repoId = String(t.repoId ?? repos[0]?.id ?? '')
-  const projectPreset = project?.workflowPreset ?? DEFAULT_WORKFLOW_PRESET
+  const workflows = useWorkflowChoices(t.projectId)
+  const workflowPick = workflows.pickOf(t.workflowPreset)
   const [branch, setBranch] = useState(t.branch)
   const [baseBranch, setBaseBranch] = useState(t.baseBranch)
   // A branch typed by hand (when the repo's branches cannot be listed) saves once typing stops.
@@ -1211,19 +1211,24 @@ function Details({
           </Label>
           <WorkflowSelect
             id="workflow"
+            projectId={t.projectId}
             value={t.workflowPreset}
-            projectPreset={projectPreset}
             onChange={(preset) => onSave({ workflowPreset: preset })}
             className="w-full"
           />
           <p className="text-xs text-muted-foreground" data-workflow-line>
-            {t.workflowPreset
-              ? `Follows the ${workflowPreset(t.workflowPreset).label} workflow, set on this ticket. `
-              : `Follows the project's workflow (${workflowPreset(projectPreset).label}). `}
+            {workflowPick.kind === 'own'
+              ? `Follows the ${workflowPick.label} workflow, set on this ticket. `
+              : workflowPick.kind === 'deleted'
+                ? `The workflow set on this ticket was deleted, so it follows the project's workflow (${workflows.activeLabel}). `
+                : `Follows the project's workflow (${workflows.activeLabel}). `}
             <Link
               to="/projects/$id/workflow"
               params={{ id: String(t.projectId) }}
-              search={{ preset: t.workflowPreset ?? projectPreset, complexity: t.complexity }}
+              search={{
+                preset: workflowPick.kind === 'own' ? t.workflowPreset! : workflows.active,
+                complexity: t.complexity,
+              }}
               className="underline underline-offset-2 hover:text-foreground"
             >
               See the steps

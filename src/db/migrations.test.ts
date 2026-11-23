@@ -2040,7 +2040,9 @@ describe('0062_project_custom_workflows', () => {
     const b = project('tweaked', 'thorough', JSON.stringify({ light: { rounds: { mid: 2 } } }))
     const t = Number(
       sqlite
-        .prepare("INSERT INTO tickets (project_id, title, created_by, workflow_preset) VALUES (?, 't', 'a', 'light')")
+        .prepare(
+          "INSERT INTO tickets (project_id, title, created_by, workflow_preset) VALUES (?, 't', 'a', 'light')",
+        )
         .run(b).lastInsertRowid,
     )
     expect(columns(sqlite, 'projects')).not.toContain('workflow_custom')

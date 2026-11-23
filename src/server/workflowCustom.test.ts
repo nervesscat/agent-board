@@ -115,10 +115,18 @@ describe('making, renaming and deleting a custom workflow', () => {
   it('duplicates a preset into a new workflow listed after the four presets, and the human only', async () => {
     const pid = await newProject()
     const before = (await call('GET', `/api/projects/${pid}/workflow`)).body
-    expect(before.presets.map((p: { id: string }) => p.id)).toEqual(['light', 'standard', 'thorough', 'maximum'])
+    expect(before.presets.map((p: { id: string }) => p.id)).toEqual([
+      'light',
+      'standard',
+      'thorough',
+      'maximum',
+    ])
     expect(before.presets.every((p: { custom: unknown }) => p.custom === null)).toBe(true)
 
-    const made = await call('POST', `/api/projects/${pid}/workflow/custom`, { name: '  Ours  ', from: 'light' })
+    const made = await call('POST', `/api/projects/${pid}/workflow/custom`, {
+      name: '  Ours  ',
+      from: 'light',
+    })
     expect(made.status).toBe(201)
     expect(made.body.presets.map((p: { id: string }) => p.id).slice(0, 4)).toEqual([
       'light',
@@ -133,7 +141,9 @@ describe('making, renaming and deleting a custom workflow', () => {
     expect([mine.label, mine.custom, mine.tweaked]).toEqual(['Ours', { base: 'light' }, false])
     expect(mine.order).toEqual(entry(before, 'light').order)
     expect(mine.rounds).toEqual(entry(before, 'light').rounds)
-    expect(mine.steps.map((s: { id: string }) => s.id)).toEqual(entry(before, 'light').steps.map((s: { id: string }) => s.id))
+    expect(mine.steps.map((s: { id: string }) => s.id)).toEqual(
+      entry(before, 'light').steps.map((s: { id: string }) => s.id),
+    )
     // Another project has none of it.
     const other = await newProject()
     expect((await call('GET', `/api/projects/${other}/workflow`)).body.presets).toHaveLength(4)
@@ -166,9 +176,11 @@ describe('making, renaming and deleting a custom workflow', () => {
     const b = await duplicate(pid, 'B', a)
     await call('PUT', `/api/projects/${pid}/workflow/${b}`, { rounds: { mid: 3 } })
     const after = (await call('GET', `/api/projects/${pid}/workflow`)).body
-    expect([entry(after, 'standard').rounds.mid, entry(after, a).rounds.mid, entry(after, b).rounds.mid]).toEqual([
-      4, 2, 3,
-    ])
+    expect([
+      entry(after, 'standard').rounds.mid,
+      entry(after, a).rounds.mid,
+      entry(after, b).rounds.mid,
+    ]).toEqual([4, 2, 3])
     expect(entry(after, b).custom).toEqual({ base: 'standard' })
   })
 
@@ -180,7 +192,10 @@ describe('making, renaming and deleting a custom workflow', () => {
       expect(res.status, String(name)).toBe(400)
       expect(res.body.error).toContain('name')
     }
-    const bad = await call('POST', `/api/projects/${pid}/workflow/custom`, { name: 'Fine', from: 'custom-zzzzzzzzzz' })
+    const bad = await call('POST', `/api/projects/${pid}/workflow/custom`, {
+      name: 'Fine',
+      from: 'custom-zzzzzzzzzz',
+    })
     expect(bad.status).toBe(400)
     expect(bad.body.error).toContain('from: one of light, standard, thorough, maximum, custom-')
     expect((await call('POST', `/api/projects/${pid}/workflow/custom`, { name: 'Fine' })).status).toBe(400)
@@ -191,20 +206,30 @@ describe('making, renaming and deleting a custom workflow', () => {
     const pid = await newProject()
     const a = await duplicate(pid, 'Ours')
     const b = await duplicate(pid, 'Theirs')
-    const renamed = await call('PATCH', `/api/projects/${pid}/workflow/custom/${a}`, { name: ' Ours, renamed ' })
+    const renamed = await call('PATCH', `/api/projects/${pid}/workflow/custom/${a}`, {
+      name: ' Ours, renamed ',
+    })
     expect(renamed.status).toBe(200)
     expect(entry(renamed.body, a).label).toBe('Ours, renamed')
     // Its own name again (another casing) is allowed; another workflow's is not.
-    expect((await call('PATCH', `/api/projects/${pid}/workflow/custom/${a}`, { name: 'OURS, RENAMED' })).status).toBe(200)
-    expect((await call('PATCH', `/api/projects/${pid}/workflow/custom/${a}`, { name: 'theirs' })).status).toBe(400)
+    expect(
+      (await call('PATCH', `/api/projects/${pid}/workflow/custom/${a}`, { name: 'OURS, RENAMED' })).status,
+    ).toBe(200)
+    expect(
+      (await call('PATCH', `/api/projects/${pid}/workflow/custom/${a}`, { name: 'theirs' })).status,
+    ).toBe(400)
     expect((await call('PATCH', `/api/projects/${pid}/workflow/custom/${a}`, { name: '' })).status).toBe(400)
-    expect((await call('PATCH', `/api/projects/${pid}/workflow/custom/${b}`, { name: 'Light' })).status).toBe(400)
+    expect((await call('PATCH', `/api/projects/${pid}/workflow/custom/${b}`, { name: 'Light' })).status).toBe(
+      400,
+    )
     for (const preset of ['light', 'standard', 'thorough', 'maximum']) {
       const res = await call('PATCH', `/api/projects/${pid}/workflow/custom/${preset}`, { name: 'Mine' })
       expect(res.status).toBe(400)
       expect(res.body.error).toBe(`${preset} is one of the four presets: it cannot be renamed`)
     }
-    expect((await call('PATCH', `/api/projects/${pid}/workflow/custom/custom-zzzzzzzzzz`, { name: 'x' })).status).toBe(404)
+    expect(
+      (await call('PATCH', `/api/projects/${pid}/workflow/custom/custom-zzzzzzzzzz`, { name: 'x' })).status,
+    ).toBe(404)
   })
 
   it('deletes a custom workflow and never a preset; a project’s other workflows stay', async () => {
@@ -218,7 +243,13 @@ describe('making, renaming and deleting a custom workflow', () => {
     }
     const gone = await call('DELETE', `/api/projects/${pid}/workflow/custom/${a}`)
     expect(gone.status).toBe(200)
-    expect(gone.body.presets.map((p: { id: string }) => p.id)).toEqual(['light', 'standard', 'thorough', 'maximum', b])
+    expect(gone.body.presets.map((p: { id: string }) => p.id)).toEqual([
+      'light',
+      'standard',
+      'thorough',
+      'maximum',
+      b,
+    ])
     expect((await call('DELETE', `/api/projects/${pid}/workflow/custom/${a}`)).status).toBe(404)
     // An id is never given out again.
     const c = await duplicate(pid, 'Ours')
@@ -256,8 +287,13 @@ describe('the steps of a custom workflow', () => {
     expect(text).toContain('## 3. Test-writing pass')
     expect(text).toContain('# Workflow: Ours (a custom workflow of the project, based on Light')
     // A kind that is not one of the 14 is refused with its name.
-    const bad = await call('PUT', `/api/projects/${pid}/workflow/${w}`, { order: [...order.slice(0, -1), 'deploy', 'handoff'] })
-    expect([bad.status, bad.body.error]).toEqual([400, 'order: "deploy" is not a kind of step the workflow has'])
+    const bad = await call('PUT', `/api/projects/${pid}/workflow/${w}`, {
+      order: [...order.slice(0, -1), 'deploy', 'handoff'],
+    })
+    expect([bad.status, bad.body.error]).toEqual([
+      400,
+      'order: "deploy" is not a kind of step the workflow has',
+    ])
   })
 
   it('removes a step with no lock, drops its settings, and refuses a locked one naming it', async () => {
@@ -280,11 +316,16 @@ describe('the steps of a custom workflow', () => {
       expect(entry((await call('GET', `/api/projects/${pid}/workflow`)).body, w).order).toEqual(without)
     }
     expect(
-      (await call('PUT', `/api/projects/${pid}/workflow/${w}`, { order: without.filter((id) => id !== 'build') }))
-        .body.error,
+      (
+        await call('PUT', `/api/projects/${pid}/workflow/${w}`, {
+          order: without.filter((id) => id !== 'build'),
+        })
+      ).body.error,
     ).toBe('build is locked: it cannot be removed')
     // A switch on a step it does not have is refused; a body with no order keeps the list.
-    const off = await call('PUT', `/api/projects/${pid}/workflow/${w}`, { steps: { preview: { enabled: false } } })
+    const off = await call('PUT', `/api/projects/${pid}/workflow/${w}`, {
+      steps: { preview: { enabled: false } },
+    })
     expect([off.status, off.body.error]).toEqual([400, 'steps: preview is not a step of the Ours workflow'])
     const rounds = await call('PUT', `/api/projects/${pid}/workflow/${w}`, { rounds: { mid: 2 } })
     expect(entry(rounds.body, w).order).toEqual(without)
@@ -292,7 +333,10 @@ describe('the steps of a custom workflow', () => {
 
   it('takes every tweak of the presets: order, switch, effort, Team agent per node, rounds', async () => {
     const pid = await newProject()
-    const { body } = await call('POST', `/api/projects/${pid}/agents`, { name: 'Maker', instructions: 'Make.' })
+    const { body } = await call('POST', `/api/projects/${pid}/agents`, {
+      name: 'Maker',
+      instructions: 'Make.',
+    })
     expect(body.id).toBeTruthy()
     await call('POST', `/api/projects/${pid}/agents`, { name: 'Sharp', instructions: 'Hunt.' })
     const w = await duplicate(pid, 'Ours', 'thorough')
@@ -322,7 +366,10 @@ describe('the steps of a custom workflow', () => {
       { rounds: { mid: 13 } },
       { agents: { review: 'Maker' } },
     ])
-      expect((await call('PUT', `/api/projects/${pid}/workflow/${w}`, body)).status, JSON.stringify(body)).toBe(400)
+      expect(
+        (await call('PUT', `/api/projects/${pid}/workflow/${w}`, body)).status,
+        JSON.stringify(body),
+      ).toBe(400)
     // The presets are not touched by any of it.
     expect(entry(saved.body, 'thorough').tweaked).toBe(false)
   })
@@ -357,7 +404,12 @@ describe('the steps of a custom workflow', () => {
     const reset = await call('DELETE', `/api/projects/${pid}/workflow/${w}`)
     expect(reset.status).toBe(200)
     const back = entry(reset.body, w)
-    expect([back.order, back.rounds, back.tweaked, back.label]).toEqual([made.order, made.rounds, false, 'Renamed'])
+    expect([back.order, back.rounds, back.tweaked, back.label]).toEqual([
+      made.order,
+      made.rounds,
+      false,
+      'Renamed',
+    ])
     expect((await call('DELETE', `/api/projects/${pid}/workflow/light`)).status).toBe(200)
     expect((await call('DELETE', `/api/projects/${pid}/workflow/custom-zzzzzzzzzz`)).status).toBe(400)
   })
@@ -371,7 +423,9 @@ describe('using a custom workflow', () => {
     expect(set.status).toBe(200)
     expect([set.body.active, set.body.fellBack]).toEqual([w, null])
     expect((await call('GET', `/api/projects/${pid}`)).body.workflowPreset).toBe(w)
-    expect((await call('PUT', `/api/projects/${pid}/workflow`, { preset: 'custom-zzzzzzzzzz' })).status).toBe(400)
+    expect((await call('PUT', `/api/projects/${pid}/workflow`, { preset: 'custom-zzzzzzzzzz' })).status).toBe(
+      400,
+    )
     const t = ticket(pid, 'mid')
     const served = await effective(pid, `?ticketId=${t.id}`)
     expect([served.preset, served.source, served.base, served.custom, served.label]).toEqual([
@@ -391,26 +445,38 @@ describe('using a custom workflow', () => {
     const made = await call('POST', `/api/projects/${pid}/tickets`, { title: 'a', workflowPreset: w })
     expect([made.status, made.body.workflowPreset]).toEqual([201, w])
     const plain = (await call('POST', `/api/projects/${pid}/tickets`, { title: 'b' })).body
-    expect((await call('PATCH', `/api/tickets/${plain.id}`, { workflowPreset: w })).body.workflowPreset).toBe(w)
+    expect((await call('PATCH', `/api/tickets/${plain.id}`, { workflowPreset: w })).body.workflowPreset).toBe(
+      w,
+    )
     for (const bad of [foreign, 'custom-zzzzzzzzzz', 'mega']) {
       const patch = await call('PATCH', `/api/tickets/${plain.id}`, { workflowPreset: bad })
       expect(patch.status, bad).toBe(400)
       expect(patch.body.error).toContain(`workflowPreset: one of light, standard, thorough, maximum, ${w}`)
-      expect((await call('POST', `/api/projects/${pid}/tickets`, { title: 'c', workflowPreset: bad })).status).toBe(400)
+      expect(
+        (await call('POST', `/api/projects/${pid}/tickets`, { title: 'c', workflowPreset: bad })).status,
+      ).toBe(400)
     }
-    expect((await tool('update_ticket', { ticketId: plain.id, workflowPreset: null })).workflowPreset).toBeNull()
+    expect(
+      (await tool('update_ticket', { ticketId: plain.id, workflowPreset: null })).workflowPreset,
+    ).toBeNull()
     expect((await tool('update_ticket', { ticketId: plain.id, workflowPreset: w })).workflowPreset).toBe(w)
-    expect((await tool('create_ticket', { projectId: pid, title: 'd', workflowPreset: w })).workflowPreset).toBe(w)
+    expect(
+      (await tool('create_ticket', { projectId: pid, title: 'd', workflowPreset: w })).workflowPreset,
+    ).toBe(w)
     expect((await tool('update_ticket', { ticketId: plain.id, workflowPreset: foreign })).error).toBeTruthy()
     // A lane copies its parent's.
-    const lane = (await call('POST', `/api/projects/${pid}/tickets`, { title: 'lane', parentId: made.body.id })).body
+    const lane = (
+      await call('POST', `/api/projects/${pid}/tickets`, { title: 'lane', parentId: made.body.id })
+    ).body
     expect(lane.workflowPreset).toBe(w)
     // get_project lists the project's own workflows for an agent to name.
     const project = await tool('get_project', { projectId: pid })
-    expect(project.workflowCustom.map((c: { id: string; name: string }) => [c.id, c.name])).toEqual([[w, 'Ours']])
-    expect((await tool('get_project', { projectId: other })).workflowCustom.map((c: { id: string }) => c.id)).toEqual([
-      foreign,
+    expect(project.workflowCustom.map((c: { id: string; name: string }) => [c.id, c.name])).toEqual([
+      [w, 'Ours'],
     ])
+    expect(
+      (await tool('get_project', { projectId: other })).workflowCustom.map((c: { id: string }) => c.id),
+    ).toEqual([foreign])
   })
 
   it('is served by get_workflow like a preset, over MCP and REST alike', async () => {
@@ -419,15 +485,26 @@ describe('using a custom workflow', () => {
     const t = ticket(pid, 'high', { workflowPreset: w })
     const rest = (await call('GET', `/api/projects/${pid}/workflow/effective?ticketId=${t.id}`)).body
     expect(await tool('get_workflow', { projectId: pid, ticketId: t.id })).toEqual(rest)
-    expect([rest.preset, rest.source, rest.projectPreset, rest.fellBack]).toEqual([w, 'ticket', 'standard', null])
-    const preset = (await call('GET', `/api/projects/${pid}/workflow/effective?preset=thorough&complexity=high`)).body
+    expect([rest.preset, rest.source, rest.projectPreset, rest.fellBack]).toEqual([
+      w,
+      'ticket',
+      'standard',
+      null,
+    ])
+    const preset = (
+      await call('GET', `/api/projects/${pid}/workflow/effective?preset=thorough&complexity=high`)
+    ).body
     expect(rest.steps.map((s: { id: string }) => s.id)).toEqual(preset.steps.map((s: { id: string }) => s.id))
     expect(rest.steps.find((s: { id: string }) => s.id === 'review').review.runs).toEqual(
       preset.steps.find((s: { id: string }) => s.id === 'review').review.runs,
     )
-    expect(rest.text).toContain('# Workflow: Ours (a custom workflow of the project, based on Thorough: its review and wording are that preset')
+    expect(rest.text).toContain(
+      '# Workflow: Ours (a custom workflow of the project, based on Thorough: its review and wording are that preset',
+    )
     expect(rest.text).toContain("set on the ticket; the project's workflow is Standard")
-    expect((await call('GET', `/api/projects/${pid}/workflow/effective?preset=custom-zzzzzzzzzz`)).status).toBe(400)
+    expect(
+      (await call('GET', `/api/projects/${pid}/workflow/effective?preset=custom-zzzzzzzzzz`)).status,
+    ).toBe(400)
   })
 })
 
@@ -439,16 +516,25 @@ describe('get_workflow across custom workflows', () => {
     it(`serves a ${base}-based workflow with a step added, a step removed and no review, at every complexity`, async () => {
       const pid = await newProject()
       const kept = await duplicate(pid, 'Kept', base)
-      const keptOrder = await orderOf(pid, kept)
       const tweaked = await duplicate(pid, 'Tweaked', base)
       const tweakedOrder = await orderOf(pid, tweaked)
       const added = tweakedOrder.includes('tests')
         ? tweakedOrder.filter((id) => id !== 'preview')
-        : ['claim', ...(tweakedOrder.includes('spec') ? ['spec'] : []), 'build', 'tests', ...tweakedOrder.slice(tweakedOrder.indexOf('build') + 1)]
-      expect((await call('PUT', `/api/projects/${pid}/workflow/${tweaked}`, { order: added })).status).toBe(200)
+        : [
+            'claim',
+            ...(tweakedOrder.includes('spec') ? ['spec'] : []),
+            'build',
+            'tests',
+            ...tweakedOrder.slice(tweakedOrder.indexOf('build') + 1),
+          ]
+      expect((await call('PUT', `/api/projects/${pid}/workflow/${tweaked}`, { order: added })).status).toBe(
+        200,
+      )
       const bare = await duplicate(pid, 'Bare', base)
       const noReview = (await orderOf(pid, bare)).filter((id) => id !== 'review')
-      expect((await call('PUT', `/api/projects/${pid}/workflow/${bare}`, { order: noReview })).status).toBe(200)
+      expect((await call('PUT', `/api/projects/${pid}/workflow/${bare}`, { order: noReview })).status).toBe(
+        200,
+      )
 
       for (const level of levels) {
         const preset = await effective(pid, `?preset=${base}&complexity=${level}`)
@@ -460,10 +546,12 @@ describe('get_workflow across custom workflows', () => {
 
         const mine = await effective(pid, `?preset=${tweaked}&complexity=${level}`)
         expect(ids(mine.steps)).toEqual(
-          added.filter((id) => !(level === 'low' && ['spec', 'spec2', 'tests'].includes(id))).filter((id) => {
-            const step = mine.steps.find((s: { id: string }) => s.id === id)
-            return step && !step.skipped
-          }),
+          added
+            .filter((id) => !(level === 'low' && ['spec', 'spec2', 'tests'].includes(id)))
+            .filter((id) => {
+              const step = mine.steps.find((s: { id: string }) => s.id === id)
+              return step && !step.skipped
+            }),
         )
         expect(mine.steps.map((s: { id: string }) => s.id)).toEqual(added)
         expect(mine.text).toContain('Test-writing pass')
@@ -494,7 +582,9 @@ describe('get_workflow across custom workflows', () => {
     features.updateTicket(t.id, { workflowPreset: light }, HUMAN)
     expect(needed()).toEqual([{ phase: 'hunt', expected: 1 }])
     const bare = await duplicate(pid, 'Bare', 'standard')
-    await call('PUT', `/api/projects/${pid}/workflow/${bare}`, { order: STANDARD.filter((id) => id !== 'review') })
+    await call('PUT', `/api/projects/${pid}/workflow/${bare}`, {
+      order: STANDARD.filter((id) => id !== 'review'),
+    })
     features.updateTicket(t.id, { workflowPreset: bare }, HUMAN)
     expect(needed()).toEqual([])
   })
@@ -509,7 +599,11 @@ describe('a workflow that was deleted', () => {
     expect([gone.body.active, gone.body.fellBack]).toEqual(['standard', { id: w }])
     const t = ticket(pid, 'mid')
     const served = await effective(pid, `?ticketId=${t.id}`)
-    expect([served.preset, served.source, served.fellBack]).toEqual(['standard', 'project', { id: w, of: 'project' }])
+    expect([served.preset, served.source, served.fellBack]).toEqual([
+      'standard',
+      'project',
+      { id: w, of: 'project' },
+    ])
     expect(ids(served.steps)).toEqual(STANDARD)
     // Picking a workflow again clears the notice.
     expect((await call('PUT', `/api/projects/${pid}/workflow`, { preset: 'light' })).body.fellBack).toBeNull()
@@ -523,13 +617,20 @@ describe('a workflow that was deleted', () => {
     await call('PUT', `/api/projects/${pid}/workflow`, { preset: 'thorough' })
     await call('DELETE', `/api/projects/${pid}/workflow/custom/${w}`)
     const served = await effective(pid, `?ticketId=${t.id}`)
-    expect([served.preset, served.source, served.fellBack]).toEqual(['thorough', 'project', { id: w, of: 'ticket' }])
+    expect([served.preset, served.source, served.fellBack]).toEqual([
+      'thorough',
+      'project',
+      { id: w, of: 'ticket' },
+    ])
     // The ticket row still names it, a later workflow does not take it over, and the checks follow the project's.
     expect((await call('GET', `/api/tickets/${t.id}`)).body.workflowPreset).toBe(w)
     await duplicate(pid, 'Ours', 'light')
     expect((await effective(pid, `?ticketId=${t.id}`)).preset).toBe('thorough')
     const { ticketWorkflow } = await import('./workflow')
     expect(ticketWorkflow({ id: t.id, projectId: pid, complexity: 'high' }).preset).toBe('thorough')
-    expect((await tool('get_workflow', { projectId: pid, ticketId: t.id })).fellBack).toEqual({ id: w, of: 'ticket' })
+    expect((await tool('get_workflow', { projectId: pid, ticketId: t.id })).fellBack).toEqual({
+      id: w,
+      of: 'ticket',
+    })
   })
 })

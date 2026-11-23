@@ -1,9 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, RotateCcw } from 'lucide-react'
+import { Check, Info, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 
 import { Empty } from '#/components/Empty'
+import {
+  AddStepSelect,
+  DeleteWorkflowButton,
+  NewWorkflowDialog,
+  RenameWorkflowDialog,
+} from '#/components/WorkflowCustom'
 import { ComplexityPicker, PresetSwitcher } from '#/components/WorkflowPresets'
 import { WhatAgentsRead, readsKey } from '#/components/WorkflowReads'
 import { WorkflowGraph } from '#/components/WorkflowGraph'
@@ -22,15 +28,38 @@ import {
 } from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
 import { Skeleton } from '#/components/ui/skeleton'
-import { del, errorMessage, get, put, type WorkflowOverview } from '#/lib/api'
+import { del, errorMessage, get, patch, post, put, type WorkflowOverview } from '#/lib/api'
 import type { Complexity } from '#/lib/constants'
-import { type PresetTweak, type WorkflowPresetId, moveStep, resolveWorkflow } from '#/lib/workflow'
+import {
+  WORKFLOW_PRESET_DEFS,
+  addStep,
+  addableSteps,
+  customSource,
+  moveStep,
+  removeStep,
+  resolveWorkflow,
+  type PresetTweak,
+  type WorkflowRef,
+} from '#/lib/workflow'
 import { tweakBody, withEffort, withEnabled, withAgent, withOrder, withRounds } from '#/lib/workflowEdit'
 import { findNode } from '#/lib/workflowGraph'
 import { COMPLEXITY_NAMES, roundsText } from '#/lib/workflowView'
 
 /** The project's workflow: the overview of every preset, read once and kept as each change answers with the new one. */
 const overviewKey = (projectId: string) => ['workflow', projectId] as const
+
+type Entry = WorkflowOverview['presets'][number]
+
+/** What the model resolves an entry of the overview from: its preset's id, or a custom workflow's source. */
+const refOf = (entry: Entry): WorkflowRef =>
+  entry.custom
+    ? customSource({
+        id: entry.id,
+        name: entry.label,
+        base: entry.custom.base,
+        seed: { order: entry.defaultOrder },
+      })
+    : (entry.id as WorkflowRef)
 
 /** Whether the page is wide enough for the settings to sit beside the graph (else they open as a sheet over it). */
 const WIDE = '(min-width: 1024px)'
@@ -62,9 +91,9 @@ export function WorkflowPage({
 }: {
   projectId: string
   /** The preset shown; the project's active one when none is picked. */
-  preset: WorkflowPresetId | undefined
+  preset: string | undefined
   complexity: Complexity
-  onView: (preset: WorkflowPresetId) => void
+  onView: (preset: string) => void
   onComplexity: (level: Complexity) => void
 }) {
   const qc = useQueryClient()
@@ -76,13 +105,18 @@ export function WorkflowPage({
   // Saves wait for each other: the next is built from what the one before it saved, never from older data.
   const queue = useRef<Promise<unknown>>(Promise.resolve())
   // The answer is the reason a save failed, or null once it was kept: an editor stays open on a refusal.
-  const run = (job: () => Promise<WorkflowOverview>, message = 'Saved') => {
+  const run = (
+    job: () => Promise<WorkflowOverview & { created?: string }>,
+    message = 'Saved',
+    after?: (overview: WorkflowOverview & { created?: string }) => void,
+  ) => {
     const next = queue.current.then(job).then(
       (overview): string | null => {
         qc.setQueryData(key, overview)
         qc.invalidateQueries({ queryKey: readsKey(projectId) })
         qc.invalidateQueries({ queryKey: ['project', projectId] })
         toast.success(message)
+        after?.(overview)
         return null
       },
       (err): string | null => {
@@ -105,11 +139,14 @@ export function WorkflowPage({
   const flights = useRef(new Map<string, RoundsFlight>())
 
   const active = data?.active
-  const viewed = pickedPreset ?? active
+  // A workflow named in the link that the project does not have (deleted, or never there) shows the project's own.
+  const missing =
+    pickedPreset !== undefined && data !== undefined && !data.presets.some((p) => p.id === pickedPreset)
+  const viewed = missing ? active : (pickedPreset ?? active)
   const current = data?.presets.find((p) => p.id === viewed)
-  // The graph is the preset and its saved tweaks resolved for the complexity: the board's own function.
+  // The graph is the workflow and its saved tweaks resolved for the complexity: the board's own function.
   const workflow = useMemo(
-    () => (current ? resolveWorkflow(current.id, current.tweaks, complexity, data?.team) : null),
+    () => (current ? resolveWorkflow(refOf(current), current.tweaks, complexity, data?.team) : null),
     [current, complexity, data?.team],
   )
   const node = workflow ? findNode(workflow, selected) : null
@@ -130,6 +167,8 @@ export function WorkflowPage({
         tweakBody(build(latest?.tweaks ?? null)),
       )
     })
+  // The steps the workflow has with `t` saved on it, in order.
+  const stepsOf = (t: PresetTweak | null) => resolveWorkflow(refOf(current), t, null).order
   const edits: WorkflowEdits = {
     setEnabled: (id, enabled) => edit((t) => withEnabled(t, id, enabled)),
     setEffort: (id, effort) => edit((t) => withEffort(t, id, effort)),
@@ -137,11 +176,49 @@ export function WorkflowPage({
     setRounds: (level, rounds) => edit((t) => withRounds(t, level, rounds)),
     move: (id, direction) =>
       edit((t) => {
-        const moved = moveStep(viewed, resolveWorkflow(viewed, t, null).order, id, direction)
+        const moved = moveStep(refOf(current), stepsOf(t), id, direction)
         if (!moved.ok) throw new Error(moved.reason)
         return withOrder(t, moved.order)
       }),
+    // Only a custom workflow has steps to take out.
+    remove: current.custom
+      ? (id) =>
+          edit((t) => {
+            const next = removeStep(stepsOf(t), id)
+            if (!next.ok) throw new Error(next.reason)
+            return withOrder(t, next.order)
+          })
+      : undefined,
   }
+  // A kind of step the custom workflow lacks put in, where the order allows it.
+  const addKind = (id: string) =>
+    edit((t) => {
+      const next = addStep(stepsOf(t), id)
+      if (!next.ok) throw new Error(next.reason)
+      return withOrder(t, next.order)
+    })
+  const create = async (name: string, from: string) => {
+    return run(
+      () =>
+        post<WorkflowOverview & { created: string }>(`/api/projects/${projectId}/workflow/custom`, {
+          name,
+          from,
+        }),
+      'Workflow created',
+      (overview) => overview.created && onView(overview.created),
+    )
+  }
+  const rename = (name: string) =>
+    run(
+      () => patch<WorkflowOverview>(`/api/projects/${projectId}/workflow/custom/${viewed}`, { name }),
+      'Renamed',
+    )
+  const removeWorkflow = () =>
+    run(
+      () => del<WorkflowOverview>(`/api/projects/${projectId}/workflow/custom/${viewed}`),
+      'Workflow deleted',
+      (overview) => onView(overview.active),
+    )
   const makeActive = () =>
     run(() => put<WorkflowOverview>(`/api/projects/${projectId}/workflow`, { preset: viewed }), 'Saved')
   const reset = () =>
@@ -186,7 +263,34 @@ export function WorkflowPage({
         </p>
       </div>
 
-      <PresetSwitcher presets={data.presets} active={data.active} viewed={viewed} onView={onView} />
+      {(data.fellBack || missing) && (
+        <p
+          data-workflow-notice
+          role="status"
+          className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200"
+        >
+          <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>
+            {data.fellBack
+              ? `The workflow this project followed was deleted, so it follows ${WORKFLOW_PRESET_DEFS.standard.label} now. Tickets that named it follow the project's workflow. Pick one below and press Use this workflow to choose again.`
+              : "That workflow is not one of this project's (it may have been deleted), so the project's own is shown."}
+          </span>
+        </p>
+      )}
+
+      <PresetSwitcher
+        presets={data.presets}
+        active={data.active}
+        viewed={viewed}
+        onView={onView}
+        extra={
+          <NewWorkflowDialog
+            choices={data.presets.map((p) => ({ id: p.id, label: p.label }))}
+            from={viewed}
+            onCreate={create}
+          />
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <ComplexityPicker value={complexity} onChange={onComplexity} />
@@ -203,6 +307,8 @@ export function WorkflowPage({
               <Check data-icon="inline-start" /> Use this workflow
             </Button>
           )}
+          {current.custom && <RenameWorkflowDialog name={current.label} onRename={rename} />}
+          {current.custom && <DeleteWorkflowButton name={current.label} onDelete={removeWorkflow} />}
           <AlertDialog open={confirmingReset} onOpenChange={setConfirmingReset}>
             <AlertDialogTrigger
               render={<Button type="button" variant="outline" size="sm" disabled={!current.tweaked} />}
@@ -213,8 +319,9 @@ export function WorkflowPage({
               <AlertDialogHeader>
                 <AlertDialogTitle>Reset the {current.label} workflow?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Its order, switches, efforts, Team agents and review rounds go back to what the{' '}
-                  {current.label} preset ships with. The other presets keep what was changed in them.
+                  {current.custom
+                    ? `Its steps, order, switches, efforts, Team agents and review rounds go back to how the ${current.label} workflow was made. Its name stays and the other workflows keep what was changed in them.`
+                    : `Its order, switches, efforts, Team agents and review rounds go back to what the ${current.label} preset ships with. The other presets keep what was changed in them.`}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -235,7 +342,7 @@ export function WorkflowPage({
 
       <section aria-label={`${current.label} workflow`} className="space-y-3">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <h2 className="text-base font-semibold">
+          <h2 className="text-base font-semibold wrap-anywhere">
             {current.label}
             {isActive && (
               <span className="ml-2 text-xs font-normal text-muted-foreground">the project&apos;s</span>
@@ -245,7 +352,20 @@ export function WorkflowPage({
             {workflow.numbered} steps for a {COMPLEXITY_NAMES[complexity].toLowerCase()} ticket · review:{' '}
             {roundsText(rounds)}
           </p>
+          {current.custom && (
+            <div className="ml-auto w-full sm:w-auto">
+              <AddStepSelect kinds={addableSteps(workflow.order)} onAdd={addKind} />
+            </div>
+          )}
         </div>
+        {current.custom && (
+          <p className="text-xs text-muted-foreground" data-custom-note>
+            Your own workflow, copied from {WORKFLOW_PRESET_DEFS[current.custom.base].label}. Add steps of the
+            kinds listed, remove the ones that are not locked, and move them within what each step allows. The
+            review inside it (its phases and what they run) comes with{' '}
+            {WORKFLOW_PRESET_DEFS[current.custom.base].label}.
+          </p>
+        )}
         <div
           className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]"
           // Escape closes the settings, unless a list open on top of them is the one it is meant for. Decided

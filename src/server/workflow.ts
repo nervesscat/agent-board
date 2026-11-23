@@ -342,7 +342,10 @@ const newCustomId = () => `${CUSTOM_ID_PREFIX}${randomUUID().replace(/-/g, '').s
  */
 export function createCustom(projectId: number, input: unknown, actor: string) {
   softwareProject(projectId)
-  const body = (typeof input === 'object' && input !== null ? input : {}) as { name?: unknown; from?: unknown }
+  const body = (typeof input === 'object' && input !== null ? input : {}) as {
+    name?: unknown
+    from?: unknown
+  }
   const w = projectWorkflow(projectId)
   const name = customNameProblem(body.name, w.customs)
   if (!name.ok) throw new HttpError(400, name.error)
@@ -352,7 +355,13 @@ export function createCustom(projectId: number, input: unknown, actor: string) {
   const id = newCustomId()
   const source = customSource({ id, name: name.name, base: resolved.base })
   const tweak = normalizeTweaks(source, { ...resolved.tweak, order: resolved.order })!
-  const custom: CustomWorkflow = { id, name: name.name, base: resolved.base, tweak, seed: structuredClone(tweak) }
+  const custom: CustomWorkflow = {
+    id,
+    name: name.name,
+    base: resolved.base,
+    tweak,
+    seed: structuredClone(tweak),
+  }
   writeCustoms(projectId, [...w.customs, custom])
   note(projectId, actor, `made the workflow ${custom.name} from ${resolved.label}`)
   return { ...workflowOverview(projectId), created: id }
@@ -364,7 +373,8 @@ export function renameCustom(projectId: number, id: string, input: unknown, acto
   const w = projectWorkflow(projectId)
   const custom = w.customs.find((c) => c.id === id)
   if (!custom) {
-    if (isWorkflowPreset(id)) throw new HttpError(400, `${id} is one of the four presets: it cannot be renamed`)
+    if (isWorkflowPreset(id))
+      throw new HttpError(400, `${id} is one of the four presets: it cannot be renamed`)
     throw notFound('workflow')
   }
   const body = (typeof input === 'object' && input !== null ? input : {}) as { name?: unknown }
@@ -393,7 +403,8 @@ export function deleteCustom(projectId: number, id: string, actor: string) {
   const w = projectWorkflow(projectId)
   const custom = w.customs.find((c) => c.id === id)
   if (!custom) {
-    if (isWorkflowPreset(id)) throw new HttpError(400, `${id} is one of the four presets: it cannot be deleted`)
+    if (isWorkflowPreset(id))
+      throw new HttpError(400, `${id} is one of the four presets: it cannot be deleted`)
     throw notFound('workflow')
   }
   writeCustoms(

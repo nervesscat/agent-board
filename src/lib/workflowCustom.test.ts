@@ -88,7 +88,8 @@ describe('the steps of a custom workflow', () => {
       expect(WORKFLOW_STEPS[id].lock !== null || WORKFLOW_STEPS[id].pinned !== null).toBe(true)
       const r = removeStep(standard, id)
       expect(r.ok).toBe(false)
-      if (!r.ok && id !== 'claim' && id !== 'handoff') expect(r.reason).toBe(`${id} is locked: it cannot be removed`)
+      if (!r.ok && id !== 'claim' && id !== 'handoff')
+        expect(r.reason).toBe(`${id} is locked: it cannot be removed`)
     }
   })
 
@@ -97,13 +98,42 @@ describe('the steps of a custom workflow', () => {
     const added = addStep(light, 'tests')
     expect(added).toEqual({
       ok: true,
-      order: ['claim', 'build', 'tests', 'gate', 'review', 'preview', 'intent', 'push', 'pr', 'ci', 'summary', 'handoff'],
+      order: [
+        'claim',
+        'build',
+        'tests',
+        'gate',
+        'review',
+        'preview',
+        'intent',
+        'push',
+        'pr',
+        'ci',
+        'summary',
+        'handoff',
+      ],
     })
     expect(addStep(light, 'spec')).toEqual({
       ok: true,
-      order: ['claim', 'spec', 'build', 'gate', 'review', 'preview', 'intent', 'push', 'pr', 'ci', 'summary', 'handoff'],
+      order: [
+        'claim',
+        'spec',
+        'build',
+        'gate',
+        'review',
+        'preview',
+        'intent',
+        'push',
+        'pr',
+        'ci',
+        'summary',
+        'handoff',
+      ],
     })
-    expect(addStep(standard, 'spec')).toEqual({ ok: false, reason: 'spec is already a step of this workflow' })
+    expect(addStep(standard, 'spec')).toEqual({
+      ok: false,
+      reason: 'spec is already a step of this workflow',
+    })
     expect(addStep(standard, 'deploy')).toEqual({
       ok: false,
       reason: '"deploy" is not a kind of step the workflow has',
@@ -116,7 +146,10 @@ describe('the steps of a custom workflow', () => {
   })
 
   it('places a kind after the steps that come before it even when the order was changed', () => {
-    const r = addStep(['claim', 'build', 'gate', 'preview', 'review', 'intent', 'push', 'pr', 'summary', 'handoff'], 'tests')
+    const r = addStep(
+      ['claim', 'build', 'gate', 'preview', 'review', 'intent', 'push', 'pr', 'summary', 'handoff'],
+      'tests',
+    )
     expect(r.ok && r.order.slice(0, 4)).toEqual(['claim', 'build', 'tests', 'gate'])
   })
 
@@ -135,18 +168,31 @@ describe('the steps of a custom workflow', () => {
 
   it('refuses an order that drops a locked step, repeats one, moves the ends or breaks a dependency', () => {
     expect(customOrderProblem(standard)).toBe(null)
-    expect(customOrderProblem(standard.filter((x) => x !== 'build'))).toBe('build is locked: it cannot be removed')
-    expect(customOrderProblem(standard.filter((x) => x !== 'intent'))).toBe('intent is locked: it cannot be removed')
-    expect(customOrderProblem([...standard.slice(0, -1), 'spec', 'handoff'])).toBe('order: "spec" is listed twice')
+    expect(customOrderProblem(standard.filter((x) => x !== 'build'))).toBe(
+      'build is locked: it cannot be removed',
+    )
+    expect(customOrderProblem(standard.filter((x) => x !== 'intent'))).toBe(
+      'intent is locked: it cannot be removed',
+    )
+    expect(customOrderProblem([...standard.slice(0, -1), 'spec', 'handoff'])).toBe(
+      'order: "spec" is listed twice',
+    )
     expect(customOrderProblem(['spec', 'claim', ...standard.slice(2)])).toBe('claim must stay first')
-    expect(customOrderProblem(['claim', 'build', 'spec', ...standard.slice(3)])).toBe('build must come after spec')
+    expect(customOrderProblem(['claim', 'build', 'spec', ...standard.slice(3)])).toBe(
+      'build must come after spec',
+    )
     expect(customOrderProblem([...standard.slice(0, -1).reverse(), 'handoff'])).toBe('claim must stay first')
-    expect(customOrderProblem([...standard, 'foo'])).toBe('order: "foo" is not a kind of step the workflow has')
+    expect(customOrderProblem([...standard, 'foo'])).toBe(
+      'order: "foo" is not a kind of step the workflow has',
+    )
   })
 
   it('moves a step of a custom workflow with the same refusals as a preset', () => {
     const { source } = copyOf('standard')
-    expect(moveStep(source, standard, 'gate', 'up')).toEqual({ ok: false, reason: 'gate must come after build' })
+    expect(moveStep(source, standard, 'gate', 'up')).toEqual({
+      ok: false,
+      reason: 'gate must come after build',
+    })
     expect(moveStep(source, standard, 'preview', 'down')).toEqual({
       ok: false,
       reason: 'intent must come after preview',
@@ -207,7 +253,8 @@ describe('naming a custom workflow', () => {
 
   it('knows its ids from the presets’ ids', () => {
     expect(isCustomWorkflowId('custom-abcdef0123')).toBe(true)
-    for (const id of [...WORKFLOW_PRESETS, 'custom-', 'custom-ABC', 'x', null, 3]) expect(isCustomWorkflowId(id)).toBe(false)
+    for (const id of [...WORKFLOW_PRESETS, 'custom-', 'custom-ABC', 'x', null, 3])
+      expect(isCustomWorkflowId(id)).toBe(false)
   })
 })
 

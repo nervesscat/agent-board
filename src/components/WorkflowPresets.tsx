@@ -1,32 +1,37 @@
 import { Check, Pencil } from 'lucide-react'
+import type { ReactNode } from 'react'
 
 import { Chip } from '#/components/WorkflowChips'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { COMPLEXITIES, type Complexity } from '#/lib/constants'
 import type { WorkflowOverview } from '#/lib/api'
-import type { WorkflowPresetId } from '#/lib/workflow'
+import { WORKFLOW_PRESET_DEFS } from '#/lib/workflow'
 import { COMPLEXITY_NAMES } from '#/lib/workflowView'
 import { cn } from '#/lib/utils'
 
 type Preset = WorkflowOverview['presets'][number]
 
 /**
- * The four presets, lightest to heaviest, as a row of cards: its name, a line on what it is, whether it is the
- * project's Active one and whether the human Tweaked it. Picking one shows its graph; it does not make it active.
+ * The four presets, lightest to heaviest, then the project's own workflows, as a row of cards: its name, a line
+ * on what it is (a custom one says which preset it was copied from), whether it is the project's Active one and
+ * whether the human Tweaked it. Picking one shows its graph; it does not make it active. `extra` is the
+ * "New workflow" card at the end.
  */
 export function PresetSwitcher({
   presets,
   active,
   viewed,
   onView,
+  extra,
 }: {
   presets: readonly Preset[]
-  active: WorkflowPresetId
-  viewed: WorkflowPresetId
-  onView: (preset: WorkflowPresetId) => void
+  active: string
+  viewed: string
+  onView: (preset: string) => void
+  extra?: ReactNode
 }) {
   return (
-    <div role="group" aria-label="Workflow presets" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+    <div role="group" aria-label="Workflows" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
       {presets.map((p) => {
         const steps = p.steps.length
         return (
@@ -42,7 +47,8 @@ export function PresetSwitcher({
             )}
           >
             <span className="flex w-full flex-wrap items-center gap-1.5">
-              <span className="text-sm font-semibold">{p.label}</span>
+              <span className="min-w-0 text-sm font-semibold wrap-anywhere">{p.label}</span>
+              {p.custom && <Chip tone="agent">Custom</Chip>}
               {p.id === active && (
                 <Chip tone="edited" icon={<Check aria-hidden />}>
                   Active
@@ -54,13 +60,18 @@ export function PresetSwitcher({
                 </Chip>
               )}
             </span>
-            <span className="text-xs text-muted-foreground">{p.description}</span>
+            <span className="text-xs wrap-anywhere text-muted-foreground">
+              {p.custom
+                ? `Your own, copied from ${WORKFLOW_PRESET_DEFS[p.custom.base].label}.`
+                : p.description}
+            </span>
             <span className="mt-auto text-[11px] text-muted-foreground">
               {steps} steps · review rounds {COMPLEXITIES.map((level) => p.rounds[level]).join(' / ')}
             </span>
           </button>
         )
       })}
+      {extra}
     </div>
   )
 }

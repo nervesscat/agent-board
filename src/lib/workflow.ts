@@ -1168,8 +1168,7 @@ export function customNameProblem(
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
 
-const stepWord = (id: string, source: WorkflowSource) =>
-  `${id} is not a step of the ${source.label} workflow`
+const stepWord = (id: string, source: WorkflowSource) => `${id} is not a step of the ${source.label} workflow`
 
 /**
  * What `validateTweaks` needs to know about the project: the names of its Team agents (a pick must be one of
@@ -1330,10 +1329,7 @@ export function validateTweaks(
  * enabled step, the preset's effort, the Team agent named like the node's role, the preset's rounds) are dropped, and
  * a tweak with nothing left is null. Expects a tweak `validateTweaks` accepted.
  */
-export function normalizeTweaks(
-  ref: WorkflowRef,
-  tweak: PresetTweak | null | undefined,
-): PresetTweak | null {
+export function normalizeTweaks(ref: WorkflowRef, tweak: PresetTweak | null | undefined): PresetTweak | null {
   if (!tweak) return null
   const source = sourceOf(ref)
   const preset = source.base
@@ -1749,7 +1745,8 @@ export function resolveWorkflow(
   const normalized = normalizeTweaks(source, saved)
   // A custom workflow always has its step list stored: it is tweaked when it differs from the one it was created with.
   const tweaked = source.custom
-    ? JSON.stringify(normalized) !== JSON.stringify(normalizeTweaks(source, source.seed ?? { order: defaultOrder }))
+    ? JSON.stringify(normalized) !==
+      JSON.stringify(normalizeTweaks(source, source.seed ?? { order: defaultOrder }))
     : normalized !== null
   return {
     preset: id,

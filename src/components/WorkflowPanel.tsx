@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, MousePointerClick, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, MinusCircle, MousePointerClick, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 
 import { ChangedChip, Chip } from '#/components/WorkflowChips'
@@ -14,7 +14,6 @@ import {
   type ResolvedStep,
   type ResolvedWorkflow,
   type WorkflowEffort,
-  type WorkflowPresetId,
   type WorkflowStepId,
 } from '#/lib/workflow'
 import { defaultAgentName, nodeView, type GraphNode, type NodeView } from '#/lib/workflowGraph'
@@ -31,6 +30,8 @@ export interface WorkflowEdits {
   setRounds: (level: Complexity, rounds: number) => Promise<string | null>
   /** Answers with the reason the move was not saved, or null once it was. */
   move: (id: WorkflowStepId, direction: 'up' | 'down') => Promise<string | null>
+  /** Takes the step out of the workflow; only a custom workflow has steps to remove. */
+  remove?: (id: WorkflowStepId) => void
 }
 
 /** The picker's entry for "no pick": it stands for the default. A name no Team agent can have. */
@@ -287,7 +288,7 @@ function StepSettings({
 }) {
   const body = useRef<HTMLDivElement>(null)
   // After a move the step is somewhere else in the list: the keyboard stays on the button that moved it.
-  const moved = useRef<{ id: string; direction: 'up' | 'down'; preset: WorkflowPresetId } | null>(null)
+  const moved = useRef<{ id: string; direction: 'up' | 'down'; preset: string } | null>(null)
   const order = workflow.order.join()
   useLayoutEffect(() => {
     const target = moved.current
@@ -340,7 +341,41 @@ function StepSettings({
           </p>
         )}
       </section>
+      {edits.remove && <RemoveStep step={step} onRemove={() => edits.remove?.(step.id)} />}
     </div>
+  )
+}
+
+/**
+ * Takes a step out of a custom workflow. A step with a lock cannot go, and says so: the lock's own reason is
+ * already shown under its switch. The kind can be added again from the page's Add a step list.
+ */
+function RemoveStep({ step, onRemove }: { step: ResolvedStep; onRemove: () => void }) {
+  const removable = step.lock === null && step.id !== 'claim' && step.id !== 'handoff'
+  return (
+    <section className="space-y-1.5">
+      <h3 className="text-xs font-medium text-muted-foreground">In this workflow</h3>
+      {removable ? (
+        <>
+          <button type="button" data-remove-step={step.id} className={MOVE_BUTTON} onClick={onRemove}>
+            <MinusCircle className="size-3.5" aria-hidden /> Remove step
+          </button>
+          <p className="text-xs text-muted-foreground">
+            Takes {step.label} out of this workflow. Add it again from Add a step above the graph.
+          </p>
+        </>
+      ) : (
+        <p data-remove-reason className="text-xs text-muted-foreground">
+          {step.label} is{' '}
+          {step.id === 'claim'
+            ? 'always the first step'
+            : step.id === 'handoff'
+              ? 'always the last step'
+              : 'locked'}
+          , so it cannot be removed.
+        </p>
+      )}
+    </section>
   )
 }
 
