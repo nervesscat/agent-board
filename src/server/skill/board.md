@@ -68,9 +68,10 @@ Then:
    `active` (`in_progress`) the stage work starts in (the project's `workStage`, else the first
    active stage), for any other kind the first stage of that kind. Below, `todo`, `in_progress`,
    `blocked`, `review`, `approved`, `done` and `cancelled` mean exactly that. A stage's own key or
-   name wins over a kind, so `done` is the first done stage (Release, when it comes before Done and
-   no stage is keyed `done`); where the board itself finishes work for good (approving a PR review,
-   a merged PR's own ticket) it lands in the last done stage. Its `agents` are the project's own agents (see
+   name wins over a kind: `done` is the stage keyed `done` when there is one (Done), and the first
+   done stage only when none is. A merged ticket goes to the project's first done stage by its key
+   (Release when the project has one); where the board itself finishes work for good (approving a PR
+   review, a merged PR's own ticket) it lands in the last done stage. Its `agents` are the project's own agents (see
    [The project's agents](#the-projects-agents)). Its `notes` are the project's short shared facts
    (a `label` and a `body`, one fact each): **read them before starting**, so you do not rediscover
    what someone already learned. When you learn something a future session must not rediscover — a

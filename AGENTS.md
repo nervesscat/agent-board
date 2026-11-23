@@ -93,9 +93,10 @@ short message shape with the numbered list of what needs the human. Its line is
    `open` the start stage (the last open stage), for `active` the stage work starts in (the
    project's `workStage`, else the first active stage), for any other kind the first stage of that
    kind. Below, `todo`, `in_progress`, `blocked`, `review`, `approved`, `done` and `cancelled` mean exactly that. A stage's own key or
-   name wins over a kind, so `done` is the first done stage (Release, when it comes before Done and
-   no stage is keyed `done`); where the board itself finishes work for good (approving a PR review,
-   a merged PR's own ticket) it lands in the last done stage.
+   name wins over a kind: `done` is the stage keyed `done` when there is one (Done), and the first
+   done stage only when none is. A merged ticket goes to the project's first done stage by its key
+   (Release when the project has one); where the board itself finishes work for good (approving a PR
+   review, a merged PR's own ticket) it lands in the last done stage.
 2. **Pick up work**: starting a session, `get_summary` with your `projectId` shows where the project
    stands in one read (waiting on the human, in progress, done today, next, carrying over). Take work
    from `list_tickets` (`status: ["todo"]` with `assignee: ""`, or assigned to
