@@ -860,6 +860,47 @@ describe('a step runs the Team agent the workflow names (B9, B11, B14)', () => {
     expect(picked).toBeGreaterThan(0)
   })
 
+  it("posts a fix pass as the agent the Between rounds line names, never as the Build step's agent (B9)", async () => {
+    const { renderWorkflowText } = await import('./workflow')
+    const ctx = { source: 'project', projectPreset: 'standard', ticketId: null } as const
+    const asBuild = 'Post its summary `as` the agent this step names (the Agent line).'
+    const asFix =
+      "except a fix pass after a review round: that summary goes `as` the agent the review's `Between rounds` line names for the fix pass, with no `as` when that line names a built-in agent"
+    const team = ['acme-dev', 'frh-fixer', 'builder']
+    let withFix = 0
+    for (const preset of WORKFLOW_PRESETS)
+      for (const complexity of COMPLEXITIES) {
+        const at = `${preset}/${complexity}`
+        const picks = { agents: { build: 'acme-dev', 'review.fix': 'frh-fixer' } }
+        for (const [label, tweak, names] of [
+          ['build and fix bound apart', picks, 'Team agent `frh-fixer`'],
+          ['unbound', undefined, 'Team agent `builder`'],
+        ] as const) {
+          const w = resolveWorkflow(preset, tweak, complexity, team)
+          const text = flat(renderWorkflowText(w, { ...ctx, projectPreset: preset }))
+          const hasFix = w.steps.some(
+            (s) => !s.skipped && s.review?.between.some((b) => /fix/i.test(b.label)),
+          )
+          const build = w.steps.find((s) => s.id === 'build' && !s.skipped)
+          if (!build) continue
+          const from = text.indexOf('Start a subagent briefed as')
+          const section = text.slice(from, text.indexOf(' ## ', from))
+          if (hasFix) {
+            withFix++
+            // The fix pass has its own post name, the Between rounds line's agent, and the Build agent's name is not it.
+            expect(section, `${at}/${label}`).toContain(asFix)
+            expect(section, `${at}/${label}`).not.toContain(asBuild)
+            expect(text, `${at}/${label}`).toContain(`Between rounds: fix pass (${names}`)
+          } else {
+            // No review, so no Between rounds line: a later round is a gate return, run by the Build step's agent.
+            expect(section, `${at}/${label}`).toContain(asBuild)
+            expect(section, `${at}/${label}`).not.toContain('Between rounds')
+          }
+        }
+      }
+    expect(withFix).toBeGreaterThan(0)
+  })
+
   it("names a step's agent by the Team agent the workflow names, never by a fixed agent name (B9)", async () => {
     // The intent and hunt agents are the step's pick: by default the agent named like the role, else the built-in.
     const fixed = [

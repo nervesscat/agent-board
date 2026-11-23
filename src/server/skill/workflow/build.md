@@ -24,7 +24,7 @@ the Focus is only their `path:line` and their tests: the builder does not re-rea
 the change. A fix pass reruns only what its findings touch: the failed end-to-end spec file(s) and the
 unit files related to the changed files (`vitest related <changed files>`, or the project's equivalent),
 not the whole gate; the full unit and end-to-end suites stay in CI, where CI runs them. When it returns,
-release any slot it left behind if `holder.txt` still names your ticket. Post its summary `as` the agent this step names (the Agent line).
+release any slot it left behind if `holder.txt` still names your ticket. Post its summary `as` the agent this step names (the Agent line){{if review}}, except a fix pass after a review round: that summary goes `as` the agent the review's `Between rounds` line names for the fix pass, with no `as` when that line names a built-in agent (it is no Team agent), the same as the Agent line says for a built-in role{{end}}.
 
 {{if !spec}}**With no spec: the builder codes and verifies itself.** Its brief is the same, with the ticket's
 instructions in place of `WORKDIR/01-spec.md` and its criteria in place of the spec's Surfaces. It is done
