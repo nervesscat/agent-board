@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
 import { WORKFLOW_PRESETS, resolveWorkflow } from './workflow'
-import { effortText, expandableIds, groupSubSteps, moveReason, roundsText, skipText } from './workflowView'
+import { effortText, groupSubSteps, moveReason, roundsText, skipText } from './workflowView'
 
 const step = (workflow: ReturnType<typeof resolveWorkflow>, id: string) =>
   workflow.steps.find((s) => s.id === id)!
 
-describe('how the tree words things', () => {
+describe('how the graph words things', () => {
   it('writes rounds', () => {
     expect(roundsText(0)).toBe('no review rounds')
     expect(roundsText(1)).toBe('1 round')
@@ -34,14 +34,14 @@ describe('how the tree words things', () => {
     expect(skipText(step(none, 'review'))).toBe('No review rounds')
   })
 
-  it('names the steps of a refused move as the tree does', () => {
+  it('names the steps of a refused move as the graph does', () => {
     expect(moveReason('build must come after spec')).toBe('Build must come after Spec')
     expect(moveReason('claim must stay first')).toBe('Read and claim must stay first')
     expect(moveReason('handoff must stay last')).toBe('Hand-off must stay last')
     expect(moveReason('pr must come after push')).toBe('Pull request must come after Push')
   })
 
-  it('has the reason the board gives for a move that breaks the order, in words the tree can use', () => {
+  it('has the reason the board gives for a move that breaks the order, in words the graph can use', () => {
     const w = resolveWorkflow('standard', null, 'mid')
     expect(moveReason(step(w, 'build').moveBlocked.up!)).toBe('Build must come after Spec')
     expect(step(w, 'preview').moveBlocked.up).toBeNull()
@@ -82,18 +82,6 @@ describe('groupSubSteps', () => {
       'review.second',
       'review.reconcile',
       'review.intent',
-    ])
-  })
-})
-
-describe('expandableIds', () => {
-  it('lists the review and its between-rounds for Standard, and the two full reviews for Maximum', () => {
-    expect(expandableIds(resolveWorkflow('standard', null, 'mid'))).toEqual(['review', 'review.between'])
-    expect(expandableIds(resolveWorkflow('maximum', null, 'mid'))).toEqual([
-      'review',
-      'review.between',
-      'review.first',
-      'review.second',
     ])
   })
 })

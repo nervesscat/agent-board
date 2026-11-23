@@ -4,7 +4,6 @@ import {
   isWorkflowStep,
   type ResolvedStep,
   type ResolvedSubStep,
-  type ResolvedWorkflow,
   type WorkflowEffort,
 } from './workflow'
 
@@ -38,7 +37,7 @@ export function effortText(step: Pick<ResolvedStep, 'effort' | 'effortLevel'>): 
   return EFFORT_NAMES[step.effort]
 }
 
-/** What the tree says about a step that does not run for the complexity shown. */
+/** What the graph says about a step that does not run for the complexity shown. */
 export function skipText(step: Pick<ResolvedStep, 'skipped'>): string | null {
   const reason = step.skipped?.reason
   if (!reason) return null
@@ -53,7 +52,7 @@ export type SubStepItem =
   | { kind: 'parallel'; group: string; steps: ResolvedSubStep[] }
 
 /**
- * The phases of a round as the tree draws them: runs of neighbours that share a `parallel` group become one
+ * The phases of a round as the graph draws them: runs of neighbours that share a `parallel` group become one
  * parallel entry (verify and the hunts), every other phase stands alone, in order.
  */
 export function groupSubSteps(steps: readonly ResolvedSubStep[]): SubStepItem[] {
@@ -72,31 +71,11 @@ export const domId = (prefix: string, id: string): string => `${prefix}-${id.rep
 
 /**
  * Why a move is refused, for a tooltip: the board's words name steps by id (`build must come after spec`), the
- * page names them as the tree does (`Build must come after Spec`).
+ * page names them as the graph does (`Build must come after Spec`).
  */
 export function moveReason(reason: string): string {
   const named = reason.replace(/[a-z0-9]+/g, (word) =>
     isWorkflowStep(word) ? WORKFLOW_STEPS[word].label : word,
   )
   return named.charAt(0).toUpperCase() + named.slice(1)
-}
-
-/**
- * The ids of every node that opens into others: a step with phases (the review), the phases that hold phases
- * (each full review of the Maximum preset) and the review's `between rounds`. What "Collapse all" closes.
- */
-export function expandableIds(workflow: Pick<ResolvedWorkflow, 'steps'>): string[] {
-  const ids: string[] = []
-  const walk = (list: readonly ResolvedSubStep[]) => {
-    for (const s of list) {
-      if (s.children.length) ids.push(s.id)
-      walk(s.children)
-    }
-  }
-  for (const step of workflow.steps) {
-    if (!step.review) continue
-    ids.push(step.id, 'review.between')
-    walk(step.review.phases)
-  }
-  return ids
 }
