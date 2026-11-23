@@ -4,8 +4,9 @@ that finds one among the ticket's posts, newest last).
 
 It is the agent this step names (its Agent line: a Team agent of the project, else the built-in `intent`
 role, whose agent file is `feature-review-intent`), started with the Agent tool at this step's effort
-(`low` unless the human set another), with that agent's `instructions`. The round-end check of a review
-that has one is run by the agent the review's `intent` phase line names. Brief it with only two things
+(`low` unless the human set another), with that agent's `instructions`. A pass is posted `as` the agent that ran it
+(none for a built-in agent): this step's own run goes as this step's agent{{if roundIntent}}, and the round-end check of a
+review that has one is run and posted by the agent the review's `intent` phase line names, not as this step's agent{{end}}. Brief it with only two things
 besides them:
 
 - the human's own words and attachments: the ticket's instructions and every post and reply by the human,
@@ -34,7 +35,8 @@ writes its run report like every subagent.
 
 - `matches`: go on. Any commit after a `matches` ({{if ci}}a CI fix, {{end}}a rebase or a merge of the base) changes the
   head, so the intent check runs again on the new head before the hand-off stands.
-- `does not match`: back to the builder with the intent check's lines as the brief, then your gate, then
+- `does not match`: back to the builder with the intent check's lines as the brief{{if review}} (that fix pass is run and
+  posted by the agent the review's `Between rounds` line names){{end}}, then your gate, then
   ONE more full review round (the review's phases all run again; a ticket with no review has only the
   gate), then the intent check again. Which budget rule applies depends on the review step's text of this
   workflow: where it says the round-end intent check counts as a round (Thorough and Maximum say so), a

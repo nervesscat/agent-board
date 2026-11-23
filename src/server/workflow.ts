@@ -358,7 +358,7 @@ const agentWords = (step: ResolvedStep) =>
       : teamWords(step.teamAgent, step.agent)
 
 /** How the ticket agent briefs the agent of a step, and what it names it as: one paragraph under the step's heading. */
-function agentLine(step: ResolvedStep): string | null {
+function agentLine(step: ResolvedStep, flow: FlowState): string | null {
   const ref = step.teamAgent
   if (!ref) return null
   const role = step.agent
@@ -369,7 +369,21 @@ function agentLine(step: ResolvedStep): string | null {
     ref.source === 'default'
       ? 'It is no Team agent, so post its work with `progress: true` and no `as`.'
       : `Post its work \`as: ${ref.name}\` (\`progress: true\`).`
-  return `Agent: ${agentSource(ref, role)} ${named} ${posts}`
+  // One rule for every pass: it is posted `as` the agent that ran it. A step's Agent line speaks for this
+  // step's own run only; a pass another node's agent runs says so here, so no line posts it as this agent.
+  const others: string[] = []
+  if (step.id === 'build' && flow.review)
+    others.push(
+      "a fix pass (after a review round or after an intent return) is run and posted by the agent the review's `Between rounds` line names, not by this one",
+    )
+  if (step.id === 'intent' && flow.roundIntent)
+    others.push(
+      "the review's round-end intent check is run and posted by the agent the review's `intent` phase line names, not by this one",
+    )
+  const scope = others.length
+    ? ` That is this step's own run: ${others.join('; ')} (with no \`as\` when that line names a built-in agent).`
+    : ''
+  return `Agent: ${agentSource(ref, role)} ${named} ${posts}${scope}`
 }
 
 /** Where a node's agent comes from and what to brief it with: the Team agent's instructions, or the built-in role's. */
@@ -473,7 +487,7 @@ export function renderWorkflowText(
     }
     out.push(`## ${step.number}. ${step.label}${lockWords(step)} - ${agentWords(step)}${effortWords(step)}`)
     out.push(`Does: ${step.what}`)
-    const line = agentLine(step)
+    const line = agentLine(step, workflow.flow)
     if (line) out.push(line)
     out.push(`Hand-off: ${step.handoff}`)
     if (step.review) out.push(...reviewLines(step))

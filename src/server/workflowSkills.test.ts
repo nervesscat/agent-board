@@ -865,7 +865,7 @@ describe('a step runs the Team agent the workflow names (B9, B11, B14)', () => {
     const ctx = { source: 'project', projectPreset: 'standard', ticketId: null } as const
     const asBuild = 'Post its summary `as` the agent this step names (the Agent line).'
     const asFix =
-      "except a fix pass after a review round: that summary goes `as` the agent the review's `Between rounds` line names for the fix pass, with no `as` when that line names a built-in agent"
+      "except a fix pass (after a review round or after an intent return): that summary goes `as` the agent the review's `Between rounds` line names for the fix pass, with no `as` when that line names a built-in agent"
     const team = ['acme-dev', 'frh-fixer', 'builder']
     let withFix = 0
     for (const preset of WORKFLOW_PRESETS)
@@ -899,6 +899,97 @@ describe('a step runs the Team agent the workflow names (B9, B11, B14)', () => {
         }
       }
     expect(withFix).toBeGreaterThan(0)
+  })
+
+  it('posts every pass as the agent that runs it: the round-end intent check, the intent step and a fix pass (B9)', async () => {
+    const { renderWorkflowText } = await import('./workflow')
+    const ctx = { source: 'project', projectPreset: 'standard', ticketId: null } as const
+    const team = ['acme-dev', 'frh-fixer', 'acme-int', 'frh-int', 'builder', 'intent']
+    const picks = {
+      agents: {
+        build: 'acme-dev',
+        'review.fix': 'frh-fixer',
+        intent: 'acme-int',
+        'review.intent': 'frh-int',
+      },
+    }
+    const sectionOf = (text: string, title: string) =>
+      text.match(new RegExp(`## \\d+\\. ${title}.*?(?= ## \\d+\\. |$)`))?.[0] ?? null
+    const roundEnd =
+      "the review's round-end intent check is run and posted by the agent the review's `intent` phase line names, not by this one"
+    const fixPass =
+      "a fix pass (after a review round or after an intent return) is run and posted by the agent the review's `Between rounds` line names, not by this one"
+    let roundEndRuns = 0
+    let fixRuns = 0
+    for (const preset of WORKFLOW_PRESETS)
+      for (const complexity of COMPLEXITIES)
+        for (const [label, tweak, names] of [
+          [
+            'picks apart',
+            picks,
+            { intent: 'frh-int', fix: 'frh-fixer', stepIntent: 'acme-int', build: 'acme-dev' },
+          ],
+          [
+            'unbound',
+            undefined,
+            { intent: 'intent', fix: 'builder', stepIntent: 'intent', build: 'builder' },
+          ],
+        ] as const) {
+          const at = `${preset}/${complexity}/${label}`
+          const w = resolveWorkflow(preset, tweak, complexity, team)
+          const text = flat(renderWorkflowText(w, { ...ctx, projectPreset: preset }))
+          const reviewStep = w.steps.find((s) => s.id === 'review' && !s.skipped)
+          const roundEndPhase = reviewStep?.review?.phases.some((p) => p.id === 'review.intent') ?? false
+          const build = sectionOf(text, 'Build')
+          const intent = sectionOf(text, 'Intent check')
+          const review = sectionOf(text, 'Review')
+
+          if (build) {
+            // The Build step's Agent line posts only its own run; a fix pass is the Between rounds agent's, posted as it.
+            const line = build.match(/Agent: .*?(?= Hand-off: )/)?.[0] ?? ''
+            if (reviewStep) {
+              fixRuns++
+              expect(line, at).toContain(fixPass)
+              expect(build, at).toContain(
+                "except a fix pass (after a review round or after an intent return): that summary goes `as` the agent the review's `Between rounds` line names",
+              )
+              expect(review, at).toContain(`Between rounds: fix pass (Team agent \`${names.fix}\``)
+            } else {
+              expect(line, at).not.toContain('Between rounds')
+              expect(build, at).not.toContain('Between rounds')
+            }
+          }
+
+          if (intent) {
+            const line = intent.match(/Agent: .*?(?= Hand-off: )/)?.[0] ?? ''
+            // The step's own run is posted as the Intent step's agent.
+            expect(line, at).toContain(`as: ${names.stepIntent}\``)
+            if (roundEndPhase) {
+              roundEndRuns++
+              // The round-end check is run by the agent its phase line names, and every sentence that posts it says so.
+              expect(review, at).toContain(`Intent check - Team agent \`${names.intent}\``)
+              expect(line, at).toContain(roundEnd)
+              expect(intent, at).toContain(
+                "the round-end check of a review that has one is run and posted by the agent the review's `intent` phase line names, not as this step's agent",
+              )
+              expect(review, at).toContain(
+                "by the agent the review's `intent` phase line names, and post it `as` that agent, none for a built-in one",
+              )
+            } else {
+              expect(line, at).not.toContain(roundEnd)
+              expect(intent, at).not.toContain('round-end check')
+            }
+            // An intent return's fix pass is run and posted by the Between rounds agent, or the Build agent with no review.
+            expect(intent, at).toContain(
+              reviewStep
+                ? "(that fix pass is run and posted by the agent the review's `Between rounds` line names)"
+                : 'back to the builder with the intent check',
+            )
+            if (!reviewStep) expect(intent, at).not.toContain('Between rounds')
+          }
+        }
+    expect(roundEndRuns).toBeGreaterThan(0)
+    expect(fixRuns).toBeGreaterThan(0)
   })
 
   it("names a step's agent by the Team agent the workflow names, never by a fixed agent name (B9)", async () => {

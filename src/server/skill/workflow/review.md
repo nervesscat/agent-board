@@ -53,8 +53,8 @@ project, briefed by `/feature-review` with that agent's `instructions` (`agents=
 skill briefs a phase with no agent of its own. The names are the human's pick on the Workflow page, never
 yours. A phase's span, its run report and its `agentName` carry its role (`spec`, `env`, `verify`, `hunt`,
 `refute`, `merge`), never the Team agent's name, so the board counts every phase of the round whoever ran
-it. The fix pass after a round that did not survive is run by the agent the `Between rounds` line names for it, briefed as
-the build step briefs the builder, with the round's findings.
+it. The fix pass after a round that did not survive{{if intent}} (and the one after an intent return){{end}} is run and posted `as` the agent the
+`Between rounds` line names for it, briefed as the build step briefs the builder, with the round's findings.
 
 **Every phase this workflow lists for a round runs in every round.** None is skipped because the findings
 look obvious, the change looks small or a finding was already reproduced, and each phase posts its
