@@ -1,6 +1,5 @@
 import { COMPLEXITIES, type Complexity } from './constants'
 import {
-  INSTRUCTIONS_MAX,
   ROUNDS_MAX,
   type PresetTweak,
   type StepTweak,
@@ -12,7 +11,7 @@ import {
  * What the Workflow page sends when the human changes one thing: the preset's tweak as it is now, with
  * that one change made. The board replaces a preset's saved tweak with what it is sent (no merge), and
  * drops what equals the preset's own, so these only have to say what was asked: a step's switch back
- * on, an effort back to the preset's or an instruction cleared is left out, never saved as a value.
+ * on, an effort back to the preset's or a Team agent put back to the default is left out, never saved as a value.
  */
 
 /** The tweak of one step with `change` applied; undefined when nothing is left of it. */
@@ -46,13 +45,19 @@ export const withEffort = (
   effort: WorkflowEffort,
 ): PresetTweak => withStep(tweak, id, stepWith(tweak?.steps?.[id], { effort }))
 
-/** A step's hand-off instruction set, or with null put back to the default. */
-export const withInstructions = (
-  tweak: PresetTweak | null,
-  id: WorkflowStepId,
-  instructions: string | null,
-): PresetTweak =>
-  withStep(tweak, id, stepWith(tweak?.steps?.[id], { instructions: instructions ?? undefined }))
+/**
+ * The Team agent of a node (a step id or a review phase's id) set, or with null put back to the default.
+ * What is kept for the other nodes is sent back as it is, a pick whose agent has left the Team included.
+ */
+export function withAgent(tweak: PresetTweak | null, nodeId: string, agent: string | null): PresetTweak {
+  const agents = { ...tweak?.agents }
+  if (agent === null) delete agents[nodeId]
+  else agents[nodeId] = agent
+  const next: PresetTweak = { ...tweak }
+  if (Object.keys(agents).length) next.agents = agents
+  else delete next.agents
+  return next
+}
 
 /** The review rounds for one complexity set. */
 export const withRounds = (tweak: PresetTweak | null, level: Complexity, rounds: number): PresetTweak => ({
@@ -71,6 +76,7 @@ export function tweakBody(tweak: PresetTweak): PresetTweak {
   const body: PresetTweak = {}
   if (tweak.order) body.order = tweak.order
   if (tweak.steps && Object.keys(tweak.steps).length) body.steps = tweak.steps
+  if (tweak.agents && Object.keys(tweak.agents).length) body.agents = tweak.agents
   if (tweak.rounds && COMPLEXITIES.some((level) => tweak.rounds![level] !== undefined))
     body.rounds = tweak.rounds
   return body
@@ -86,12 +92,4 @@ export function parseRounds(text: string): { ok: true; rounds: number } | { ok: 
   if (!/^\d+$/.test(trimmed)) return { ok: false, error: range }
   const rounds = Number(trimmed)
   return rounds > ROUNDS_MAX ? { ok: false, error: range } : { ok: true, rounds }
-}
-
-/** What is wrong with a hand-off instruction typed, or null: it is counted as it is saved (trimmed). */
-export function instructionsProblem(text: string): string | null {
-  const length = text.trim().length
-  if (length > INSTRUCTIONS_MAX)
-    return `${length - INSTRUCTIONS_MAX} characters over the limit of ${INSTRUCTIONS_MAX}`
-  return null
 }

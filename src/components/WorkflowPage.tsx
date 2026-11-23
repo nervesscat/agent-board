@@ -23,14 +23,7 @@ import { Skeleton } from '#/components/ui/skeleton'
 import { del, errorMessage, get, put, type WorkflowOverview } from '#/lib/api'
 import type { Complexity } from '#/lib/constants'
 import { type PresetTweak, type WorkflowPresetId, moveStep, resolveWorkflow } from '#/lib/workflow'
-import {
-  tweakBody,
-  withEffort,
-  withEnabled,
-  withInstructions,
-  withOrder,
-  withRounds,
-} from '#/lib/workflowEdit'
+import { tweakBody, withEffort, withEnabled, withAgent, withOrder, withRounds } from '#/lib/workflowEdit'
 import { COMPLEXITY_NAMES, expandableIds, roundsText } from '#/lib/workflowView'
 
 /** The project's workflow: the overview of every preset, read once and kept as each change answers with the new one. */
@@ -38,7 +31,7 @@ const overviewKey = (projectId: string) => ['workflow', projectId] as const
 
 /**
  * The Workflow page: the four presets, and the one shown as a tree of the steps a ticket's agent runs, with the
- * order, what runs, each agent's effort, the hand-off instructions and the review rounds editable on it. The
+ * order, what runs, each agent's effort, the Team agent of each node and the review rounds editable on it. The
  * complexity picked decides what the tree shows (a low ticket skips steps and gets no review). Every change
  * saves at once, one after another, each built on what the last one saved.
  */
@@ -91,8 +84,8 @@ export function WorkflowPage({
   const current = data?.presets.find((p) => p.id === viewed)
   // The tree is the preset and its saved tweaks resolved for the complexity: the board's own function.
   const workflow = useMemo(
-    () => (current ? resolveWorkflow(current.id, current.tweaks, complexity) : null),
-    [current, complexity],
+    () => (current ? resolveWorkflow(current.id, current.tweaks, complexity, data?.team) : null),
+    [current, complexity, data?.team],
   )
   if (error) return <Empty>{errorMessage(error)}</Empty>
   if (!data || !current || !workflow || !viewed) return <WorkflowSkeleton />
@@ -109,7 +102,7 @@ export function WorkflowPage({
   const edits: WorkflowEdits = {
     setEnabled: (id, enabled) => edit((t) => withEnabled(t, id, enabled)),
     setEffort: (id, effort) => edit((t) => withEffort(t, id, effort)),
-    setInstructions: (id, text) => edit((t) => withInstructions(t, id, text)),
+    setAgent: (nodeId, agent) => edit((t) => withAgent(t, nodeId, agent)),
     setRounds: (level, rounds) => edit((t) => withRounds(t, level, rounds)),
     move: (id, direction) =>
       edit((t) => {
@@ -165,7 +158,7 @@ export function WorkflowPage({
               <AlertDialogHeader>
                 <AlertDialogTitle>Reset the {current.label} workflow?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Its order, switches, efforts, hand-off instructions and review rounds go back to what the{' '}
+                  Its order, switches, efforts, Team agents and review rounds go back to what the{' '}
                   {current.label} preset ships with. The other presets keep what was changed in them.
                 </AlertDialogDescription>
               </AlertDialogHeader>

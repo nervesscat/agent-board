@@ -231,7 +231,7 @@ function PhaseNode({
         <span id={title} className="text-sm font-medium">
           {step.label}
         </span>
-        <AgentChip agent={step.agent} label={step.agentLabel} />
+        <AgentChip agent={step.agent} label={step.agentLabel} team={step.teamAgent} />
         {hasChildren && (
           <button
             type="button"

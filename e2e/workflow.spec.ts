@@ -4,8 +4,8 @@ import type { TicketFull, WorkflowEffective, WorkflowOverview } from '#/lib/api'
 import { expect, expectTooltip, ok, test } from './fixtures'
 
 /**
- * The Workflow page: the workflow as a tree of steps (their sub-steps, the hand-offs between them) with the core
- * settings editable on it, and a ticket naming a workflow of its own.
+ * The Workflow page: the workflow as a tree of steps (their sub-steps, the hand-offs between them, read-only) with
+ * the core settings editable on it, and a ticket naming a workflow of its own.
  */
 
 const STANDARD = [
@@ -228,7 +228,7 @@ test('Standard at Mid is twelve steps in the order agents run them; Review opens
   await expect(review).toHaveAttribute('aria-expanded', 'false')
 })
 
-test('every step is followed by the hand-off to the next, with its instruction (F5)', async ({
+test('every step is followed by the hand-off to the next, in the preset’s words and read-only (F5)', async ({
   page,
   project,
   human,
@@ -253,15 +253,17 @@ test('every step is followed by the hand-off to the next, with its instruction (
   expect(c.y).toBeGreaterThan(a.y)
   expect(c.y).toBeLessThan(b.y)
 
-  // An edited instruction is what the connector shows.
-  await ok(
-    human.put(`/api/projects/${project.id}/workflow/standard`, {
-      data: { steps: { build: { instructions: 'Hand over the diff and the criteria table.' } } },
-    }),
-  )
+  // Nothing of the hand-off is editable: no button, no field, no counter, and a saved edit of a step's text is refused.
+  await expect(page.getByRole('button', { name: /^Edit the .* hand-off/ })).toHaveCount(0)
+  await expect(page.getByRole('textbox', { name: /hand-off instruction/i })).toHaveCount(0)
+  await expect(page.getByText(/\d+\/4000/)).toHaveCount(0)
+  const refused = await human.put(`/api/projects/${project.id}/workflow/standard`, {
+    data: { steps: { build: { instructions: 'Hand over the diff and the criteria table.' } } },
+  })
+  expect(refused.status()).toBe(400)
   await page.reload()
   await expect(page.locator('[data-handoff="build"] [data-handoff-text]')).toHaveText(
-    'Hand over the diff and the criteria table.',
+    standard.steps.find((x) => x.id === 'build')!.handoff,
   )
 })
 
@@ -438,152 +440,79 @@ test("a step's effort is chosen from Auto, Low, Medium and High, and survives a 
     await expect(step(page, id).getByRole('combobox')).toHaveCount(0)
 })
 
-test('a hand-off instruction is edited in place with a limit, reset to the default, and marked edited (F10)', async ({
+test('the page offers no way to edit a hand-off or any text of a step, for every preset and complexity (A9)', async ({
   page,
   project,
   human,
 }) => {
+  for (const preset of ['light', 'standard', 'thorough', 'maximum'])
+    for (const complexity of ['low', 'mid', 'high', 'max']) {
+      await open(page, project.id, `?preset=${preset}&complexity=${complexity}`)
+      await expect(page.getByRole('textbox', { name: /hand-off instruction/i })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: /^Edit the .*hand-off/ })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: /Reset the .* hand-off/ })).toHaveCount(0)
+      await expect(page.getByText(/hand-off instruction/i)).toHaveCount(0)
+      await expect(page.getByText(/\d+\/4000/)).toHaveCount(0)
+    }
+  // The reset dialog no longer lists hand-off instructions among what it clears.
+  await ok(
+    human.put(`/api/projects/${project.id}/workflow/standard`, {
+      data: { steps: { ci: { enabled: false } } },
+    }),
+  )
   await open(page, project.id)
-  const standard = await presetOf(human, project.id, 'standard')
-  const def = standard.steps.find((s) => s.id === 'build')!.handoff
-  const connector = page.locator('[data-handoff="build"]')
-  await expect(connector.getByText('edited', { exact: true })).toHaveCount(0)
-  await connector.getByRole('button', { name: 'Edit the Build hand-off' }).click()
-  const field = connector.getByRole('textbox', { name: 'Build hand-off instruction' })
-  await expect(field).toHaveValue(def)
-  await expect(connector).toContainText(`${def.length}/4000`)
-  // The editor says what a saved text covers, and the field is described by it.
-  const scope = connector.locator('[data-handoff-scope]')
-  await expect(scope).toBeVisible()
-  await expect(scope).toContainText(
-    "A saved instruction replaces this step's hand-off for every ticket on this preset, whatever its complexity.",
+  await page.getByRole('button', { name: 'Reset this workflow' }).click()
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog).toContainText('Reset the Standard workflow?')
+  await expect(dialog).toContainText('Team agents')
+  await expect(dialog).not.toContainText(/hand-off instruction/i)
+})
+
+test('a Team agent picked for a step is shown on it, survives an effort saved after it, and a pick the Team lost is marked missing', async ({
+  page,
+  project,
+  human,
+}) => {
+  const agent = await ok<{ id: number }>(
+    human.post(`/api/projects/${project.id}/agents`, {
+      data: { name: 'acme-dev', instructions: 'Build well.' },
+    }),
   )
-  await expect(scope).not.toContainText('The text shown is the default for')
-  expect(await field.getAttribute('aria-describedby')).toContain((await scope.getAttribute('id'))!)
-
-  // Past the limit: an error, and Save waits.
-  await field.fill('x'.repeat(4003))
-  await expect(connector.getByRole('alert')).toContainText('3 characters over the limit of 4000')
-  await expect(connector.getByRole('button', { name: 'Save' })).toBeDisabled()
-  // Cancel leaves it as it was.
-  await connector.getByRole('button', { name: 'Cancel' }).click()
-  await expect(connector.locator('[data-handoff-text]')).toHaveText(def)
-
-  await connector.getByRole('button', { name: 'Edit the Build hand-off' }).click()
-  await field.fill('Give the gate the commits and a table of criterion to check.')
-  await connector.getByRole('button', { name: 'Save' }).click()
+  await ok(
+    human.put(`/api/projects/${project.id}/workflow/standard`, {
+      data: { agents: { build: 'acme-dev', 'review.hunt-a': 'acme-dev' } },
+    }),
+  )
+  await open(page, project.id)
+  await expect(step(page, 'build')).toContainText('acme-dev')
+  await expect(step(page, 'build').getByText('edited', { exact: true })).toBeVisible()
+  await expect(step(page, 'build').getByText('agent missing')).toHaveCount(0)
+  // The page sends the picks back with the change it makes: an effort saved after a pick keeps the pick.
+  const effort = step(page, 'build').getByRole('combobox', { name: 'Effort of Build' })
+  await effort.click()
+  await page.getByRole('option', { name: 'High' }).click()
   await saved(page)
-  await expect(connector.locator('[data-handoff-text]')).toHaveText(
-    'Give the gate the commits and a table of criterion to check.',
-  )
-  await expect(connector.getByText('edited', { exact: true })).toBeVisible()
-  // The step carries the marker too, and so does the preset on its card.
-  await expect(step(page, 'build').getByText('edited', { exact: true }).first()).toBeVisible()
-  expect((await presetOf(human, project.id, 'standard')).tweaks).toEqual({
-    steps: { build: { instructions: 'Give the gate the commits and a table of criterion to check.' } },
+  const kept = await presetOf(human, project.id, 'standard')
+  expect(kept.tweaks).toEqual({
+    steps: { build: { effort: 'high' } },
+    agents: { build: 'acme-dev', 'review.hunt-a': 'acme-dev' },
   })
+  // The agent is deleted from the Team: the pick stays, and the step says it runs as if none were picked.
+  await ok(human.delete(`/api/agents/${agent.id}`))
   await page.reload()
-  await expect(page.locator('[data-handoff="build"] [data-handoff-text]')).toHaveText(
-    'Give the gate the commits and a table of criterion to check.',
-  )
-
-  await page.getByRole('button', { name: 'Reset the Build hand-off to its default' }).click()
-  await saved(page)
-  await expect(page.locator('[data-handoff="build"] [data-handoff-text]')).toHaveText(def)
-  await expect(page.locator('[data-handoff="build"]').getByText('edited', { exact: true })).toHaveCount(0)
-  expect((await presetOf(human, project.id, 'standard')).tweaked).toBe(false)
-})
-
-test('the hand-off editor says a saved text is for every complexity, and which complexity the default shown is for (F10)', async ({
-  page,
-  project,
-}) => {
-  await open(page, project.id, '?complexity=low')
-  // The Intent check reads differently by complexity: the note names the one shown.
-  const intent = page.locator('[data-handoff="intent"]')
-  await intent.getByRole('button', { name: 'Edit the Intent check hand-off' }).click()
-  const scope = intent.locator('[data-handoff-scope]')
-  await expect(scope).toBeVisible()
-  await expect(scope).toHaveText(
-    "A saved instruction replaces this step's hand-off for every ticket on this preset, whatever its complexity. The text shown is the default for low tickets.",
-  )
-  await expect(intent.getByRole('textbox', { name: 'Intent check hand-off instruction' })).toHaveAttribute(
-    'aria-describedby',
-    new RegExp(`${(await scope.getAttribute('id'))!}`),
-  )
-  // The Build hand-off reads the same at every complexity: only the first sentence.
-  const build = page.locator('[data-handoff="build"]')
-  await build.getByRole('button', { name: 'Edit the Build hand-off' }).click()
-  await expect(build.locator('[data-handoff-scope]')).toHaveText(
-    "A saved instruction replaces this step's hand-off for every ticket on this preset, whatever its complexity.",
-  )
-})
-
-test('a hand-off save that is refused keeps the editor open with the draft and the reason, and a retry saves (F10)', async ({
-  page,
-  project,
-  human,
-}) => {
-  await open(page, project.id)
-  const connector = page.locator('[data-handoff="build"]')
-  await connector.getByRole('button', { name: 'Edit the Build hand-off' }).click()
-  const field = connector.getByRole('textbox', { name: 'Build hand-off instruction' })
-  const draft = 'A draft that has to survive a refused save.'
-  await field.fill(draft)
-
-  const refuse = (route: import('@playwright/test').Route) =>
-    route.request().method() === 'PUT'
-      ? route.fulfill({
-          status: 400,
-          contentType: 'application/json',
-          body: JSON.stringify({ error: 'steps.build.instructions: refused' }),
-        })
-      : route.fallback()
-  const putUrl = /\/api\/projects\/\d+\/workflow\/standard$/
-  await page.route(putUrl, refuse)
-  await connector.getByRole('button', { name: 'Save' }).click()
-  await expect(connector.getByRole('alert')).toContainText('steps.build.instructions: refused')
-  // Still open, with what was typed, and nothing stored.
-  await expect(field).toBeVisible()
-  await expect(field).toHaveValue(draft)
-  await expect(connector.getByRole('button', { name: 'Save' })).toBeEnabled()
-  expect((await presetOf(human, project.id, 'standard')).tweaked).toBe(false)
-
-  await page.unroute(putUrl, refuse)
-  await connector.getByRole('button', { name: 'Save' }).click()
-  await saved(page)
-  await expect(connector.getByRole('textbox')).toHaveCount(0)
-  await expect(connector.locator('[data-handoff-text]')).toHaveText(draft)
-  expect((await presetOf(human, project.id, 'standard')).tweaks).toEqual({
-    steps: { build: { instructions: draft } },
+  await expect(step(page, 'build').getByText('agent missing')).toBeVisible()
+  await expect(step(page, 'build')).toContainText('builder')
+  expect((await presetOf(human, project.id, 'standard')).tweaks?.agents).toEqual({
+    build: 'acme-dev',
+    'review.hunt-a': 'acme-dev',
   })
-})
-
-test('an open hand-off editor does not survive a switch to another preset, and nothing is stored for it (F10)', async ({
-  page,
-  project,
-  human,
-}) => {
-  await open(page, project.id)
-  const presets = page.getByRole('group', { name: 'Workflow presets' })
-  const standardIntent = page.locator('[data-handoff="intent"]')
-  await standardIntent.getByRole('button', { name: 'Edit the Intent check hand-off' }).click()
-  const field = standardIntent.getByRole('textbox', { name: 'Intent check hand-off instruction' })
-  await field.fill('A draft written on Standard.')
-
-  await presets.getByRole('button', { name: /^Thorough/ }).click()
-  await expect(page.getByRole('tree')).toHaveAccessibleName(/^Thorough workflow/)
-  const thoroughIntent = page.locator('[data-handoff="intent"]')
-  // The editor is closed and the text shown is Thorough's own.
-  await expect(thoroughIntent.getByRole('textbox')).toHaveCount(0)
-  await expect(thoroughIntent.locator('[data-handoff-text]')).toHaveText(
-    (await presetOf(human, project.id, 'thorough')).steps.find((s) => s.id === 'intent')!.handoff,
-  )
-  await expect(thoroughIntent.locator('[data-handoff-text]')).not.toContainText(
-    'A draft written on Standard.',
-  )
-  expect((await presetOf(human, project.id, 'thorough')).tweaked).toBe(false)
-  expect((await presetOf(human, project.id, 'standard')).tweaked).toBe(false)
+  // Another change on the page is not refused for the missing pick.
+  await step(page, 'ci').getByRole('switch', { name: 'Run CI' }).click()
+  await saved(page)
+  expect((await presetOf(human, project.id, 'standard')).tweaks?.agents).toEqual({
+    build: 'acme-dev',
+    'review.hunt-a': 'acme-dev',
+  })
 })
 
 test('the order is changed with Move up and Move down, refused where it would break the flow, and kept (F11)', async ({
@@ -872,13 +801,13 @@ test('typing the saved count back while an older save is out and then refused le
   expect(puts).toBe(1)
 })
 
-test('a move saved after the person went on into a hand-off editor does not take the focus back (F11)', async ({
+test('a move saved after the person went on to another control does not take the focus back (F11)', async ({
   page,
   project,
   human,
 }) => {
   await open(page, project.id)
-  // The move's answer is slow: the person is typing in a hand-off editor by the time it lands.
+  // The move's answer is slow: the person is on another control by the time it lands.
   let moves = 0
   await page.route(/\/api\/projects\/\d+\/workflow\/standard$/, async (route) => {
     if (route.request().method() !== 'PUT') return route.fallback()
@@ -886,22 +815,16 @@ test('a move saved after the person went on into a hand-off editor does not take
     await new Promise((resolve) => setTimeout(resolve, 600))
     await route.continue()
   })
-  const connector = page.locator('[data-handoff="build"]')
-  await connector.getByRole('button', { name: 'Edit the Build hand-off' }).click()
-  const field = connector.getByRole('textbox', { name: 'Build hand-off instruction' })
-  await field.fill('')
   await step(page, 'preview').getByRole('button', { name: 'Move Preview up' }).click()
   await expect.poll(() => moves).toBe(1)
-  await field.focus()
-  const text = 'typed while the move was being saved'
-  await page.keyboard.type(text, { delay: 40 })
+  const reads = page.locator('[data-reads] summary')
+  await reads.focus()
   await saved(page)
   const expected = [...STANDARD]
   ;[expected[4], expected[5]] = [expected[5]!, expected[4]!]
   await expect.poll(() => labels(page)).toEqual(expected)
-  // The answer landed while the text was still being typed, or just after: either way the field kept the focus.
-  await expect(field).toBeFocused()
-  await expect(field).toHaveValue(text)
+  // The answer landed while the person was on the disclosure: it kept the focus.
+  await expect(reads).toBeFocused()
   await expect(page.locator('[data-move]:focus')).toHaveCount(0)
   expect((await presetOf(human, project.id, 'standard')).order.slice(4, 6)).toEqual(['preview', 'review'])
 })
@@ -1068,9 +991,6 @@ test('the page fits a phone and works in the dark (F16)', async ({ page, project
     const up = await box(step(page, id).getByRole('button', { name: /^Move .* up$/ }))
     expect(up.x).toBeGreaterThanOrEqual(0)
   }
-  await page.getByRole('button', { name: 'Edit the Build hand-off' }).click()
-  expect(await scrollsSideways(page), 'editing a hand-off at 390px').toBe(false)
-  await page.getByRole('button', { name: 'Cancel' }).click()
   await page.locator('[data-reads]').getByText('What agents read').click()
   await expect(page.locator('[data-reads]').getByLabel('Workflow text')).toBeVisible()
   expect(await scrollsSideways(page), 'the text panel at 390px').toBe(false)

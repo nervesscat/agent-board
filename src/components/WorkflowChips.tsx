@@ -2,6 +2,7 @@ import { Bot, Lock, Pencil, User } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { Tip } from '#/components/ui/tooltip'
+import type { TeamAgentRef } from '#/lib/workflow'
 import { cn } from '#/lib/utils'
 
 /** The look of a small label on a node: its tone says what kind of fact it states. */
@@ -52,23 +53,49 @@ export function Chip({
   return tip ? <Tip content={tip}>{chip}</Tip> : chip
 }
 
-/** Who runs a step: the ticket agent itself (`you`), or an agent it starts. */
-export function AgentChip({ agent, label }: { agent: string; label: string }) {
-  const you = agent === 'you'
+/**
+ * Who runs a node: the ticket agent itself (`you`), or the Team agent that runs it (a pick, the Team agent
+ * named like its role, or the built-in role the Team lacks), with a badge when a saved pick is not in the Team.
+ */
+export function AgentChip({
+  agent,
+  label,
+  team,
+}: {
+  agent: string
+  label: string
+  team: TeamAgentRef | null
+}) {
+  if (!team)
+    return (
+      <Chip tone="agent" icon={<User aria-hidden />} tip="The ticket agent does this itself">
+        {label}
+      </Chip>
+    )
+  const how =
+    team.source === 'picked'
+      ? 'The Team agent picked for it'
+      : team.source === 'role'
+        ? `The Team agent named like its role (${agent})`
+        : `No Team agent is named ${agent}: it runs as the built-in ${agent} role`
   return (
-    <Chip
-      tone="agent"
-      icon={you ? <User aria-hidden /> : <Bot aria-hidden />}
-      tip={
-        you
-          ? 'The ticket agent does this itself'
-          : agent === 'runner'
-            ? 'The /feature-review run, which starts the phase agents below'
-            : `The project's \`${label}\` agent does this`
-      }
-    >
-      {label}
-    </Chip>
+    <>
+      <Chip
+        tone="agent"
+        icon={<Bot aria-hidden />}
+        tip={`${how}. Its instructions are written on the Team page. The role (${agent}) names its spans and run reports.`}
+      >
+        {team.name}
+      </Chip>
+      {team.missing && (
+        <Chip
+          tone="lock"
+          tip={`${team.picked} was picked for it but the Team has no agent of that name now: it runs as ${team.name} until the agent is back or another is picked.`}
+        >
+          agent missing
+        </Chip>
+      )}
+    </>
   )
 }
 

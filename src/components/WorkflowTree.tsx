@@ -1,17 +1,15 @@
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from 'lucide-react'
-import { useLayoutEffect, useMemo, useRef } from 'react'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Flag } from 'lucide-react'
+import { useLayoutEffect, useRef } from 'react'
 
 import { AgentChip, Chip, EditedChip, LockChip } from '#/components/WorkflowChips'
-import { WorkflowHandoff } from '#/components/WorkflowHandoff'
 import { ReviewBody, type RoundsFlight } from '#/components/WorkflowReview'
 import { Button } from '#/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Switch } from '#/components/ui/switch'
 import { Tip } from '#/components/ui/tooltip'
-import { COMPLEXITIES, type Complexity } from '#/lib/constants'
+import type { Complexity } from '#/lib/constants'
 import {
   WORKFLOW_EFFORTS,
-  resolveWorkflow,
   type ResolvedStep,
   type ResolvedWorkflow,
   type WorkflowEffort,
@@ -33,11 +31,8 @@ import { cn } from '#/lib/utils'
 export interface WorkflowEdits {
   setEnabled: (id: WorkflowStepId, enabled: boolean) => void
   setEffort: (id: WorkflowStepId, effort: WorkflowEffort) => void
-  /**
-   * The instruction to keep, or null for the preset's. Answers with the reason it was not saved, or null once
-   * it was, so the editor stays open on a refusal.
-   */
-  setInstructions: (id: WorkflowStepId, instructions: string | null) => Promise<string | null>
+  /** The Team agent a node runs, by name; null puts back the default (the Team agent named like its role). */
+  setAgent: (nodeId: string, agent: string | null) => void
   /** Answers with the reason the count was not saved, or null once it was; the field goes back to the saved count. */
   setRounds: (level: Complexity, rounds: number) => Promise<string | null>
   /** Answers with the reason the move was not saved, or null once it was. */
@@ -50,7 +45,7 @@ function editedWhat(step: ResolvedStep): string {
     step.edited.moved && 'its place in the order',
     step.edited.enabled && 'turned off',
     step.edited.effort && 'its effort',
-    step.edited.instructions && 'its hand-off instruction',
+    step.edited.agent && 'its Team agent',
   ].filter((p): p is string => Boolean(p))
   return parts.join(', ')
 }
@@ -89,14 +84,6 @@ export function WorkflowTree({
     if (!flight) flights.current.set(key, (flight = { sent: null, pending: 0 }))
     return flight
   }
-  // The same preset and tweaks at the other complexities: a hand-off whose default reads differently there.
-  const others = useMemo(
-    () =>
-      COMPLEXITIES.filter((level) => level !== complexity).map((level) =>
-        resolveWorkflow(workflow.preset, workflow.tweak, level),
-      ),
-    [workflow.preset, workflow.tweak, complexity],
-  )
   useLayoutEffect(() => {
     const target = moved.current
     if (!target) return
@@ -131,9 +118,6 @@ export function WorkflowTree({
           last={i === workflow.steps.length - 1}
           preset={workflow.preset}
           complexity={complexity}
-          handoffVaries={others.some(
-            (w) => w.steps.find((o) => o.id === step.id)?.handoffDefault !== step.handoffDefault,
-          )}
           edits={edits}
           flightOf={flightOf}
           open={!collapsed.has(step.id)}
@@ -159,7 +143,6 @@ function StepNode({
   last,
   preset,
   complexity,
-  handoffVaries,
   edits,
   flightOf,
   open,
@@ -172,8 +155,6 @@ function StepNode({
   last: boolean
   preset: WorkflowPresetId
   complexity: Complexity
-  /** Whether this step's default hand-off reads differently at another complexity. */
-  handoffVaries: boolean
   edits: WorkflowEdits
   flightOf: (level: Complexity) => RoundsFlight
   open: boolean
@@ -230,7 +211,7 @@ function StepNode({
                   {step.number !== null && <span className="sr-only">{step.number}. </span>}
                   {step.label}
                 </span>
-                <AgentChip agent={step.agent} label={step.agentLabel} />
+                <AgentChip agent={step.agent} label={step.agentLabel} team={step.teamAgent} />
                 {effort !== null && (
                   <EffortSelect step={step} text={effort} onChange={(e) => edits.setEffort(step.id, e)} />
                 )}
@@ -288,17 +269,35 @@ function StepNode({
           )}
         </div>
       </div>
-      {/* An editor opened on one view (preset, complexity) does not carry its draft to another. */}
-      <WorkflowHandoff
-        key={`${preset}:${complexity}`}
-        step={step}
-        next={next}
-        last={last}
-        complexity={complexity}
-        defaultVaries={handoffVaries}
-        onSave={(instructions) => edits.setInstructions(step.id, instructions)}
-      />
+      <HandoffNote step={step} next={next} last={last} />
     </li>
+  )
+}
+
+/** The hand-off after a step, drawn as the connector to the next one: what it passes on, in the preset's words. Read-only. */
+function HandoffNote({ step, next, last }: { step: ResolvedStep; next: string | null; last: boolean }) {
+  return (
+    <div
+      data-handoff={step.id}
+      className={cn('grid grid-cols-[2rem_minmax(0,1fr)] gap-x-3', step.skipped && 'opacity-60')}
+    >
+      <div className="flex justify-center pt-1.5" aria-hidden>
+        <span className="z-[1] flex size-5 items-center justify-center rounded-full border bg-background text-muted-foreground">
+          {last ? <Flag className="size-3" /> : <ArrowDown className="size-3" />}
+        </span>
+      </div>
+      <div className="min-w-0 space-y-1.5 py-1">
+        <span className="text-xs font-medium text-muted-foreground">
+          {last ? 'Result' : next ? `Hand-off to ${next}` : 'Hand-off'}
+        </span>
+        <p
+          data-handoff-text
+          className="border-l-2 border-border pl-2.5 text-[0.8125rem] leading-relaxed wrap-anywhere text-foreground/85"
+        >
+          {step.handoff}
+        </p>
+      </div>
+    </div>
   )
 }
 
