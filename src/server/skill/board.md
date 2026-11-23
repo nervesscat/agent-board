@@ -537,9 +537,8 @@ After that:
 1. `done` is the human's call unless the project instructions say otherwise, or the ticket is in
    Approved, where an orchestrator merges the PR and then moves it: see
    [Approved](#approved-the-go-ahead-to-merge).
-2. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the
-   board flags a ticket that is further along than its lanes. Say in the summary which lanes it
-   covers.
+2. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`. Say in the
+   summary which lanes it covers.
 3. Dropping work: `status: cancelled`, with a comment saying why. A cancelled or done lane's tasks
    leave the parent's progress.
 4. Clean up your lane before it goes to `done` (or when the human moves it there): see
