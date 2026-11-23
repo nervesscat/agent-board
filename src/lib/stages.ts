@@ -18,7 +18,8 @@ export const isClosed = (kind: StageKind) => kind === 'done' || kind === 'cancel
 
 /**
  * The stage keys Overview's Carrying over lists: the project's blocked stages and its In review stage,
- * the first of kind review. The later review-kind stages (Approved, Release…) are not "in review".
+ * the first of kind review. Approved and Release have kinds of their own, so they are never "in review";
+ * a later stage of kind review is not either.
  */
 export function carryingOverStages(stages: StageLike[]): Set<string> {
   const inReview = stages.find((s) => s.kind === 'review')
