@@ -4,6 +4,7 @@ import path from 'node:path'
 
 import { beforeAll, describe, expect, it } from 'vitest'
 
+import { STAGE_KINDS } from '#/lib/constants'
 import { KIND_WORK } from './kindText'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
@@ -122,6 +123,15 @@ describe('the text a project with no software kind is offered', () => {
       clientInfo: { name: 'test', version: '1' },
     })
     expect(init.instructions).toContain('workFolder')
+  })
+
+  it('lists every stage kind the board has, as the software text does', async () => {
+    const init = await rpc(`/api/mcp?project=${music}`, 'initialize', {
+      protocolVersion: '2025-03-26',
+      capabilities: {},
+      clientInfo: { name: 'test', version: '1' },
+    })
+    expect(init.instructions).toContain(`a kind (${STAGE_KINDS.join(', ')})`)
   })
 
   it('keeps the software text and tools for a software project and for a connection that names none', async () => {

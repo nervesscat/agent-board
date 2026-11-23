@@ -718,8 +718,10 @@ describe('0036_pr_left_as', () => {
 
     const prs = sqlite.prepare('SELECT * FROM prs').all() as Record<string, unknown>[]
     expect(prs.map((p) => p.left_as)).toEqual([null, null, null])
-    // A later migration adds the review request column.
-    expect(prs.map(({ left_as: _l, requested: _r, ...rest }) => rest)).toEqual(before)
+    // Every PR that existed involved me: the queue held only what the searches found.
+    expect(prs.map((p) => p.involves_me)).toEqual(prs.map(() => 1))
+    // Later migrations add the review request and involves-me columns.
+    expect(prs.map(({ left_as: _l, requested: _r, involves_me: _i, ...rest }) => rest)).toEqual(before)
     sqlite.close()
   })
 })
@@ -1397,7 +1399,7 @@ describe('0053_approved_stage', () => {
     ])
     expect(stages(a).find((s) => s.key === 'approved')).toMatchObject({
       name: 'Approved',
-      // 0053 made it a review stage; 0059 gives it a kind of its own.
+      // 0053 made it a review stage; 0060 gives it a kind of its own.
       kind: 'approved',
       color: 'teal',
       position: 5,
@@ -1834,9 +1836,9 @@ describe('0058_task_blocked_at', () => {
   })
 })
 
-describe('0059_approved_kind', () => {
+describe('0060_approved_kind', () => {
   it('gives Approved its own kind and makes Release done, changing nothing else', () => {
-    const sqlite = databaseAt('0058_task_blocked_at')
+    const sqlite = databaseAt('0059_prs_involves_me')
     const project = (name: string) =>
       Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run(name).lastInsertRowid)
     const stage = sqlite.prepare(

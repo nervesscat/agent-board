@@ -659,7 +659,17 @@ let prNumbers = 1000
 /** A PR row as a refresh from GitHub would leave it (the e2e repo has no remote, so none comes). */
 function seedPr(
   project: Project,
-  pr: { title: string; author?: string; waitingOn?: 'me' | 'others'; stage?: string; updatedAt?: string },
+  pr: {
+    title: string
+    author?: string
+    waitingOn?: 'me' | 'others'
+    stage?: string
+    updatedAt?: string
+    /** False: found only by the repo's plain list of open PRs (shown by All PRs alone). */
+    involvesMe?: boolean
+    /** Merged now: it left the open queue. */
+    merged?: boolean
+  },
 ) {
   const number = ++prNumbers
   const id = inDatabase(
@@ -668,8 +678,8 @@ function seedPr(
         db
           .prepare(
             `insert into prs (project_id, repo_id, number, title, url, author, head_ref, base_ref, head_sha,
-               waiting_on, review_stage, updated_at, fetched_at)
-             values (?, ?, ?, ?, ?, ?, ?, 'main', 'abcdef1234567', ?, ?, ?, ?) returning id`,
+               waiting_on, review_stage, updated_at, fetched_at, involves_me, open, merged_at)
+             values (?, ?, ?, ?, ?, ?, ?, 'main', 'abcdef1234567', ?, ?, ?, ?, ?, ?, ?) returning id`,
           )
           .get(
             project.id,
@@ -683,6 +693,9 @@ function seedPr(
             pr.stage ?? 'pending',
             pr.updatedAt ?? new Date().toISOString(),
             new Date().toISOString(),
+            pr.involvesMe === false ? 0 : 1,
+            pr.merged ? 0 : 1,
+            pr.merged ? new Date().toISOString() : null,
           ) as Row
       ).id,
   )
@@ -714,7 +727,7 @@ test('a PR to review lands on its card, whatever filter this browser remembers',
   expect(await page.evaluate(() => localStorage.getItem('prs.filter'))).toBe('others')
 })
 
-test('a link to a PR that Just me as reviewer hides lands on its card, with All PRs for the visit', async ({
+test('a link to a PR that Just me as reviewer hides lands on its card, with Involving me for the visit', async ({
   page,
   project,
 }) => {
@@ -734,11 +747,69 @@ test('a link to a PR that Just me as reviewer hides lands on its card, with All 
   await page.goto(`/projects/${project.id}/prs#pr-${target.id}`)
   await expectRevealed(page, card, topBar(page))
   await expect(card).toContainText('Not asked of me')
-  await expect(page.getByRole('tab', { name: 'All PRs' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tab', { name: 'Involving me' })).toHaveAttribute('aria-selected', 'true')
   await expect(page).toHaveURL(/[?&]reviewer=all(&|#|$)/)
   await expect(page).toHaveURL(new RegExp(`#pr-${target.id}$`))
   // Shown for this visit, not remembered.
   expect(await page.evaluate(() => localStorage.getItem('prs.reviewer'))).toBe('mine')
+})
+
+test('a link to a PR that involves me not lands on its card under All PRs, for the visit', async ({
+  page,
+  project,
+}) => {
+  // Only All PRs shows it; the filter this browser remembers is a side, and stays so.
+  const target = seedPr(project, {
+    title: 'Nobody asked me',
+    involvesMe: false,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  })
+  for (let i = 0; i < 12; i++) seedPr(project, { title: `Involving filler ${i}` })
+  for (let i = 0; i < 12; i++) seedPr(project, { title: `Stranger filler ${i}`, involvesMe: false })
+  await overview(page, project)
+  await page.evaluate(() => {
+    localStorage.setItem('prs.filter', 'others')
+    localStorage.setItem('prs.reviewer', 'mine')
+  })
+  const card = page.locator(`#pr-${target.id}`)
+  await page.goto(`/projects/${project.id}/prs#pr-${target.id}`)
+  await expectRevealed(page, card, topBar(page))
+  await expect(card).toContainText('Nobody asked me')
+  await expect(page.getByRole('tab', { name: /^All PRs/ })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tab', { name: /^Pending/ })).toHaveAttribute('aria-selected', 'true')
+  await expect(page).toHaveURL(/[?&]filter=all(&|#|$)/)
+  await expect(page).toHaveURL(new RegExp(`#pr-${target.id}$`))
+  expect(await page.evaluate(() => localStorage.getItem('prs.filter'))).toBe('others')
+  expect(await page.evaluate(() => localStorage.getItem('prs.reviewer'))).toBe('mine')
+})
+
+test('with All PRs picked, a link to an open PR stays there and one to a merged PR goes to its side', async ({
+  page,
+  project,
+}) => {
+  const open = seedPr(project, { title: 'Open under all', involvesMe: false })
+  const mine = seedPr(project, { title: 'Mine under all', waitingOn: 'others' })
+  const merged = seedPr(project, { title: 'Merged under all', merged: true })
+  await overview(page, project)
+  await page.evaluate(() => localStorage.setItem('prs.filter', 'all'))
+  const filter = (name: string) => page.getByRole('tab', { name: new RegExp(`^${name}`) })
+
+  await page.goto(`/projects/${project.id}/prs#pr-${open.id}`)
+  await expect(page.locator(`#pr-${open.id}`)).toContainText('Open under all')
+  await expect(filter('All PRs')).toHaveAttribute('aria-selected', 'true')
+  await expect(page).toHaveURL(/[?&]filter=all(&|#|$)/)
+
+  await page.goto(`/projects/${project.id}/prs#pr-${mine.id}`)
+  await expect(page.locator(`#pr-${mine.id}`)).toContainText('Mine under all')
+  await expect(filter('All PRs')).toHaveAttribute('aria-selected', 'true')
+
+  // All PRs cannot show a merged one: its side does, under Done.
+  await page.goto(`/projects/${project.id}/prs#pr-${merged.id}`)
+  await expect(page.locator(`#pr-${merged.id}`)).toContainText('Merged under all')
+  await expect(filter('To review')).toHaveAttribute('aria-selected', 'true')
+  await expect(filter('Done')).toHaveAttribute('aria-selected', 'true')
+  await expect(page).toHaveURL(/[?&]filter=me(&|#|$)/)
+  expect(await page.evaluate(() => localStorage.getItem('prs.filter'))).toBe('all')
 })
 
 /**
@@ -778,10 +849,10 @@ async function reviewFromCachedQueue(page: Page, project: Project) {
   await next.click()
   await expect(page).toHaveURL(new RegExp(`filter=me#pr-${again.id}$`))
   await expect(page.getByRole('tab', { name: /^To review/ })).toHaveAttribute('aria-selected', 'true')
-  // The queued PR lands on To review with the switch it starts on: All PRs, since none was picked.
+  // The queued PR lands on To review with the switch it starts on: Involving me, since none was picked.
   const filterRow = page.getByRole('tablist').filter({ has: page.getByRole('tab', { name: /^To review/ }) })
-  await expect(filterRow.getByRole('tab')).toHaveCount(2)
-  await expect(page.getByRole('tab', { name: 'All PRs' })).toHaveAttribute('aria-selected', 'true')
+  await expect(filterRow.getByRole('tab')).toHaveCount(3)
+  await expect(page.getByRole('tab', { name: 'Involving me' })).toHaveAttribute('aria-selected', 'true')
   const card = page.locator(`#pr-${again.id}`)
   await expectRevealed(page, card, topBar(page))
   await expect.poll(() => scrollY(page)).toBeGreaterThan(0)

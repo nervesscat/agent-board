@@ -97,7 +97,14 @@ export function openPrTickets(projectId: number, statusOf: (pr: schema.Pr) => Pr
       const open = tx
         .select()
         .from(schema.prs)
-        .where(and(eq(schema.prs.projectId, projectId), eq(schema.prs.open, true)))
+        .where(
+          and(
+            eq(schema.prs.projectId, projectId),
+            eq(schema.prs.open, true),
+            // Someone else's PR that only All PRs shows is nobody's work here: no ticket of its own.
+            eq(schema.prs.involvesMe, true),
+          ),
+        )
         .orderBy(asc(schema.prs.id))
         .all()
       if (!open.length) return

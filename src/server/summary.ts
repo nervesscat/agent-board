@@ -170,6 +170,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       and(
         eq(schema.prs.projectId, project.id),
         eq(schema.prs.open, true),
+        eq(schema.prs.involvesMe, true),
         eq(schema.prs.waitingOn, 'me'),
         eq(schema.prs.reviewStage, 'pending'),
         eq(schema.prs.hold, false),
@@ -445,6 +446,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       and(
         eq(schema.prs.projectId, project.id),
         eq(schema.prs.open, false),
+        eq(schema.prs.involvesMe, true),
         gte(schema.prs.closedAt, from),
         lt(schema.prs.closedAt, to),
       ),
