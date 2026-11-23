@@ -134,9 +134,9 @@ test('the chart scrolls under the ticket’s sticky header: its labels never pai
   await page.evaluate((y) => window.scrollTo(0, y), top)
   await page.waitForTimeout(200)
 
-  // The ticket header is the one that says who opened the ticket; it is sticky and opaque.
+  // The ticket header is the one with the line of who opened the ticket and when; it is sticky and opaque.
   const hit = await page.evaluate(() => {
-    const header = [...document.querySelectorAll('header')].find((h) => h.textContent?.includes('opened by'))!
+    const header = [...document.querySelectorAll('header')].find((h) => h.querySelector('[data-fact]'))!
     const hr = header.getBoundingClientRect()
     const under = [...document.querySelectorAll('[data-testid="agent-label"]')]
       .filter((el) => {

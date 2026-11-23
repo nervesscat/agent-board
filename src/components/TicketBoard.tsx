@@ -546,7 +546,6 @@ function LaneCount({ lanes, stages }: { lanes: TicketRow['lanes']; stages: Stage
   const parts = stages
     .filter((s) => s.kind !== 'open' && lanes.byStage[s.key])
     .map((s) => `${lanes.byStage[s.key]} ${s.name.toLowerCase()}`)
-  if (lanes.approved) parts.push(`${lanes.approved} approved`)
   return (
     <div className="mt-1.5 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
       <Layers className="size-3 shrink-0" />

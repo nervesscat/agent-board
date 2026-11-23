@@ -276,6 +276,10 @@ short message shape with the numbered list of what needs the human. Its line is
    whichever ticket and agent it belongs to; a comment leaves it once an agent replies under it
    (a later discussion post by an agent on the ticket answers a top-level post). Read it when a
    session starts and between steps, and answer each item under it.
+   When the project has a resume command (its Settings), the board itself runs it when the human
+   answers a card on the board or moves the ticket from blocked or review to an active stage, so you
+   may be started again with the answer. If you can stay alive, `wait_for_answer` on the card returns
+   the answer instead.
    **Record your work on the ticket's timeline** as you go: the Roadmap and the ticket page draw it,
    so the human sees who worked when, who waited on what, and what is going on now. Each call takes
    `projectId` and `ticketId`, and only a ticket of that project (another project's is a 403 and
@@ -332,14 +336,25 @@ short message shape with the numbered list of what needs the human. Its line is
       `push` for every workspace's branch. (`merged`: gone from origin because its PR was merged
       into the base.)
    4. `needs` declared for any unmerged branch it builds on: when your branch is built on another
-      ticket's open branch (stacked), or you merged one in to get past a conflict, `update_ticket`
-      with `needs: [<its ticket id>]` (or `needs` on `create_ticket`), instead of only writing
-      "builds on …" in the PR. The PR queue then marks your PR "merge after #<its PR>", and the
+      ticket's open branch (stacked), or you merged one in to get past a conflict, the board adds
+      that need itself once the commits are in the branches it looks at (after a push or a fetch,
+      and when a ticket is read; it logs "now needs #N", marks the need `auto` in `get_ticket`,
+      and drops it again when the branch no longer holds those commits or the other ticket was
+      cancelled or archived without landing). It sees only what git has, at its looks (a fresh
+      listing, a ticket read, a status change), and cannot prove who owns commits two branches
+      share once they moved apart, so when you stack before your ticket's branch exists or the
+      commits are in git, declare it yourself with `update_ticket` with `needs: [<its ticket id>]`
+      (or `needs` on `create_ticket`), instead of only writing "builds on …" in the PR: the board
+      then confirms it, and a need you declared is yours, never touched by the board. Your `needs`
+      list never removes a need the board added (only the human does, and it then stays removed).
+      The PR queue then marks your PR "merge after #<its PR>", and the
       ticket cannot move to `done` until that branch is merged into its base (the refusal says
       which; only the human can mark it done anyway, but in Approved an orchestrator moves it to
-      `done` after it merges the PR, below). `get_ticket_git` → `includes` lists the
-      open tickets whose unmerged work your branch already holds; `get_ticket` → `needs` says
-      whether each is `merged`. `needs` is the enforced rule; the review column's order is the
+      `done` after it merges the PR, below). `get_ticket_git` → `includes` (HTTP: `GET /api/tickets/:id/git?includes=1`) lists only the
+      open tickets whose unmerged work your branch holds but git cannot prove is theirs (the
+      board adds no need for those, and the ticket page shows each as an amber "Includes unmerged
+      work" row with "Add as a need": declare one if it is a real dependency); `get_ticket` →
+      `needs` says whether each is `merged`. `needs` is the enforced rule; the review column's order is the
       merge order the agents propose, read top to bottom (top merges first). Moving your ticket to
       review, place it with `update_ticket` → `position` (1 is the top; with `status`, in the new
       stage): below every open ticket it `needs`, otherwise where it should merge relative to the
@@ -401,10 +416,11 @@ auto}`. Merged is left out: merging is the human's, except on a ticket in Approv
    `done` is the human's call unless the instructions say otherwise, or the ticket is in Approved,
    where an orchestrator merges the PR and then moves it (below). A ticket with lanes goes to
    `review` once its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was
-   dropped: say why in a comment). The human's verdict on a lane or ticket is `approvedAt` /
+   dropped: say why in a comment). The human's verdict on a top-level ticket is `approvedAt` /
    `approvedBy` or `disapprovedAt` / `disapprovedBy` (disapproving also cancels it; approving a
-   ticket tagged `PR`, a PR review, also moves it to `done`): read it, never set it, and ask in the
-   thread before touching an approved or disapproved lane. Archiving is the human's too:
+   ticket tagged `PR`, a PR review, also moves it to `done`): read it, never set it. A lane has no
+   verdict: its stage is the call (Approved or Done is accepted, Cancelled is dropped), so ask in
+   its thread before moving one of those. Archiving is the human's too:
    `archivedAt` set means the ticket (and its lanes) is finished and off the board; `list_tickets`
    leaves those out unless `archived: "include"` or `"only"`. An agent may ask for it, never do it:
    `request_archive` (MCP; REST `POST /api/projects/:id/tickets/archive-request` `{ticketIds, as?}`)

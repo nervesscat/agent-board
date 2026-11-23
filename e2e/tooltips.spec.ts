@@ -183,11 +183,18 @@ test('hovering shows what the title said, and each element stays what it was, wi
 
   // The ticket page.
   await page.goto(`/projects/${project.id}/features/${t.id}`)
-  const openedBy = page.locator('span').filter({ hasText: /^opened by / })
-  const actor = openedBy.locator('span[data-slot="tooltip-trigger"]')
-  await expectTooltip(actor, `${HUMAN} (Human): you, signed in with a passkey`)
+  const line = page.locator('[data-fact]').first().locator('..')
+  const actor = line.locator('span[data-slot="tooltip-trigger"]').first()
+  await expectTooltip(actor, new RegExp(`^Opened by ${HUMAN} \\(Human\\) on .+`))
   expect(await tagOf(actor)).toBe('span')
-  await expect(openedBy.getByRole('button')).toHaveCount(0)
+  await expect(line.locator('[data-fact]').getByRole('button')).toHaveCount(0)
+  // The times: the full date and time, and a screen reader hears it, not just "just now".
+  const opened = line.locator('[data-fact]').nth(1)
+  const updated = line.locator('[data-fact]').nth(2)
+  await expectTooltip(opened, /^Opened on .+\d/)
+  await expectTooltip(updated, /^Updated on .+\d/)
+  await expect(opened.locator('.sr-only')).toHaveText(/^Opened on .+\d/)
+  await expect(updated.locator('.sr-only')).toHaveText(/^Updated on .+\d/)
 
   // The post's actions: the same buttons, by the same names, each with its tooltip.
   const post = page.getByRole('article').filter({ hasText: 'A post to act on.' })
@@ -225,11 +232,8 @@ test('hovering shows what the title said, and each element stays what it was, wi
   // An agent's name.
   await page.goto(`/projects/${project.id}/features/${byAgent.id}`)
   await expectTooltip(
-    page
-      .locator('span')
-      .filter({ hasText: /^opened by / })
-      .locator('span[data-slot="tooltip-trigger"]'),
-    `${AGENT} (Agent): an agent, signed in with a token`,
+    page.locator('[data-fact]').first().locator('span[data-slot="tooltip-trigger"]'),
+    new RegExp(`^Opened by ${AGENT} \\(Agent\\) on .+`),
   )
 
   // The project's agents: icon buttons named as their tooltips say.
@@ -289,6 +293,39 @@ test('keyboard focus opens the same tooltip as hover, and leaving or Escape clos
   await expect(tooltip(page)).toHaveText('Bold')
   await page.keyboard.press('Shift+Tab')
   await expect(tooltip(page)).toHaveText('Attach files')
+})
+
+test("the top bar's Connect and Settings are icon buttons with a tooltip, a name and an active state", async ({
+  page,
+}) => {
+  await page.goto('/')
+  const bar = page.getByRole('banner')
+  const connect = bar.getByRole('link', { name: 'Connect an agent', exact: true })
+  const settings = bar.getByRole('link', { name: 'Settings', exact: true })
+  // Icons, not words: each link holds one svg and no text of its own.
+  for (const link of [connect, settings]) {
+    await expect(link.locator('svg')).toHaveCount(1)
+    await expect(link).toHaveText('')
+  }
+  await expectTooltip(connect, 'Connect an agent')
+  await expectTooltip(settings, 'Settings')
+  // The same size as the notification bell beside them.
+  const size = async (l: Locator) => {
+    const b = (await l.boundingBox())!
+    return [Math.round(b.width), Math.round(b.height)]
+  }
+  expect(await size(connect)).toEqual(await size(bar.getByRole('button', { name: 'Notifications' })))
+
+  // Keyboard focus opens the tooltip too, and the page's own link is the active one.
+  await connect.focus()
+  await expect(tooltip(page)).toHaveText('Connect an agent')
+  await connect.click()
+  await expect(page).toHaveURL(/\/agents$/)
+  await expect(connect).toHaveAttribute('aria-current', 'page')
+  await expect(settings).not.toHaveAttribute('aria-current', 'page')
+  await settings.click()
+  await expect(page).toHaveURL(/\/settings$/)
+  await expect(settings).toHaveAttribute('aria-current', 'page')
 })
 
 test('a tooltip of several lines keeps them, each on its own row', async ({ page, api, project }) => {

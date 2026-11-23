@@ -96,3 +96,17 @@ export function commitFile(parent: string, file: string, content: string, messag
   const tree = gitWith(`100644 blob ${blob}\t${file}\n`, ['mktree']).trim()
   return git('commit-tree', tree, '-p', parent, '-m', message).trim()
 }
+
+/**
+ * A commit on top of `parents` (none for a root) whose tree is exactly `files`, made without touching
+ * the repo's working tree; answers its sha. Two commits with the same added files over parents with the
+ * same other files carry the same change, whatever their parents are: a copy of one another.
+ */
+export function commitFiles(parents: string[], files: Record<string, string>, message: string): string {
+  const entries = Object.entries(files).map(([file, content]) => {
+    const blob = gitWith(content, ['hash-object', '-w', '--stdin']).trim()
+    return `100644 blob ${blob}\t${file}\n`
+  })
+  const tree = gitWith(entries.join(''), ['mktree']).trim()
+  return git('commit-tree', tree, ...parents.flatMap((p) => ['-p', p]), '-m', message).trim()
+}
