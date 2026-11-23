@@ -4,7 +4,6 @@ import { DEFAULT_STAGES } from './constants'
 import {
   carryingOverStages,
   columnNeighbours,
-  mergeAfter,
   newTicketStage,
   placeInColumn,
   positionBy,
@@ -231,19 +230,6 @@ describe('placed tickets', () => {
     expect(positionBy(order, 14, 13, 'above')).toBe(3)
     expect(after(column, 12, positionBy(order, 12, 13, 'below')!)).toEqual([11, 13, 12, 14, 15])
     expect(positionBy(order, 12, 99, 'above')).toBeNull()
-  })
-
-  it('flag a card placed above a ticket it needs merged first', () => {
-    const needing = (id: number, needs: { id: number; merged: boolean }[]) => ({
-      ...placed(id, null, '2026-10-01T10:00:00Z'),
-      needs,
-    })
-    const a = needing(1, [{ id: 2, merged: false }])
-    const b = needing(2, [])
-    expect(mergeAfter([a, b])).toEqual(new Map([[1, [2]]]))
-    expect(mergeAfter([b, a])).toEqual(new Map())
-    // Once what it needs is merged, the order no longer matters.
-    expect(mergeAfter([{ ...a, needs: [{ id: 2, merged: true }] }, b])).toEqual(new Map())
   })
 })
 

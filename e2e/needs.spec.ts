@@ -36,10 +36,11 @@ test('a ticket that needs another one merged first is held out of Done; the huma
     .poll(async () => (await api.getTicket(t.id)).needs)
     .toMatchObject([{ id: base.id, merged: false }])
 
-  // The board card says what it waits on.
+  // The board card carries no needs badge: the ticket page is where the need shows.
   await page.goto(`/projects/${project.id}/features?view=board`)
   const card = page.locator('[data-column="in_progress"]').getByRole('link', { name: /Built on it/ })
-  await expect(card).toContainText(`needs #${base.id}`)
+  await expect(card).toBeVisible()
+  await expect(card).not.toContainText('needs #')
 
   // Dragged to Done, it is refused and goes back to its column.
   await drag(page, card, page.locator('[data-column="done"]'))
@@ -136,10 +137,6 @@ test('a branch that holds another ticket’s unmerged work gets the need by itse
   git('update-ref', `refs/heads/${name('base')}`, a)
   await page.reload()
   await expect(page.getByRole('link', { name: `Needs #${base.id} · merged` })).toBeVisible()
-  await page.goto(`/projects/${project.id}/features?view=board`)
-  await expect(
-    page.locator('[data-column="in_progress"]').getByRole('link', { name: /Built on it/ }),
-  ).not.toContainText('needs #')
   await ok(agent.patch(`/api/tickets/${t.id}`, { data: { status: 'done' } }))
 })
 
