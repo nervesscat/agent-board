@@ -550,6 +550,16 @@ test('the panel shows what a step does and the hand-off to the next, in the pres
   await select(page, 'handoff')
   await expect(panel(page)).toContainText('Result')
 
+  // A low ticket skips Spec and Review: the hand-off goes to the next step that runs, never to a skipped one.
+  await complexityTab(page, 'Low').click()
+  await select(page, 'claim')
+  await expect(panel(page)).toContainText('Hand-off to Build')
+  await expect(panel(page)).not.toContainText('Hand-off to Spec')
+  await select(page, 'gate')
+  await expect(panel(page)).toContainText('Hand-off to Preview')
+  await expect(panel(page)).not.toContainText('Hand-off to Review')
+  await complexityTab(page, 'Mid').click()
+
   // Nothing of the hand-off is editable: no button, no field, no counter, and a saved edit of a step's text is refused.
   await expect(page.getByRole('button', { name: /^Edit the .* hand-off/ })).toHaveCount(0)
   await expect(page.getByRole('textbox', { name: /hand-off instruction/i })).toHaveCount(0)

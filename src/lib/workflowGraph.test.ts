@@ -141,6 +141,28 @@ describe('graphNodes and findNode', () => {
     const last = findNode(resolved('standard'), 'handoff')
     expect(last?.kind === 'step' && last.next).toBeNull()
   })
+
+  it('hands a step on to the next step that runs, never to one skipped for the ticket or switched off', () => {
+    const next = (w: ReturnType<typeof resolved>, id: string) => {
+      const node = findNode(w, id)
+      return node?.kind === 'step' ? node.next : undefined
+    }
+    // A low ticket skips Spec and Review.
+    const low = resolved('standard', 'low')
+    expect(next(low, 'claim')).toBe('Build')
+    expect(next(low, 'gate')).toBe('Preview')
+    expect(next(low, 'handoff')).toBeNull()
+    // The same steps hand on in order on a mid ticket.
+    const mid = resolved('standard', 'mid')
+    expect(next(mid, 'claim')).toBe('Spec')
+    expect(next(mid, 'gate')).toBe('Review')
+    // Switched off on the Workflow page: Preview and the intent check are passed over too.
+    const off = resolved('standard', 'low', {
+      steps: { preview: { enabled: false }, intent: { enabled: false } },
+    })
+    expect(next(off, 'gate')).toBe('Push')
+    expect(next(off, 'build')).toBe('Gate')
+  })
 })
 
 describe('what a node reads as', () => {

@@ -57,7 +57,9 @@ const phasesOf = (rows: readonly RoundRow[]): ResolvedSubStep[] =>
 export function graphNodes(workflow: Pick<ResolvedWorkflow, 'steps'>): GraphNode[] {
   const nodes: GraphNode[] = []
   workflow.steps.forEach((step, i) => {
-    nodes.push({ kind: 'step', id: step.id, step, next: workflow.steps[i + 1]?.label ?? null })
+    // The hand-off goes to the next step that runs: a step skipped for this ticket or switched off is passed over.
+    const next = workflow.steps.slice(i + 1).find((s) => !s.skipped)
+    nodes.push({ kind: 'step', id: step.id, step, next: next?.label ?? null })
     if (!step.review) return
     for (const phase of [...phasesOf(roundRows(step.review.phases)), ...step.review.between])
       nodes.push({ kind: 'phase', id: phase.id, step: phase })
