@@ -681,6 +681,7 @@ describe('stops by itself', () => {
       comments: [],
       requested: false,
       assigned: true,
+      involvesMe: true,
     }) satisfies MyGhPr
 
   it("when the ticket's PR is merged (not when it is only closed)", async () => {
