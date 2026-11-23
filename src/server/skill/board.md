@@ -62,12 +62,15 @@ Then:
    comments yours, as a worker under the orchestrator.
 2. `get_project` with your `projectId`. Its `instructions` override
    your defaults for every repo in it. Its `stages` are the board's columns, each with a `key`, a
-   `name` and a `kind` (`open`, `active`, `blocked`, `review`, `done`, `cancelled`); a ticket's
+   `name` and a `kind` (`open`, `active`, `blocked`, `review`, `approved`, `done`, `cancelled`); a ticket's
    `status` is a stage key. Wherever a status is asked for you can also pass a kind, which means
    the project's stage of that kind: for `open` (`todo`) the start stage (the last open stage), for
    `active` (`in_progress`) the stage work starts in (the project's `workStage`, else the first
    active stage), for any other kind the first stage of that kind. Below, `todo`, `in_progress`,
-   `blocked`, `review`, `done` and `cancelled` mean exactly that. Its `agents` are the project's own agents (see
+   `blocked`, `review`, `approved`, `done` and `cancelled` mean exactly that. A stage's own key or
+   name wins over a kind, so `done` is the first done stage (Release, when it comes before Done and
+   no stage is keyed `done`); where the board itself finishes work for good (approving a PR review,
+   a merged PR's own ticket) it lands in the last done stage. Its `agents` are the project's own agents (see
    [The project's agents](#the-projects-agents)). Its `notes` are the project's short shared facts
    (a `label` and a `body`, one fact each): **read them before starting**, so you do not rediscover
    what someone already learned. When you learn something a future session must not rediscover — a
@@ -400,7 +403,7 @@ name>"` (e.g. `orch/builder-1`) on every board tool call, so what it posts is fi
   SHA's review had already survived: that one is reused and named in the summary). A phase counts only
   when its span or run report carries the round (and the last segment of the agent name names the
   phase agent): a run with no round is not counted. Moving the ticket out of a review stage, to any
-  other stage, restarts the count (only runs after the move count, from round 1): run a missing
+  other stage but Approved, restarts the count (only runs after the move count, from round 1): run a missing
   phase while the ticket stays in review.
 
 ### Watch for feedback
@@ -449,7 +452,7 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    Only the human can mark it done anyway; in Approved, where an orchestrator merges the PR without
    asking again, it moves the ticket to done after the merge (see
    [Approved](#approved-the-go-ahead-to-merge)).
-   `needs` is the enforced rule; the review column's order is the merge order the agents propose,
+   `needs` is the enforced rule; the order of the review and approved columns is the merge order the agents propose,
    read top to bottom (top merges first). Moving your ticket to review, place it with
    `update_ticket` → `position` (1 is the top of its stage's column; with `status`, in the new
    stage): below every open ticket it `needs`, otherwise where it should merge relative to the
@@ -517,7 +520,7 @@ agent name names the phase agent, so a run with no round is not counted), as `{r
 and round counts as a run). It is a flag, not a refusal: run each missing phase (with a fix round if it
 needs code) before the hand-off stands, except a round the build skipped because its head SHA's review
 had already survived (reused, named in the summary). Moving the ticket out of a review stage, to any other
-stage, restarts the count (only runs after the move count, from round 1): run a missing phase while the
+stage but Approved, restarts the count (only runs after the move count, from round 1): run a missing phase while the
 ticket stays in review. `get_ticket` shows it in review too; it is `[]` for a low ticket.
 
 After that:
@@ -711,8 +714,9 @@ doing it yourself.
 
 Moving a ticket to **Approved** is the human's go-ahead to merge it. Only the human puts a ticket there:
 the approval verdict on a ticket in In review does it, or their move. An agent never does, and a worker
-(a sub-identity) never merges. Taking the approval back returns the ticket to In review. Approved is a
-review-kind stage, so no stage kind sends a ticket there.
+(a sub-identity) never merges. Taking the approval back returns the ticket to In review. Approved is a stage
+of its own kind, `approved` (after `review`): an agent may pass `approved` as a kind, but is refused a
+move or a new ticket there, by its kind whatever the stage's key.
 
 An orchestrator that finds a ticket in Approved merges its PR(s) without asking again, once the facts
 allow it:
@@ -724,7 +728,8 @@ allow it:
    or conflicts, that comes first. It is the ticket's own work, done by an agent on its branch: merge the
    base in, resolve the conflicts, push, and wait for CI green on the new head.
 4. **Merge the PR**, then **move the ticket to the project's first done stage** (the first stage of kind
-   done in `get_project`; Done in the default layout) and post on the ticket, naming the PR and the merge commit.
+   done in `get_project`: Release when the project has one, where a merged ticket waits for a release;
+   Done in the default layout) and post on the ticket, naming the PR and the merge commit.
 
 When something keeps it from merging (red checks, a conflict that needs a product call), say exactly
 what on the ticket, and leave it in Approved. It does not merge around it, and it does not ask whether
