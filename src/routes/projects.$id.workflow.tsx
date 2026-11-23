@@ -7,7 +7,7 @@ import { WORKFLOW_PRESETS } from '#/lib/workflow'
 
 export const Route = createFileRoute('/projects/$id/workflow')({
   component: Workflow,
-  // Which preset and complexity the tree shows, so a link can point at one (the project's active preset and
+  // Which preset and complexity the graph shows, so a link can point at one (the project's active preset and
   // Mid when none is named).
   validateSearch: z.object({
     preset: z.enum(WORKFLOW_PRESETS).optional().catch(undefined),

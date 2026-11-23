@@ -12,7 +12,7 @@ type Preset = WorkflowOverview['presets'][number]
 
 /**
  * The four presets, lightest to heaviest, as a row of cards: its name, a line on what it is, whether it is the
- * project's Active one and whether the human Tweaked it. Picking one shows its tree; it does not make it active.
+ * project's Active one and whether the human Tweaked it. Picking one shows its graph; it does not make it active.
  */
 export function PresetSwitcher({
   presets,
@@ -65,7 +65,7 @@ export function PresetSwitcher({
   )
 }
 
-/** Low, Mid, High and Max: the complexity the tree is drawn for (its rounds, and the steps a low ticket skips). */
+/** Low, Mid, High and Max: the complexity the graph is drawn for (its rounds, and the steps a low ticket skips). */
 export function ComplexityPicker({
   value,
   onChange,

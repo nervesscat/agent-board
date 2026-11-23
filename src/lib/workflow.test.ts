@@ -441,7 +441,7 @@ describe('the order (A8)', () => {
     })
   })
 
-  it('hands the tree the reasons: every step says whether it can move up and down', () => {
+  it('hands the graph the reasons: every step says whether it can move up and down', () => {
     const w = resolveWorkflow('standard', undefined, 'mid')
     const by = Object.fromEntries(w.steps.map((s) => [s.id, s.moveBlocked]))
     expect(by.build).toEqual({ up: 'build must come after spec', down: 'gate must come after build' })

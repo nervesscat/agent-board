@@ -19,7 +19,7 @@ const TONES = {
 export type ChipTone = keyof typeof TONES
 
 /**
- * A small label on a tree node (who runs it, its effort, a lock, an edit). With `tip` it explains itself on
+ * A small label on a node (who runs it, its effort, a lock, an edit). With `tip` it explains itself on
  * hover and on keyboard focus, so it can be tabbed to.
  */
 export function Chip({
@@ -55,20 +55,28 @@ export function Chip({
 
 /**
  * Who runs a node: the ticket agent itself (`you`), or the Team agent that runs it (a pick, the Team agent
- * named like its role, or the built-in role the Team lacks), with a badge when a saved pick is not in the Team.
+ * named like its role, or the built-in role the Team lacks) with the role it runs as in a muted way, and a
+ * badge when a saved pick is not in the Team. `plain` leaves out the tooltips (and so the tab stops): on a
+ * node, which is itself one button.
  */
 export function AgentChip({
   agent,
   label,
   team,
+  plain = false,
 }: {
   agent: string
   label: string
   team: TeamAgentRef | null
+  plain?: boolean
 }) {
   if (!team)
     return (
-      <Chip tone="agent" icon={<User aria-hidden />} tip="The ticket agent does this itself">
+      <Chip
+        tone="agent"
+        icon={<User aria-hidden />}
+        tip={plain ? undefined : 'The ticket agent does this itself'}
+      >
         {label}
       </Chip>
     )
@@ -83,14 +91,29 @@ export function AgentChip({
       <Chip
         tone="agent"
         icon={<Bot aria-hidden />}
-        tip={`${how}. Its instructions are written on the Team page. The role (${agent}) names its spans and run reports.`}
+        tip={
+          plain
+            ? undefined
+            : `${how}. Its instructions are written on the Team page. The role (${agent}) names its spans and run reports.`
+        }
       >
-        {team.name}
+        <span className="min-w-0 truncate" data-agent-name>
+          {team.name}
+        </span>
+        {team.name.toLowerCase() !== agent && (
+          <span className="min-w-0 truncate font-normal opacity-70" data-agent-role>
+            {agent}
+          </span>
+        )}
       </Chip>
       {team.missing && (
         <Chip
           tone="lock"
-          tip={`${team.picked} was picked for it but the Team has no agent of that name now: it runs as ${team.name} until the agent is back or another is picked.`}
+          tip={
+            plain
+              ? undefined
+              : `${team.picked} was picked for it but the Team has no agent of that name now: it runs as ${team.name} until the agent is back or another is picked.`
+          }
         >
           agent missing
         </Chip>
@@ -109,10 +132,14 @@ export function LockChip({ lock, reason }: { lock: 'always' | 'above-low'; reaso
 }
 
 /** A step the human changed: what exactly. */
-export function EditedChip({ what }: { what: string }) {
+export function ChangedChip({ what, plain = false }: { what: string; plain?: boolean }) {
   return (
-    <Chip tone="edited" icon={<Pencil aria-hidden />} tip={`Changed from the preset: ${what}`}>
-      edited
+    <Chip
+      tone="edited"
+      icon={<Pencil aria-hidden />}
+      tip={plain ? undefined : `Changed from the preset: ${what}`}
+    >
+      changed
     </Chip>
   )
 }

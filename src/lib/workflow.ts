@@ -4,13 +4,13 @@ import { COMPLEXITIES, COMPLEXITY_EFFORT, type Complexity } from './constants'
  * The workflow module: the order in which a ticket's agent delegates the build-and-review cycle (read
  * and claim, spec, build, gate, review rounds, preview, intent check, push, PR, CI, summary, hand-off),
  * as data. The board serves a project's active workflow to its agents (`get_workflow`) and the Workflow
- * page draws it as a tree; neither hard-codes the order.
+ * page draws it as a graph; neither hard-codes the order.
  *
  * Pure and shared by the client and the server: no database, no I/O. The long procedure of each step is
  * markdown the server serves (src/server/skill/workflow/<id>.md); this file holds what the page and the
  * served text both show: the catalogue (every step the cycle can have), the four presets (an ordered
  * list of those steps, the review rounds per complexity, an effort each), the tweaks a human saves on
- * top of a preset, and `resolveWorkflow`, which turns a preset and its tweaks into the tree.
+ * top of a preset, and `resolveWorkflow`, which turns a preset and its tweaks into the resolved workflow.
  *
  * A *preset* (`light|standard|thorough|maximum`) is not the review *depth* (`light|standard|deep`):
  * the depth is how hard one review hunts, the preset is which steps and phases a ticket goes through.
@@ -85,7 +85,7 @@ export type WorkflowLock = 'always' | 'above-low'
 export interface WorkflowStepDef {
   id: WorkflowStepId
   label: string
-  /** One paragraph on what the step does: shown on the tree and at the head of the served step. */
+  /** One paragraph on what the step does: shown in the node's panel and at the head of the served step. */
   what: string
   /**
    * The hand-off: what the step receives and passes on, and what the ticket agent checks when it returns.
@@ -105,13 +105,13 @@ export interface WorkflowStepDef {
   pinned: 'first' | 'last' | null
   /** The work timeline span the step opens (`start_span`), and whether it carries the round number. */
   span: { phase: string; round: boolean } | null
-  /** The step has sub-steps in the tree (the review's phases): they belong to the preset, see `review`. */
+  /** The step has sub-steps in the graph (the review's phases): they belong to the preset, see `review`. */
   hasSubSteps: boolean
 }
 
 const ALWAYS = 'Locked: the ticket cannot be handed off without it.'
 
-/** What each agent-run step is called in the tree and the served text. */
+/** What each agent-run step is called in the graph and the served text. */
 export const AGENT_LABELS: Record<WorkflowAgent, string> = {
   you: 'you',
   spec: 'spec',
@@ -1268,7 +1268,7 @@ export interface ResolvedStep {
   label: string
   what: string
   agent: WorkflowAgent
-  /** `you`, `spec`, `/feature-review`: how the tree and the served text name who runs it. */
+  /** `you`, `spec`, `/feature-review`: how the graph and the served text name who runs it. */
   agentLabel: string
   /** What the step receives and passes on: the preset's wording, read-only. */
   handoff: string
@@ -1400,7 +1400,7 @@ function resolveReview(
 }
 
 /**
- * A preset and its saved tweaks as the tree a ticket of `complexity` goes through: every step in order
+ * A preset and its saved tweaks as the graph a ticket of `complexity` goes through: every step in order
  * with its number (skipped ones with the reason and no number), agent, effort, hand-off text, lock,
  * what the human edited and where it can move; the review with its rounds, its phases per round, what
  * happens between rounds and the `/feature-review` runs a round makes. With no complexity nothing is
