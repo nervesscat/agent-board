@@ -396,7 +396,8 @@ short message shape with the numbered list of what needs the human. Its line is
    `get_workflow` with the ticket's id. The human sets it on the project's Workflow page; a ticket may
    name its own preset (`workflowPreset`); an agent changes neither. Run exactly the steps it lists, in
    its order, each as its text says; a workflow change made while you work is read at your next
-   relaunch. None is skipped because findings look obvious, the change looks small or a finding was
+   relaunch. Each step that runs an agent names the Team agent that runs it: brief it with that agent's
+   instructions from `get_project` (written on the Team page, never in the workflow). None is skipped because findings look obvious, the change looks small or a finding was
    already reproduced; each phase posts its result, so a skipped phase is visible.
 
    `update_ticket` to `review` answers with `open`: every task and subtask still open, the
@@ -564,7 +565,12 @@ that agent; the notes pick the next agent. Before moving the ticket to
 `review`, check every item of that checklist yourself. The Team page adds a default set (spec, builder, runner, and
 the review phases env, verify, hunt, refute, merge, and the intent check). **Which of them run, in what order, how many review rounds a ticket gets and at what effort is the
 project's workflow** (`get_workflow` with the ticket's id: its steps in order, each with its agent, its
-effort, what it does and what it hands on), not this text. Run exactly the steps it lists. Rules that
+effort, what it does and what it hands on), not this text. Run exactly the steps it lists. Each step that
+runs an agent names the **Team agent** that runs it (the human's pick on the Workflow page, else the Team
+agent named like the step's role, else the built-in role): brief that agent with the instructions it has
+in `get_project` -> `agents` (instructions are written on the Team page only; the workflow carries
+none), the project's instructions and the ticket, and name its span, run report and `agentName` by the
+step's role, never by the Team agent's name. Rules that
 hold in every workflow: a fix pass by the **builder** takes the review's confirmed findings, each with
 the project's checks and a new review; a review that does not survive after the workflow's last round
 goes to a human decision; the checks return the build at most twice, and after the second return,

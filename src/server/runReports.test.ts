@@ -1101,6 +1101,74 @@ describe('the review phases flag follows the ticket’s workflow', () => {
     expect(missingReviewPhases(plain.id)).toEqual([])
   })
 
+  it("counts by the step's role whichever Team agent a node names, and a missing pick changes nothing (B11)", async () => {
+    const pid = newProject()
+    projectAgents.createAgent(pid, { name: 'sec-hunter', instructions: 'Look for holes.' }, HUMAN)
+    projectAgents.createAgent(pid, { name: 'acme-dev', instructions: 'Build.' }, HUMAN)
+    const picked = await call('PUT', `/api/projects/${pid}/workflow/thorough`, {
+      agents: {
+        'review.hunt-a': 'sec-hunter',
+        'review.hunt-b': 'sec-hunter',
+        'review.hunt-security': 'acme-dev',
+        build: 'acme-dev',
+      },
+    })
+    expect(picked.status).toBe(200)
+    await preset(pid, 'thorough')
+    const t = ticketOf(pid)
+    // The ticket agent names every phase by its role, as the served text says; the three hunts are hunts.
+    spans(pid, t.id, 1, ['spec', 'env', 'verify', 'hunt', 'hunt', 'hunt-security', 'refute', 'merge'])
+    expect(missingReviewPhases(t.id)).toEqual([])
+    // A span named after the Team agent is no phase of the round: the board counts by role.
+    const wrong = ticketOf(pid)
+    spans(pid, wrong.id, 1, [
+      'spec',
+      'env',
+      'verify',
+      'sec-hunter',
+      'sec-hunter',
+      'acme-dev',
+      'refute',
+      'merge',
+    ])
+    expect(missingReviewPhases(wrong.id)).toEqual([{ round: 1, phase: 'hunt', expected: 3, found: 0 }])
+    // What a round needs is the same with no pick, with picks, and with picks whose agents left the Team.
+    const { ticketWorkflow } = await import('./workflow')
+    const { reviewPhaseRuns } = await import('#/lib/workflow')
+    const needed = () => reviewPhaseRuns(ticketWorkflow({ id: t.id, projectId: pid, complexity: 'mid' }))
+    const withPicks = needed()
+    for (const name of ['sec-hunter', 'acme-dev'])
+      projectAgents.deleteAgent(projectAgents.findAgent(pid, name)!.id, HUMAN)
+    expect(needed()).toEqual(withPicks)
+    expect(missingReviewPhases(t.id)).toEqual([])
+    await call('DELETE', `/api/projects/${pid}/workflow/thorough`)
+    expect(needed()).toEqual(withPicks)
+    expect(withPicks).toEqual([
+      { phase: 'spec', expected: 1 },
+      { phase: 'env', expected: 1 },
+      { phase: 'verify', expected: 1 },
+      { phase: 'hunt', expected: 3 },
+      { phase: 'refute', expected: 1 },
+      { phase: 'merge', expected: 1 },
+    ])
+  })
+
+  it('reads run kinds the same with or without a Team agent bound to a hunt (B11)', async () => {
+    const pid = newProject()
+    projectAgents.createAgent(pid, { name: 'sec-hunter' }, HUMAN)
+    await call('PUT', `/api/projects/${pid}/workflow/standard`, { agents: { 'review.hunt-a': 'sec-hunter' } })
+    const t = ticketOf(pid)
+    spans(pid, t.id, 1, ['spec', 'env', 'verify', 'hunt-1', 'orch/hunt-2', 'refute', 'merge'])
+    expect(missingReviewPhases(t.id)).toEqual([])
+    const reports = await tool('write_run_report', {
+      projectId: pid,
+      ticketId: t.id,
+      agent: 'hunt',
+      round: 1,
+    })
+    expect(reports.agent).toBe('hunt')
+  })
+
   it('stays empty for a low ticket, whatever the preset, and for a project with no software kind (H3)', async () => {
     const pid = newProject()
     for (const id of ['light', 'standard', 'thorough', 'maximum']) {

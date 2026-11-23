@@ -62,10 +62,15 @@ Every step in the text has the same parts:
 - **Skipped.** A step listed as "skipped" (a low ticket, or turned off by the human) is not run,
   and its reason is the line. A skipped step is not a failure and needs no note beyond the summary
   when it changes what the hand-off says.
-- **Agent routing.** `agent <name>` is the project's agent of that name when it has instructions,
-  else the agent whose `delegation` notes describe that step; when none fits, stop with
-  `STATUS: error` and say which step had no agent. `you` is the step you do yourself; `agent
-  /feature-review` is the review skill, run through the Skill tool. A project's stored delegation notes
+- **Agent routing.** `Team agent <name>` is the project's agent of that name, the one the human picked for
+  the step on the Workflow page or else the one named like the step's role: brief a subagent with the
+  `instructions` that agent has in `get_project` -> `agents` (they are written on the Team page only,
+  the workflow carries none), the project's `instructions` and the ticket's context. `built-in <role>`
+  is a role the Team has no agent for: brief it as the role's own agent file does, else as the step's
+  procedure says; when none fits, stop with `STATUS: error` and say which step had no agent. A
+  step's span, run report and `agentName` carry its **role** (`hunt`, `spec`, `builder`...), never the
+  Team agent's name. `you` is the step you do yourself; `agent /feature-review` is the review skill, run
+  through the Skill tool. A project's stored delegation notes
   may still say an order of their own (a fixed cycle, a fixed number of hunts): when they
   disagree with the workflow text, the workflow text wins.
 - **Effort.** The effort a step names (a level, or `auto`: low for a low ticket, medium for mid and
@@ -73,8 +78,7 @@ Every step in the text has the same parts:
   `effort=<level>` for `/feature-review`, so its phase agents run at it. The intent agent runs at the
   intent step's effort, `low` unless the human set another.
 - **Hand-off.** The "Hand-off" line says what the step receives and passes on, and what you check
-  when it returns. When it ends "(set by the human)" it is the human's own wording and replaces the
-  default: follow it. Check it before the next step starts.
+  when it returns. Check it before the next step starts.
 - **How it runs.** The procedure of the step: do it as written. A workflow's review also lists its
   phases per round and the `phases=` argument to pass to `/feature-review` for each run it makes.
 - **The rules in this file hold in every step** (the contract, the repo's rules on what it may

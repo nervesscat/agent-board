@@ -69,7 +69,7 @@ export const projects = sqliteTable('projects', {
   // with none of software hides it. The migration gives every existing project software.
   kinds: text('kinds', { mode: 'json' }).$type<Kind[]>().notNull().default(['software']),
   // The workflow its tickets' agents follow (`#/lib/workflow`): the active preset, and what the human changed
-  // in each preset (order, switches, efforts, hand-off instructions, review rounds). Null is no change.
+  // in each preset (order, switches, efforts, the Team agent of each node, review rounds). Null is no change.
   workflowPreset: text('workflow_preset').$type<WorkflowPresetId>().notNull().default('standard'),
   workflowTweaks: text('workflow_tweaks', { mode: 'json' }).$type<ProjectTweaks>(),
 })

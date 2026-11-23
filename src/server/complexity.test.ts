@@ -660,7 +660,7 @@ describe('the review texts the board ships', () => {
       const wf = await workflowText('standard', 'low')
       expect(wf).toContain('Run no `/feature-review` and write no line to `depth.md`')
       expect(wf).toMatch(/- Review - skipped/)
-      expect(wf).toMatch(/Intent check \[locked above low\] - agent `intent`, effort low/)
+      expect(wf).toMatch(/Intent check \[locked above low\] - built-in `intent`, effort low/)
       expect(flat(ticketAgent)).toContain('DEPTH: <light | standard | deep>')
       expect(flat(ticketAgent)).toContain(
         'none (no review for this ticket: <low ticket | no rounds | review off>)',

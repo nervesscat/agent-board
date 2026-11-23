@@ -507,7 +507,8 @@ gets for its complexity and each step's effort are the project's workflow, which
 `get_workflow` with the ticket's id. The human sets it on the project's Workflow page; a ticket may
 name its own preset (`workflowPreset`); an agent changes neither. Run exactly the steps it lists, in
 its order, each as its text says; a workflow change made while you work is read at your next
-relaunch. None is skipped because findings look obvious, the change looks small or a finding was
+relaunch. Each step that runs an agent names the Team agent that runs it: brief it with that agent's
+instructions from `get_project` (written on the Team page, never in the workflow). None is skipped because findings look obvious, the change looks small or a finding was
 already reproduced; each phase posts its result, so a skipped phase is visible.
 
 `update_ticket` → `review` then answers with `open`: every task and subtask still open, the
@@ -673,7 +674,12 @@ code), **runner** (a `/feature-review` of the branch, whose phases **env**, **ve
 **refute** and **merge** try to break it) and **intent** (the check against the human's own words).
 **Which of them run, in what order, how many review rounds a ticket gets and at what effort is the
 project's workflow** (`get_workflow` with the ticket's id: its steps in order, each with its agent, its
-effort, what it does and what it hands on), not this text. Run exactly the steps it lists. Rules that
+effort, what it does and what it hands on), not this text. Run exactly the steps it lists. Each step that
+runs an agent names the **Team agent** that runs it (the human's pick on the Workflow page, else the Team
+agent named like the step's role, else the built-in role): brief that agent with the instructions it has
+in `get_project` -> `agents` (instructions are written on the Team page only; the workflow carries
+none), the project's instructions and the ticket, and name its span, run report and `agentName` by the
+step's role, never by the Team agent's name. Rules that
 hold in every workflow: a fix pass by the **builder** takes the review's confirmed findings, each with
 the project's checks and a new review; a review that does not survive after the workflow's last round
 goes to a human decision; the checks return the build at most twice, and after the second return,
@@ -690,7 +696,8 @@ Without those skills, or for one ticket, orchestrate by hand:
 
 1. `get_project`: read every agent's `delegation` (your routing table) and `instructions` (its
    brief). Claim the ticket (with `as` when it is reserved), open its worktree, `add_workspace`.
-2. Per step: pick the agent whose notes match where the ticket is; run it as a subagent whose
+2. Per step: pick the agent the workflow names for the step (without one, the agent whose notes match
+   where the ticket is); run it as a subagent whose
    prompt is its `instructions`, the project's `instructions`, the ticket's context (`get_ticket`:
    its instructions, the human's posts and replies, the decisions and their answers, the attachments;
    the subagent may read the rest itself, except the intent agent: it gets only the human's own words and attachments (the instructions, every post and reply by the human, and the human's own answer on a decision card) and the result, never the spec, the plan, the review's findings or the options an agent put on a card, and it may not read the rest of the ticket's posts itself) and a brief in the five parts of

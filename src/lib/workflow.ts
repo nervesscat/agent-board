@@ -53,8 +53,6 @@ export const WORKFLOW_EFFORTS = ['auto', 'low', 'medium', 'high'] as const
 export type WorkflowEffort = (typeof WORKFLOW_EFFORTS)[number]
 export type EffortLevel = Exclude<WorkflowEffort, 'auto'>
 
-/** The longest hand-off instruction a human can save for a step, in characters. */
-export const INSTRUCTIONS_MAX = 4000
 /** The most review rounds a human can set for one complexity; the presets' own never pass it. */
 export const ROUNDS_MAX = 12
 
@@ -90,8 +88,8 @@ export interface WorkflowStepDef {
   /** One paragraph on what the step does: shown on the tree and at the head of the served step. */
   what: string
   /**
-   * The default hand-off instruction: what the step receives and passes on, and what the ticket agent
-   * checks when it returns. A human's edit replaces it for the preset.
+   * The hand-off: what the step receives and passes on, and what the ticket agent checks when it returns.
+   * It is the preset's own wording; nothing on the Workflow page edits it.
    */
   handoff: string
   agent: WorkflowAgent
@@ -724,18 +722,21 @@ export interface StepTweak {
   /** false turns the step off; a locked step cannot be turned off (the intent check only for a low ticket). */
   enabled?: boolean
   effort?: WorkflowEffort
-  /** Replaces the step's hand-off instruction (at most INSTRUCTIONS_MAX characters). */
-  instructions?: string
 }
 
 /**
- * What the human changed in one preset: the order of its steps, each step's switch, effort and hand-off
- * instruction, and the review rounds per complexity. Agent, model, sub-steps and procedure stay with the
- * preset.
+ * What the human changed in one preset: the order of its steps, each step's switch and effort, the Team
+ * agent each node runs and the review rounds per complexity. Sub-steps and procedure stay with the preset,
+ * and so does every text: instructions are written on the project's Team page, never here.
  */
 export interface PresetTweak {
   order?: WorkflowStepId[]
   steps?: Partial<Record<WorkflowStepId, StepTweak>>
+  /**
+   * The Team agent a node runs, by name, keyed by node id: a step id (`build`) or a review phase's id
+   * (`review.hunt-a`). Only nodes with an agent of their own have one (see `bindableNodes`).
+   */
+  agents?: Record<string, string>
   rounds?: Partial<Record<Complexity, number>>
 }
 
@@ -748,9 +749,93 @@ export function defaultEffort(preset: WorkflowPresetId, id: WorkflowStepId): Wor
   return WORKFLOW_PRESET_DEFS[preset].effort[id] ?? 'auto'
 }
 
-/** The hand-off instruction a step has before the human edits it: the preset's wording, else the catalogue's. */
-export const defaultHandoff = (preset: WorkflowPresetId, id: WorkflowStepId) =>
+/** The hand-off of a step before what else runs changes it: the preset's wording, else the catalogue's. */
+export const stepHandoff = (preset: WorkflowPresetId, id: WorkflowStepId) =>
   WORKFLOW_PRESET_DEFS[preset].text[id]?.handoff ?? WORKFLOW_STEPS[id].handoff
+
+// --- Team agents ---
+
+/** A node of the graph that runs an agent: a step, or a phase of the review's round. */
+export interface WorkflowNode {
+  /** A step id (`build`), or a phase's id (`review.hunt-a`, `review.first.hunt-b`). */
+  id: string
+  label: string
+  /** The role: what the Team's agent of that name (or the built-in default of the role) is called. */
+  agent: Exclude<WorkflowAgent, 'you'>
+  kind: 'step' | 'phase'
+}
+
+/** The sub-steps of a plan that are phases (not groups), with their role; the ticket agent's own are `you`. */
+function planPhases(preset: WorkflowPresetDef): ReviewSubStepDef[] {
+  const out: ReviewSubStepDef[] = []
+  const walk = (list: readonly ReviewSubStepDef[]) => {
+    for (const d of list) {
+      out.push(d)
+      walk(d.children)
+    }
+  }
+  walk(preset.review.phases)
+  walk(preset.review.between)
+  return out
+}
+
+/**
+ * The nodes of a preset that run an agent and so can name a Team agent: its steps with an agent of their
+ * own (not `you`) and the review's phases with one. Groups (Maximum's two reviews) and the ticket agent's
+ * own steps and phases are not nodes of that kind.
+ */
+export function bindableNodes(presetId: WorkflowPresetId): WorkflowNode[] {
+  const preset = WORKFLOW_PRESET_DEFS[presetId]
+  return [
+    ...preset.steps.flatMap((id): WorkflowNode[] => {
+      const def = WORKFLOW_STEPS[id]
+      return def.agent === 'you' ? [] : [{ id, label: def.label, agent: def.agent, kind: 'step' }]
+    }),
+    ...planPhases(preset).flatMap((d): WorkflowNode[] =>
+      d.agent === 'you' || d.children.length
+        ? []
+        : [{ id: d.id, label: d.label, agent: d.agent, kind: 'phase' }],
+    ),
+  ]
+}
+
+/** The Team agent a node resolves to: the pick, or the default; `missing` when a stored pick is not in the Team. */
+export interface TeamAgentRef {
+  /** The agent that runs the node: the Team agent's own spelling, or the built-in role's name. */
+  name: string
+  /** `picked`: the human's pick. `role`: the Team agent named like the role. `default`: the built-in agent of the role. */
+  source: 'picked' | 'role' | 'default'
+  /** The stored pick: the Team agent's spelling when it is in the Team, the stored name when it is not. */
+  picked: string | null
+  /** A pick is stored and no Team agent has that name any more: the node runs as if none were stored. */
+  missing: boolean
+}
+
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+
+/** What a node runs with no pick: the Team agent named like its role, else the role's built-in agent. */
+export function defaultTeamAgent(
+  role: Exclude<WorkflowAgent, 'you'>,
+  team: readonly string[] = [],
+): Pick<TeamAgentRef, 'name' | 'source'> {
+  const own = team.find((name) => sameName(name, role))
+  return own === undefined ? { name: role, source: 'default' } : { name: own, source: 'role' }
+}
+
+/**
+ * The Team agent a node runs, from its role, the pick stored for it and the names of the project's Team. With
+ * no Team given nothing is in it: every node runs the built-in agent of its role, and a stored pick is missing.
+ */
+export function teamAgentFor(
+  role: Exclude<WorkflowAgent, 'you'>,
+  pick: string | undefined,
+  team: readonly string[] = [],
+): TeamAgentRef {
+  if (pick === undefined) return { ...defaultTeamAgent(role, team), picked: null, missing: false }
+  const own = team.find((name) => sameName(name, pick))
+  if (own !== undefined) return { name: own, source: 'picked', picked: own, missing: false }
+  return { ...defaultTeamAgent(role, team), picked: pick, missing: true }
+}
 
 /** The text of what a step does for the preset: its own wording, else the catalogue's. */
 export const stepWhat = (preset: WorkflowPresetId, id: WorkflowStepId) =>
@@ -902,15 +987,27 @@ const stepWord = (id: string, preset: WorkflowPresetDef) =>
   `${id} is not a step of the ${preset.label} workflow`
 
 /**
+ * What `validateTweaks` needs to know about the project: the names of its Team agents (a pick must be one of
+ * them, in any casing), and the picks already stored for the preset, which stay as they are even when their
+ * agent has left the Team, so a body that carries them back unchanged is not refused for them.
+ */
+export interface TweakContext {
+  team?: readonly string[]
+  stored?: Readonly<Record<string, string>> | null
+}
+
+/**
  * Checks a tweak a human sends for one preset, and answers it typed or with every problem found, the
- * first one first. Nothing is dropped or fixed silently: an unknown key, an unknown step or one the
- * preset does not have, a locked step turned off, an effort on a step that runs no agent, an effort or a
- * round count out of range, an instruction past INSTRUCTIONS_MAX, an order that breaks a dependency.
- * Run `normalizeTweaks` on the result before saving it.
+ * first one first. Nothing is dropped or fixed silently: an unknown key (an instruction text is one), an
+ * unknown step or one the preset does not have, a locked step turned off, an effort on a step that runs no
+ * agent, an effort or a round count out of range, an order that breaks a dependency, a Team agent picked
+ * for a node that runs none or that the project's Team does not have. Run `normalizeTweaks` on the result
+ * before saving it.
  */
 export function validateTweaks(
   presetId: WorkflowPresetId,
   input: unknown,
+  context: TweakContext = {},
 ): { ok: true; tweak: PresetTweak } | { ok: false; error: string; errors: string[] } {
   const preset = WORKFLOW_PRESET_DEFS[presetId]
   const errors: string[] = []
@@ -918,8 +1015,8 @@ export function validateTweaks(
   if (!isRecord(input))
     return { ok: false, error: 'tweaks must be an object', errors: ['tweaks must be an object'] }
   for (const key of Object.keys(input))
-    if (!['order', 'steps', 'rounds'].includes(key))
-      errors.push(`unknown key "${key}": a tweak has order, steps and rounds`)
+    if (!['order', 'steps', 'rounds', 'agents'].includes(key))
+      errors.push(`unknown key "${key}": a tweak has order, steps, agents and rounds`)
 
   if (input.order !== undefined) {
     if (!Array.isArray(input.order) || input.order.some((x) => typeof x !== 'string'))
@@ -945,13 +1042,13 @@ export function validateTweaks(
           continue
         }
         if (!isRecord(value)) {
-          errors.push(`steps.${id}: an object with enabled, effort and instructions`)
+          errors.push(`steps.${id}: an object with enabled and effort`)
           continue
         }
         const own: StepTweak = {}
         for (const key of Object.keys(value))
-          if (!['enabled', 'effort', 'instructions'].includes(key))
-            errors.push(`steps.${id}: unknown key "${key}" (enabled, effort and instructions)`)
+          if (!['enabled', 'effort'].includes(key))
+            errors.push(`steps.${id}: unknown key "${key}" (enabled and effort)`)
         if (value.enabled !== undefined) {
           if (typeof value.enabled !== 'boolean') errors.push(`steps.${id}.enabled: true or false`)
           else if (!value.enabled && WORKFLOW_STEPS[id].lock === 'always')
@@ -968,15 +1065,47 @@ export function validateTweaks(
             errors.push(`steps.${id}.effort: ${id} runs no agent of its own, so it has no effort`)
           else own.effort = value.effort as WorkflowEffort
         }
-        if (value.instructions !== undefined) {
-          if (typeof value.instructions !== 'string') errors.push(`steps.${id}.instructions: text`)
-          else if (value.instructions.trim().length > INSTRUCTIONS_MAX)
-            errors.push(`steps.${id}.instructions: at most ${INSTRUCTIONS_MAX} characters`)
-          else own.instructions = value.instructions.trim()
-        }
         steps[id] = own
       }
       tweak.steps = steps
+    }
+  }
+
+  if (input.agents !== undefined) {
+    if (!isRecord(input.agents)) errors.push('agents: an object keyed by node id, each a Team agent name')
+    else {
+      const agents: Record<string, string> = {}
+      const nodes = new Map(bindableNodes(presetId).map((n) => [n.id, n]))
+      const phases = new Map(planPhases(preset).map((d) => [d.id, d]))
+      for (const [id, value] of Object.entries(input.agents)) {
+        if (isWorkflowStep(id) && !preset.steps.includes(id)) {
+          errors.push(`agents: ${stepWord(id, preset)}`)
+          continue
+        }
+        if (!nodes.has(id)) {
+          const def = isWorkflowStep(id) ? WORKFLOW_STEPS[id] : phases.get(id)
+          if (!def) errors.push(`agents: unknown node "${id}"`)
+          else if ('children' in def && def.children.length)
+            errors.push(`agents.${id}: ${id} is a group of reviews: name an agent for each of its phases`)
+          else errors.push(`agents.${id}: ${id} runs no agent of its own, so it has no Team agent`)
+          continue
+        }
+        if (typeof value !== 'string' || !value.trim()) {
+          errors.push(`agents.${id}: the name of one of the project's Team agents`)
+          continue
+        }
+        const team = context.team?.find((name) => sameName(name, value))
+        const stored = Object.entries(context.stored ?? {}).find(
+          ([node, name]) => node === id && sameName(name, value),
+        )?.[1]
+        if (team !== undefined) agents[id] = team
+        else if (stored !== undefined) agents[id] = stored
+        else
+          errors.push(
+            `agents.${id}: "${value.trim()}" is not one of the project's Team agents (add it on the Team page first)`,
+          )
+      }
+      tweak.agents = agents
     }
   }
 
@@ -1000,7 +1129,7 @@ export function validateTweaks(
 
 /**
  * A tweak reduced to what differs from the preset: values equal to the default (the default order, an
- * enabled step, the preset's effort, the default instruction, the preset's rounds) are dropped, and
+ * enabled step, the preset's effort, the Team agent named like the node's role, the preset's rounds) are dropped, and
  * a tweak with nothing left is null. Expects a tweak `validateTweaks` accepted.
  */
 export function normalizeTweaks(
@@ -1016,11 +1145,16 @@ export function normalizeTweaks(
     const kept: StepTweak = {}
     if (own.enabled === false) kept.enabled = false
     if (own.effort !== undefined && own.effort !== defaultEffort(presetId, id)) kept.effort = own.effort
-    const text = own.instructions?.trim()
-    if (text && text !== defaultHandoff(presetId, id)) kept.instructions = text
     if (Object.keys(kept).length) steps[id] = kept
   }
   if (Object.keys(steps).length) out.steps = steps
+  const roles = new Map(bindableNodes(presetId).map((n) => [n.id, n.agent]))
+  const agents: Record<string, string> = {}
+  for (const [id, name] of Object.entries(tweak.agents ?? {})) {
+    const role = roles.get(id)
+    if (role !== undefined && name.trim() && !sameName(name, role)) agents[id] = name.trim()
+  }
+  if (Object.keys(agents).length) out.agents = agents
   const rounds: Partial<Record<Complexity, number>> = {}
   for (const level of COMPLEXITIES) {
     const n = tweak.rounds?.[level]
@@ -1031,8 +1165,8 @@ export function normalizeTweaks(
 }
 
 /**
- * What a saved tweak still means to the catalogue: unknown steps and values that no longer pass are
- * dropped, an order that no longer holds is dropped (the default order stands), and a locked step's off
+ * What a saved tweak still means to the catalogue: unknown steps and nodes, values that no longer pass and
+ * keys the page no longer has (a step's instruction text) are dropped, an order that no longer holds is dropped (the default order stands), and a locked step's off
  * switch is ignored. Stored data outlives the catalogue, so reading it never throws.
  */
 function readSaved(presetId: WorkflowPresetId, saved: unknown): PresetTweak | null {
@@ -1057,11 +1191,16 @@ function readSaved(presetId: WorkflowPresetId, saved: unknown): PresetTweak | nu
         WORKFLOW_STEPS[id].agent !== 'you'
       )
         own.effort = value.effort as WorkflowEffort
-      if (typeof value.instructions === 'string' && value.instructions.trim())
-        own.instructions = value.instructions.trim().slice(0, INSTRUCTIONS_MAX)
       steps[id] = own
     }
     tweak.steps = steps
+  }
+  if (isRecord(saved.agents)) {
+    const ids = new Set(bindableNodes(presetId).map((n) => n.id))
+    const agents: Record<string, string> = {}
+    for (const [id, name] of Object.entries(saved.agents))
+      if (ids.has(id) && typeof name === 'string' && name.trim()) agents[id] = name.trim()
+    tweak.agents = agents
   }
   if (isRecord(saved.rounds)) {
     const rounds: Partial<Record<Complexity, number>> = {}
@@ -1100,6 +1239,8 @@ export interface ResolvedSubStep {
   parallel: string | null
   /** `5.3`: the parent's number and its place among its siblings; null when the parent is not numbered. */
   number: string | null
+  /** The Team agent that runs it; null for the ticket agent's own phases and for groups. */
+  teamAgent: TeamAgentRef | null
   children: ResolvedSubStep[]
 }
 
@@ -1112,8 +1253,12 @@ export interface ResolvedReview {
   /** The phases of one round, then what happens between two rounds. */
   phases: ResolvedSubStep[]
   between: ResolvedSubStep[]
-  /** The `/feature-review` runs one round makes, each with its `phases=` argument. */
-  runs: (ReviewRunDef & { phasesArg: string })[]
+  /**
+   * The `/feature-review` runs one round makes, each with its `phases=` argument and, one name per token of
+   * it in the same order, the Team agent that briefs the phase (`agents=`: the role's name where the Team has
+   * no agent for it).
+   */
+  runs: (ReviewRunDef & { phasesArg: string; agentsArg: string })[]
   /** The kind of run each round needs and how many of each: what the hand-off checks. */
   perRound: { phase: ReviewPhaseKind; expected: number }[]
 }
@@ -1125,9 +1270,8 @@ export interface ResolvedStep {
   agent: WorkflowAgent
   /** `you`, `spec`, `/feature-review`: how the tree and the served text name who runs it. */
   agentLabel: string
-  /** The hand-off instruction in force: the human's when they set one, else the default. */
+  /** What the step receives and passes on: the preset's wording, read-only. */
   handoff: string
-  handoffDefault: string
   lock: WorkflowLock | null
   lockReason: string | null
   /** Its place in the order, from 0, skipped steps included. */
@@ -1147,10 +1291,15 @@ export interface ResolvedStep {
   effortLevel: EffortLevel | null
   /** Null on every step but the review. */
   review: ResolvedReview | null
+  /**
+   * The Team agent that runs it (`agent` stays its role: spans, run reports and the board's checks name the
+   * role); null when the ticket agent runs the step itself.
+   */
+  teamAgent: TeamAgentRef | null
   /** The step's `start_span` phase, and whether it carries the review round. */
   span: { phase: string; round: boolean } | null
   /** What the human changed on it. */
-  edited: { enabled: boolean; effort: boolean; instructions: boolean; moved: boolean; any: boolean }
+  edited: { enabled: boolean; effort: boolean; agent: boolean; moved: boolean; any: boolean }
   /** Why a move is refused (words naming the pair), null when it is allowed. */
   moveBlocked: { up: string | null; down: string | null }
 }
@@ -1178,7 +1327,15 @@ export interface ResolvedWorkflow {
   flow: FlowState
 }
 
-function resolveSub(def: ReviewSubStepDef, parent: string | null, at: number): ResolvedSubStep {
+/** Which Team agent each node runs: the preset's picks against the names of the project's Team. */
+type TeamOf = (nodeId: string, role: WorkflowAgent) => TeamAgentRef | null
+
+function resolveSub(
+  def: ReviewSubStepDef,
+  parent: string | null,
+  at: number,
+  teamOf: TeamOf,
+): ResolvedSubStep {
   const number = parent === null ? null : `${parent}.${at + 1}`
   return {
     id: def.id,
@@ -1189,7 +1346,8 @@ function resolveSub(def: ReviewSubStepDef, parent: string | null, at: number): R
     phase: def.phase,
     parallel: def.parallel,
     number,
-    children: def.children.map((child, i) => resolveSub(child, number, i)),
+    teamAgent: def.children.length ? null : teamOf(def.id, def.agent),
+    children: def.children.map((child, i) => resolveSub(child, number, i, teamOf)),
   }
 }
 
@@ -1212,11 +1370,13 @@ function resolveReview(
   rounds: Record<Complexity, number>,
   complexity: Complexity | null,
   intentRuns: boolean,
+  teamOf: TeamOf,
 ): ResolvedReview {
   const at = number === null ? null : String(number)
   // The round-end intent check is a phase of the round only while the intent step runs for the ticket.
   const defs = preset.review.phases.filter((d) => intentRuns || d.id !== ROUND_INTENT_ID)
   const counts = phaseCounts(defs)
+  const phases = defs.map((d, i) => resolveSub(d, at, i, teamOf))
   return {
     rounds: complexity ? rounds[complexity] : null,
     roundsByComplexity: rounds,
@@ -1224,9 +1384,14 @@ function resolveReview(
     survival: preset.review.survival(
       intentRuns && preset.review.phases.some((d) => d.id === ROUND_INTENT_ID),
     ),
-    phases: defs.map((d, i) => resolveSub(d, at, i)),
-    between: preset.review.between.map((d) => resolveSub(d, null, 0)),
-    runs: preset.review.runs.map((r) => ({ ...r, phasesArg: r.phases.join(',') })),
+    phases,
+    between: preset.review.between.map((d) => resolveSub(d, null, 0, teamOf)),
+    runs: preset.review.runs.map((r) => {
+      // A run's phases are the top-level ones, or the children of its own full review (Maximum's two).
+      const own = r.agentSuffix === null ? phases : (phases.find((p) => p.id === r.id)?.children ?? [])
+      const names = own.filter((p) => p.phase !== null).map((p) => p.teamAgent?.name ?? '')
+      return { ...r, phasesArg: r.phases.join(','), agentsArg: names.join(',') }
+    }),
     perRound: REVIEW_PHASE_KINDS.flatMap((phase) => {
       const expected = counts.get(phase)
       return expected ? [{ phase, expected }] : []
@@ -1243,17 +1408,23 @@ function resolveReview(
  *
  * `tweak` is the preset's own tweak as stored (`projectTweaks[preset]`); it is read leniently, never
  * thrown on: what the catalogue no longer has is ignored and a broken order falls back to the default.
+ * `team` is the names of the project's Team agents, which only the caller knows (this module reads no
+ * database): each node's `teamAgent` is the stored pick when the Team has that agent, else the Team agent
+ * named like the node's role, else the built-in agent of that role. With no `team` nothing is in the Team.
  */
 export function resolveWorkflow(
   presetId: WorkflowPresetId,
   tweak?: unknown,
   complexity: Complexity | null = null,
+  team: readonly string[] = [],
 ): ResolvedWorkflow {
   const preset = workflowPreset(presetId)
   const id = preset.id
   const saved = readSaved(id, tweak)
   const order = saved?.order ? [...saved.order] : [...preset.steps]
   const rounds = { ...preset.rounds, ...saved?.rounds }
+  const teamOf: TeamOf = (nodeId, role) =>
+    role === 'you' ? null : teamAgentFor(role, saved?.agents?.[nodeId], team)
   const skipOf = (stepId: WorkflowStepId): ResolvedStep['skipped'] => {
     const def = WORKFLOW_STEPS[stepId]
     const own = saved?.steps?.[stepId]
@@ -1296,17 +1467,16 @@ export function resolveWorkflow(
     const effortDefaultValue = defaultEffort(id, stepId)
     const effort = effortDefaultValue === null ? null : (own?.effort ?? effortDefaultValue)
     const flowOwn = flowText(stepId, flow)
-    const handoffDefault = flowOwn?.handoff ?? defaultHandoff(id, stepId)
-    const handoff = own?.instructions ?? handoffDefault
+    const handoff = flowOwn?.handoff ?? stepHandoff(id, stepId)
     const moved = order.indexOf(stepId) !== preset.steps.indexOf(stepId)
     const edited = {
       enabled: own?.enabled === false,
       effort: own?.effort !== undefined,
-      instructions: own?.instructions !== undefined,
+      agent: saved?.agents?.[stepId] !== undefined,
       moved,
       any: false,
     }
-    edited.any = edited.enabled || edited.effort || edited.instructions || edited.moved
+    edited.any = edited.enabled || edited.effort || edited.agent || edited.moved
     const up = moveStep(id, order, stepId, 'up')
     const down = moveStep(id, order, stepId, 'down')
     return {
@@ -1316,7 +1486,6 @@ export function resolveWorkflow(
       agent: def.agent,
       agentLabel: AGENT_LABELS[def.agent],
       handoff,
-      handoffDefault,
       lock: def.lock,
       lockReason: def.lockReason,
       position,
@@ -1328,7 +1497,9 @@ export function resolveWorkflow(
       effort,
       effortDefault: effortDefaultValue,
       effortLevel: effort === null ? null : effortLevel(effort, complexity),
-      review: stepId === 'review' ? resolveReview(preset, number, rounds, complexity, flow.intent) : null,
+      review:
+        stepId === 'review' ? resolveReview(preset, number, rounds, complexity, flow.intent, teamOf) : null,
+      teamAgent: teamOf(stepId, def.agent),
       span: def.span,
       edited,
       moveBlocked: { up: up.ok ? null : up.reason, down: down.ok ? null : down.reason },

@@ -96,6 +96,36 @@ function previewBeforeReview(preset: WorkflowPresetId): WorkflowStepId[] {
 
 const flat = (text: string) => text.replace(/\s+/g, ' ')
 
+const ROLES = ['spec', 'builder', 'runner', 'env', 'verify', 'hunt', 'refute', 'merge', 'intent']
+
+/**
+ * The ways a project's Team can meet a workflow: no agent at all, the agents named like the roles, picks of
+ * other Team agents on steps and phases, and the same picks after their agents left the Team.
+ */
+const TEAMS: { name: string; team: string[]; agents: Record<string, string> | undefined }[] = (() => {
+  const picks = {
+    spec: 'acme-dev',
+    spec2: 'acme-dev',
+    build: 'acme-dev',
+    tests: 'acme-dev',
+    review: 'acme-dev',
+    intent: 'acme-dev',
+    'review.fix': 'acme-dev',
+    'review.intent': 'acme-dev',
+    'review.hunt-a': 'sec-hunter',
+    'review.reviewer': 'sec-hunter',
+    'review.first.hunt-a': 'sec-hunter',
+    'review.second.hunt-b': 'sec-hunter',
+    'review.refute': 'acme-dev',
+  }
+  return [
+    { name: 'no Team', team: [], agents: undefined },
+    { name: 'role agents', team: ROLES, agents: undefined },
+    { name: 'picks', team: [...ROLES, 'acme-dev', 'sec-hunter'], agents: picks },
+    { name: 'missing picks (agents gone from the Team)', team: ROLES, agents: picks },
+  ]
+})()
+
 /** How the served text names a step, in the lines that tell what a step does and hands on. */
 const NAMES: Partial<Record<WorkflowStepId, RegExp>> = {
   intent: /intent check|intent step/i,
@@ -169,7 +199,7 @@ function inconsistencies(w: ResolvedWorkflow, text: string): string[] {
     walk(review.review.phases)
     if (labels.includes('review.intent'))
       found.push('(b) the review lists an intent phase with the intent step skipped')
-    if (/Intent check - `intent`/.test(text))
+    if (/Intent check - (?:built-in|Team agent) `/.test(text))
       found.push('(b) the text lists an intent phase with the intent step skipped')
     if (/matches/.test(review.review.survival))
       found.push('(b) the survival rule asks for a match with the intent step skipped')
@@ -238,18 +268,68 @@ describe('the served workflow text for every preset, complexity and tweak', () =
     for (const preset of WORKFLOW_PRESETS) {
       for (const complexity of COMPLEXITIES as readonly Complexity[]) {
         for (const combo of combos(preset)) {
-          const workflow = resolveWorkflow(preset, combo.tweak, complexity)
-          const text = render(workflow)
-          rendered++
-          for (const problem of inconsistencies(workflow, text))
-            problems.push(`${preset}/${complexity}/${combo.name}: ${problem}`)
+          for (const team of TEAMS) {
+            const workflow = resolveWorkflow(
+              preset,
+              team.agents ? { ...combo.tweak, agents: team.agents } : combo.tweak,
+              complexity,
+              team.team,
+            )
+            const text = render(workflow)
+            rendered++
+            for (const problem of inconsistencies(workflow, text))
+              problems.push(`${preset}/${complexity}/${combo.name}/${team.name}: ${problem}`)
+          }
         }
       }
     }
     // Four presets by four complexities by the tweak sets above.
-    expect(rendered).toBeGreaterThan(500)
+    expect(rendered).toBeGreaterThan(2000)
     const unique = [...new Set(problems.map((p) => p.replace(/^[^:]*: /, '')))]
     expect(unique).toEqual([])
+  })
+
+  it("changes nothing of a step's text for any Team, pick or missing agent: only who runs it (A5, B9, B12)", () => {
+    let compared = 0
+    for (const preset of WORKFLOW_PRESETS)
+      for (const complexity of COMPLEXITIES)
+        for (const combo of combos(preset)) {
+          const bare = resolveWorkflow(preset, combo.tweak, complexity)
+          const base = render(bare)
+          for (const team of TEAMS) {
+            const at = `${preset}/${complexity}/${combo.name}/${team.name}`
+            const w = resolveWorkflow(
+              preset,
+              team.agents ? { ...combo.tweak, agents: team.agents } : combo.tweak,
+              complexity,
+              team.team,
+            )
+            compared++
+            // The same steps run, in the same order, with the same words and numbers.
+            const shape = (x: ResolvedWorkflow) =>
+              x.steps.map((s) => [s.id, s.number, s.what, s.handoff, s.skipped, s.effort, s.review?.perRound])
+            expect(shape(w), at).toEqual(shape(bare))
+            const text = render(w)
+            expect(text, at).not.toMatch(/set by the human|instructions you wrote|\(edited\)|Edited/)
+            expect(text, at).not.toMatch(/\{\{|\}\}/)
+            // Every Hand-off line is the resolved step's own, in order, with nothing after it.
+            const lines = [...text.matchAll(/^Hand-off: (.*)$/gm)].map((m) => m[1])
+            expect(lines, at).toEqual(w.steps.filter((s) => !s.skipped).map((s) => s.handoff))
+            // The procedure never sends the ticket agent to a fixed agent's instructions.
+            expect(text, at).not.toMatch(/\*\*(spec|builder)\*\* agent's `instructions`/)
+            // Each step that runs an agent says which Team agent it is, and that spans are named by role.
+            for (const s of w.steps.filter((x) => !x.skipped && x.teamAgent))
+              expect(text, `${at} ${s.id}`).toContain(
+                `Name its span, its run report and its \`agentName\` by the role \`${s.agent}\``,
+              )
+            // Without a review no phase of it is named, with or without a Team.
+            if (w.steps.find((s) => s.id === 'review')!.skipped) expect(text, at).not.toContain('agents=')
+            else expect(text, at).toContain('agents=')
+            // The shape of the text outside who runs what is the same as with no Team (headings of skipped steps too).
+            expect(text.match(/^- .* - skipped.*$/gm), at).toEqual(base.match(/^- .* - skipped.*$/gm))
+          }
+        }
+    expect(compared).toBeGreaterThan(2000)
   })
 
   it('has every step whose procedure carries a condition read it: no tag is left in any text', () => {
@@ -327,7 +407,6 @@ describe('the served workflow text for every preset, complexity and tweak', () =
     expect(second.handoff).toContain('Its spec is the one the builder gets')
     for (const line of [second.what, second.handoff])
       expect(line).not.toMatch(/reconcile|merge the two|first/i)
-    expect(second.handoffDefault).toBe(second.handoff)
     // With the Spec step on, the catalogue's own lines (two specs, reconciled) stand.
     const both = resolveWorkflow('maximum', undefined, 'mid').steps.find((st) => st.id === 'spec2')!
     expect(both.what).toBe(WORKFLOW_STEPS.spec2.what)

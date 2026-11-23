@@ -113,17 +113,24 @@ describe('the ticket agent follows the project’s workflow (E1)', () => {
       '**Skipped.**',
       '**Agent routing.**',
       '`STATUS: error` and say which step had no agent',
+      "`Team agent <name>` is the project's agent of that name",
+      'brief a subagent with the `instructions` that agent has in `get_project` -> `agents`',
+      "never the Team agent's name",
       'the workflow text wins',
       '**Effort.**',
       "is the Agent tool's `effort` on **every** agent you start for that step",
       '`effort=<level>` for `/feature-review`',
       '**Hand-off.**',
-      '"(set by the human)"',
       '**How it runs.**',
       '`phases=` argument to pass to `/feature-review`',
       'win over any instruction in the workflow text',
     ])
       expect(section, part).toContain(part)
+  })
+
+  it("no longer says a hand-off can be the human's own wording (A3)", () => {
+    expect(flat(agent())).not.toMatch(/set by the human|replaces the default/)
+    expect(flat(review('agents/todo-review-ticket.md'))).not.toContain('(set by the human)')
   })
 
   it('keeps preset (the workflow’s name) and depth (the review’s measure) apart', () => {
@@ -389,7 +396,7 @@ describe('the step procedures are served only by get_workflow (E8, D3)', () => {
       ['a ticket with an empty body and a screenshot is a bug report', mid],
       // spec, and the no-spec path
       ['WORKDIR/01-spec.md', mid],
-      ['Post its result on the ticket `as: spec`', mid],
+      ['Post its result on the ticket `as` the agent this step names', mid],
       ['A **decisive** open question', mid],
       ['write its acceptance criteria yourself', low],
       // build
@@ -471,13 +478,28 @@ describe('the README documents the workflow (I1)', () => {
       expect(section, part).toContain(part)
   })
 
+  it('names the Team agent among what is tweakable, and promises no edited text (A10)', () => {
+    const section = flat(readme().split('\n## Workflow\n')[1]!.split('\n## Cleanup\n')[0]!)
+    const tweakable = section.slice(
+      section.indexOf('**Tweakable, per preset.**'),
+      section.indexOf('**Team agents.**'),
+    )
+    expect(tweakable).toContain('the Team agent each step and each review phase runs')
+    expect(tweakable).toContain('no text is written in the workflow')
+    expect(section).not.toMatch(/hand-off instruction|edited.instructions|instructions\?/i)
+    expect(section).toContain('briefs that agent with the instructions it has in the Team')
+    expect(section).toContain("A step's span, run report and `agentName` always carry its **role**")
+  })
+
   it('lists each new route and field in the REST table', () => {
     const rows = readme()
       .split('\n')
       .filter((l) => l.startsWith('|'))
     const row = (needle: string) => rows.find((l) => l.includes(needle))
-    expect(row('`/api/projects/:id/workflow`')).toContain('{active, presets[]}')
-    expect(row('`/api/projects/:id/workflow/:preset`')).toContain('{order?, steps?, rounds?}')
+    expect(row('`/api/projects/:id/workflow`')).toContain('{active, team, presets[]}')
+    expect(row('`/api/projects/:id/workflow/:preset`')).toContain('{order?, steps?, agents?, rounds?}')
+    expect(row('`/api/projects/:id/workflow/:preset`')).toContain('`steps`: `{enabled?, effort?}`')
+    expect(row('`/api/projects/:id/workflow/:preset`')).not.toContain('instructions?')
     expect(row('`/api/projects/:id/workflow/effective?ticketId=`')).toContain('get_workflow')
     expect(row('`workflowPreset` on GET `/api/projects/:id`')).toBeDefined()
     expect(
@@ -701,6 +723,156 @@ describe('review fix pass: the intent effort, the browser rule and the screensho
     expect(flat(read(root, 'AGENTS.md'))).toContain(rule)
     expect(flat(review('agents/todo-review-ticket.md'))).toContain(
       "the review's own run (`shots/`, the verify phase) where the preview is turned off",
+    )
+  })
+})
+
+describe('a step runs the Team agent the workflow names (B9, B11, B14)', () => {
+  const render = async (
+    tweak: object | undefined,
+    team: string[],
+    preset: 'standard' | 'maximum' = 'standard',
+  ) => {
+    const { renderWorkflowText } = await import('./workflow')
+    return renderWorkflowText(resolveWorkflow(preset, tweak, 'mid', team), {
+      source: 'project',
+      projectPreset: preset,
+      ticketId: null,
+    })
+  }
+  const stepFiles = fs
+    .readdirSync(path.join(skillDir, 'workflow'))
+    .filter((f) => f.endsWith('.md'))
+    .map((f) => [f, read(skillDir, 'workflow', f)] as const)
+
+  it('has no step procedure name a role agent as the fixed one to brief with (B9)', () => {
+    for (const [file, text] of stepFiles) {
+      expect(flat(text), file).not.toMatch(/\*\*(spec|builder)\*\* agent's `instructions`/)
+      expect(flat(text), file).not.toMatch(/`as: (spec|builder)`/)
+    }
+    for (const file of ['spec.md', 'spec2.md', 'build.md', 'tests.md']) {
+      const text = flat(read(skillDir, 'workflow', file))
+      expect(text, file).toMatch(/Team agent it names|agent this step names|Agent line/)
+    }
+  })
+
+  it("serves a step bound to a Team agent with that agent to brief and none of the role's instructions (B9)", async () => {
+    const text = flat(await render({ agents: { build: 'acme-dev' } }, ['acme-dev', 'builder']))
+    expect(text).toContain('## 3. Build [locked] - Team agent `acme-dev` (role `builder`)')
+    expect(text).toContain(
+      "brief its subagent with the instructions of `acme-dev` (`get_project` -> `agents`), the project's `instructions` and the ticket's context",
+    )
+    expect(text).toContain(
+      "Start a subagent briefed as this step's Agent line says (the Team agent it names, with that agent's `instructions` from `get_project`)",
+    )
+    // The only sentence that names the builder agent's instructions is the fix pass's, which has its own line.
+    expect(text).not.toMatch(/the \*\*builder\*\* agent's `instructions`/)
+    expect(text).toContain("run by the agent the review's `Between rounds` line names for it")
+  })
+
+  it('serves a built-in role, and a pick the Team lost, with the role it falls back to (B9)', async () => {
+    const builtIn = flat(await render(undefined, []))
+    expect(builtIn).toContain(
+      'the Team has no agent named `builder`, so this runs as the built-in `builder` role',
+    )
+    expect(builtIn).toContain(
+      'The human can add the role to the Team or pick another Team agent for it on the Workflow page.',
+    )
+    const gone = flat(await render({ agents: { build: 'acme-dev' } }, ['builder']))
+    expect(gone).toContain(
+      '## 3. Build [locked] - Team agent `builder` [picked `acme-dev` is not in the Team]',
+    )
+    expect(gone).toContain(
+      "The workflow names `acme-dev` for it, but the project's Team has no agent of that name (deleted or renamed), so it runs as if none were picked.",
+    )
+  })
+
+  it('keeps the intent agent blind whichever Team agent runs it (B9)', async () => {
+    const text = flat(await render({ agents: { intent: 'acme-dev' } }, ['acme-dev']))
+    expect(text).toContain(
+      "brief its subagent with the instructions of `acme-dev` (`get_project` -> `agents`) and, besides them, only what the intent step lists: the human's own words and the result",
+    )
+    expect(text).toContain('Brief it with only two things besides them')
+    const intent = flat(read(skillDir, 'workflow', 'intent.md'))
+    expect(intent).toContain("Never give it the builder's plan, the spec, the review's findings")
+  })
+
+  it('has spans, run reports and agentName named by the role, never by the picked agent (B11)', async () => {
+    const text = flat(
+      await render(
+        { agents: { 'review.hunt-a': 'sec-hunter', 'review.hunt-b': 'sec-hunter', spec: 'acme-dev' } },
+        ['sec-hunter', 'acme-dev'],
+      ),
+    )
+    expect(text).toContain(
+      'Name its span, its run report and its `agentName` by the role `spec`, never by `acme-dev`',
+    )
+    expect(text).toContain(
+      "A phase's span, run report and `agentName` carry its role (`spec`, `env`, `verify`, `hunt`, `refute`, `merge`, `intent`), never the Team agent's name",
+    )
+    expect(text).toContain(
+      'phases=spec,env,verify,hunt,hunt,refute,merge agents=spec,env,verify,sec-hunter,sec-hunter,refute,merge',
+    )
+    // The review step and the feature-review skill say the same, so the phase agents it starts follow.
+    expect(flat(read(skillDir, 'workflow', 'review.md'))).toContain(
+      "carry its role (`spec`, `env`, `verify`, `hunt`, `refute`, `merge`), never the Team agent's name",
+    )
+    const skill = flat(review('skills/feature-review/SKILL.md'))
+    expect(skill).toContain('| `agents=<list>` | the Team agent that briefs each phase of `phases=`')
+    expect(skill).toContain("spans, run reports and `agentName` still carry the phase's own name")
+  })
+
+  it("has the board skill, AGENTS.md and the MCP text say where a step's instructions come from (B14)", async () => {
+    const sentence =
+      "Each step that runs an agent names the **Team agent** that runs it (the human's pick on the Workflow page, else the Team agent named like the step's role, else the built-in role)"
+    expect(flat(read(skillDir, 'board.md'))).toContain(sentence)
+    expect(flat(read(root, 'AGENTS.md'))).toContain(sentence)
+    const { handleMcp } = await import('./mcp')
+    const res = await handleMcp(
+      new Request('http://localhost/api/mcp', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          authorization: 'Bearer gate_test',
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+      }),
+      'claude',
+    )
+    const tools = ((await res.json()) as { result: { tools: { name: string; description: string }[] } })
+      .result.tools
+    const init = await handleMcp(
+      new Request('http://localhost/api/mcp', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          authorization: 'Bearer gate_test',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 2,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2025-03-26',
+            capabilities: {},
+            clientInfo: { name: 't', version: '1' },
+          },
+        }),
+      }),
+      'claude',
+    )
+    const instructions = ((await init.json()) as { result: { instructions: string } }).result.instructions
+    expect(instructions).toContain(
+      "the project's workflow (get_workflow) names the Team agent that runs it: the human's pick on the Workflow page",
+    )
+    expect(instructions).toContain("never by that agent's name")
+    const text = tools.map((t) => t.description).join('\n')
+    expect(text).not.toContain('edited.instructions')
+    expect(text).not.toContain('the human wrote it')
+    expect(tools.find((t) => t.name === 'get_workflow')!.description).toContain(
+      'teamAgent ({name, source, picked, missing}',
     )
   })
 })

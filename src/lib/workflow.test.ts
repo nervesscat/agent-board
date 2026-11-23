@@ -5,7 +5,6 @@ import { describe, expect, it } from 'vitest'
 
 import { COMPLEXITIES, type Complexity } from './constants'
 import {
-  INSTRUCTIONS_MAX,
   WORKFLOW_PRESETS,
   WORKFLOW_PRESET_DEFS,
   WORKFLOW_STEPS,
@@ -13,13 +12,13 @@ import {
   type PresetTweak,
   type WorkflowPresetId,
   type WorkflowStepId,
-  defaultHandoff,
   moveStep,
   normalizeTweaks,
   orderProblem,
   readProjectTweaks,
   resolveWorkflow,
   reviewPhaseRuns,
+  stepHandoff,
   validateTweaks,
 } from './workflow'
 
@@ -362,7 +361,7 @@ describe('what a tweak may name (A7)', () => {
 
   it('rejects an unknown key at every level', () => {
     expect(problem('standard', { color: 'red' })).toBe(
-      'unknown key "color": a tweak has order, steps and rounds',
+      'unknown key "color": a tweak has order, steps, agents and rounds',
     )
     expect(problem('standard', { steps: { build: { agent: 'x' } } })).toContain('unknown key "agent"')
     expect(problem('standard', { rounds: { huge: 1 } })).toContain('unknown complexity "huge"')
@@ -487,13 +486,18 @@ describe('the values (A9)', () => {
       expect(problem({ rounds: { mid: n } }), String(n)).toBe('rounds.mid: a whole number from 0 to 12')
   })
 
-  it('takes instructions up to the limit', () => {
-    const at = 'x'.repeat(INSTRUCTIONS_MAX)
-    expect(validateTweaks('standard', { steps: { build: { instructions: at } } }).ok).toBe(true)
-    expect(problem({ steps: { build: { instructions: `${at}x` } } })).toBe(
-      `steps.build.instructions: at most ${INSTRUCTIONS_MAX} characters`,
+  it('refuses every key a step has no setting for: an instruction text and a position among them', () => {
+    expect(problem({ steps: { build: { instructions: 'x' } } })).toBe(
+      'steps.build: unknown key "instructions" (enabled and effort)',
     )
-    expect(problem({ steps: { build: { instructions: 7 } } })).toContain('instructions')
+    expect(problem({ steps: { build: { instructions: '' } } })).toContain('unknown key "instructions"')
+    expect(problem({ steps: { spec: { effort: 'high', foo: 1 } } })).toContain('unknown key "foo"')
+    for (const key of ['x', 'y', 'position'])
+      expect(problem({ steps: { spec: { [key]: 1 } } }), key).toContain(`unknown key "${key}"`)
+    expect(problem({ x: 1 })).toBe('unknown key "x": a tweak has order, steps, agents and rounds')
+    expect(problem({ instructions: 'x' })).toContain('unknown key "instructions"')
+    expect(problem({ steps: { build: { enabled: false } } })).toBe('build is locked: it cannot be turned off')
+    expect(validateTweaks('standard', { steps: { spec: { effort: 'high' } } }).ok).toBe(true)
   })
 
   it('reports every problem, the first one as the error', () => {
@@ -506,18 +510,17 @@ describe('the values (A9)', () => {
   })
 
   it('normalizes away what is the preset default, and to null when nothing is left', () => {
-    const custom = 'Pass the diff and the gate output on.'
     const tweak: PresetTweak = {
       order: [...WORKFLOW_PRESET_DEFS.standard.steps],
       steps: {
-        build: { enabled: true, effort: 'auto', instructions: '   ' },
-        intent: { effort: 'low', instructions: defaultHandoff('standard', 'intent') },
-        spec: { effort: 'high', instructions: `  ${custom}  ` },
+        build: { enabled: true, effort: 'auto' },
+        intent: { effort: 'low' },
+        spec: { effort: 'high' },
       },
       rounds: { low: 0, mid: 1, high: 4, max: 10 },
     }
     expect(normalizeTweaks('standard', tweak)).toEqual({
-      steps: { spec: { effort: 'high', instructions: custom } },
+      steps: { spec: { effort: 'high' } },
       rounds: { high: 4 },
     })
     expect(normalizeTweaks('standard', { order: [...WORKFLOW_PRESET_DEFS.standard.steps] })).toBeNull()
@@ -538,6 +541,7 @@ describe('a tweak the catalogue no longer matches (A10)', () => {
       order: ['claim', 'gone', 'build', 'spec', 'gate'],
       steps: { gone: { enabled: false }, build: { enabled: false, effort: 'bogus' }, ci: 'nope' },
       rounds: { mid: 99, huge: 3 },
+      agents: { build: 7, gone: 'x', gate: 'y', 'review.first': 'z' },
       extra: true,
     }
     const w = resolveWorkflow('standard', stale, 'mid')
@@ -652,31 +656,59 @@ describe('the phases a round needs (A12)', () => {
 })
 
 describe('what the human edited', () => {
-  it('marks the steps, the tweak and the rounds, and shows the edited hand-off in place of the default', () => {
+  it('marks the steps, the tweak and the rounds, and keeps the hand-off the preset words', () => {
     const tweak = {
-      steps: { build: { instructions: 'Hand the diff over.' }, ci: { enabled: false } },
+      steps: { build: { effort: 'high' as const }, ci: { enabled: false } },
+      agents: { build: 'acme-dev' },
       rounds: { mid: 3 },
     }
-    const w = resolveWorkflow('standard', tweak, 'mid')
+    const w = resolveWorkflow('standard', tweak, 'mid', ['acme-dev'])
     const build = w.steps.find((s) => s.id === 'build')!
-    expect(build.handoff).toBe('Hand the diff over.')
-    expect(build.handoffDefault).toBe(WORKFLOW_STEPS.build.handoff)
-    expect(build.edited).toEqual({
-      enabled: false,
-      effort: false,
-      instructions: true,
-      moved: false,
-      any: true,
-    })
+    expect(build.handoff).toBe(WORKFLOW_STEPS.build.handoff)
+    expect(build.edited).toEqual({ enabled: false, effort: true, agent: true, moved: false, any: true })
     expect(w.steps.find((s) => s.id === 'ci')!.edited.enabled).toBe(true)
     expect(w.steps.find((s) => s.id === 'gate')!.edited.any).toBe(false)
     expect(w.rounds.mid).toBe(3)
     expect(w.defaultRounds.mid).toBe(1)
     expect(reviewOf('standard', 'mid', tweak).review!.rounds).toBe(3)
     expect(w.tweak).toEqual({
-      steps: { build: { instructions: 'Hand the diff over.' }, ci: { enabled: false } },
+      steps: { build: { effort: 'high' }, ci: { enabled: false } },
+      agents: { build: 'acme-dev' },
       rounds: { mid: 3 },
     })
+  })
+
+  it("serves the preset's hand-off wording for every step and never marks one as edited by text (A4, A8)", () => {
+    for (const preset of WORKFLOW_PRESETS)
+      for (const level of COMPLEXITIES) {
+        const w = resolveWorkflow(preset, { steps: { build: { instructions: 'x' } } }, level)
+        expect(w.tweaked, `${preset} ${level}`).toBe(false)
+        expect(w.tweak).toBeNull()
+        for (const step of w.steps) {
+          expect(step.handoff.length).toBeGreaterThan(0)
+          expect(Object.keys(step.edited).sort()).toEqual(['agent', 'any', 'effort', 'enabled', 'moved'])
+          expect(step.handoff).not.toBe('x')
+        }
+      }
+    // The flow variants of the wording still read from the preset, not from a stored value.
+    expect(stepHandoff('thorough', 'intent')).toContain('an ordinary round of the budget')
+    expect(
+      resolveWorkflow('standard', { steps: { build: { instructions: 'x' } } }, 'mid').steps[2]!.handoff,
+    ).toBe(WORKFLOW_STEPS.build.handoff)
+  })
+
+  it('drops a stored instruction when reading, and keeps what sits beside it (A8)', () => {
+    expect(
+      readProjectTweaks({
+        standard: { steps: { build: { instructions: 'x', effort: 'high' }, spec: { instructions: 'y' } } },
+        light: { steps: { intent: { instructions: 'z' } } },
+      }),
+    ).toEqual({ standard: { steps: { build: { effort: 'high' } } } })
+    expect(
+      JSON.stringify(
+        readProjectTweaks({ standard: { instructions: 'x', steps: { ci: { instructions: 'q' } } } }),
+      ),
+    ).not.toContain('instructions')
   })
 
   it('is per preset: a tweak of one leaves the others as shipped', () => {

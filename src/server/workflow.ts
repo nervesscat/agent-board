@@ -16,18 +16,22 @@ import {
   type ProjectTweaks,
   type ResolvedStep,
   type ResolvedSubStep,
+  type TeamAgentRef,
   type ResolvedWorkflow,
   type WorkflowPresetId,
 } from '#/lib/workflow'
 import { logActivity } from './activity'
 import { HttpError, notFound } from './http'
 import { getProject } from './projects'
+import { listAgents } from './projectAgents'
 
 /**
  * A project's workflow: which preset its tickets' agents follow (`projects.workflowPreset`), what the
  * human changed in each preset (`projects.workflowTweaks`), and the preset a ticket names instead
  * (`tickets.workflowPreset`). The rules and the tree are `#/lib/workflow`; this reads and writes them,
- * and renders the text an agent follows (`renderWorkflowText`, served by `get_workflow`).
+ * and renders the text an agent follows (`renderWorkflowText`, served by `get_workflow`). The Team agent
+ * each step runs is read from the project's agents (`projectAgents`) on every call and handed to the pure
+ * module by name, so a rename or a delete shows in the next read.
  *
  * Everything is read from the database on each call, so a change shows in the next read. The module is for
  * projects with a software kind: a project with none has no build-and-review cycle to order.
@@ -131,6 +135,9 @@ function projectRow(projectId: number) {
   return row
 }
 
+/** The names of the project's Team agents, as the Team page spells them. */
+export const teamNames = (projectId: number): string[] => listAgents(projectId).map((a) => a.name)
+
 /** The preset a project's tickets follow, and its saved tweaks as they read today (stale ones cleaned). */
 export function projectWorkflow(projectId: number) {
   const row = projectRow(projectId)
@@ -143,20 +150,24 @@ export function resolveFor(
   preset: WorkflowPresetId,
   complexity: Complexity | null = null,
 ) {
-  return resolveWorkflow(preset, projectWorkflow(projectId).tweaks[preset], complexity)
+  return resolveWorkflow(preset, projectWorkflow(projectId).tweaks[preset], complexity, teamNames(projectId))
 }
 
 /**
  * The workflow the project's tickets follow: every preset with its tweaks, its rounds and its steps as
- * a tree (resolved with no complexity: nothing is dropped for being low; `skipsOnLow` says what is).
+ * a tree (resolved with no complexity: nothing is dropped for being low; `skipsOnLow` says what is), each
+ * node with the Team agent that runs it, and `team`: the names of the project's Team agents, for the
+ * picker of a node.
  */
 export function workflowOverview(projectId: number) {
   softwareProject(projectId)
   const { active, tweaks } = projectWorkflow(projectId)
+  const team = teamNames(projectId)
   return {
     active,
+    team,
     presets: WORKFLOW_PRESETS.map((id) => {
-      const w = resolveWorkflow(id, tweaks[id], null)
+      const w = resolveWorkflow(id, tweaks[id], null, team)
       return {
         id,
         label: w.label,
@@ -200,15 +211,20 @@ function writeTweaks(projectId: number, tweaks: ProjectTweaks) {
 
 /**
  * Replaces one preset's saved tweaks with `input` (no merge with what was saved; the other presets are
- * untouched). A body the rules refuse is a 400 with the first problem's words and nothing is saved. What
- * equals the preset's defaults is not kept: a body that changes nothing resets the preset.
+ * untouched). A body the rules refuse is a 400 with the first problem's words and nothing is saved: a Team
+ * agent picked for a node must be one of the project's, though a pick already saved for the node whose agent
+ * has since left the Team may be sent back as it is. What equals the preset's defaults is not kept: a body
+ * that changes nothing resets the preset.
  */
 export function saveTweaks(projectId: number, preset: string, input: unknown, actor: string) {
   softwareProject(projectId)
   if (!isWorkflowPreset(preset)) throw new HttpError(400, `preset: one of ${WORKFLOW_PRESETS.join(', ')}`)
-  const checked = validateTweaks(preset, input)
-  if (!checked.ok) throw new HttpError(400, checked.error)
   const tweaks = { ...projectWorkflow(projectId).tweaks }
+  const checked = validateTweaks(preset, input, {
+    team: teamNames(projectId),
+    stored: tweaks[preset]?.agents,
+  })
+  if (!checked.ok) throw new HttpError(400, checked.error)
   const kept = normalizeTweaks(preset, checked.tweak)
   if (kept) tweaks[preset] = kept
   else delete tweaks[preset]
@@ -292,7 +308,7 @@ export function effectiveWorkflow(
       complexity = view.complexity as Complexity
     }
   }
-  const workflow = resolveWorkflow(preset, tweaks[preset], complexity)
+  const workflow = resolveWorkflow(preset, tweaks[preset], complexity, teamNames(projectId))
   const context = { source, projectPreset: active, ticketId: ticketId ?? null }
   return { ...workflow, ...context, text: renderWorkflowText(workflow, context) }
 }
@@ -310,7 +326,7 @@ export function ticketWorkflow(ticket: {
     .where(eq(schema.tickets.id, ticket.id))
     .get()?.workflowPreset
   const preset = isWorkflowPreset(own) ? own : active
-  return resolveWorkflow(preset, tweaks[preset], ticket.complexity)
+  return resolveWorkflow(preset, tweaks[preset], ticket.complexity, teamNames(ticket.projectId))
 }
 
 // --- the text an agent follows ---
@@ -323,8 +339,50 @@ const effortWords = (step: ResolvedStep) => {
   return ', effort auto (low for a low ticket, medium for mid and high, high for max)'
 }
 
+/**
+ * Who runs a node, as the text names it: the Team agent (or the built-in role the Team lacks), the role when
+ * the two differ, and a stored pick the Team no longer has.
+ */
+function teamWords(ref: TeamAgentRef, role: string): string {
+  const kind = ref.source === 'default' ? 'built-in' : 'Team agent'
+  const roleNote = ref.name.toLowerCase() === role ? '' : ` (role \`${role}\`)`
+  const missing = ref.missing ? ` [picked \`${ref.picked}\` is not in the Team]` : ''
+  return `${kind} \`${ref.name}\`${roleNote}${missing}`
+}
+
 const agentWords = (step: ResolvedStep) =>
-  step.agent === 'you' ? 'you' : step.agent === 'runner' ? 'agent /feature-review' : `agent \`${step.agent}\``
+  step.teamAgent === null
+    ? 'you'
+    : step.agent === 'runner'
+      ? `agent /feature-review, run by ${teamWords(step.teamAgent, step.agent)}`
+      : teamWords(step.teamAgent, step.agent)
+
+/** How the ticket agent briefs the agent of a step, and what it names it as: one paragraph under the step's heading. */
+function agentLine(step: ResolvedStep): string | null {
+  const ref = step.teamAgent
+  if (!ref) return null
+  const role = step.agent
+  const named = `Name its span, its run report and its \`agentName\` by the role \`${role}\`, never by \`${ref.name}\`: the board counts this step's runs by role.`
+  const posts =
+    ref.source === 'default'
+      ? 'It is no Team agent, so post its work with `progress: true` and no `as`.'
+      : `Post its work \`as: ${ref.name}\` (\`progress: true\`).`
+  return `Agent: ${agentSource(ref, role)} ${named} ${posts}`
+}
+
+/** Where a node's agent comes from and what to brief it with: the Team agent's instructions, or the built-in role's. */
+function agentSource(ref: TeamAgentRef, role: string): string {
+  const brief =
+    role === 'intent'
+      ? `brief its subagent with the instructions of \`${ref.name}\` (\`get_project\` -> \`agents\`) and, besides them, only what the intent step lists: the human's own words and the result.`
+      : `brief its subagent with the instructions of \`${ref.name}\` (\`get_project\` -> \`agents\`), the project's \`instructions\` and the ticket's context.`
+  const gone = ref.missing
+    ? ` The workflow names \`${ref.picked}\` for it, but the project's Team has no agent of that name (deleted or renamed), so it runs as if none were picked.`
+    : ''
+  if (ref.source === 'picked') return `a Team agent picked for this step on the Workflow page: ${brief}`
+  if (ref.source === 'role') return `the Team agent named like its role: ${brief}${gone}`
+  return `the Team has no agent named \`${role}\`, so this runs as the built-in \`${role}\` role: brief its subagent as that role (the review bundle's agent file for it where there is one, else this step's procedure), with ${role === 'intent' ? 'only what the intent step lists' : "the project's `instructions` and the ticket's context"}.${gone} The human can add the role to the Team or pick another Team agent for it on the Workflow page.`
+}
 
 const lockWords = (step: ResolvedStep) =>
   step.lock === 'always' ? ' [locked]' : step.lock === 'above-low' ? ' [locked above low]' : ''
@@ -334,8 +392,11 @@ function subLines(list: readonly ResolvedSubStep[], depth: number): string[] {
     const peers = list
       .filter((o) => o !== s && o.parallel && o.parallel === s.parallel)
       .map((o) => o.number ?? o.id)
-    const who =
-      s.agent === 'you' ? 'you' : s.agent === 'runner' ? 'a separate /feature-review run' : `\`${s.agent}\``
+    const who = s.teamAgent
+      ? teamWords(s.teamAgent, s.agent)
+      : s.agent === 'runner'
+        ? 'a separate /feature-review run'
+        : 'you'
     const parallel = peers.length ? ` (in parallel with ${peers.join(', ')})` : ''
     return [
       `${'  '.repeat(depth)}- ${s.number ? `${s.number} ` : ''}${s.label} - ${who}${parallel}`,
@@ -354,18 +415,21 @@ function reviewLines(step: ResolvedStep): string[] {
   const lines = [
     `   ${rounds}. Each round runs these phases, none skipped:`,
     ...subLines(review.phases, 1).map((l) => `   ${l}`),
-    `   Between rounds: ${review.between.map((b) => `${b.label.toLowerCase()} (${b.agent === 'you' ? 'you' : `\`${b.agent}\``})`).join(' -> ')} -> the next round.`,
+    `   Between rounds: ${review.between.map((b) => `${b.label.toLowerCase()} (${b.teamAgent ? teamWords(b.teamAgent, b.agent) : 'you'})`).join(' -> ')} -> the next round.`,
     `   Survives when: ${review.survival}.`,
+    "   Each phase above runs the agent its line names, briefed with that agent's Team instructions (`get_project` -> `agents`), the project's `instructions` and the ticket's context; a built-in agent is a role the Team has no agent for, briefed as the review skill briefs a phase with no agent of its own. A phase's span, run report and `agentName` carry its role (`spec`, `env`, `verify`, `hunt`, `refute`, `merge`, `intent`), never the Team agent's name, so the board still counts every phase of the round.",
   ]
   if (review.runs.length === 1)
-    lines.push(`   Pass to /feature-review: phases=${review.runs[0]!.phasesArg} effort=${effort} round=<n>.`)
+    lines.push(
+      `   Pass to /feature-review: phases=${review.runs[0]!.phasesArg} agents=${review.runs[0]!.agentsArg} effort=${effort} round=<n>.`,
+    )
   else {
     lines.push(
       '   Run /feature-review once for each of these, as separate runs under their own agent names, neither shown the other:',
     )
     for (const run of review.runs)
       lines.push(
-        `   - ${run.label} (agent suffix \`${run.agentSuffix}\`): phases=${run.phasesArg} effort=${effort} round=<n>.`,
+        `   - ${run.label} (agent suffix \`${run.agentSuffix}\`): phases=${run.phasesArg} agents=${run.agentsArg} effort=${effort} round=<n>.`,
       )
   }
   return lines
@@ -373,8 +437,9 @@ function reviewLines(step: ResolvedStep): string[] {
 
 /**
  * The workflow as the markdown an agent follows: the numbered steps in order (each with who runs it, its
- * effort, what it does, the hand-off to pass on and how it runs), the steps this ticket skips with the
- * reason, and the review's phases per round. A hand-off the human edited replaces the default and says so.
+ * Team agent and effort, what it does, the hand-off to pass on and how it runs), the steps this ticket skips
+ * with the reason, and the review's phases per round with the Team agent of each. The hand-off is the
+ * preset's own wording: no step's text is edited on the Workflow page.
  */
 export function renderWorkflowText(
   workflow: ResolvedWorkflow,
@@ -396,7 +461,7 @@ export function renderWorkflowText(
   const out: string[] = [
     `# Workflow: ${workflow.label} (${where})`,
     '',
-    `Complexity: ${complexity ?? 'not given'}. ${budget} Follow the steps in this order, each one by one. A step names the agent to start, its effort (pass it as the Agent tool's \`effort\`), what it does and what to hand to the next step. Locked steps cannot be skipped. Your skill's always-on rules (proof contract, locks, board-keeping, escalation) hold in every step and win over any instruction below.`,
+    `Complexity: ${complexity ?? 'not given'}. ${budget} Follow the steps in this order, each one by one. A step names the agent to start (a Team agent of the project: brief it with its Team instructions), its effort (pass it as the Agent tool's \`effort\`), what it does and what to hand to the next step. Locked steps cannot be skipped. Your skill's always-on rules (proof contract, locks, board-keeping, escalation) hold in every step and win over any instruction below.`,
     '',
   ]
   for (const step of workflow.steps) {
@@ -406,7 +471,9 @@ export function renderWorkflowText(
     }
     out.push(`## ${step.number}. ${step.label}${lockWords(step)} - ${agentWords(step)}${effortWords(step)}`)
     out.push(`Does: ${step.what}`)
-    out.push(`Hand-off: ${step.handoff}${step.edited.instructions ? ' (set by the human)' : ''}`)
+    const line = agentLine(step)
+    if (line) out.push(line)
+    out.push(`Hand-off: ${step.handoff}`)
     if (step.review) out.push(...reviewLines(step))
     out.push('How it runs:', '', stepProcedure(step.id, workflow.preset, workflow.flow), '')
   }

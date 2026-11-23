@@ -103,6 +103,18 @@ const STANDARD = [
 ]
 const ids = (steps: { id: string; skipped: unknown }[]) => steps.filter((s) => !s.skipped).map((s) => s.id)
 
+/** A Team agent of the project, as the Team page adds one; its id. */
+const agent = async (projectId: number, name: string, instructions = `You are ${name}.`) =>
+  (await call('POST', `/api/projects/${projectId}/agents`, { name, instructions })).body.id as number
+/** The step or phase with this id in a resolved workflow (a step, or a phase of its review). */
+const nodeOf = (w: any, id: string) => {
+  const all = (list: any[]): any[] => list.flatMap((s) => [s, ...all(s.children ?? [])])
+  const review = w.steps.find((s: { id: string }) => s.id === 'review')?.review
+  return [...w.steps, ...(review ? all([...review.phases, ...review.between]) : [])].find(
+    (s: { id: string }) => s.id === id,
+  )
+}
+
 describe('a project that never opened the workflow (B2)', () => {
   it('reads as Standard with no tweaks and no ticket override, as before the columns', async () => {
     const pid = await newProject()
@@ -170,16 +182,18 @@ describe('the project workflow routes (C1 to C5)', () => {
     expect((await tool('get_project', { projectId: pid })).workflowTweaks).toBeNull()
   })
 
-  it('saves order, switches, efforts, instructions and rounds, and shows them as tweaked (C3)', async () => {
+  it('saves order, switches, efforts, Team agents and rounds, and shows them as tweaked (C3)', async () => {
     const pid = await newProject()
+    await agent(pid, 'acme-dev')
     const order = [...STANDARD]
     ;[order[4], order[5]] = [order[5]!, order[4]!]
     const body = {
       order,
       steps: {
         ci: { enabled: false },
-        build: { effort: 'high', instructions: 'Hand the diff over.' },
+        build: { effort: 'high' },
       },
+      agents: { build: 'acme-dev' },
       rounds: { mid: 2 },
     }
     expect((await call('PUT', `/api/projects/${pid}/workflow/standard`, body, 'agent')).status).toBe(403)
@@ -242,10 +256,12 @@ describe('the project workflow routes (C1 to C5)', () => {
       'steps.build.effort: one of auto, low, medium, high',
     ],
     [
-      'instructions past the limit',
-      { steps: { build: { instructions: 'x'.repeat(4001) } } },
-      'steps.build.instructions: at most 4000 characters',
+      "a step's instruction text (A1)",
+      { steps: { build: { instructions: 'x' } } },
+      'steps.build: unknown key "instructions" (enabled and effort)',
     ],
+    ['a coordinate on a step (A2)', { steps: { spec: { x: 1 } } }, 'steps.spec: unknown key "x"'],
+    ['a position (A2)', { position: { spec: [1, 2] } }, 'unknown key "position"'],
     ['an unknown key', { colour: 1 }, 'unknown key "colour"'],
   ])('refuses %s with the rule’s words and saves nothing (C3)', async (_, body, message) => {
     const pid = await newProject()
@@ -359,7 +375,7 @@ describe('the effective workflow (C6, C7, C9, D1 to D3)', () => {
       order,
       steps: {
         ci: { enabled: false },
-        build: { effort: 'high', instructions: 'Hand the diff and the criteria table over.' },
+        build: { effort: 'high' },
       },
       rounds: { mid: 2 },
     })
@@ -374,10 +390,10 @@ describe('the effective workflow (C6, C7, C9, D1 to D3)', () => {
     expect(w.steps.find((s: { id: string }) => s.id === 'review').review.rounds).toBe(2)
     expect(w.text).toContain('Review: up to 2 rounds.')
     expect(w.text).toContain('## 5. Preview - you')
-    expect(w.text).toContain('## 6. Review - agent /feature-review')
+    expect(w.text).toContain('## 6. Review - agent /feature-review, run by built-in `runner`')
     expect(w.text).toContain('- CI - skipped: turned off on the Workflow page')
-    expect(w.text).toContain('## 3. Build [locked] - agent `builder`, effort high')
-    expect(w.text).toContain('Hand-off: Hand the diff and the criteria table over. (set by the human)')
+    expect(w.text).toContain('## 3. Build [locked] - built-in `builder`, effort high')
+    expect(w.text).toContain(`Hand-off: ${nodeOf(w, 'build').handoff}`)
     expect(w.text).not.toContain('gh pr checks')
   })
 
@@ -445,22 +461,24 @@ describe('the effective workflow (C6, C7, C9, D1 to D3)', () => {
       '12 Hand-off',
     ])
     expect(w.text).toContain('## 1. Read and claim [locked] - you')
-    expect(w.text).toContain('## 2. Spec - agent `spec`, effort medium')
-    expect(w.text).toContain('## 5. Review - agent /feature-review, effort medium')
-    expect(w.text).toContain('## 7. Intent check [locked above low] - agent `intent`, effort low')
+    expect(w.text).toContain('## 2. Spec - built-in `spec`, effort medium')
+    expect(w.text).toContain('## 5. Review - agent /feature-review, run by built-in `runner`, effort medium')
+    expect(w.text).toContain('## 7. Intent check [locked above low] - built-in `intent`, effort low')
     expect(w.text).toContain('rounds: 1. Each round runs these phases, none skipped:')
     for (const phase of [
-      '5.1 Spec - `spec`',
-      '5.2 Environment - `env`',
-      '5.3 Verify - `verify` (in parallel with 5.4, 5.5)',
-      '5.4 Hunt A - `hunt`',
-      '5.5 Hunt B - `hunt`',
-      '5.6 Refute - `refute`',
-      '5.7 Merge check - `merge`',
+      '5.1 Spec - built-in `spec`',
+      '5.2 Environment - built-in `env`',
+      '5.3 Verify - built-in `verify` (in parallel with 5.4, 5.5)',
+      '5.4 Hunt A - built-in `hunt`',
+      '5.5 Hunt B - built-in `hunt`',
+      '5.6 Refute - built-in `refute`',
+      '5.7 Merge check - built-in `merge`',
     ])
       expect(w.text).toContain(phase)
-    expect(w.text).toContain('Between rounds: fix pass (`builder`) -> gate (you) -> the next round.')
-    expect(w.text).toContain('phases=spec,env,verify,hunt,hunt,refute,merge effort=medium round=<n>')
+    expect(w.text).toContain('Between rounds: fix pass (built-in `builder`) -> gate (you) -> the next round.')
+    expect(w.text).toContain(
+      'phases=spec,env,verify,hunt,hunt,refute,merge agents=spec,env,verify,hunt,hunt,refute,merge effort=medium round=<n>',
+    )
     expect(w.text).toContain('Survives when: the verdict is SHIP')
     // The structured answer carries the same steps.
     expect(w.steps).toHaveLength(12)
@@ -476,7 +494,7 @@ describe('the effective workflow (C6, C7, C9, D1 to D3)', () => {
     expect(w.text).toContain('- Review - skipped: low ticket (no review rounds)')
     expect(w.text.match(/^## \d+\. /gm)).toHaveLength(10)
     expect(w.text).toContain('## 3. Gate [locked] - you')
-    expect(w.text).toContain('## 5. Intent check [locked above low] - agent `intent`, effort low')
+    expect(w.text).toContain('## 5. Intent check [locked above low] - built-in `intent`, effort low')
   })
 
   it('includes each step’s procedure, so the skill can drop it (D3)', async () => {
@@ -509,10 +527,10 @@ describe('the effective workflow (C6, C7, C9, D1 to D3)', () => {
       return (await tool('get_workflow', { projectId: pid, ticketId: t.id })).text as string
     }
     const light = await text('light')
-    expect(light).toContain('phases=reviewer effort=medium round=<n>')
+    expect(light).toContain('phases=reviewer agents=hunt effort=medium round=<n>')
     expect(light).toContain("This workflow's review is one reviewer")
     expect(light).not.toContain('Hunt B')
-    expect(light).not.toContain('Spec - agent `spec`')
+    expect(light).not.toContain('Spec - built-in `spec`')
     const thorough = await text('thorough')
     expect(thorough).toContain('phases=spec,env,verify,hunt,hunt,hunt-security,refute,merge')
     expect(thorough).toContain('Test-writing pass')
@@ -520,7 +538,7 @@ describe('the effective workflow (C6, C7, C9, D1 to D3)', () => {
     const maximum = await text('maximum')
     expect(maximum).toContain('Second spec (independent)')
     expect(maximum).toContain('Second review (different agent)')
-    expect(maximum).toContain('## 3. Second spec (independent) - agent `spec`, effort high')
+    expect(maximum).toContain('## 3. Second spec (independent) - built-in `spec`, effort high')
     expect(maximum).toContain('agent suffix `second`')
     expect(maximum).toContain('reviews every round twice, by different agents')
   })
@@ -791,7 +809,7 @@ describe('the served step texts of the Thorough and Maximum reviews, and of the 
     expect(low).not.toContain('Only after the intent check returned')
     // Locked above low: the same tweak does not skip it for a mid ticket.
     const mid = flat(await effective(pid, 'preset=standard&complexity=mid'))
-    expect(mid).toContain('## 7. Intent check [locked above low] - agent `intent`, effort low')
+    expect(mid).toContain('## 7. Intent check [locked above low] - built-in `intent`, effort low')
     expect(mid).not.toContain('- Intent check - skipped')
     expect(
       mid.split('Only after the intent check returned `matches` on the head being handed off.').length - 1,
@@ -858,5 +876,337 @@ describe('the served step texts of the Thorough and Maximum reviews, and of the 
     expect(text).toContain('it is not shown a spec file')
     expect(text).toContain('never as a defect')
     expect(text).toContain('This replaces the survival rule above')
+  })
+})
+
+describe('the workflow no longer edits a step’s text (A1, A4, A8)', () => {
+  const standard = async (pid: number) =>
+    (await call('GET', `/api/projects/${pid}/workflow`)).body.presets.find(
+      (p: { id: string }) => p.id === 'standard',
+    )
+
+  it('refuses an instruction on a step and leaves what was saved as it was (A1)', async () => {
+    const pid = await newProject()
+    await call('PUT', `/api/projects/${pid}/workflow/standard`, { rounds: { high: 4 } })
+    const before = await standard(pid)
+    const res = await call('PUT', `/api/projects/${pid}/workflow/standard`, {
+      steps: { build: { instructions: 'x' } },
+    })
+    expect(res.status).toBe(400)
+    expect(res.body.error).toContain('steps.build: unknown key "instructions"')
+    const after = await standard(pid)
+    expect(after.tweaks).toEqual(before.tweaks)
+    expect(after.tweaked).toBe(before.tweaked)
+  })
+
+  it('serves the preset’s hand-off wording for every step, whatever is stored, with no "set by the human" (A4)', async () => {
+    const pid = await newProject()
+    const t = ticket(pid, 'mid')
+    const w = (await call('GET', `/api/projects/${pid}/workflow/effective?ticketId=${t.id}`)).body
+    for (const step of w.steps) {
+      expect(step.handoff).toBeTruthy()
+      expect(Object.keys(step.edited).sort()).toEqual(['agent', 'any', 'effort', 'enabled', 'moved'])
+      if (!step.skipped) expect(w.text).toContain(`Hand-off: ${step.handoff}\n`)
+    }
+    expect(w.text).not.toContain('set by the human')
+  })
+
+  it('reads a row written with an instruction as if it had none, and does not throw (A8)', async () => {
+    const pid = await newProject()
+    dbm.db
+      .update(dbm.schema.projects)
+      .set({
+        workflowTweaks: {
+          standard: {
+            steps: { build: { instructions: 'legacy text', effort: 'high' }, spec: { instructions: 'y' } },
+          },
+          light: { steps: { intent: { instructions: 'z' } } },
+        } as never,
+      })
+      .where(eq(dbm.schema.projects.id, pid))
+      .run()
+    const t = ticket(pid, 'mid')
+    const res = await call('GET', `/api/projects/${pid}/workflow`)
+    expect(res.status).toBe(200)
+    expect(JSON.stringify(res.body)).not.toContain('legacy text')
+    expect(JSON.stringify(res.body.presets.map((p: { tweaks: unknown }) => p.tweaks))).not.toContain(
+      'instructions',
+    )
+    expect((await standard(pid)).tweaks).toEqual({ steps: { build: { effort: 'high' } } })
+    const served = (await call('GET', `/api/projects/${pid}/workflow/effective?ticketId=${t.id}`)).body
+    expect(served.text).not.toContain('legacy text')
+  })
+})
+
+describe('the Team agent of a node (B1 to B4, B6 to B8, B10, B13)', () => {
+  const put = (pid: number, preset: string, body: unknown, as: 'human' | 'agent' = 'human') =>
+    call('PUT', `/api/projects/${pid}/workflow/${preset}`, body, as)
+  const overview = async (pid: number) => (await call('GET', `/api/projects/${pid}/workflow`)).body
+  const preset = async (pid: number, id = 'standard') =>
+    (await overview(pid)).presets.find((p: { id: string }) => p.id === id)
+  const effective = async (pid: number, query: string) =>
+    (await call('GET', `/api/projects/${pid}/workflow/effective?${query}`)).body
+
+  it('saves a pick by name, returns it with the step’s Team agent and keeps it across reads (B1)', async () => {
+    const pid = await newProject()
+    await agent(pid, 'acme-dev')
+    const res = await put(pid, 'standard', { agents: { build: 'acme-dev' } })
+    expect(res.status).toBe(200)
+    for (const body of [res.body, await overview(pid)]) {
+      expect(body.team).toEqual(['acme-dev'])
+      const standard = body.presets.find((p: { id: string }) => p.id === 'standard')
+      expect(standard.tweaks).toEqual({ agents: { build: 'acme-dev' } })
+      expect(standard.tweaked).toBe(true)
+      const build = standard.steps.find((s: { id: string }) => s.id === 'build')
+      expect(build.agent).toBe('builder')
+      expect(build.teamAgent).toEqual({
+        name: 'acme-dev',
+        source: 'picked',
+        picked: 'acme-dev',
+        missing: false,
+      })
+      expect(build.edited.agent).toBe(true)
+    }
+    expect((await tool('get_project', { projectId: pid })).workflowTweaks).toEqual({
+      standard: { agents: { build: 'acme-dev' } },
+    })
+  })
+
+  it('refuses a name that is not in the Team, a node with no agent, an unknown or absent node and a non-name (B2)', async () => {
+    const pid = await newProject()
+    await agent(pid, 'acme-dev')
+    await put(pid, 'standard', { agents: { build: 'acme-dev' } })
+    const refused = async (agents: unknown, message: string, status = 400) => {
+      const res = await put(pid, 'standard', { agents })
+      expect(res.status, JSON.stringify(agents)).toBe(status)
+      expect(res.body.error).toContain(message)
+      expect((await preset(pid)).tweaks).toEqual({ agents: { build: 'acme-dev' } })
+    }
+    await refused({ build: 'nobody' }, '"nobody" is not one of the project\'s Team agents')
+    for (const node of ['claim', 'gate', 'preview', 'push', 'pr', 'ci', 'summary', 'handoff', 'review.gate'])
+      await refused({ [node]: 'acme-dev' }, `${node} runs no agent of its own`)
+    await refused({ 'review.reconcile': 'acme-dev' }, 'review.reconcile')
+    await refused({ foo: 'acme-dev' }, 'unknown node "foo"')
+    await refused({ 'review.nope': 'acme-dev' }, 'unknown node "review.nope"')
+    await refused({ spec2: 'acme-dev' }, 'spec2 is not a step of the Standard workflow')
+    await refused({ build: 5 }, 'agents.build')
+    await refused({ build: ['acme-dev'] }, 'agents.build')
+    await refused('acme-dev', 'agents: an object keyed by node id')
+    // An agent token may read the workflow but not change it.
+    expect((await put(pid, 'standard', { agents: { build: 'acme-dev' } }, 'agent')).status).toBe(403)
+    expect((await call('GET', `/api/projects/${pid}/workflow`, undefined, 'agent')).status).toBe(200)
+  })
+
+  it('matches the Team’s names in any casing and stores the Team’s own spelling (B3)', async () => {
+    const pid = await newProject()
+    await agent(pid, 'acme-dev')
+    const res = await put(pid, 'standard', { agents: { build: 'ACME-DEV' } })
+    expect(res.status).toBe(200)
+    expect((await preset(pid)).tweaks).toEqual({ agents: { build: 'acme-dev' } })
+    expect(nodeOf(await preset(pid), 'build').teamAgent.name).toBe('acme-dev')
+  })
+
+  it('runs a node as the Team agent named like its role, else the built-in agent of the role (B4)', async () => {
+    const pid = await newProject()
+    const roles = { spec: 'spec', build: 'builder', review: 'runner', intent: 'intent' }
+    for (const [id, role] of Object.entries(roles))
+      expect(nodeOf(await preset(pid), id).teamAgent, id).toEqual({
+        name: role,
+        source: 'default',
+        picked: null,
+        missing: false,
+      })
+    const phases = {
+      'review.env': 'env',
+      'review.verify': 'verify',
+      'review.hunt-a': 'hunt',
+      'review.refute': 'refute',
+      'review.merge': 'merge',
+      'review.fix': 'builder',
+    }
+    for (const [id, role] of Object.entries(phases))
+      expect(nodeOf(await preset(pid), id).teamAgent.name, id).toBe(role)
+    expect(nodeOf(await preset(pid, 'light'), 'review.reviewer').teamAgent.name).toBe('hunt')
+    expect(nodeOf(await preset(pid), 'gate').teamAgent ?? null).toBeNull()
+    await agent(pid, 'Builder')
+    await agent(pid, 'hunt')
+    const standard = await preset(pid)
+    expect(nodeOf(standard, 'build').teamAgent).toEqual({
+      name: 'Builder',
+      source: 'role',
+      picked: null,
+      missing: false,
+    })
+    expect(nodeOf(standard, 'review.fix').teamAgent.source).toBe('role')
+    expect(nodeOf(standard, 'review.hunt-b').teamAgent.name).toBe('hunt')
+    expect(nodeOf(standard, 'spec').teamAgent.source).toBe('default')
+  })
+
+  it('does not store a pick equal to the default, and the reset clears every pick of the preset only (B6)', async () => {
+    const pid = await newProject()
+    await agent(pid, 'hunt')
+    await agent(pid, 'acme-dev')
+    const same = await put(pid, 'standard', { agents: { 'review.hunt-a': 'hunt', 'review.hunt-b': 'HUNT' } })
+    expect(same.status).toBe(200)
+    expect((await preset(pid)).tweaked).toBe(false)
+    expect((await call('GET', `/api/projects/${pid}`)).body.workflowTweaks).toBeNull()
+    await put(pid, 'standard', { agents: { build: 'acme-dev' }, rounds: { mid: 2 } })
+    await put(pid, 'thorough', { agents: { tests: 'acme-dev' } })
+    const reset = await call('DELETE', `/api/projects/${pid}/workflow/standard`)
+    expect(reset.status).toBe(200)
+    expect(
+      nodeOf(
+        reset.body.presets.find((p: { id: string }) => p.id === 'standard'),
+        'build',
+      ).teamAgent.source,
+    ).toBe('default')
+    expect((await call('GET', `/api/projects/${pid}`)).body.workflowTweaks).toEqual({
+      thorough: { agents: { tests: 'acme-dev' } },
+    })
+    // A body with no pick replaces the saved ones, so it resets them too.
+    await put(pid, 'thorough', {})
+    expect((await call('GET', `/api/projects/${pid}`)).body.workflowTweaks).toBeNull()
+  })
+
+  it('keeps a pick whose agent was renamed or deleted, runs the node as unset and says so, and restores it with the agent (B7)', async () => {
+    const pid = await newProject()
+    const id = await agent(pid, 'acme-dev')
+    await agent(pid, 'builder')
+    await put(pid, 'standard', {
+      agents: { build: 'acme-dev', 'review.hunt-a': 'acme-dev' },
+      rounds: { high: 4 },
+    })
+    const t = ticket(pid, 'mid')
+    const after = async () => {
+      const standard = await preset(pid)
+      const served = await effective(pid, `ticketId=${t.id}`)
+      return { build: nodeOf(standard, 'build'), tweaks: standard.tweaks, served }
+    }
+    const renamed = await call('PATCH', `/api/agents/${id}`, { name: 'acme-dev2' })
+    expect(renamed.status).toBe(200)
+    let now = await after()
+    expect(now.tweaks).toEqual({
+      agents: { build: 'acme-dev', 'review.hunt-a': 'acme-dev' },
+      rounds: { high: 4 },
+    })
+    expect(now.build.teamAgent).toEqual({
+      name: 'builder',
+      source: 'role',
+      picked: 'acme-dev',
+      missing: true,
+    })
+    expect(now.served.text).toContain('[picked `acme-dev` is not in the Team]')
+    expect(now.served.text).toContain("the project's Team has no agent of that name")
+    expect(nodeOf(now.served, 'review.hunt-a').teamAgent).toMatchObject({ missing: true, picked: 'acme-dev' })
+    // Saving the page's other changes back, pick included, is not refused for it.
+    const save = await put(pid, 'standard', { ...now.tweaks, steps: { spec: { effort: 'high' } } })
+    expect(save.status).toBe(200)
+    expect((await preset(pid)).tweaks.agents).toEqual({ build: 'acme-dev', 'review.hunt-a': 'acme-dev' })
+    // Renaming back restores it.
+    await call('PATCH', `/api/agents/${id}`, { name: 'acme-dev' })
+    now = await after()
+    expect(now.build.teamAgent).toEqual({
+      name: 'acme-dev',
+      source: 'picked',
+      picked: 'acme-dev',
+      missing: false,
+    })
+    // A delete leaves it missing the same way, and creating the agent again restores it.
+    expect((await call('DELETE', `/api/agents/${id}`)).status).toBe(200)
+    now = await after()
+    expect(now.build.teamAgent.missing).toBe(true)
+    expect(now.tweaks.agents.build).toBe('acme-dev')
+    expect((await put(pid, 'standard', { agents: { build: 'acme-dev' } })).status).toBe(200)
+    await agent(pid, 'Acme-Dev')
+    now = await after()
+    expect(now.build.teamAgent).toEqual({
+      name: 'Acme-Dev',
+      source: 'picked',
+      picked: 'Acme-Dev',
+      missing: false,
+    })
+  })
+
+  it('serves the Team agent per step and per phase in the structure and in the text, over REST and MCP (B8, B10)', async () => {
+    const pid = await newProject()
+    await agent(pid, 'acme-dev')
+    await agent(pid, 'sec-hunter')
+    await call('PUT', `/api/projects/${pid}/workflow`, { preset: 'standard' })
+    await put(pid, 'standard', {
+      agents: { build: 'acme-dev', 'review.hunt-a': 'sec-hunter', 'review.hunt-b': 'acme-dev' },
+    })
+    const t = ticket(pid, 'mid')
+    const rest = await effective(pid, `ticketId=${t.id}`)
+    const mcp = await tool('get_workflow', { projectId: pid, ticketId: t.id })
+    expect(mcp).toEqual(rest)
+    expect(nodeOf(rest, 'build').teamAgent.name).toBe('acme-dev')
+    expect(rest.text).toContain(
+      '## 3. Build [locked] - Team agent `acme-dev` (role `builder`), effort medium',
+    )
+    expect(rest.text).not.toContain('## 3. Build [locked] - built-in')
+    expect(rest.text).toContain('5.4 Hunt A - Team agent `sec-hunter` (role `hunt`) (in parallel with')
+    expect(rest.text).toContain('5.5 Hunt B - Team agent `acme-dev` (role `hunt`)')
+    expect(rest.text).toContain('5.6 Refute - built-in `refute`')
+    expect(rest.text).toContain(
+      'phases=spec,env,verify,hunt,hunt,refute,merge agents=spec,env,verify,sec-hunter,acme-dev,refute,merge',
+    )
+    expect(rest.text).toContain('Post its work `as: acme-dev`')
+    expect(rest.text).toContain(
+      'Name its span, its run report and its `agentName` by the role `builder`, never by `acme-dev`',
+    )
+    expect(rest.text).toContain(
+      "brief its subagent with the instructions of `acme-dev` (`get_project` -> `agents`), the project's `instructions` and the ticket's context",
+    )
+    // A step that is not bound says which built-in role it runs as, and that it is no Team agent.
+    expect(rest.text).toContain(
+      'the Team has no agent named `spec`, so this runs as the built-in `spec` role',
+    )
+    expect(rest.text).toContain('It is no Team agent, so post its work with `progress: true` and no `as`.')
+    // The intent agent is briefed with only the human's words and the result, whatever Team agent it is.
+    await agent(pid, 'intent')
+    const withIntent = await effective(pid, `ticketId=${t.id}`)
+    expect(withIntent.text).toContain('besides them, only what the intent step lists')
+    // The ticket's own preset carries its own picks.
+    await put(pid, 'light', { agents: { build: 'acme-dev' } })
+    const own = ticket(pid, 'mid', { workflowPreset: 'light' })
+    const light = await effective(pid, `ticketId=${own.id}`)
+    expect([light.source, nodeOf(light, 'build').teamAgent.source]).toEqual(['ticket', 'picked'])
+    expect(nodeOf(rest, 'build').teamAgent.source).toBe('picked')
+  })
+
+  it('takes a pick on each phase of every preset’s review, and none on a group or the ticket agent’s own (B10)', async () => {
+    const pid = await newProject()
+    await agent(pid, 'sec-hunter')
+    const ok = [
+      ['standard', 'review.hunt-a'],
+      ['standard', 'review.spec'],
+      ['standard', 'review.fix'],
+      ['light', 'review.reviewer'],
+      ['thorough', 'review.intent'],
+      ['thorough', 'review.hunt-security'],
+      ['maximum', 'review.first.hunt-a'],
+      ['maximum', 'review.second.hunt-a'],
+      ['maximum', 'review.second.merge'],
+      ['maximum', 'spec2'],
+    ] as const
+    for (const [id, node] of ok) {
+      const res = await put(pid, id, { agents: { [node]: 'sec-hunter' } })
+      expect(res.status, `${id} ${node}`).toBe(200)
+      expect(
+        nodeOf(
+          res.body.presets.find((p: { id: string }) => p.id === id),
+          node,
+        ).teamAgent.source,
+      ).toBe('picked')
+    }
+    for (const node of ['review.first', 'review.second', 'review.reconcile', 'review.gate'])
+      expect((await put(pid, 'maximum', { agents: { [node]: 'sec-hunter' } })).status, node).toBe(400)
+  })
+
+  it('is still refused for a project with no software kind, a pick included (B13)', async () => {
+    const pid = await newProject(['music'])
+    const res = await put(pid, 'standard', { agents: { build: 'acme-dev' } })
+    expect(res.status).toBe(400)
+    expect(res.body.error).toContain('the workflow module is for software projects')
   })
 })

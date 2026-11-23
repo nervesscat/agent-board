@@ -1,7 +1,10 @@
 1. `get_project` (`PROJECT`): its `instructions` win over your defaults; its `agents` are the team, and
-   their `delegation` notes say when to call each. Use the agent a step names when it has instructions,
-   else the agent whose notes describe that step (a ticket the workflow gives no spec step needs no spec
-   agent); when none fits a step, stop with `STATUS: error` and say which step had no agent.
+   their `delegation` notes say when to call each and their `instructions` are what you brief a step's
+   agent with: the workflow names, for each step that runs an agent, the Team agent that runs it (the
+   human's pick on the Workflow page, else the Team agent named like the step's role, else the built-in
+   role) and its instructions are written on the Team page only. A ticket the workflow gives no spec step
+   needs no spec agent; when a step's agent has no instructions and none of the Team's agents fits it, stop
+   with `STATUS: error` and say which step had no agent.
 2. `get_ticket`: the instructions, the attachments (read each image and file at its local `path`: a
    ticket with an empty body and a screenshot is a bug report), the posts, the answered decisions, and the
    **summary first** when there is one. Read every post and each reply under it (`list_comments` with the

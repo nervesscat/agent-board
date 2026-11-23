@@ -80,6 +80,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | a number | a GitHub PR | |
 | a branch name, `diff`, `staged`, or a path | the change to review | see Setup |
 | `phases=<list>` | the plan: the phases this run executes, as comma-separated tokens (**The plan**, below): e.g. `spec,env,verify,hunt,hunt,refute,merge`, or `reviewer` alone. A board cycle's ticket agent passes what its workflow's review step gives | the ticket's workflow on a board ticket, else the six standard phases |
+| `agents=<list>` | the Team agent that briefs each phase of `phases=`: one name per token, in the same order (a board cycle's ticket agent passes what its workflow's review step gives). The phase is briefed with that project agent's `instructions` (**On the board**, step 1) instead of the agent named like the phase; a name that is not one of the project's agents (a built-in role the Team has no agent for) briefs the phase from its agent file as before. It changes only who briefs the phase: spans, run reports and `agentName` still carry the phase's own name | each phase's agent is the project's agent named like it |
 | `deep` | the independent hunts also report each finding's stability (every hunt or one) | off |
 | `light` | a depth name only: it has no effect on the phases, every phase the plan lists runs (every hunt included) | off |
 | `keep` | keep the worktree and servers after the report, for debugging | off |
@@ -481,13 +482,15 @@ and never posts a new hand-off: whoever hands the ticket off rewrites the summar
 and the review answers them, it replies under their post, never with a new top-level post: the
 plan first, then the result with its proofs.
 
-1. **The project's agents brief the phases.** `get_project` → `agents`. For each phase, when the
-   project has an agent with that name (`spec`, `env`, `verify`, `hunt`, `refute`, `merge`, `intent`)
-   and instructions, spawn a general-purpose subagent whose prompt is that agent's `instructions`
+1. **The project's agents brief the phases.** `get_project` → `agents`. For each phase, the agent is the
+   one `agents=` names at the phase's place in `phases=`; without `agents=`, the project's agent named
+   like the phase (`spec`, `env`, `verify`, `hunt`, `refute`, `merge`, `intent`). When the project has
+   that agent and it has instructions, spawn a general-purpose subagent whose prompt is that agent's `instructions`
    followed by everything this skill gives the phase (paths, the contract, its inputs). The human
    edits those on the board, so they win over the `feature-review-*` agent files; a phase with no
    such agent uses its agent file as before.
-2. **Each phase reports on the ticket as its agent**: `post_update` with `as: <agent name>` and
+2. **Each phase reports on the ticket as its agent**: `post_update` with `as: <agent name>` (the Team
+   agent that briefed the phase when it is one of the project's agents, else no `as`) and
    `progress: true`, a few lines (what it established, counts, anything unavailable) and its
    evidence in `files` (screenshots from `WORKDIR/shots/`, the phase's own file). Never paste
    hunt notes; the refute phase's verdict table is the findings' record. These posts go to the

@@ -6,8 +6,8 @@ ticket's instructions as its spec. An unclear point follows **Escalation**: take
 in the hand-off, and `ask_decision` only when the readings lead to different products.
 
 {{end}}
-Start a subagent briefed with the **builder** agent's `instructions`, the project's `instructions`, the
-ticket's context (everything the claim step read: its instructions, the human's posts and replies, the
+Start a subagent briefed as this step's Agent line says (the Team agent it names, with that agent's
+`instructions` from `get_project`), the project's `instructions`, the ticket's context (everything the claim step read: its instructions, the human's posts and replies, the
 decisions and their answers, the attachments), {{if spec}}`WORKDIR/01-spec.md`, {{end}}and a brief in the
 same four parts. Focus: {{if spec}}the spec's Surfaces and their tests{{else}}the acceptance criteria and the files they touch{{end}}. Known: the worktree and branch, the
 project's check commands scoped as the gate runs them, with the **Local test flags**, never the full unit
@@ -18,12 +18,13 @@ released right after it). Done when: every criterion has its check, the scoped c
 is committed on the branch, never pushed. Return: the commits, what changed per criterion or finding, the
 checks run with their results.
 
-On a later round the brief carries the findings and failed criteria to fix, each with its scenario, and
+On a later round{{if review}} (the fix pass: run by the agent the review's `Between rounds` line names for it,
+which may be another Team agent than this step's){{end}} the brief carries the findings and failed criteria to fix, each with its scenario, and
 the Focus is only their `path:line` and their tests: the builder does not re-read or rework the rest of
 the change. A fix pass reruns only what its findings touch: the failed end-to-end spec file(s) and the
 unit files related to the changed files (`vitest related <changed files>`, or the project's equivalent),
 not the whole gate; the full unit and end-to-end suites stay in CI, where CI runs them. When it returns,
-release any slot it left behind if `holder.txt` still names your ticket. Post its summary `as: builder`.
+release any slot it left behind if `holder.txt` still names your ticket. Post its summary `as` the agent this step names (the Agent line).
 
 {{if !spec}}**With no spec: the builder codes and verifies itself.** Its brief is the same, with the ticket's
 instructions in place of `WORKDIR/01-spec.md` and its criteria in place of the spec's Surfaces. It is done

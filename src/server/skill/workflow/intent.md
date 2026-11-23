@@ -2,9 +2,11 @@ After the last review round passes (a ticket with no review: after its gate and 
 every hand-off. It runs again after any human comment that sent the ticket back (a `RETRY` or a re-run
 that finds one among the ticket's posts, newest last).
 
-It is the project's `intent` agent (its `delegation` notes route it; else `feature-review-intent`),
-started with the Agent tool at this step's effort (`low` unless the human set another). Brief it with only
-two things:
+It is the agent this step names (its Agent line: a Team agent of the project, else the built-in `intent`
+role, whose agent file is `feature-review-intent`), started with the Agent tool at this step's effort
+(`low` unless the human set another), with that agent's `instructions`. The round-end check of a review
+that has one is run by the agent the review's `intent` phase line names. Brief it with only two things
+besides them:
 
 - the human's own words and attachments: the ticket's instructions and every post and reply by the human,
   newest last, and the human's own answer on each decision card (the option they picked and their words,

@@ -1,5 +1,5 @@
 **This workflow's review is one reviewer, not the full cycle.** The review is invoked
-`/feature-review ... phases=reviewer`: one phase agent of the project's `hunt` role, briefed with the
+`/feature-review ... phases=reviewer`: one phase agent (the Team agent the reviewer line names; the role is `hunt`), briefed with the
 ticket's instructions (the human's words and the acceptance criteria you wrote), the diff at the head and
 the gate's results. It runs no spec, environment, verify, refute or merge phase and no second hunt, and
 it is not shown a spec file (its only environment file is the small one below).

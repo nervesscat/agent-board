@@ -13,7 +13,7 @@ not name that review, its depth or its findings. Then go on with that review.
 Otherwise run `/feature-review` through the Skill tool, unattended:
 `repo=<REPO> <branch> ticket=<TICKET> round=<n> ports=<PORTS> browser=<BROWSER> effort=<this step's effort>`,
 `slots=<SLOTS> build=<WORKDIR/02-build.md> repoId=<REPO_ID>`, `phases=<the phases argument this
-workflow gives for the run>`, then `scoped`, plus `light` when the depth is `light` and `deep` when it is
+workflow gives for the run>` and `agents=<the agents argument it gives for the same run>`, then `scoped`, plus `light` when the depth is `light` and `deep` when it is
 `deep` (nothing more for `standard`). With `scoped`, its phases run only the scoped checks, since CI runs
 the full suites on the PR. With `slots=`, its verify phase takes a test slot around the end-to-end run
 and the full suite and its merge check around a heavy test run; its typecheck, lint and scoped unit runs
@@ -46,6 +46,15 @@ is not a gate return and is outside this budget: it gets its own fix pass and on
 start one more round on your own" does not apply to it. Where this workflow's review text below says its
 round-end intent check counts as a round (Thorough and Maximum), that text replaces this sentence: there
 a `does not match` is an ordinary round of the budget.{{end}}
+
+**Who runs each phase.** Each phase of the round is run by the agent its line names: a Team agent of the
+project, briefed by `/feature-review` with that agent's `instructions` (`agents=` gives one name per
+`phases=` token, in the same order), or a built-in role the Team has no agent for, briefed as the review
+skill briefs a phase with no agent of its own. The names are the human's pick on the Workflow page, never
+yours. A phase's span, its run report and its `agentName` carry its role (`spec`, `env`, `verify`, `hunt`,
+`refute`, `merge`), never the Team agent's name, so the board counts every phase of the round whoever ran
+it. The fix pass after a round that did not survive is run by the agent the `Between rounds` line names for it, briefed as
+the build step briefs the builder, with the round's findings.
 
 **Every phase this workflow lists for a round runs in every round.** None is skipped because the findings
 look obvious, the change looks small or a finding was already reproduced, and each phase posts its

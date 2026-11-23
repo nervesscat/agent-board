@@ -1007,7 +1007,7 @@ Only the human sets it (PATCH `{layout}`; an agent gets 403).
 
 A project's **workflow** is the delegation order its ticket agents follow from To do to hand-off:
 which steps run (claim, spec, build, gate, the review rounds, preview, the intent check, push, PR,
-CI, summary, hand-off), in what order, with which agent at which effort, how many review rounds a
+CI, summary, hand-off), in what order, with which Team agent at which effort, how many review rounds a
 ticket gets for its complexity, and what each step passes on to the next. It is data the board
 serves, not text in the skills: an agent calls `get_workflow` with the ticket's id (REST: `GET
 /api/projects/:id/workflow/effective?ticketId=`) and runs exactly the steps it lists, in that order;
@@ -1025,11 +1025,26 @@ answers 400.
   preset, set on the project's Workflow page (the menu entry after Team, a tree of every step, its
   sub-steps and what each hands on).
 - **Tweakable, per preset.** The order of the steps, which steps run, each step's effort (`auto`, which
-  follows the ticket's complexity, or `low`, `medium`, `high`), each step's hand-off instruction and the
-  review rounds per complexity (0 to 12). A tweak is saved per project and per preset and replaces
-  that preset's earlier one; "Reset this workflow" removes it. An agent, its model, a step's
-  sub-steps and the steps themselves are the preset's and cannot be edited, and only the human changes
-  any of it (an agent's write gets 403).
+  follows the ticket's complexity, or `low`, `medium`, `high`), the Team agent each step and each review
+  phase runs, and the review rounds per complexity (0 to 12). A tweak is saved per project and per
+  preset and replaces that preset's earlier one; "Reset this workflow" removes it, picked agents
+  included. The steps, their sub-steps, the hand-off wording and every procedure are the preset's and
+  cannot be edited: **no text is written in the workflow**, and only the human changes any of it (an
+  agent's write gets 403).
+- **Team agents.** A step that runs an agent (the spec, the build, the test-writing pass, the review
+  and its phases: environment, verify, each hunt, refute, merge check, the fix pass and the round's
+  intent check, and the intent check) runs one of the project's Team agents, by name. Left alone, a
+  node runs the Team agent named like its role (`spec`, `builder`, `runner`, `env`, `verify`, `hunt`,
+  `refute`, `merge`, `intent`), any casing, else the built-in agent of that role (a project with no
+  Team still has a workflow). The human picks another on the Workflow page (`agents` of a preset's
+  tweak, keyed by step id or by a review phase's id such as `review.hunt-a`): the name must be one of
+  the project's Team agents (a 400 otherwise), and a pick equal to the default is not kept. The
+  ticket agent briefs that agent with the instructions it has in the Team (`get_project` ->
+  `agents`), written only on the Team page, plus the project's instructions and the ticket's
+  context. If a picked agent is later renamed or deleted, the pick is kept and the step runs as if
+  none were picked (`teamAgent.missing`); an agent created again under that name restores it. A
+  step's span, run report and `agentName` always carry its **role** (`hunt`), never the Team agent's
+  name, so the board's counts of a review's phases do not change with the picks.
 - **Locked steps** cannot be turned off: claim, build, gate, push, PR, summary and hand-off, and the
   intent check on a ticket above low (it may be switched off for low tickets only). A step cannot be
   moved above one it depends on (build above spec, say), and claim stays first and hand-off last.
@@ -1040,7 +1055,8 @@ answers 400.
   ticket's preset or complexity.
 - **Reading it.** `GET /api/projects/:id/workflow/effective?ticketId=` (MCP `get_workflow`) answers the
   effective workflow with its `text`, the markdown an agent follows: the numbered steps with their
-  agent, effort, what each does, its hand-off and its procedure, and the review's phases per round.
+  Team agent, effort, what each does, its hand-off and its procedure, and the review's phases per
+  round with the Team agent of each (and the `agents=` argument to pass to `/feature-review`).
   Without a `ticketId`, `?preset=` and `?complexity=` choose what to show (the project's active preset
   and no complexity by default). A change made while an agent runs is read at its next relaunch.
 
@@ -1261,10 +1277,10 @@ one (`\t`, `\n`, `\r`, `\b`, `\f`) the string silently changes. `\u005c` survive
 | POST         | `/api/instructions/changes/:id/review` · `/revert`                                                                  | mark a change reviewed (409 once reverted) · put the instructions back as they were before it, recorded as the human's own change (409 when a later change stands or the text changed since); the human's                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 |              | `stallMinutes` on GET/PATCH `/api/projects/:id`                                                                     | how long an active ticket may go without a work-timeline event before it reads as stalled (30 until changed, 1 to 1440); the human's: an agent's PATCH is a 403                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 |              | `workStage` on GET/PATCH `/api/projects/:id`                                                                        | the key of the active stage work starts in: where `claim_ticket` and a status of `in_progress` or `active` put a ticket, and where a blocked ticket goes back once its last decision is answered; `null` (the default) is the first active stage, as is a chosen stage that is gone or no longer active; anything but an active stage's key or `null` is a 400; the human's (Settings → Stages, Work starts in): an agent's PATCH is a 403                                                                                                                                                                                                                                                                                                                                                                                |
-| GET          | `/api/projects/:id/workflow`                                                                                        | the project's workflow `{active, presets[]}`: the active preset's id and the four presets, each `{id, label, description, tweaked, tweaks, rounds, defaultRounds, order, steps[]}` with its steps resolved as a tree (sub-steps, locks, agent, effort, hand-off); a project with no git side is a 400 |
+| GET          | `/api/projects/:id/workflow`                                                                                        | the project's workflow `{active, team, presets[]}`: the active preset's id, the names of the project's Team agents (`team`, for the picker of a node) and the four presets, each `{id, label, description, tweaked, tweaks, rounds, defaultRounds, order, steps[]}` with its steps resolved as a tree (sub-steps, locks, `agent` (the role), `teamAgent` `{name, source, picked, missing}`, effort, hand-off); a project with no git side is a 400 |
 | PUT          | `/api/projects/:id/workflow`                                                                                        | `{preset}`: the preset the project's tickets follow (`light`, `standard`, `thorough` or `maximum`; anything else is a 400); the human's (an agent gets 403) |
 |              | `workflowPreset` on GET `/api/projects/:id` (and MCP `get_project`)                              | the active preset's id, `standard` until the human picks another; set it with PUT `/api/projects/:id/workflow`, never with PATCH |
-| PUT/DELETE   | `/api/projects/:id/workflow/:preset`                                                                                | `{order?, steps?, rounds?}` replaces that preset's saved tweaks (`steps`: `{enabled?, effort?, instructions?}` per step id; `rounds`: 0 to 12 per complexity; a locked step switched off, an unknown step, an order breaking a dependency or a value out of range is a 400 that saves nothing) · removes them (the preset as shipped; nothing to reset is not an error); the human's (an agent gets 403) |
+| PUT/DELETE   | `/api/projects/:id/workflow/:preset`                                                                                | `{order?, steps?, agents?, rounds?}` replaces that preset's saved tweaks (`steps`: `{enabled?, effort?}` per step id; `agents`: a Team agent's name per step id or review phase id; `rounds`: 0 to 12 per complexity; a locked step switched off, an unknown step or key (an instruction text is one), an agent that is not one of the project's Team agents or a node that runs none, an order breaking a dependency or a value out of range is a 400 that saves nothing) · removes them (the preset as shipped; nothing to reset is not an error); the human's (an agent gets 403) |
 | GET          | `/api/projects/:id/workflow/effective?ticketId=`                                                                    | the workflow a ticket's agent follows (MCP `get_workflow`), read by agents too: the ticket's own preset (`source` ticket) else the project's active one (`source` project), resolved for the ticket's complexity, with its `text`; a ticket of another project is refused. With no `ticketId`, `?preset=` and `?complexity=` choose what to show (`complexity` null when none) |
 | GET/POST     | `/api/projects/:id/agents` · PATCH/DELETE `/api/agents/:id`                                                         | the project's agents `{name, instructions, delegation, avatarId}` (writes are the human's); a ticket assigned to one is reserved                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | POST         | `/api/projects/:id/agents/defaults`                                                                                 | adds the default agents the project lacks (spec, builder, runner, env, verify, hunt, refute, merge, intent), each with instructions and delegation notes; the human's                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
