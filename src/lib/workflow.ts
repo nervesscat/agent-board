@@ -1450,6 +1450,13 @@ export function readCustomWorkflows(saved: unknown): CustomWorkflow[] {
   return out
 }
 
+/** JSON with the keys of every object sorted, so two tweaks with the same content read the same in any key order. */
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, v) =>
+    isRecord(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v,
+  )
+}
+
 // --- resolving ---
 
 /** Why a step is not run for this ticket. */
@@ -1745,8 +1752,7 @@ export function resolveWorkflow(
   const normalized = normalizeTweaks(source, saved)
   // A custom workflow always has its step list stored: it is tweaked when it differs from the one it was created with.
   const tweaked = source.custom
-    ? JSON.stringify(normalized) !==
-      JSON.stringify(normalizeTweaks(source, source.seed ?? { order: defaultOrder }))
+    ? stableJson(normalized) !== stableJson(normalizeTweaks(source, source.seed ?? { order: defaultOrder }))
     : normalized !== null
   return {
     preset: id,

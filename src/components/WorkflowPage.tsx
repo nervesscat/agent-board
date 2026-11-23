@@ -41,7 +41,15 @@ import {
   type PresetTweak,
   type WorkflowRef,
 } from '#/lib/workflow'
-import { tweakBody, withEffort, withEnabled, withAgent, withOrder, withRounds } from '#/lib/workflowEdit'
+import {
+  tweakBody,
+  withEffort,
+  withEnabled,
+  withAgent,
+  withOrder,
+  withRounds,
+  withoutStep,
+} from '#/lib/workflowEdit'
 import { findNode } from '#/lib/workflowGraph'
 import { COMPLEXITY_NAMES, roundsText } from '#/lib/workflowView'
 
@@ -186,7 +194,7 @@ export function WorkflowPage({
           edit((t) => {
             const next = removeStep(stepsOf(t), id)
             if (!next.ok) throw new Error(next.reason)
-            return withOrder(t, next.order)
+            return withoutStep(t, id, next.order)
           })
       : undefined,
   }
@@ -221,6 +229,9 @@ export function WorkflowPage({
     )
   const makeActive = () =>
     run(() => put<WorkflowOverview>(`/api/projects/${projectId}/workflow`, { preset: viewed }), 'Saved')
+  // The project's workflow is stored as Standard, so a pick that was deleted is not read as one any more.
+  const keepStandard = () =>
+    run(() => put<WorkflowOverview>(`/api/projects/${projectId}/workflow`, { preset: 'standard' }), 'Saved')
   const reset = () =>
     run(() => del<WorkflowOverview>(`/api/projects/${projectId}/workflow/${viewed}`), 'Reset')
   const isActive = viewed === active
@@ -270,11 +281,16 @@ export function WorkflowPage({
           className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200"
         >
           <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
-          <span>
+          <span className="flex-1">
             {data.fellBack
-              ? `The workflow this project followed was deleted, so it follows ${WORKFLOW_PRESET_DEFS.standard.label} now. Tickets that named it follow the project's workflow. Pick one below and press Use this workflow to choose again.`
+              ? `The workflow this project followed was deleted, so it follows ${WORKFLOW_PRESET_DEFS.standard.label} now. Tickets that named it follow the project's workflow. Keep ${WORKFLOW_PRESET_DEFS.standard.label} to dismiss this, or pick another workflow below and press Use this workflow.`
               : "That workflow is not one of this project's (it may have been deleted), so the project's own is shown."}
           </span>
+          {data.fellBack && (
+            <Button type="button" size="sm" variant="outline" data-keep-standard onClick={keepStandard}>
+              Keep {WORKFLOW_PRESET_DEFS.standard.label}
+            </Button>
+          )}
         </p>
       )}
 

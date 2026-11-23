@@ -77,6 +77,29 @@ describe('a custom workflow resolves like the preset it was copied from', () => 
   })
 })
 
+describe('whether a custom workflow differs from how it was made', () => {
+  it('does not depend on the order of the keys the settings were saved in', () => {
+    const order = [...WORKFLOW_PRESET_DEFS.thorough.steps]
+    const made = {
+      order,
+      steps: { preview: { enabled: false }, ci: { enabled: false }, build: { effort: 'high' as const } },
+    }
+    const { source } = copyOf('thorough', made)
+    const same = {
+      order,
+      steps: { build: { effort: 'high' as const }, ci: { enabled: false }, preview: { enabled: false } },
+    }
+    expect(resolveWorkflow(source, normalizeTweaks(source, made), 'mid', []).tweaked).toBe(false)
+    expect(resolveWorkflow(source, same, 'mid', []).tweaked).toBe(false)
+    // A real difference still shows.
+    const other = {
+      ...same,
+      steps: { ...same.steps, ci: { enabled: false }, preview: { effort: 'low' as const } },
+    }
+    expect(resolveWorkflow(source, other, 'mid', []).tweaked).toBe(true)
+  })
+})
+
 describe('the steps of a custom workflow', () => {
   const standard = [...WORKFLOW_PRESET_DEFS.standard.steps]
 

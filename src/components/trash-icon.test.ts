@@ -29,6 +29,7 @@ const TRIGGERS: Record<string, number> = {
   'components/ProjectSwitcher.tsx': 1,
   'components/RunsSettings.tsx': 1,
   'components/StagesEditor.tsx': 1,
+  'components/WorkflowCustom.tsx': 1,
   'routes/projects.$id.agents.tsx': 1,
   'routes/projects.$id.cleanup.tsx': 2,
   'routes/projects.$id.features.$ticketId.tsx': 1,

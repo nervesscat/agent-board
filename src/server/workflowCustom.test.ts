@@ -374,6 +374,70 @@ describe('the steps of a custom workflow', () => {
     expect(entry(saved.body, 'thorough').tweaked).toBe(false)
   })
 
+  it('removes a step through the body the page builds, whatever was saved for it', async () => {
+    const { removeStep } = await import('#/lib/workflow')
+    const { tweakBody, withoutStep } = await import('#/lib/workflowEdit')
+    const pid = await newProject()
+    await call('POST', `/api/projects/${pid}/agents`, { name: 'Quick', instructions: 'Spec.' })
+    await call('POST', `/api/projects/${pid}/agents`, { name: 'Sharp', instructions: 'Hunt.' })
+    const w = await duplicate(pid, 'Ours', 'thorough')
+    const order = await orderOf(pid, w)
+    const saved = await call('PUT', `/api/projects/${pid}/workflow/${w}`, {
+      order,
+      steps: { preview: { enabled: false }, tests: { effort: 'high' }, spec: { effort: 'low' } },
+      agents: { spec: 'Quick', 'review.hunt-a': 'Sharp' },
+    })
+    expect(saved.status).toBe(200)
+    for (const id of ['preview', 'tests', 'review'] as const) {
+      const current = entry((await call('GET', `/api/projects/${pid}/workflow`)).body, w)
+      const next = removeStep(current.order, id)
+      if (!next.ok) throw new Error(next.reason)
+      const res = await call(
+        'PUT',
+        `/api/projects/${pid}/workflow/${w}`,
+        tweakBody(withoutStep(current.tweaks, id, next.order)),
+      )
+      expect([id, res.status]).toEqual([id, 200])
+      expect(entry(res.body, w).order).not.toContain(id)
+    }
+    const left = entry((await call('GET', `/api/projects/${pid}/workflow`)).body, w)
+    expect(left.tweaks.steps).toEqual({ spec: { effort: 'low' } })
+    expect(left.tweaks.agents).toEqual({ spec: 'Quick' })
+    // The board itself stays strict: a body that still carries a setting for a step it removes is refused.
+    const stale = await call('PUT', `/api/projects/${pid}/workflow/${w}`, {
+      order: left.order.filter((id: string) => id !== 'spec'),
+      steps: { spec: { effort: 'low' } },
+    })
+    expect([stale.status, stale.body.error]).toEqual([400, 'steps: spec is not a step of the Ours workflow'])
+  })
+
+  it('does not read a workflow as changed because its settings were saved in another key order', async () => {
+    const pid = await newProject()
+    const preset = await call('PUT', `/api/projects/${pid}/workflow/thorough`, {
+      steps: { preview: { enabled: false }, ci: { enabled: false } },
+    })
+    expect(preset.status).toBe(200)
+    const w = await duplicate(pid, 'Ours', 'thorough')
+    const order = await orderOf(pid, w)
+    expect(entry((await call('GET', `/api/projects/${pid}/workflow`)).body, w).tweaked).toBe(false)
+    const swapped = await call('PUT', `/api/projects/${pid}/workflow/${w}`, {
+      order,
+      steps: { ci: { enabled: false }, preview: { enabled: false } },
+    })
+    expect(swapped.status).toBe(200)
+    expect(entry(swapped.body, w).tweaked).toBe(false)
+  })
+
+  it("makes Standard the project's workflow again after the one it followed was deleted", async () => {
+    const pid = await newProject()
+    const w = await duplicate(pid, 'Ours', 'standard')
+    await call('PUT', `/api/projects/${pid}/workflow`, { preset: w })
+    const gone = await call('DELETE', `/api/projects/${pid}/workflow/custom/${w}`)
+    expect([gone.body.active, gone.body.fellBack]).toEqual(['standard', { id: w }])
+    const kept = await call('PUT', `/api/projects/${pid}/workflow`, { preset: 'standard' })
+    expect([kept.body.active, kept.body.fellBack]).toEqual(['standard', null])
+  })
+
   it('refuses a Team agent on a review phase once the review is removed', async () => {
     const pid = await newProject()
     await call('POST', `/api/projects/${pid}/agents`, { name: 'Sharp', instructions: 'Hunt.' })

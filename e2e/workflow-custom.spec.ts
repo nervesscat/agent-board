@@ -211,6 +211,40 @@ test('a step of a kind it lacks is added where it belongs, and a step that is no
   expect(await labels(page)).toContain('Test-writing pass')
 })
 
+test('a step that has settings saved is removed too, and so is the review with its phases’ Team agents (C10)', async ({
+  page,
+  project,
+  human,
+}) => {
+  for (const name of ['Quick', 'Sharp'])
+    await ok(human.post(`/api/projects/${project.id}/agents`, { data: { name, instructions: 'Work.' } }))
+  await open(page, project.id)
+  const id = await create(page, 'Our flow', 'Thorough')
+  const order = (await overview(human, project.id)).presets.find((p) => p.id === id)!.order
+  await ok(
+    human.put(`/api/projects/${project.id}/workflow/${id}`, {
+      data: {
+        order,
+        steps: { preview: { enabled: false }, tests: { effort: 'high' }, spec: { effort: 'low' } },
+        agents: { spec: 'Quick', 'review.hunt-a': 'Sharp' },
+      },
+    }),
+  )
+  await open(page, project.id, `?preset=${id}`)
+  const panel = page.locator('[data-panel="side"]')
+  for (const step of ['preview', 'tests', 'review']) {
+    await node(page, step).click()
+    await panel.getByRole('button', { name: 'Remove step' }).click()
+    await expect(node(page, step)).toHaveCount(0)
+  }
+  const mine = (await overview(human, project.id)).presets.find((p) => p.id === id)!
+  expect(mine.order).not.toContain('review')
+  expect(mine.tweaks).toMatchObject({ steps: { spec: { effort: 'low' } }, agents: { spec: 'Quick' } })
+  expect(mine.tweaks?.steps).not.toHaveProperty('preview')
+  expect(mine.tweaks?.steps).not.toHaveProperty('tests')
+  expect(mine.tweaks?.agents).not.toHaveProperty('review.hunt-a')
+})
+
 test('a preset has no Add a step and no Remove step: only a workflow of the project’s own has steps to change (C6)', async ({
   page,
   project,
@@ -277,6 +311,13 @@ test('the project follows a workflow of its own, a ticket names one, and deletin
   await expect(cards(page).locator('[data-preset="standard"]')).toContainText('Active')
   const after = await overview(human, project.id)
   expect([after.active, after.fellBack]).toEqual(['standard', { id }])
+  // The notice is not a dead end: keeping Standard clears it, and it stays cleared on a reload.
+  await expect(page.locator('[data-workflow-notice]')).toContainText('Keep Standard to dismiss this')
+  await page.locator('[data-keep-standard]').click()
+  await expect(page.locator('[data-workflow-notice]')).toHaveCount(0)
+  expect((await overview(human, project.id)).fellBack).toBe(null)
+  await open(page, project.id)
+  await expect(page.locator('[data-workflow-notice]')).toHaveCount(0)
 
   // The ticket follows the project's workflow, and its Details card says it fell back.
   await page.goto(`/projects/${project.id}/features/${t.id}`)

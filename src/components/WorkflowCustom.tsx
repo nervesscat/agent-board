@@ -1,4 +1,4 @@
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { Pencil, Plus } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 
 import {
@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '#/components/ui/alert-dialog'
+import { TrashIcon } from '#/components/TrashIcon'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,
@@ -198,7 +199,7 @@ export function DeleteWorkflowButton({ name, onDelete }: { name: string; onDelet
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger render={<Button type="button" variant="outline" size="sm" data-delete-workflow />}>
-        <Trash2 data-icon="inline-start" /> Delete
+        <TrashIcon data-icon="inline-start" /> Delete
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>

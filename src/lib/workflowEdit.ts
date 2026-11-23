@@ -71,6 +71,34 @@ export const withOrder = (tweak: PresetTweak | null, order: readonly WorkflowSte
   order: [...order],
 })
 
+/**
+ * A step taken out of a custom workflow: the new step list, and nothing left of the step in the tweak (its
+ * switch and effort, the Team agent of its node, and for the review the Team agent of every phase of its
+ * round), since the board refuses a setting for a step the workflow does not have.
+ */
+export function withoutStep(
+  tweak: PresetTweak | null,
+  id: WorkflowStepId,
+  order: readonly WorkflowStepId[],
+): PresetTweak {
+  const next = withOrder(tweak, order)
+  if (next.steps && id in next.steps) {
+    const { [id]: _gone, ...rest } = next.steps
+    if (Object.keys(rest).length) next.steps = rest
+    else delete next.steps
+  }
+  if (next.agents) {
+    const kept = Object.fromEntries(
+      Object.entries(next.agents).filter(
+        ([node]) => node !== id && !(id === 'review' && node.startsWith('review.')),
+      ),
+    )
+    if (Object.keys(kept).length) next.agents = kept
+    else delete next.agents
+  }
+  return next
+}
+
 /** The body of the PUT for a tweak: only what is set, in the shape the board checks. */
 export function tweakBody(tweak: PresetTweak): PresetTweak {
   const body: PresetTweak = {}
