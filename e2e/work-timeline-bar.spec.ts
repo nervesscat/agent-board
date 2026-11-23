@@ -233,7 +233,7 @@ test('a human wait is amber and filled on the waiting agent’s row, not hatched
   await expect(bar.locator('[data-kind="human-overlay"]')).toHaveCount(0)
 })
 
-test('a segment opens its details in a popover by click, and by Enter from the keyboard', async ({
+test('a span without a report opens its facts and says so, by click and by Enter from the keyboard', async ({
   page,
   project,
   human,
@@ -259,6 +259,8 @@ test('a segment opens its details in a popover by click, and by Enter from the k
   await expect(details).toContainText('reviewer-sub-1')
   await expect(details).toContainText('via')
   await expect(details).toContainText('review round 2')
+  await expect(details).toContainText('Duration')
+  await expect(details).toContainText('No report for this run.')
   await page.keyboard.press('Escape')
   await expect(details).toHaveCount(0)
 
