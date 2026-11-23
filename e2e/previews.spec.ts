@@ -5,7 +5,7 @@ import net from 'node:net'
 import type { AddressInfo } from 'node:net'
 import path from 'node:path'
 
-import type { APIRequestContext, Page } from '@playwright/test'
+import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
 import type { ManagedPreview, ProjectPreview, ProjectPreviews, TicketFull, Workspace } from '#/lib/api'
 import { END_BUILD as END, e2eEnv, git } from './env'
@@ -122,6 +122,14 @@ const previewRows = (page: Page) =>
 
 const toast = (page: Page, text: string | RegExp) =>
   page.locator('[data-sonner-toast]').filter({ hasText: text })
+
+/**
+ * The Save of the form that holds `field`. Settings has more than one Save (the tailnet entrance's sits
+ * disabled beside it once that section has loaded), so "the Save on the page" is one or two depending on
+ * how soon the other section arrived.
+ */
+const save = (page: Page, field: Locator) =>
+  page.locator('form').filter({ has: field }).getByRole('button', { name: 'Save', exact: true })
 
 test('the Previews module opens from the sidebar, and says so when the project has none', async ({
   page,
@@ -435,7 +443,7 @@ test.describe('board-run previews and the preview limit', BOARD_RUNS, () => {
       const limit = page.getByLabel('Preview limit')
       await expect(limit).toHaveValue('8')
       await limit.fill('4')
-      await page.getByRole('button', { name: 'Save', exact: true }).click()
+      await save(page, limit).click()
       await expect(toast(page, 'Saved')).toBeVisible()
       await page.goto(`/projects/${project.id}/previews`)
       await expect(inUse(page)).toHaveText(/of 4 in use/)
@@ -443,7 +451,7 @@ test.describe('board-run previews and the preview limit', BOARD_RUNS, () => {
       // Out of range there too.
       await page.goto('/settings')
       await page.getByLabel('Preview limit').fill('33')
-      await page.getByRole('button', { name: 'Save', exact: true }).click()
+      await save(page, page.getByLabel('Preview limit')).click()
       await expect(page.locator('[data-sonner-toast][data-type="error"]')).toBeVisible()
       expect(await ok<{ previewLimit: number }>(human.get('/api/settings'))).toMatchObject({
         previewLimit: 4,

@@ -107,13 +107,52 @@ test('the Roadmap shows a labeled chart skeleton while it loads, then the chart'
   await expect(loading).toHaveCount(0)
 })
 
+test('the watcher keeps time on the page, so a placeholder comes only after its delay and is then seen', async ({
+  page,
+  project,
+  api,
+}) => {
+  await api.ticket({ title: 'Held ticket' })
+  await warm(page, features(project.id, 'board'))
+  const watch = await watchLoading(page)
+  // From here the test alone moves the page's clock, so what time has passed on the page is what it says.
+  await watch.still()
+  // The tickets answer is held back by the test: how long the board or the runner takes is no part of it.
+  let release!: () => void
+  const held = new Promise<void>((resolve) => (release = resolve))
+  await page.route(
+    (url) => url.pathname === `/api/projects/${project.id}/tickets` && url.search === '?parent=root',
+    async (route) => {
+      await held
+      await route.fallback()
+    },
+  )
+  await page.goto(features(project.id, 'board'))
+  await expect(page.getByRole('tab', { name: 'Board' })).toBeVisible()
+
+  // A little under the 150 ms a placeholder waits: none yet. A page that drew it at once, or after a delay
+  // a good deal shorter than 150 ms, fails here.
+  await page.clock.runFor(100)
+  expect(await watch.seen()).toEqual([])
+  // Past it, with the answer still on its way: the placeholder is drawn, and the watcher saw it.
+  await page.clock.runFor(80)
+  await expect.poll(watch.seen).toContain('Loading tickets…')
+  watch.resume()
+  release()
+  await expect(page.getByText('Held ticket')).toBeVisible()
+})
+
 test('a fast load of the Features page and the Roadmap draws no placeholder', async ({
   page,
   project,
   api,
 }) => {
   await api.ticket({ title: 'Quick ticket', status: 'in_progress' })
-  await warm(page, ...['board', 'list', 'archived'].map((view) => features(project.id, view)))
+  await warm(
+    page,
+    ...['board', 'list', 'archived'].map((view) => features(project.id, view)),
+    `/projects/${project.id}/roadmap`,
+  )
   const watch = await watchLoading(page)
 
   for (const view of ['board', 'list', 'archived']) {

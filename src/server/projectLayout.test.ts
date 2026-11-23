@@ -116,7 +116,7 @@ describe("a project's layout", () => {
       'overview.needsYou',
       'overview.agents',
       'overview.inProgress',
-      'overview.next',
+      'overview.lostContact',
       'overview.carryingOver',
       'overview.notes',
     ])

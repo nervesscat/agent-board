@@ -227,7 +227,8 @@ export async function infoOf(
 const CONTAINS_MEMO_MAX = 500
 const containsMemo = new Map<string, Promise<Set<string>>>()
 
-const refsKey = (refs: Refs) => {
+/** A fingerprint of every branch and its commit, local and origin's. */
+export const refsKey = (refs: Refs) => {
   const hash = crypto.createHash('sha1')
   for (const [name, sha] of refs.local) hash.update(`refs/heads/${name} ${sha}\n`)
   for (const [name, sha] of refs.remote) hash.update(`refs/remotes/origin/${name} ${sha}\n`)
@@ -581,7 +582,7 @@ async function guardOf(repoPath: string, git: RepoGit, key: (p: string) => strin
  * why, and to `using` with the ticket; each workspace path registered on one to `registered`; each
  * ticket, with its branch names and base chain, to `ticket`.
  */
-function workOf(
+export function workOf(
   rows: RepoRow[],
   keep: (name: string, why: string) => void,
   using: (name: string, ticketId: number) => void = () => {},
@@ -590,6 +591,16 @@ function workOf(
 ) {
   const rowIds = new Set(rows.map((r) => r.id))
   for (const projectId of new Set(rows.map((r) => r.projectId))) {
+    // `rows` were read before the report waited on git: a project deleted since has nothing left to keep,
+    // and reading its stages would seed them for a project that is gone (a foreign key error, a 500).
+    if (
+      !db
+        .select({ id: schema.projects.id })
+        .from(schema.projects)
+        .where(eq(schema.projects.id, projectId))
+        .get()
+    )
+      continue
     const stages = listStages(projectId)
     const projectRepos = listRepos(projectId)
     const all = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, projectId)).all()

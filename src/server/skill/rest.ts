@@ -78,6 +78,8 @@ export const TOOL_ROUTES: Record<string, string> = {
   get_ticket_git: 'GET /api/tickets/:id/git',
   cleanup_report: 'GET /api/projects/:id/cleanup',
   cleanup_delete: 'POST /api/projects/:id/cleanup/delete `{items[]}`',
+  wait_for_answer:
+    'GET /api/tickets/:id/answer?postId=&timeoutSeconds= (blocks until the answer or the timeout)',
   list_my_threads: 'GET /api/projects/:id/threads?since=',
   check_inbox: 'GET /api/projects/:id/inbox?since=',
   latest_actions: 'GET /api/projects/:id/latest-actions',

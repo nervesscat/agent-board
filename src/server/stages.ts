@@ -100,6 +100,17 @@ export function movePatch(
   return { ...startedPatch(stages, from, to, startedAt), ...(from !== to ? { rank: null } : {}) }
 }
 
+/** A ticket sent back from done is no longer approved: the approval was for the work it closed. */
+export function reopenPatch(
+  stages: Stage[],
+  from: string,
+  to: string,
+): { approvedAt?: null; approvedBy?: string; closedByApproval?: boolean } {
+  return kindOf(stages, from) === 'done' && kindOf(stages, to) !== 'done'
+    ? { approvedAt: null, approvedBy: '', closedByApproval: false }
+    : {}
+}
+
 /**
  * The stage an agent or the UI named: its key, else its name (any casing), else a kind: `open` (and
  * `todo`) is the start stage, `active` (and `in_progress`) the work stage (`work`, the first active
