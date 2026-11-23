@@ -1772,6 +1772,117 @@ describe('0051_agent_cards', () => {
   })
 })
 
+describe('0060_lane_verdicts_to_stages', () => {
+  it('moves approved lanes to Approved and clears every lane call, leaving top-level tickets alone', () => {
+    const sqlite = databaseAt('0059_prs_involves_me')
+    const project = (name: string) =>
+      Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run(name).lastInsertRowid)
+    const stage = sqlite.prepare(
+      'INSERT INTO stages (project_id, key, name, kind, color, position) VALUES (?, ?, ?, ?, ?, ?)',
+    )
+    const layout = [
+      ['todo', 'To do', 'open'],
+      ['in_progress', 'In progress', 'active'],
+      ['review', 'In review', 'review'],
+      ['approved', 'Approved', 'review'],
+      ['done', 'Done', 'done'],
+      ['cancelled', 'Cancelled', 'cancelled'],
+    ]
+    const withApproved = project('with approved')
+    layout.forEach((s, i) => stage.run(withApproved, ...s, 'gray', i))
+    // No Approved stage here: its lanes stay where they are.
+    const without = project('without approved')
+    layout.filter((s) => s[0] !== 'approved').forEach((s, i) => stage.run(without, ...s, 'gray', i))
+
+    const insert = sqlite.prepare(
+      `INSERT INTO tickets (project_id, parent_id, title, created_by, status, rank, approved_at, approved_by,
+         disapproved_at, disapproved_by, closed_by_approval) VALUES (?, ?, ?, 'claude', ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    const at = '2026-10-01T10:00:00.000Z'
+    const add = (
+      pid: number,
+      parent: number | null,
+      title: string,
+      status: string,
+      call: 'approved' | 'disapproved' | 'closed' | null,
+    ) =>
+      Number(
+        insert.run(
+          pid,
+          parent,
+          title,
+          status,
+          3,
+          call === 'approved' || call === 'closed' ? at : null,
+          call === 'approved' || call === 'closed' ? 'enrique' : '',
+          call === 'disapproved' ? at : null,
+          call === 'disapproved' ? 'enrique' : '',
+          call === 'closed' ? 1 : 0,
+        ).lastInsertRowid,
+      )
+    const parent = add(withApproved, null, 'Parent', 'in_progress', null)
+    const lane = (title: string, status: string, call: 'approved' | 'disapproved' | 'closed' | null) =>
+      add(withApproved, parent, title, status, call)
+    const lanes = {
+      todo: lane('approved in To do', 'todo', 'approved'),
+      active: lane('approved in progress', 'in_progress', 'approved'),
+      review: lane('approved in review', 'review', 'approved'),
+      inApproved: lane('approved in Approved', 'approved', 'approved'),
+      done: lane('approved done', 'done', 'approved'),
+      closed: lane('closed on its approval', 'done', 'closed'),
+      cancelled: lane('approved then cancelled', 'cancelled', 'approved'),
+      rejected: lane('rejected', 'cancelled', 'disapproved'),
+      plain: lane('no call', 'in_progress', null),
+    }
+    const otherParent = add(without, null, 'Other parent', 'in_progress', null)
+    const noStage = add(without, otherParent, 'approved, no Approved stage', 'review', 'approved')
+    // A PR review (a lane tagged PR) keeps its approval and its place.
+    const prReview = add(withApproved, parent, 'PR review', 'done', 'closed')
+    sqlite.prepare('UPDATE tickets SET tags = \'["PR"]\' WHERE id = ?').run(prReview)
+    // Top-level tickets keep their approval, their stage and their place.
+    const topApproved = add(withApproved, null, 'Top approved', 'todo', 'approved')
+    const topRejected = add(withApproved, null, 'Top rejected', 'cancelled', 'disapproved')
+    const topClosed = add(withApproved, null, 'Top closed', 'done', 'closed')
+
+    const read = (id: number) =>
+      sqlite.prepare('SELECT * FROM tickets WHERE id = ?').get(id) as Record<string, unknown>
+    const before = [topApproved, topRejected, topClosed, parent, otherParent, prReview].map(read)
+    const others = sqlite.prepare('SELECT * FROM stages ORDER BY id').all()
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    const moved = (id: number) => ({ status: read(id).status, rank: read(id).rank })
+    // Approved lanes that were still open or in review move to Approved, unplaced.
+    for (const id of [lanes.todo, lanes.active, lanes.review])
+      expect(moved(id)).toEqual({ status: 'approved', rank: null })
+    // Already in Approved or Done, or cancelled afterwards, or in a project with no Approved stage: kept.
+    expect(moved(lanes.inApproved)).toEqual({ status: 'approved', rank: 3 })
+    expect(moved(lanes.done)).toEqual({ status: 'done', rank: 3 })
+    expect(moved(lanes.closed)).toEqual({ status: 'done', rank: 3 })
+    expect(moved(lanes.cancelled)).toEqual({ status: 'cancelled', rank: 3 })
+    expect(moved(lanes.rejected)).toEqual({ status: 'cancelled', rank: 3 })
+    expect(moved(lanes.plain)).toEqual({ status: 'in_progress', rank: 3 })
+    expect(moved(noStage)).toEqual({ status: 'review', rank: 3 })
+
+    // No lane keeps a call, whichever stage it ended in.
+    for (const id of [...Object.values(lanes), noStage])
+      expect(read(id)).toMatchObject({
+        approved_at: null,
+        approved_by: '',
+        disapproved_at: null,
+        disapproved_by: '',
+        closed_by_approval: 0,
+      })
+    // Top-level tickets, parents included, and the PR review are as they were: every column.
+    expect([topApproved, topRejected, topClosed, parent, otherParent, prReview].map(read)).toEqual(before)
+    expect(read(prReview)).toMatchObject({ closed_by_approval: 1, approved_by: 'enrique' })
+    expect(read(topApproved)).toMatchObject({ approved_by: 'enrique', status: 'todo' })
+    expect(read(topClosed)).toMatchObject({ closed_by_approval: 1 })
+    expect(sqlite.prepare('SELECT * FROM stages ORDER BY id').all()).toEqual(others)
+    sqlite.close()
+  })
+})
+
 describe('0057_alerts', () => {
   it('adds the alert tables beside the rows a board already has, and keeps a board-wide alert unique', () => {
     const sqlite = databaseAt('0056_closed_by_approval')

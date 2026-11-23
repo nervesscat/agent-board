@@ -401,10 +401,11 @@ auto}`. Merged is left out: merging is the human's, except on a ticket in Approv
    `done` is the human's call unless the instructions say otherwise, or the ticket is in Approved,
    where an orchestrator merges the PR and then moves it (below). A ticket with lanes goes to
    `review` once its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was
-   dropped: say why in a comment). The human's verdict on a lane or ticket is `approvedAt` /
+   dropped: say why in a comment). The human's verdict on a top-level ticket is `approvedAt` /
    `approvedBy` or `disapprovedAt` / `disapprovedBy` (disapproving also cancels it; approving a
-   ticket tagged `PR`, a PR review, also moves it to `done`): read it, never set it, and ask in the
-   thread before touching an approved or disapproved lane. Archiving is the human's too:
+   ticket tagged `PR`, a PR review, also moves it to `done`): read it, never set it. A lane has no
+   verdict: its stage is the call (Approved or Done is accepted, Cancelled is dropped), so ask in
+   its thread before moving one of those. Archiving is the human's too:
    `archivedAt` set means the ticket (and its lanes) is finished and off the board; `list_tickets`
    leaves those out unless `archived: "include"` or `"only"`. An agent may ask for it, never do it:
    `request_archive` (MCP; REST `POST /api/projects/:id/tickets/archive-request` `{ticketIds, as?}`)
