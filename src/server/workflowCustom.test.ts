@@ -214,6 +214,13 @@ describe('making, renaming and deleting a custom workflow', () => {
     expect(bad.body.error).toContain('from: one of light, standard, thorough, maximum, custom-')
     expect((await call('POST', `/api/projects/${pid}/workflow/custom`, { name: 'Fine' })).status).toBe(400)
     expect((await call('GET', `/api/projects/${pid}/workflow`)).body.presets).toHaveLength(5)
+    // The joiners of a Persian word stay as typed, while the marks that draw nothing go.
+    const persian = await call('POST', `/api/projects/${pid}/workflow/custom`, {
+      name: 'گردش\u200cکار\u200b',
+      from: 'light',
+    })
+    expect(persian.status).toBe(201)
+    expect(persian.body.presets.map((p: { label: string }) => p.label)).toContain('گردش\u200cکار')
   })
 
   it('renames a custom workflow, refuses a taken name, and leaves the presets as they are', async () => {

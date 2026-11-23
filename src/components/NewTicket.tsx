@@ -345,7 +345,7 @@ export function NewTicket({
             {/* A lane follows its parent's workflow; the workflow module is for projects with a git side. It goes under
                 Stage and Complexity, in the room Tags' suggestions leave beside them, so it adds no row. */}
             {hasWorkflow && (
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <Label htmlFor="workflow">Workflow</Label>
                 <WorkflowSelect
                   id="workflow"
@@ -353,7 +353,7 @@ export function NewTicket({
                   value={workflow}
                   onChange={setWorkflow}
                   size="default"
-                  className="w-full"
+                  className="w-full min-w-0"
                 />
               </div>
             )}

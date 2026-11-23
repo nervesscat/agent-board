@@ -168,6 +168,19 @@ describe('the steps of a custom workflow', () => {
     }
   })
 
+  it('says what stands in the way when a step has no place in the order', () => {
+    // Intent before the Gate: Review and Preview must come before Intent, which cannot happen after the Gate.
+    const odd: WorkflowStepId[] = ['claim', 'build', 'intent', 'gate', 'push', 'pr', 'summary', 'handoff']
+    const r = addStep(odd, 'review')
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.reason).toContain('review cannot be added to this order')
+    expect(r.reason).toContain('intent must come after')
+    // Moving Intent below the Gate makes room.
+    const fixed = addStep(['claim', 'build', 'gate', 'intent', 'push', 'pr', 'summary', 'handoff'], 'review')
+    expect(fixed.ok).toBe(true)
+  })
+
   it('places a kind after the steps that come before it even when the order was changed', () => {
     const r = addStep(
       ['claim', 'build', 'gate', 'preview', 'review', 'intent', 'push', 'pr', 'summary', 'handoff'],
@@ -299,6 +312,10 @@ describe('naming a custom workflow', () => {
     expect(customNameProblem('Our\u200b flow\u0000', [{ name: 'our flow' }])).toMatchObject({ ok: false })
     expect(customNameProblem('Our\u202e flow', [])).toEqual({ ok: true, name: 'Our flow' })
     expect(customNameProblem('Our\tflow\nhere', [])).toEqual({ ok: true, name: 'Our flow here' })
+    // The joiners are part of words and emoji sequences, and stay as typed.
+    expect(customNameProblem('گردش\u200cکار', [])).toEqual({ ok: true, name: 'گردش\u200cکار' })
+    const family = '\u{1F468}\u200d\u{1F469}\u200d\u{1F467}'
+    expect(customNameProblem(`Our ${family}`, [])).toEqual({ ok: true, name: `Our ${family}` })
     // The limit counts the cleaned name.
     expect(customNameProblem(`${'x'.repeat(60)}\u200b`, [])).toMatchObject({ ok: true })
     expect(customNameProblem(`${'x'.repeat(61)}\u200b`, [])).toMatchObject({ ok: false })

@@ -1131,7 +1131,13 @@ export function addStep(
     const next = [...order.slice(0, at), id, ...order.slice(at)]
     if (!customOrderProblem(next)) return { ok: true, order: next }
   }
-  return { ok: false, reason: `${id} has no place in this workflow's order` }
+  // No place: say what stands in the way, from the nearest place the step could go in.
+  const near = Math.min(Math.max(preferred, 1), order.length - 1)
+  const blocked = customOrderProblem([...order.slice(0, near), id, ...order.slice(near)])
+  return {
+    ok: false,
+    reason: `${id} cannot be added to this order${blocked ? `: ${blocked}. Move that step first` : ''}`,
+  }
 }
 
 /** The order without a step, or why it cannot go: a locked step stays, and so does one that is not there. */
@@ -1145,12 +1151,16 @@ export function removeStep(
   return { ok: true, order: order.filter((x) => x !== id) }
 }
 
-/** The ranges of characters that draw nothing: control (tab and line breaks aside: those are spaces), zero-width, bidi and byte-order marks. */
+/**
+ * The ranges of characters that draw nothing: control (tab and line breaks aside: those are spaces), zero-width,
+ * bidi and byte-order marks. The joiners (U+200C, U+200D) stay: they are part of Persian words and emoji sequences.
+ */
 const INVISIBLE: readonly (readonly [number, number])[] = [
   [0x00, 0x08],
   [0x0e, 0x1f],
   [0x7f, 0x9f],
-  [0x200b, 0x200f],
+  [0x200b, 0x200b],
+  [0x200e, 0x200f],
   [0x202a, 0x202e],
   [0x2060, 0x2064],
   [0x2066, 0x2069],

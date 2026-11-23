@@ -447,9 +447,19 @@ test('a name of sixty characters with no break wraps where it is shown: the page
   expect(await scrollsSideways(page), 'with the rename dialog open').toBe(false)
   await page.keyboard.press('Escape')
 
+  // The dialog clips what overflows it, so the page check cannot see it: the picker's own box is compared with
+  // the box that holds it.
+  const pickerInside = (page: Page, within: string) =>
+    page.evaluate((sel) => {
+      const picker = document.querySelector<HTMLElement>('#workflow')!.getBoundingClientRect()
+      const holder = document.querySelector<HTMLElement>(sel)!.getBoundingClientRect()
+      return picker.left >= holder.left - 0.5 && picker.right <= holder.right + 0.5
+    }, within)
+
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   await expect(page.locator('[data-workflow-line]')).toContainText(`Follows the ${long} workflow`)
   expect(await scrollsSideways(page), 'the Details card').toBe(false)
+  expect(await pickerInside(page, 'main'), 'the Details picker inside the page').toBe(true)
 
   await page.goto(`/projects/${project.id}/features`)
   await page.getByRole('button', { name: 'New ticket' }).click()
@@ -458,6 +468,17 @@ test('a name of sixty characters with no break wraps where it is shown: the page
   await page.getByRole('option', { name: long, exact: true }).click()
   await expect(dialog.getByRole('combobox', { name: 'Workflow' })).toContainText('WWWW')
   expect(await scrollsSideways(page), 'the new-ticket dialog').toBe(false)
+  expect(await pickerInside(page, '[role="dialog"]'), 'the picker inside the new-ticket dialog').toBe(true)
+  // Its neighbours are not stretched with it either.
+  expect(
+    await page.evaluate(() => {
+      const dialogBox = document.querySelector('[role="dialog"]')!.getBoundingClientRect()
+      return [...document.querySelectorAll<HTMLElement>('[role="dialog"] [role="combobox"]')].every(
+        (c) => c.getBoundingClientRect().right <= dialogBox.right + 0.5,
+      )
+    }),
+    'every picker of the dialog inside it',
+  ).toBe(true)
 
   await page.setViewportSize({ width: 1280, height: 900 })
   await open(page, project.id, `?preset=${id}`)
