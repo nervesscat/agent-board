@@ -15,6 +15,7 @@ test('Home and Overview sum up the work: what needs you, in progress, done today
   const yesterday = await api.ticket({ title: 'Started yesterday', status: 'in_progress' })
   startedAt(yesterday.id, yesterdayNoon())
   const review = await api.ticket({ title: 'Ready for a look', status: 'review' })
+  startedAt(review.id, yesterdayNoon())
   const shipped = await api.ticket({ title: 'Shipped', status: 'todo' })
   await ok(human.patch(`/api/tickets/${shipped.id}`, { data: { status: 'done' } }))
   const asking = await api.ticket({ title: 'Pick a storage', status: 'in_progress' })
@@ -72,11 +73,13 @@ test('Home and Overview sum up the work: what needs you, in progress, done today
   await expect(link(nextUp, shipped)).toHaveCount(0)
   await expect(nextUp).toContainText('1 blocked')
 
-  // Only what was already in progress before today carries over.
+  // Only what was already in progress before today carries over, and of that only what is blocked or in
+  // review: a ticket that started yesterday and is still being worked stays out.
   const carrying = section(page, 'Carrying over')
-  await expect(link(carrying, yesterday)).toBeVisible()
+  await expect(link(carrying, review)).toBeVisible()
+  await expect(link(carrying, yesterday)).toHaveCount(0)
   await expect(link(carrying, today)).toHaveCount(0)
-  const carried = carrying.getByRole('listitem').filter({ hasText: 'Started yesterday' })
+  const carried = carrying.getByRole('listitem').filter({ hasText: 'Ready for a look' })
   await expect(carried).toContainText('1 day in progress')
 
   // Once the human answers, it no longer waits on them.

@@ -73,6 +73,8 @@ const timeline = (more: Partial<WorkTimeline> = {}): WorkTimeline => ({
   handoffs: [],
   marks: [],
   blockedStretches: [],
+  reviewStretches: [],
+  humanStretches: [],
   totals: { workingMs: 0, waitingMs: 0, blockedOnHumanMs: 0 },
   lastSignalAt: iso('10:00'),
   lastWordAt: iso('10:00'),
@@ -212,16 +214,17 @@ describe('delegation and hand-offs', () => {
 })
 
 describe('the axis and ticks', () => {
-  it('starts at the first agent event, and a ticket created earlier marks its creation', () => {
+  it('starts at the creation, the wait before the first agent event a block of its own', () => {
     const t = timeline({
       start: iso('09:00'),
       spans: [span(1, 'builder', 'builder', '09:12', '09:40')],
       end: iso('09:40'),
     })
     const axis = axisFor(t, ms('09:40'))
-    expect(axis.start).toBe(ms('09:12'))
+    expect(axis.start).toBe(ms('09:00'))
     const chart = buildChart(t, ms('09:40'))
-    expect(chart.created).toEqual({ minutes: 12, left: 0 })
+    expect(chart.bands.map((b) => b.label)).toEqual(['Waiting to start'])
+    expect(chart.created).toBeNull()
   })
 
   it('has no creation mark for a lead under a minute, even one of 59 seconds', () => {
@@ -311,15 +314,17 @@ describe('segments', () => {
     expect(packLanes([])).toEqual({ lane: [], count: 0 })
   })
 
-  it('draws the blocked stages as bands, and clips them to the axis', () => {
+  it('draws the blocked stages as fixed blocks, and clips them to the axis', () => {
     const t = timeline({
-      spans: [span(1, 'a', 'a', '10:00', '10:30')],
+      spans: [span(1, 'a', 'a', '10:00', '10:10'), span(2, 'a', 'a', '10:20', '10:30')],
       blockedStretches: [{ start: iso('10:10'), end: iso('10:20') }],
       end: iso('10:30'),
     })
     const chart = buildChart(t, ms('10:30'))
     expect(chart.bands).toHaveLength(1)
-    expect(chart.bands[0]!.seg.left).toBeCloseTo(1 / 3, 2)
+    // The 10 minutes of blocked time take a fixed 24: the axis is 20 real minutes plus the block.
+    expect(chart.bands[0]!.seg.left).toBeCloseTo(10 / 44, 4)
+    expect(chart.bands[0]!.seg.width).toBeCloseTo(24 / 44, 4)
   })
 })
 
@@ -365,9 +370,8 @@ describe('durations', () => {
   })
 })
 
-describe('the creation mark', () => {
-  it('measures from the creation to the first agent event, on a window that starts after the creation', () => {
-    // Created three days before the window's end; the first agent event 71 hours after the creation.
+describe('waiting to start', () => {
+  it('is a labelled block from the creation to the first agent event, and the axis begins at the creation', () => {
     const created = Date.parse('2026-10-17T10:00:00.000Z')
     const firstWork = created + 71 * 60 * MIN
     const t = timeline({
@@ -375,34 +379,71 @@ describe('the creation mark', () => {
       spans: [span(1, 'builder', 'builder', new Date(firstWork).toISOString().slice(11, 16), '23:00')],
       end: iso('23:00'),
     })
-    // The window opens two days before the creation's first event: the creation is inside it.
-    const win = { start: new Date(created - 2 * 24 * 60 * MIN).toISOString(), end: iso('23:00') }
-    const chart = buildChart(t, ms('23:00'), win)
-    expect(chart.created?.minutes).toBe(71 * 60)
-    expect(chart.created?.left).toBeCloseTo(
-      (created - Date.parse(win.start)) / (Date.parse(win.end) - Date.parse(win.start)),
-      6,
-    )
+    const chart = buildChart(t, ms('23:00'))
+    expect(chart.axis.start).toBe(created)
+    expect(chart.bands.map((b) => [b.kind, b.label, b.start, b.end])).toEqual([
+      ['start', 'Waiting to start', created, firstWork],
+    ])
+    // The block is a fixed length however long the wait: the work after it keeps its scale.
+    expect(chart.bands[0]!.seg.left).toBe(0)
+    expect(chart.created).toBeNull()
+    expect(chart.summary).toContain('waiting to start 2 d 23 h')
   })
 
-  it('is pinned to the left edge when the creation is before the window', () => {
+  it('draws the creation mark instead when the window starts after the creation and none of the wait is on it', () => {
+    const t = timeline({
+      start: iso('08:00'),
+      spans: [span(1, 'builder', 'builder', '10:00', '10:30')],
+      end: iso('10:30'),
+    })
+    const chart = buildChart(t, ms('10:30'), { start: iso('10:00'), end: iso('10:30') })
+    expect(chart.bands).toHaveLength(0)
+    expect(chart.created).toEqual({ minutes: 120, left: 0 })
+  })
+
+  it('is a block cut by the window, still labelled, when the window starts inside the wait', () => {
     const t = timeline({
       start: iso('08:00'),
       spans: [span(1, 'builder', 'builder', '10:00', '10:30')],
       end: iso('10:30'),
     })
     const chart = buildChart(t, ms('10:30'), { start: iso('09:30'), end: iso('10:30') })
-    expect(chart.created).toEqual({ minutes: 120, left: 0 })
+    expect(chart.bands.map((b) => b.label)).toEqual(['Waiting to start'])
+    expect(chart.created).toBeNull()
   })
 
-  it('is at the creation on a window that starts before it', () => {
+  it('has no block for a lead under a minute', () => {
+    const created = Date.parse('2026-10-17T10:00:00.000Z')
     const t = timeline({
-      start: iso('09:50'),
-      spans: [span(1, 'builder', 'builder', '10:00', '10:30')],
-      end: iso('10:30'),
+      start: new Date(created).toISOString(),
+      spans: [span(1, 'builder', 'builder', new Date(created + 59_000).toISOString(), '23:00')],
+      end: iso('23:00'),
     })
-    const chart = buildChart(t, ms('10:30'), { start: iso('09:00'), end: iso('10:30') })
-    expect(chart.created?.minutes).toBe(10)
-    expect(chart.created?.left).toBeCloseTo(50 / 90, 6)
+    expect(buildChart(t, ms('23:00')).bands).toHaveLength(0)
+  })
+})
+
+describe('one row per agent', () => {
+  it('joins an agent recorded under its short name and under its full name', () => {
+    const t = timeline({
+      spans: [
+        span(1, 'intent', 'team/ticket-7', '10:00', '10:10'),
+        span(2, 'team/ticket-7/intent', 'team/ticket-7', '10:20', '10:30'),
+        span(3, 'team/ticket-7', 'team/ticket-7', '09:50', '09:55'),
+      ],
+      handoffs: [handoff(4, 'team/ticket-7', 'team/ticket-7/intent', '10:20')],
+      waits: [wait(5, 'team/ticket-7/intent', '10:12', '10:15', { on: 'intent' })],
+    })
+    const chart = buildChart(t, ms('11:00'))
+    expect(chart.rows.map((r) => r.agent)).toEqual(['team/ticket-7', 'intent'])
+    expect(chart.rows[1]!.items).toHaveLength(3)
+    expect(chart.rows[1]!.parent).toBe('team/ticket-7')
+  })
+
+  it('leaves a full name alone when its short form is not an agent of the ticket', () => {
+    const t = timeline({
+      spans: [span(1, 'team/ticket-7/intent', 'team/ticket-7', '10:00', '10:10')],
+    })
+    expect(buildChart(t, ms('11:00')).rows.map((r) => r.agent)).toEqual(['team/ticket-7/intent'])
   })
 })

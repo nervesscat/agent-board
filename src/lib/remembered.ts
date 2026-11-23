@@ -1,5 +1,5 @@
 import { type AnyRouter, useRouter } from '@tanstack/react-router'
-import { useEffect } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 
 /**
  * A choice a page keeps in its URL (so the server renders it, a link shares it and a reload keeps
@@ -63,18 +63,51 @@ function arrived(router: Moving) {
   )
 }
 
+/** Choices kept in memory too, for a browser whose storage is unavailable (they last until reload). */
+const memory = new Map<string, string>()
+const listeners = new Set<() => void>()
+
+function read(key: string): string | null {
+  try {
+    const saved = localStorage.getItem(key)
+    if (saved !== null) return saved
+  } catch {}
+  return memory.get(key) ?? null
+}
+
 /** The choice this browser remembers, if it is one of `allowed`. Only after mount (see above). */
 export function recall<T extends string>(key: string, allowed: readonly T[]): T | undefined {
-  let saved: string | null = null
-  try {
-    saved = localStorage.getItem(key)
-  } catch {}
+  const saved = read(key)
   return allowed.find((v) => v === saved)
 }
 
-/** Remembers a choice in this browser; storage can be unavailable, and then it is not remembered. */
+/** Remembers a choice in this browser; storage can be unavailable, and then it lasts until reload. */
 export function remember(key: string, value: string) {
+  memory.set(key, value)
   try {
     localStorage.setItem(key, value)
   } catch {}
+  for (const notify of listeners) notify()
+}
+
+function subscribe(notify: () => void) {
+  listeners.add(notify)
+  // Another tab of this browser changed what it remembers.
+  window.addEventListener('storage', notify)
+  return () => {
+    listeners.delete(notify)
+    window.removeEventListener('storage', notify)
+  }
+}
+
+/**
+ * The choice this browser remembers, as it changes (null: none). The server, and the browser's first
+ * render, see none, so the page matches the server's and fills in right after.
+ */
+export function useRemembered(key: string): string | null {
+  return useSyncExternalStore(
+    subscribe,
+    () => read(key),
+    () => null,
+  )
 }

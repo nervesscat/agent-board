@@ -143,6 +143,7 @@ const ghPr = (number: number, head: string, mergedAt: string | null): MyGhPr => 
   reviewRequests: [],
   requested: false,
   assigned: false,
+  involvesMe: true,
 })
 
 function activeTicket(pid: number, title = 'work') {
@@ -965,6 +966,23 @@ describe('what the board records itself', () => {
     const { timeline } = work.ticketTimeline(t.id)
     expect(timeline.blockedStretches).toHaveLength(1)
     expect(Math.round(timeline.totals.blockedOnHumanMs / MIN)).toBe(30)
+  })
+
+  it('review stretches: time in review, joined across Approved, and still open while in review', async () => {
+    const pid = newProject()
+    const t = activeTicket(pid)
+    features.updateTicket(t.id, { status: 'review' }, HUMAN)
+    age(t.id, 30)
+    features.updateTicket(t.id, { status: 'in_progress' }, HUMAN)
+    expect(work.ticketTimeline(t.id).timeline.reviewStretches).toHaveLength(1)
+    features.updateTicket(t.id, { status: 'review' }, HUMAN)
+    age(t.id, 10)
+    const { timeline } = work.ticketTimeline(t.id)
+    expect(timeline.reviewStretches).toHaveLength(2)
+    const open = timeline.reviewStretches[1]!
+    expect(open.end).toBe(timeline.end)
+    expect(timeline.live).toBe(true)
+    expect(timeline.blockedStretches).toEqual([])
   })
 
   it('a stage event for the tickets a deleted stage moves', async () => {

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowUp, Folder, FolderGit2, Home } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
+import { DelayedLoading } from '#/components/Loading'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,
@@ -12,6 +13,7 @@ import {
   DialogTitle,
 } from '#/components/ui/dialog'
 import { Input } from '#/components/ui/input'
+import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, type DirListing } from '#/lib/api'
 
@@ -35,7 +37,7 @@ export function FolderPicker({
   useEffect(() => {
     if (open) setDir(start ?? '')
   }, [open, start])
-  const { data, error, isFetching } = useQuery({
+  const { data, error, isFetching, isPending } = useQuery({
     queryKey: ['fs-dirs', dir],
     queryFn: () => get<DirListing>(`/api/fs/dirs?path=${encodeURIComponent(dir)}`),
     enabled: open,
@@ -105,6 +107,16 @@ export function FolderPicker({
           className={`h-72 overflow-y-auto rounded-md border p-1 ${isFetching ? 'opacity-60' : ''}`}
           aria-label="Folders"
         >
+          {isPending && !error && (
+            <DelayedLoading label="Loading folders…" className="space-y-1">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex items-center gap-2 px-2 py-1">
+                  <Skeleton className="size-4 shrink-0" />
+                  <Skeleton className="h-4 w-1/2" />
+                </div>
+              ))}
+            </DelayedLoading>
+          )}
           {data?.entries.length === 0 && (
             <li className="p-2 text-sm text-muted-foreground">No folders here.</li>
           )}
