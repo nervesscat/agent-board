@@ -88,7 +88,8 @@ export function autoPhaseRules(f: AutoFacts): AutoTicks {
   }
 }
 
-const ticked = (done: boolean) => (done ? { done, blocked: false, blockedReason: '' } : { done })
+const ticked = (done: boolean) =>
+  done ? { done, blocked: false, blockedReason: '', blockedAt: null } : { done }
 
 /** Bump a ticket and its parents, as a manual tick does. */
 function touch(ticketId: number) {

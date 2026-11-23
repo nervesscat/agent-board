@@ -88,6 +88,7 @@ const ghPr = (number: number, over: Partial<MyGhPr> = {}): MyGhPr => ({
   comments: [],
   requested: false,
   assigned: false,
+  involvesMe: true,
   ...over,
 })
 
@@ -1086,6 +1087,92 @@ describe('PR tickets', () => {
     found = [theirs(41)]
     await prs.refreshPrs(projectId)
     expect((await storedPr(projectId, 41)).ticket).toMatchObject({ status: 'todo' })
+  })
+})
+
+describe('PRs that involve me not (All PRs)', () => {
+  const stranger = (number: number, over: Partial<MyGhPr> = {}) =>
+    theirs(number, { requested: false, assigned: false, involvesMe: false, ...over })
+
+  it("stores every open PR, a stranger's as to review and not involving me, and flips the flag both ways", async () => {
+    const { projectId } = await queueProject('all-prs-flag')
+    found = [theirs(1, { requested: true }), stranger(2)]
+    const first = await prs.listPrs(projectId, { refresh: true })
+    expect(first.map((p) => [p.number, p.involvesMe]).sort()).toEqual([
+      [1, true],
+      [2, false],
+    ])
+    expect((await storedPr(projectId, 2)).row).toMatchObject({
+      open: true,
+      involvesMe: false,
+      waitingOn: 'me',
+      requested: false,
+      reviewStage: 'pending',
+    })
+    expect(first.find((p) => p.number === 2)).toMatchObject({ status: 'pending', waitingOn: 'me' })
+    // Unrequested and not authored: still open, no longer involving me; the other is found again.
+    found = [theirs(1, { involvesMe: false }), theirs(2, { requested: true })]
+    await prs.refreshPrs(projectId)
+    expect((await storedPr(projectId, 1)).row).toMatchObject({ open: true, involvesMe: false })
+    expect((await storedPr(projectId, 2)).row).toMatchObject({ open: true, involvesMe: true })
+  })
+
+  it('lists open PRs of every kind and the merged ones, never a closed one, and takes a gone one as before', async () => {
+    const { projectId } = await queueProject('all-prs-list')
+    const mergedAt = new Date().toISOString()
+    found = [theirs(1), stranger(2), stranger(3), ghPr(4, { mergedAt })]
+    await prs.refreshPrs(projectId)
+    states = { 3: 'CLOSED' }
+    // 3 is in no list any more (closed); 2 is still open but in no search; 1 and 4 as before.
+    found = [theirs(1), stranger(2), ghPr(4, { mergedAt })]
+    const queue = await prs.listPrs(projectId, { refresh: true })
+    expect(queue.map((p) => p.number).sort()).toEqual([1, 2, 4])
+    expect(queue.find((p) => p.number === 2)).toMatchObject({ open: true, involvesMe: false })
+    expect((await storedPr(projectId, 3)).row).toMatchObject({ open: false, leftAs: 'CLOSED' })
+    // A PR that stops involving me but stays open is not closed.
+    found = [stranger(1), stranger(2)]
+    await prs.refreshPrs(projectId)
+    expect((await storedPr(projectId, 1)).row).toMatchObject({ open: true, involvesMe: false, leftAs: null })
+  })
+
+  it("narrows to the PRs that involve me for a reader that acts on the queue (an agent's list_prs)", async () => {
+    const { projectId } = await queueProject('all-prs-involving')
+    found = [theirs(1), stranger(2), ghPr(3)]
+    const everyone = await prs.listPrs(projectId, { refresh: true })
+    expect(everyone.map((p) => p.number).sort()).toEqual([1, 2, 3])
+    const mine = await prs.listPrs(projectId, { involvingMe: true })
+    expect(mine.map((p) => p.number).sort()).toEqual([1, 3])
+  })
+
+  it('keeps the readers on the PRs that involve me: the summary, the project count, the PR tickets', async () => {
+    const { db, schema } = await import('#/db')
+    const summary = await import('./summary')
+    const projects = await import('./projects')
+    const { projectId } = await queueProject('all-prs-readers')
+    found = [theirs(1), stranger(2)]
+    await prs.refreshPrs(projectId)
+    expect(summary.getSummary(projectId, { humans: [] }).projects[0]!.needsYou.prs).toHaveLength(1)
+    expect(projects.listProjects().find((p) => p.id === projectId)!.counts.openPrs).toBe(1)
+    const own = db
+      .select()
+      .from(schema.tickets)
+      .all()
+      .filter((t) => t.projectId === projectId && t.prId !== null)
+    expect(own.map((t) => t.prNumber)).toEqual([1])
+    expect((await storedPr(projectId, 2)).ticket).toBeUndefined()
+    // The stranger's PR closes: it is no closed PR of mine in the summary's day.
+    found = [theirs(1)]
+    states = { 2: 'CLOSED' }
+    await prs.refreshPrs(projectId)
+    expect((await storedPr(projectId, 2)).row).toMatchObject({ open: false })
+    expect(summary.getSummary(projectId, { humans: [] }).projects[0]!.doneToday.prs).toEqual([])
+    // One of mine closing is listed, which proves the list is read at all.
+    found = []
+    states = { 1: 'MERGED' }
+    await prs.refreshPrs(projectId)
+    expect(
+      summary.getSummary(projectId, { humans: [] }).projects[0]!.doneToday.prs.map((p) => p.number),
+    ).toEqual([1])
   })
 })
 
