@@ -95,7 +95,8 @@ export function WorkflowPage({
     return next
   }
   const [confirmingReset, setConfirmingReset] = useState(false)
-  // The node whose settings are open, and a count that moves the focus into them when the keyboard opened it.
+  // The node whose settings are open, and a count that moves the focus into them when the keyboard chose it: 0 for
+  // a node chosen with the mouse, so only the selection that asked for the focus gets it.
   const [selected, setSelected] = useState<string | null>(null)
   const [focusToken, setFocusToken] = useState(0)
   const wide = useWide()
@@ -155,7 +156,7 @@ export function WorkflowPage({
   }
   const select = (id: string, byKeyboard: boolean) => {
     setSelected(id)
-    if (byKeyboard) setFocusToken((t) => t + 1)
+    setFocusToken((t) => (byKeyboard ? t + 1 : 0))
   }
   const close = () => {
     const id = selected

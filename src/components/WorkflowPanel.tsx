@@ -49,7 +49,7 @@ export function SidePanel({
   focusToken,
   ...rest
 }: PanelProps & {
-  /** Changes when the keyboard opened the node: the focus moves to the panel's title so Tab reaches its controls. */
+  /** Above 0 when the keyboard chose the node (it changes with each such choice): the focus moves to the panel's title so Tab reaches its controls. 0 when the mouse chose it. */
   focusToken: number
 }) {
   const title = useRef<HTMLHeadingElement>(null)
@@ -251,12 +251,12 @@ function TeamPicker({
         </SelectContent>
       </Select>
       {ref.missing ? (
-        <p data-missing role="status" className="text-xs text-amber-700 dark:text-amber-400">
+        <p data-missing role="status" className="text-xs wrap-anywhere text-amber-700 dark:text-amber-400">
           {ref.picked} was picked for it, but the Team has no agent of that name now. It runs as {ref.name}{' '}
           until the agent is back or another is picked. Choose Default to clear the pick.
         </p>
       ) : (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs wrap-anywhere text-muted-foreground">
           Runs as {ref.name}
           {ref.source === 'default' && ' (the built-in agent: the Team has none of that name)'}. Its
           instructions are written on the Team page; the role ({view.role}) names its spans and run reports.

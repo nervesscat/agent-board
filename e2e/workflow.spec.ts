@@ -1425,6 +1425,79 @@ test('every node is reached by Tab in reading order and works with Enter and Spa
   expect(await node(page, 'push').evaluate((el) => getComputedStyle(el).boxShadow)).not.toBe('none')
 })
 
+test('only a keyboard choice moves the focus into the settings: a mouse click after one, or after Escape, leaves it on the node (C12)', async ({
+  page,
+  project,
+}) => {
+  await open(page, project.id)
+  await node(page, 'build').focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('heading', { name: '3. Build' })).toBeFocused()
+  // The mouse picks another node: the focus stays on the node that was clicked.
+  await node(page, 'spec').click()
+  await expect(node(page, 'spec')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('heading', { name: '2. Spec' })).toBeVisible()
+  await expect(node(page, 'spec')).toBeFocused()
+  // Escape closes the settings, and a mouse click opens them again without taking the focus.
+  await page.keyboard.press('Escape')
+  await expect(panel(page)).toHaveCount(0)
+  await node(page, 'gate').click()
+  await expect(page.getByRole('heading', { name: '4. Gate' })).toBeVisible()
+  await expect(node(page, 'gate')).toBeFocused()
+  // A keyboard choice after the mouse ones still moves it.
+  await node(page, 'push').focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('heading', { name: '8. Push' })).toBeFocused()
+})
+
+test('a Team agent name with no break in it stays inside the panel, the sheet and the node (C11)', async ({
+  page,
+  project,
+  human,
+}) => {
+  const long = 'W'.repeat(40)
+  const agent = await ok<{ id: number }>(
+    human.post(`/api/projects/${project.id}/agents`, { data: { name: long, instructions: 'Hunt.' } }),
+  )
+  const inside = (el: Element) => el.scrollWidth <= el.clientWidth
+  const fits = async (page: Page, where: Locator, what: string) => {
+    expect(await where.evaluate(inside), `${what} does not scroll sideways`).toBe(true)
+    expect(await scrollsSideways(page), `the page with ${what}`).toBe(false)
+  }
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    await open(page, project.id, '?preset=thorough&complexity=high')
+    const hunt = node(page, 'review.hunt-a')
+    await hunt.scrollIntoViewIfNeeded()
+    await hunt.click()
+    const where = width === 1280 ? panel(page) : page.getByRole('dialog')
+    const picker = where.getByRole('combobox', { name: 'Team agent' })
+    // The long name is picked once, on the wide screen; the list shows it inside the screen at both widths.
+    await picker.click()
+    const option = page.getByRole('option', { name: long, exact: true })
+    const o = await box(option)
+    expect(o.x, `the option at ${width}px starts inside the screen`).toBeGreaterThanOrEqual(0)
+    if (width === 1280) {
+      await option.click()
+      await saved(page)
+    } else await page.keyboard.press('Escape')
+    await expect(where.getByText(`Runs as ${long}`)).toBeVisible()
+    await fits(page, where, `the settings at ${width}px`)
+    expect(await box(where.getByText(`Runs as ${long}`)).then((b) => b.x + b.width)).toBeLessThanOrEqual(
+      width,
+    )
+    // The node's own chip is cut, not spilled.
+    await fits(page, hunt, `the node at ${width}px`)
+    expect(await hunt.evaluate((el) => el.getBoundingClientRect().right)).toBeLessThanOrEqual(width)
+  }
+  // A pick the Team lost: its warning wraps too.
+  await ok(human.delete(`/api/agents/${agent.id}`))
+  await open(page, project.id, '?preset=thorough&complexity=high')
+  await node(page, 'review.hunt-a').click()
+  await expect(page.getByRole('dialog').locator('[data-missing]')).toBeVisible()
+  await fits(page, page.getByRole('dialog'), 'the sheet with a missing agent')
+})
+
 test('the graph fits a phone, and a node opens its settings as a sheet that gives the focus back (C11, F16)', async ({
   page,
   project,
