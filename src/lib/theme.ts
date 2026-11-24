@@ -2,12 +2,6 @@
 export const THEMES = ['system', 'light', 'dark'] as const
 export type Theme = (typeof THEMES)[number]
 
-export const THEME_LABEL: Record<Theme, string> = {
-  system: 'System',
-  light: 'Light',
-  dark: 'Dark',
-}
-
 /** Where the choice is kept: this browser's, like the layout's own pickers. */
 const THEME_KEY = 'theme'
 

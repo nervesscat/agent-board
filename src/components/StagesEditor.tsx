@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { TrashIcon } from '#/components/TrashIcon'
@@ -23,29 +24,18 @@ import { Tip } from '#/components/ui/tooltip'
 import { del, errorMessage, get, patch, post, put } from '#/lib/api'
 import { STAGE_COLORS, STAGE_KINDS, type StageColor, type StageKind } from '#/lib/constants'
 import { useProject } from '#/lib/project'
-import { STAGE_DOT, STAGE_KIND_LABEL } from '#/lib/stages'
+import { STAGE_DOT } from '#/lib/stages'
 import { ticketsKey } from '#/lib/tickets'
 import type { Stage } from '#/db/schema'
 
 type StageRow = Stage & { tickets: number }
-
-const KIND_HINT: Record<StageKind, string> = {
-  open: 'waiting to be picked up; claiming moves it to the stage work starts in',
-  active: 'being worked on',
-  blocked: 'waiting on you',
-  review: 'handed off for review',
-  approved: 'your go-ahead to merge; no agent moves a ticket here',
-  done: 'finished; cannot be claimed',
-  cancelled: 'dropped; disapproving moves a ticket here, and its tasks leave the progress',
-}
-
-const kindItems = Object.fromEntries(STAGE_KINDS.map((k) => [k, STAGE_KIND_LABEL[k]]))
 
 /**
  * The project's stages, which are its board's columns: add, rename, recolour, change the kind,
  * reorder, delete. Every change saves at once.
  */
 export function StagesEditor({ projectId }: { projectId: string }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const key = ['stages', projectId]
   const { data: stages } = useQuery({
@@ -83,11 +73,13 @@ export function StagesEditor({ projectId }: { projectId: string }) {
       ),
     onSuccess: refresh,
     // Into a done stage, tickets whose needs are not merged yet hold it up; the human can move them anyway.
-    onError: (err, v) => toastRefusal(err, () => remove.mutate({ ...v, force: true }), 'Move them anyway'),
+    onError: (err, v) =>
+      toastRefusal(err, () => remove.mutate({ ...v, force: true }), t('stagesEditor.moveAnyway')),
   })
 
   const [name, setName] = useState('')
   const [kind, setKind] = useState<StageKind>('active')
+  const kindItems = Object.fromEntries(STAGE_KINDS.map((k) => [k, t(`stagesEditor.kind.${k}`)]))
 
   if (!stages) return null
   const move = (i: number, dir: -1 | 1) => {
@@ -96,14 +88,10 @@ export function StagesEditor({ projectId }: { projectId: string }) {
     reorder.mutate(ids)
   }
   return (
-    <section id="stages" aria-label="Stages" className="max-w-3xl scroll-mt-16 space-y-3">
+    <section id="stages" aria-label={t('stagesEditor.title')} className="max-w-3xl scroll-mt-16 space-y-3">
       <div>
-        <h2 className="text-xl font-semibold tracking-tight">Stages</h2>
-        <p className="text-sm text-muted-foreground">
-          The columns of the features board, left to right. The kind is what the board&apos;s rules go by
-          (claiming, disapproving, lane progress); agents see each stage&apos;s key, name and kind. Renaming
-          keeps the key.
-        </p>
+        <h2 className="text-xl font-semibold tracking-tight">{t('stagesEditor.title')}</h2>
+        <p className="text-sm text-muted-foreground">{t('stagesEditor.description')}</p>
       </div>
       <ul className="divide-y rounded-md border">
         {stages.map((s, i) => (
@@ -114,7 +102,7 @@ export function StagesEditor({ projectId }: { projectId: string }) {
                 size="icon-sm"
                 disabled={i === 0 || reorder.isPending}
                 onClick={() => move(i, -1)}
-                aria-label={`Move ${s.name} earlier`}
+                aria-label={t('stagesEditor.moveEarlier', { name: s.name })}
               >
                 <ArrowUp />
               </Button>
@@ -123,7 +111,7 @@ export function StagesEditor({ projectId }: { projectId: string }) {
                 size="icon-sm"
                 disabled={i === stages.length - 1 || reorder.isPending}
                 onClick={() => move(i, 1)}
-                aria-label={`Move ${s.name} later`}
+                aria-label={t('stagesEditor.moveLater', { name: s.name })}
               >
                 <ArrowDown />
               </Button>
@@ -135,24 +123,22 @@ export function StagesEditor({ projectId }: { projectId: string }) {
               onValueChange={(k) => k && change.mutate({ id: s.id, kind: k as StageKind })}
               items={kindItems}
             >
-              <Tip content={KIND_HINT[s.kind]}>
-                <SelectTrigger size="sm" className="w-32">
+              <Tip content={t(`stagesEditor.hint.${s.kind}`)}>
+                <SelectTrigger size="sm" className="min-w-32">
                   <SelectValue />
                 </SelectTrigger>
               </Tip>
               <SelectContent>
                 {STAGE_KINDS.map((k) => (
                   <SelectItem key={k} value={k}>
-                    {STAGE_KIND_LABEL[k]}
+                    {t(`stagesEditor.kind.${k}`)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
               <code className="rounded bg-muted px-1">{s.key}</code>
-              <span className="tabular-nums">
-                {s.tickets} ticket{s.tickets === 1 ? '' : 's'}
-              </span>
+              <span className="tabular-nums">{t('stagesEditor.tickets', { count: s.tickets })}</span>
               <DeleteStage
                 stage={s}
                 others={stages.filter((o) => o.id !== s.id)}
@@ -174,28 +160,28 @@ export function StagesEditor({ projectId }: { projectId: string }) {
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="New stage, e.g. QA"
+          placeholder={t('stagesEditor.newPlaceholder')}
           maxLength={40}
           className="h-8 w-56"
         />
         <Select value={kind} onValueChange={(k) => k && setKind(k as StageKind)} items={kindItems}>
-          <Tip content={KIND_HINT[kind]}>
-            <SelectTrigger size="sm" className="w-32">
+          <Tip content={t(`stagesEditor.hint.${kind}`)}>
+            <SelectTrigger size="sm" className="min-w-32">
               <SelectValue />
             </SelectTrigger>
           </Tip>
           <SelectContent>
             {STAGE_KINDS.map((k) => (
               <SelectItem key={k} value={k}>
-                {STAGE_KIND_LABEL[k]}
+                {t(`stagesEditor.kind.${k}`)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Button type="submit" size="sm" disabled={!name.trim() || add.isPending}>
-          <Plus data-icon="inline-start" /> Add stage
+          <Plus data-icon="inline-start" /> {t('stagesEditor.add')}
         </Button>
-        <span className="text-xs text-muted-foreground">{KIND_HINT[kind]}</span>
+        <span className="text-xs text-muted-foreground">{t(`stagesEditor.hint.${kind}`)}</span>
       </form>
     </section>
   )
@@ -210,6 +196,7 @@ const FIRST_ACTIVE = '__first_active__'
  * active reads as the default again, as the server takes it.
  */
 function WorkStage({ projectId, stages }: { projectId: string; stages: StageRow[] }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const { data: project } = useProject(projectId)
   const save = useMutation({
@@ -217,7 +204,7 @@ function WorkStage({ projectId, stages }: { projectId: string; stages: StageRow[
       patch<{ workStage: string | null }>(`/api/projects/${projectId}`, { workStage }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['project', projectId] })
-      toast.success('Saved')
+      toast.success(t('common.saved'))
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
@@ -226,13 +213,15 @@ function WorkStage({ projectId, stages }: { projectId: string; stages: StageRow[
   const first = active[0]
   const chosen = active.find((s) => s.key === project.workStage)
   const items = {
-    [FIRST_ACTIVE]: first ? `First active stage (${first.name})` : 'First active stage (none)',
+    [FIRST_ACTIVE]: first
+      ? t('stagesEditor.firstActive', { name: first.name })
+      : t('stagesEditor.firstActiveNone'),
     ...Object.fromEntries(active.map((s) => [s.key, s.name])),
   }
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span id="work-stage-label" className="text-sm font-medium">
-        Work starts in
+        {t('stagesEditor.workStarts')}
       </span>
       <Select
         value={chosen?.key ?? FIRST_ACTIVE}
@@ -240,7 +229,7 @@ function WorkStage({ projectId, stages }: { projectId: string; stages: StageRow[
         items={items}
         disabled={save.isPending}
       >
-        <SelectTrigger size="sm" className="w-64" aria-labelledby="work-stage-label">
+        <SelectTrigger size="sm" className="min-w-64" aria-labelledby="work-stage-label">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -251,9 +240,7 @@ function WorkStage({ projectId, stages }: { projectId: string; stages: StageRow[
           ))}
         </SelectContent>
       </Select>
-      <span className="text-xs text-muted-foreground">
-        Where claiming a ticket puts it; a status of in progress or active means this stage too.
-      </span>
+      <span className="text-xs text-muted-foreground">{t('stagesEditor.workStartsHint')}</span>
     </div>
   )
 }
@@ -268,6 +255,7 @@ function StageName({
   onSave: (name: string) => void
   className?: string
 }) {
+  const { t } = useTranslation()
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
   const commit = () => {
@@ -288,22 +276,22 @@ function StageName({
         }
       }}
       maxLength={40}
-      aria-label="Stage name"
+      aria-label={t('stagesEditor.stageName')}
       className={`h-8 ${className}`}
     />
   )
 }
 
-const colorItems = Object.fromEntries(STAGE_COLORS.map((c) => [c, c]))
-
 function ColorPick({ value, onChange }: { value: StageColor; onChange: (c: StageColor) => void }) {
+  const { t } = useTranslation()
+  const colorItems = Object.fromEntries(STAGE_COLORS.map((c) => [c, t(`stagesEditor.color.${c}`)]))
   return (
     <Select value={value} onValueChange={(c) => c && onChange(c as StageColor)} items={colorItems}>
-      <SelectTrigger size="sm" className="w-28" aria-label="Colour">
+      <SelectTrigger size="sm" className="w-36" aria-label={t('stagesEditor.colour')}>
         <SelectValue>
           {(c: StageColor) => (
             <span className="inline-flex items-center gap-1.5">
-              <span className={`size-3 rounded-full ${STAGE_DOT[c]}`} /> {c}
+              <span className={`size-3 rounded-full ${STAGE_DOT[c]}`} /> {t(`stagesEditor.color.${c}`)}
             </span>
           )}
         </SelectValue>
@@ -312,7 +300,7 @@ function ColorPick({ value, onChange }: { value: StageColor; onChange: (c: Stage
         {STAGE_COLORS.map((c) => (
           <SelectItem key={c} value={c}>
             <span className="inline-flex items-center gap-1.5">
-              <span className={`size-3 rounded-full ${STAGE_DOT[c]}`} /> {c}
+              <span className={`size-3 rounded-full ${STAGE_DOT[c]}`} /> {t(`stagesEditor.color.${c}`)}
             </span>
           </SelectItem>
         ))}
@@ -331,6 +319,7 @@ function DeleteStage({
   others: StageRow[]
   onDelete: (moveTo?: string) => void
 }) {
+  const { t } = useTranslation()
   const [moveTo, setMoveTo] = useState<string>('')
   const items = Object.fromEntries(others.map((o) => [o.key, o.name]))
   return (
@@ -341,7 +330,7 @@ function DeleteStage({
             variant="ghost"
             size="icon-sm"
             disabled={!others.length}
-            aria-label={`Delete ${stage.name}`}
+            aria-label={t('stagesEditor.delete', { name: stage.name })}
           />
         }
       >
@@ -349,17 +338,15 @@ function DeleteStage({
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete the stage {stage.name}?</AlertDialogTitle>
+          <AlertDialogTitle>{t('stagesEditor.deleteTitle', { name: stage.name })}</AlertDialogTitle>
           <AlertDialogDescription>
-            {stage.tickets
-              ? `It holds ${stage.tickets} ticket${stage.tickets === 1 ? '' : 's'} (lanes included). Pick the stage they move to.`
-              : 'No ticket is in it.'}
+            {stage.tickets ? t('stagesEditor.holds', { count: stage.tickets }) : t('stagesEditor.holdsNone')}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {stage.tickets > 0 && (
           <Select value={moveTo || null} onValueChange={(v) => setMoveTo(v ?? '')} items={items}>
             <SelectTrigger size="sm" className="w-full">
-              <SelectValue placeholder="Move them to…" />
+              <SelectValue placeholder={t('stagesEditor.moveTo')} />
             </SelectTrigger>
             <SelectContent>
               {others.map((o) => (
@@ -371,12 +358,12 @@ function DeleteStage({
           </Select>
         )}
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t('stagesEditor.cancel')}</AlertDialogCancel>
           <AlertDialogAction
             disabled={stage.tickets > 0 && !moveTo}
             onClick={() => onDelete(stage.tickets ? moveTo : undefined)}
           >
-            Delete
+            {t('stagesEditor.deleteConfirm')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

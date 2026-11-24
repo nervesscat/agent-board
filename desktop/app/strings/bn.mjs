@@ -1,0 +1,38 @@
+// The desktop app's own texts in bn (see ../strings.mjs). Every key of en.mjs, the same {{placeholders}} and <tags>.
+export default {
+  open: 'খুলুন',
+  openInBrowser: 'ব্রাউজারে খুলুন',
+  retryNow: 'এখনই আবার চেষ্টা',
+  startAtLogin: 'লগইনে চালু করুন',
+  quit: 'বন্ধ করুন',
+  openSettings: 'সেটিংস ফাইল খুলুন',
+  openLogs: 'লগ ফোল্ডার খুলুন',
+  openHome: 'অ্যাপ ফোল্ডার খুলুন',
+  startAtLoginFailed: 'লগইনে চালু করার সেটিং বদলানো যায়নি।',
+  cannotStart: 'বোর্ড চালু হতে পারছে না।',
+  settingsInvalid: 'বোর্ডের সেটিংস সঠিক নয়।',
+  homeUnusable:
+    'অ্যাপের ফোল্ডার {{home}} ব্যবহার করা যাচ্ছে না: {{error}}\n\nAGENT_BOARD_HOME-কে লেখা যায় এমন একটি ফোল্ডারে সেট করুন, অথবা ডিফল্ট ব্যবহার করতে সেটি সরান।',
+  homeLine: '{{error}}\n\nঅ্যাপের ফোল্ডার: {{home}}',
+  dataFolderUnusable:
+    'এর ডেটা ফোল্ডার {{dir}} ব্যবহার করা যাচ্ছে না: {{error}}\n\n{{file}}-এ, বা এনভায়রনমেন্টে, অন্য একটি DATA_DIR সেট করে অ্যাপ আবার চালু করুন।',
+  logsLine: '{{detail}}\n\nলগ: {{logs}}',
+  stopped: 'বোর্ড বন্ধ হয়েছে।',
+  restartedTimes_one: ' এটি আবার চালু হয়েছে {{count}} বার।',
+  restartedTimes_other: ' এটি আবার চালু হয়েছে {{count}} বার।',
+  noOutput: '(কোনো আউটপুট নেই)',
+  exitedSignal: '{{time}}-এ {{signal}} দিয়ে এটি বন্ধ করা হয়েছে।',
+  exitedCode: '{{time}}-এ এটি কোড {{code}} দিয়ে বেরিয়ে গেছে।',
+  exited: '{{time}}-এ এটি বেরিয়ে গেছে।',
+  reasonCode: 'এক্সিট কোড {{code}}',
+  reasonSignal: 'সিগন্যাল {{signal}}',
+  reasonNone: 'কোনো এক্সিট কোড নেই',
+  tipRestarting: '{{name}}: বোর্ড আবার চালু হচ্ছে ({{reason}})',
+  tipRestarted: '{{name}}: {{url}} ({{reason}}-এর পর {{time}}-এ আবার চালু হয়েছে)',
+  notifyRestarted: 'বোর্ড আবার চালু হয়েছে ({{reason}})।',
+  didNotStart: 'বোর্ড চালু হয়নি।',
+  didNotAnswer: 'এক মিনিটের মধ্যে {{url}}-এ সাড়া দেয়নি।',
+  unreachableHeading: '<code>{{address}}</code>-এর বোর্ডে পৌঁছানো যাচ্ছে না।',
+  unreachableBody:
+    'বোর্ড অন্য মেশিনে চলে: এটি অনলাইন আছে কি না এবং সেখানে বোর্ড চলছে কি না দেখুন। অ্যাপ নিজেই আবার চেষ্টা করে, আর {{retry}} তখনই চেষ্টা করে।',
+}

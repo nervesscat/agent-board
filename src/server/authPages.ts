@@ -1,3 +1,7 @@
+import i18next, { type TFunction } from 'i18next'
+
+import { DEFAULT_LANGUAGE, LANGUAGES, languageOfRequest, type Language } from '#/i18n/languages'
+import { translationOf } from '#/i18n/locales'
 import { callerOf, onThisMachine, redirectTo } from './auth'
 import { config } from './config'
 import { LOCAL_RP_ID, localSite, type SignInSite } from './entrance'
@@ -15,6 +19,33 @@ import { lastHuman } from './actors'
  * WebAuthn takes no IP address for an RP ID: on this machine the pages live on localhost, so a browser
  * on 127.0.0.1 or [::1] is sent there.
  */
+
+/**
+ * The texts, in the request's language (src/i18n/locales, group `signIn`). A plain i18next instance per
+ * language, with no React: the page is drawn here, before the app.
+ */
+const instances = new Map<Language, TFunction>()
+function translator(language: Language): TFunction {
+  let t = instances.get(language)
+  if (!t) {
+    const instance = i18next.createInstance()
+    void instance.init({
+      resources: {
+        en: { translation: translationOf('en')! },
+        [language]: { translation: translationOf(language)! },
+      },
+      lng: language,
+      fallbackLng: DEFAULT_LANGUAGE,
+      supportedLngs: [...LANGUAGES],
+      initAsync: false,
+      interpolation: { escapeValue: false },
+      returnNull: false,
+    })
+    t = instance.t
+    instances.set(language, t)
+  }
+  return t
+}
 
 const escape = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
@@ -109,6 +140,7 @@ async function get(o) {
     userHandle: c.response.userHandle ? fromBuf(c.response.userHandle) : undefined,
   } }
 }
+const texts = JSON.parse(document.getElementById('texts').textContent)
 const form = document.getElementById('form')
 const message = document.getElementById('message')
 form?.addEventListener('submit', async (event) => {
@@ -117,7 +149,7 @@ form?.addEventListener('submit', async (event) => {
   button.disabled = true
   message.textContent = ''
   try {
-    if (!window.PublicKeyCredential) throw new Error('This browser cannot use passkeys here.')
+    if (!window.PublicKeyCredential) throw new Error(texts.noPasskeys)
     const field = (name) => form.elements.namedItem(name)?.value
     const flow = form.dataset.flow
     if (flow === 'setup') {
@@ -134,16 +166,25 @@ form?.addEventListener('submit', async (event) => {
     location.replace(form.dataset.next || '/')
   } catch (err) {
     message.textContent =
-      err && err.name === 'NotAllowedError' ? 'The passkey prompt was closed or timed out. Try again.'
+      err && err.name === 'NotAllowedError' ? texts.promptClosed
       : (err && err.message) || String(err)
     button.disabled = false
   }
 })
 `
 
-function page(title: string, body: string, status = 200): Response {
+/** JSON that sits safely inside a <script> element: no `<` (so no `</script>` or `<!--`) and no line separators. */
+const jsonForScript = (value: unknown) =>
+  JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029')
+
+function page(language: Language, title: string, body: string, status = 200): Response {
+  const t = translator(language)
+  const texts = { noPasskeys: t('signIn.noPasskeys'), promptClosed: t('signIn.promptClosed') }
   const html = `<!doctype html>
-<html lang="en">
+<html lang="${language}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -156,6 +197,7 @@ function page(title: string, body: string, status = 200): Response {
 <main>
 ${body}
 </main>
+<script type="application/json" id="texts">${jsonForScript(texts)}</script>
 <script type="module">${SCRIPT}</script>
 </body>
 </html>`
@@ -188,27 +230,28 @@ function onLocalhost(request: Request, site: SignInSite): Response | null {
 
 function setupPage(request: Request, site: SignInSite): Response {
   if (hasAccount()) return redirectTo('/login')
+  const language = languageOfRequest(request.headers)
+  const t = translator(language)
   if (!onThisMachine(request) || site.rpId !== LOCAL_RP_ID)
     return page(
-      'Finish setup on the host',
-      `<h1>Finish setup on the host</h1>
-<p>This board has no account yet. It is created on the machine the board runs on: open
-<code>${escape(localSite(config.port).origin)}/setup</code> there. Then come back here to add this device
-with a link from the board.</p>`,
+      language,
+      t('signIn.finishTitle'),
+      `<h1>${escape(t('signIn.finishTitle'))}</h1>
+<p>${t('signIn.finishBody', { url: `<code>${escape(localSite(config.port).origin)}/setup</code>` })}</p>`,
     )
   const elsewhere = onLocalhost(request, site)
   if (elsewhere) return elsewhere
   return page(
-    'Set up',
-    `<h1>Set up CrossBoard</h1>
-<p>Create the board's account and its first passkey, on this machine. Other devices are added later from
-Settings, with a one-time link.</p>
+    language,
+    t('signIn.setupTitle'),
+    `<h1>${escape(t('signIn.setupHeading'))}</h1>
+<p>${escape(t('signIn.setupIntro'))}</p>
 <form id="form" data-flow="setup" data-next="/">
-<label for="name">Your name on the board</label>
+<label for="name">${escape(t('signIn.nameLabel'))}</label>
 <input id="name" name="name" required maxlength="80" value="${escape(lastHuman() ?? '')}" autocomplete="off">
-<label for="device">This device</label>
-<input id="device" name="device" required maxlength="60" value="This computer" autocomplete="off">
-<button type="submit">Create passkey</button>
+<label for="device">${escape(t('signIn.deviceLabel'))}</label>
+<input id="device" name="device" required maxlength="60" value="${escape(t('signIn.deviceDefault'))}" autocomplete="off">
+<button type="submit">${escape(t('signIn.createPasskey'))}</button>
 <p id="message" role="alert"></p>
 </form>`,
   )
@@ -220,12 +263,16 @@ async function loginPage(request: Request, site: SignInSite): Promise<Response> 
   if (await callerOf(request, undefined, site)) return redirectTo(next)
   const elsewhere = onLocalhost(request, site)
   if (elsewhere) return elsewhere
+  const language = languageOfRequest(request.headers)
+  const t = translator(language)
+  const welcome = site.rpId === LOCAL_RP_ID ? 'signIn.loginWelcomeMachine' : 'signIn.loginWelcomeDevice'
   return page(
-    'Sign in',
-    `<h1>Sign in</h1>
-<p>Welcome back, ${escape(getAccount()!.name)}. Sign in with a passkey of this ${site.rpId === LOCAL_RP_ID ? 'machine' : 'device'}.</p>
+    language,
+    t('signIn.loginTitle'),
+    `<h1>${escape(t('signIn.loginHeading'))}</h1>
+<p>${t(welcome, { name: escape(getAccount()!.name) })}</p>
 <form id="form" data-flow="login" data-next="${escape(next)}">
-<button type="submit" autofocus>Sign in with a passkey</button>
+<button type="submit" autofocus>${escape(t('signIn.loginButton'))}</button>
 <p id="message" role="alert"></p>
 </form>`,
   )
@@ -236,21 +283,24 @@ function enrollPage(request: Request, site: SignInSite): Response {
   const elsewhere = onLocalhost(request, site)
   if (elsewhere) return elsewhere
   const code = new URL(request.url).searchParams.get('code')
+  const language = languageOfRequest(request.headers)
+  const t = translator(language)
   if (!code)
     return page(
-      'Add a device',
-      `<h1>Add a device</h1>
-<p>This page needs a link from the board: on a device that is signed in, open Settings, Devices, and
-press Add a device.</p>`,
+      language,
+      t('signIn.enrollTitle'),
+      `<h1>${escape(t('signIn.enrollNeedsLinkHeading'))}</h1>
+<p>${escape(t('signIn.enrollNeedsLink'))}</p>`,
     )
   return page(
-    'Add a device',
-    `<h1>Add this device</h1>
-<p>Create a passkey for ${escape(getAccount()!.name)} on this device. The link works once, for 15 minutes.</p>
+    language,
+    t('signIn.enrollTitle'),
+    `<h1>${escape(t('signIn.enrollHeading'))}</h1>
+<p>${t('signIn.enrollIntro', { name: escape(getAccount()!.name) })}</p>
 <form id="form" data-flow="enrol" data-code="${escape(code)}" data-next="/">
-<label for="device">This device</label>
-<input id="device" name="device" required maxlength="60" placeholder="Phone, laptop…" autocomplete="off">
-<button type="submit">Create passkey</button>
+<label for="device">${escape(t('signIn.deviceLabel'))}</label>
+<input id="device" name="device" required maxlength="60" placeholder="${escape(t('signIn.devicePlaceholder'))}" autocomplete="off">
+<button type="submit">${escape(t('signIn.createPasskey'))}</button>
 <p id="message" role="alert"></p>
 </form>`,
   )

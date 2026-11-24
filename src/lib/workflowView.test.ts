@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
+import { COMPLEXITIES } from './constants'
 import { WORKFLOW_PRESETS, resolveWorkflow } from './workflow'
-import { effortText, groupSubSteps, moveReason, roundsText, skipText } from './workflowView'
+import {
+  effortText,
+  groupSubSteps,
+  lockReasonText,
+  moveReason,
+  roundsText,
+  skipText,
+  survivalText,
+} from './workflowView'
 
 const step = (workflow: ReturnType<typeof resolveWorkflow>, id: string) =>
   workflow.steps.find((s) => s.id === id)!
@@ -45,6 +54,27 @@ describe('how the graph words things', () => {
     const w = resolveWorkflow('standard', null, 'mid')
     expect(moveReason(step(w, 'build').moveBlocked.up!)).toBe('Build must come after Spec')
     expect(step(w, 'preview').moveBlocked.up).toBeNull()
+  })
+})
+
+describe('the sentences the page shows of the resolved workflow', () => {
+  it('says each lock reason as the resolved step carries it (the served text keeps that English)', () => {
+    for (const preset of WORKFLOW_PRESETS)
+      for (const s of resolveWorkflow(preset, null, 'mid').steps) expect(lockReasonText(s)).toBe(s.lockReason)
+  })
+
+  it('says when a round survives as the resolved review does, with and without the round-end intent check', () => {
+    for (const preset of WORKFLOW_PRESETS)
+      for (const complexity of COMPLEXITIES)
+        for (const tweak of [null, { steps: { intent: { enabled: false } } }]) {
+          const review = step(resolveWorkflow(preset, tweak, complexity), 'review').review!
+          expect(survivalText(preset, review)).toBe(review.survival)
+        }
+  })
+
+  it('words a refused move that stops at an end of the order', () => {
+    expect(moveReason('build is already first')).toBe('Build is already first')
+    expect(moveReason('handoff is already last')).toBe('Hand-off is already last')
   })
 })
 

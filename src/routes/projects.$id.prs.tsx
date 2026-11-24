@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
 import { ExternalLink, GitMerge, PauseCircle, PlayCircle, RefreshCw, Ticket } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
@@ -54,40 +55,33 @@ export const Route = createFileRoute('/projects/$id/prs')({
   }),
 })
 
-const TABS = [
-  { key: 'pending', label: 'Pending' },
-  { key: 'reviewed', label: 'Reviewed' },
-  { key: 'on_hold', label: 'On hold' },
-  { key: 'done', label: 'Done' },
-] as const
+const TABS = [{ key: 'pending' }, { key: 'reviewed' }, { key: 'on_hold' }, { key: 'done' }] as const
 
-const FILTERS: { key: PrFilter; label: string; title: string }[] = [
-  {
-    key: 'me',
-    label: 'To review',
-    title: 'PRs by others you review: pending your approval, approved by you, or on hold on your comments',
-  },
-  {
-    key: 'others',
-    label: 'Waiting on others',
-    title:
-      "Your PRs (agents' too): pending approvals, approved by every reviewer, or on hold on their comments",
-  },
-  {
-    key: 'all',
-    label: 'All PRs',
-    title: 'Every open PR of the repos, whoever wrote it and whether or not it involves you',
-  },
-]
+const FILTERS: { key: PrFilter }[] = [{ key: 'me' }, { key: 'others' }, { key: 'all' }]
 // The To review switch, in the same tab row as the filters: the whole side, or the PRs whose review
 // GitHub still asks of me (`requested`). Shown only while To review is picked.
-const REVIEWERS: { key: PrReviewer; label: string }[] = [
-  { key: 'all', label: 'Involving me' },
-  { key: 'mine', label: 'Just me as reviewer' },
+const REVIEWERS: { key: PrReviewer; label: 'prQueue.reviewers.involving' | 'prQueue.reviewers.mine' }[] = [
+  { key: 'all', label: 'prQueue.reviewers.involving' },
+  { key: 'mine', label: 'prQueue.reviewers.mine' },
 ]
 // A tab's underline, drawn by the line style only (these are the default style), hangs 5px below it:
 // without it, nothing of a tab reaches outside its list, so the list has nothing to scroll.
 const NO_UNDERLINE = 'after:hidden'
+// What GitHub's review state of mine says, as a word (any other state shows as GitHub names it).
+const MY_REVIEW: Record<
+  string,
+  | 'prQueue.myReviewState.approved'
+  | 'prQueue.myReviewState.changes_requested'
+  | 'prQueue.myReviewState.commented'
+  | 'prQueue.myReviewState.dismissed'
+  | 'prQueue.myReviewState.pending'
+> = {
+  approved: 'prQueue.myReviewState.approved',
+  changes_requested: 'prQueue.myReviewState.changes_requested',
+  commented: 'prQueue.myReviewState.commented',
+  dismissed: 'prQueue.myReviewState.dismissed',
+  pending: 'prQueue.myReviewState.pending',
+}
 // The last filter picked is remembered in this browser, for a visit whose URL names none.
 const FILTER_KEY = 'prs.filter'
 // The last To review switch picked, the same way. It is kept while Waiting on others is shown, so
@@ -95,6 +89,7 @@ const FILTER_KEY = 'prs.filter'
 const REVIEWER_KEY = 'prs.reviewer'
 
 function PrQueue() {
+  const { t: tr } = useTranslation()
   const { id } = Route.useParams()
   const { result, filter: picked, reviewer: pickedReviewer } = Route.useSearch()
   const navigate = Route.useNavigate()
@@ -224,15 +219,13 @@ function PrQueue() {
       })
     }
   }, [anchor, linked, staying, stayingReviewer, back])
-  const suffix =
-    filter === 'all' ? 'among the open PRs' : FILTERS.find((f) => f.key === filter)!.label.toLowerCase()
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">PR queue</h1>
-          <p className="text-sm text-muted-foreground">PRs to review and your own, by review state.</p>
+          <h1 className="text-xl font-semibold tracking-tight">{tr('prQueue.title')}</h1>
+          <p className="text-sm text-muted-foreground">{tr('prQueue.subtitle')}</p>
         </div>
         {/* The filter choices and Refresh sit top right on every filter, and wrap among themselves and,
             when they cannot sit beside the title, onto a line of their own: a phone shows no sideways scroll. */}
@@ -241,9 +234,9 @@ function PrQueue() {
             {/* Three choices with their counts do not fit one row of a phone: there they wrap onto a second. */}
             <TabsList className="max-w-full flex-wrap group-data-horizontal/tabs:h-auto sm:flex-nowrap sm:group-data-horizontal/tabs:h-8">
               {FILTERS.map((f) => (
-                <Tip key={f.key} content={f.title}>
+                <Tip key={f.key} content={tr(`prQueue.filters.${f.key}.title`)}>
                   <TabsTrigger value={f.key} className={NO_UNDERLINE}>
-                    {f.label}
+                    {tr(`prQueue.filters.${f.key}.label`)}
                     <span className="ml-1 rounded-full bg-background px-1.5 text-xs tabular-nums">
                       {waitingCount(data ?? [], f.key, reviewer)}
                     </span>
@@ -258,7 +251,8 @@ function PrQueue() {
             onClick={() => refresh.mutate()}
             disabled={refresh.isPending || isFetching}
           >
-            <RefreshCw data-icon="inline-start" className={refresh.isPending ? 'animate-spin' : ''} /> Refresh
+            <RefreshCw data-icon="inline-start" className={refresh.isPending ? 'animate-spin' : ''} />{' '}
+            {tr('prQueue.refresh')}
           </Button>
         </div>
       </div>
@@ -269,6 +263,7 @@ function PrQueue() {
         <ChipTabs
           chips={TABS.map((t) => ({
             ...t,
+            label: tr(`prQueue.tabs.${t.key}`),
             count: stageCount(data ?? [], filter, reviewer, t.key),
           }))}
           value={tab}
@@ -283,7 +278,7 @@ function PrQueue() {
                 <TabsList>
                   {REVIEWERS.map((r) => (
                     <TabsTrigger key={r.key} value={r.key} className={NO_UNDERLINE}>
-                      {r.label}
+                      {tr(r.label)}
                     </TabsTrigger>
                   ))}
                 </TabsList>
@@ -301,7 +296,7 @@ function PrQueue() {
                   ))
               ) : (
                 <Empty>
-                  Nothing {t.label.toLowerCase()} {suffix}.
+                  {tr(`prQueue.empty.${filter}`, { stage: tr(`prQueue.tabs.${t.key}`).toLowerCase() })}
                 </Empty>
               )}
             </TabsContent>
@@ -321,31 +316,48 @@ function PrQueue() {
  * links to its PR on GitHub.
  */
 function MergeAfter({ pr }: { pr: PrRow }) {
+  const { t: tr } = useTranslation()
   if (!pr.mergeAfter.length) return null
   return (
     <Tip
-      content={`Its ticket needs these merged first:\n${pr.mergeAfter.map((m) => `PR #${m.number} (from #${m.ticketId} ${m.title})`).join('\n')}`}
+      content={tr('prQueue.mergeAfterTip', {
+        list: pr.mergeAfter
+          .map((m) =>
+            tr('prQueue.mergeAfterItem', { number: m.number, ticketId: m.ticketId, title: m.title }),
+          )
+          .join('\n'),
+      })}
     >
       <span className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
-        <GitMerge className="size-3" /> merge after{' '}
-        {pr.mergeAfter.map((m, i) => (
-          <span key={`${m.repoId}:${m.number}`}>
-            {i > 0 && ', '}
-            {m.url ? (
-              <a href={m.url} target="_blank" rel="noreferrer" className="hover:underline">
-                #{m.number}
-              </a>
-            ) : (
-              `#${m.number}`
-            )}
-          </span>
-        ))}
+        <GitMerge className="size-3" />{' '}
+        <Trans
+          i18nKey="prQueue.mergeAfter"
+          components={{
+            refs: (
+              <>
+                {pr.mergeAfter.map((m, i) => (
+                  <span key={`${m.repoId}:${m.number}`}>
+                    {i > 0 && ', '}
+                    {m.url ? (
+                      <a href={m.url} target="_blank" rel="noreferrer" className="hover:underline">
+                        #{m.number}
+                      </a>
+                    ) : (
+                      `#${m.number}`
+                    )}
+                  </span>
+                ))}
+              </>
+            ),
+          }}
+        />
       </span>
     </Tip>
   )
 }
 
 function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: string | null }) {
+  const { t: tr } = useTranslation()
   const qc = useQueryClient()
   const [holdOpen, setHoldOpen] = useState(false)
   const [note, setNote] = useState(pr.holdNote)
@@ -380,11 +392,23 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
               {pr.headRef} → {pr.baseRef}
             </span>
             <span className="font-mono">{shortSha(pr.headSha)}</span>
-            <span>updated {ago(pr.updatedAt)}</span>
-            {pr.mergedAt && <span>merged {ago(pr.mergedAt)}</span>}
-            {pr.myReview !== 'none' && <span>· my review: {pr.myReview.replace('_', ' ')}</span>}
+            <span>{tr('prQueue.updated', { when: ago(pr.updatedAt) })}</span>
+            {pr.mergedAt && <span>{tr('prQueue.merged', { when: ago(pr.mergedAt) })}</span>}
+            {pr.myReview !== 'none' && (
+              <span>
+                ·{' '}
+                {tr('prQueue.myReview', {
+                  state: MY_REVIEW[pr.myReview] ? tr(MY_REVIEW[pr.myReview]!) : pr.myReview.replace('_', ' '),
+                })}
+              </span>
+            )}
             <span>
-              · {!pr.involvesMe ? 'not involving you' : pr.waitingOn === 'me' ? 'for your review' : 'your PR'}
+              ·{' '}
+              {!pr.involvesMe
+                ? tr('prQueue.notInvolvingYou')
+                : pr.waitingOn === 'me'
+                  ? tr('prQueue.forYourReview')
+                  : tr('prQueue.yourPr')}
             </span>
           </div>
           {pr.open && <PrState pr={pr} className="mt-1.5" />}
@@ -397,7 +421,7 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
                   params={{ id: projectId, ticketId: String(t.id) }}
                   className="text-muted-foreground hover:text-foreground hover:underline"
                 >
-                  from #{t.id} {t.title}
+                  {tr('prQueue.fromTicket', { id: t.id, title: t.title })}
                 </Link>
               ))}
             </div>
@@ -406,7 +430,7 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
         </div>
         <div className="flex items-center gap-1">
           {pr.latestReview && (
-            <Tip content={pr.latestReview.fresh ? 'reviewed at this SHA' : 'review is for an older SHA'}>
+            <Tip content={pr.latestReview.fresh ? tr('prQueue.reviewFresh') : tr('prQueue.reviewStale')}>
               <Link to="/projects/$id/prs" params={{ id: projectId }} search={{ result: pr.latestReview.id }}>
                 <Badge
                   variant={verdictTone(pr.latestReview.verdict)}
@@ -423,18 +447,18 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
               params={{ id: projectId, ticketId: String(pr.ticket.id) }}
               className={buttonVariants({ variant: 'ghost', size: 'sm' })}
             >
-              <Ticket data-icon="inline-start" /> Open ticket
+              <Ticket data-icon="inline-start" /> {tr('prQueue.openTicket')}
             </Link>
           )}
           {pr.hold ? (
             <Button variant="ghost" size="sm" onClick={() => hold.mutate({ hold: false, holdNote: '' })}>
-              <PlayCircle data-icon="inline-start" /> release
+              <PlayCircle data-icon="inline-start" /> {tr('prQueue.release')}
             </Button>
           ) : (
             // A merged PR has nothing left to wait for.
             pr.open && (
               <Button variant="ghost" size="sm" onClick={() => setHoldOpen(true)}>
-                <PauseCircle data-icon="inline-start" /> hold
+                <PauseCircle data-icon="inline-start" /> {tr('prQueue.hold')}
               </Button>
             )
           )}
@@ -443,19 +467,19 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
       <Dialog open={holdOpen} onOpenChange={setHoldOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Put #{pr.number} on hold</DialogTitle>
-            <DialogDescription>A note for you and the agents. GitHub is not touched.</DialogDescription>
+            <DialogTitle>{tr('prQueue.holdTitle', { number: pr.number })}</DialogTitle>
+            <DialogDescription>{tr('prQueue.holdText')}</DialogDescription>
           </DialogHeader>
           <Textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Why it waits…"
+            placeholder={tr('prQueue.holdPlaceholder')}
             rows={3}
             autoFocus
           />
           <DialogFooter>
             <Button onClick={() => hold.mutate({ hold: true, holdNote: note })} disabled={hold.isPending}>
-              Hold
+              {tr('prQueue.holdConfirm')}
             </Button>
           </DialogFooter>
         </DialogContent>

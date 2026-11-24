@@ -1,0 +1,3043 @@
+{
+  "common": {
+    "saved": "Kaydedildi",
+    "close": "Kapat"
+  },
+  "loading": {
+    "ticket": "ticket yükleniyor…",
+    "tickets": "ticket'lar yükleniyor…",
+    "agents": "ajanlar yükleniyor…",
+    "branches": "branch'ler yükleniyor…",
+    "recentTickets": "son ticket'lar yükleniyor…",
+    "folders": "klasörler yükleniyor…",
+    "projectPhases": "projenin fazları yükleniyor…",
+    "stages": "aşamalar yükleniyor…",
+    "preview": "preview yükleniyor…",
+    "file": "dosya yükleniyor…",
+    "files": "dosyalar yükleniyor…",
+    "instructionsHistory": "talimat geçmişi yükleniyor…",
+    "instructions": "talimatlar yükleniyor…",
+    "notes": "notlar yükleniyor…",
+    "reviewResult": "inceleme sonucu yükleniyor…",
+    "changes": "değişiklikler yükleniyor…",
+    "replies": "yanıtlar yükleniyor…",
+    "timeline": "zaman çizelgesi yükleniyor…",
+    "activity": "etkinlik yükleniyor…",
+    "pushedToday": "bugün push edilenler yükleniyor…",
+    "calendar": "takvim yükleniyor…",
+    "report": "rapor yükleniyor…",
+    "reportSettings": "rapor ayarları yükleniyor…",
+    "shift": "vardiya yükleniyor…",
+    "cleanup": "temizlik yükleniyor…",
+    "runs": "run'lar yükleniyor…",
+    "branchState": "branch durumu yükleniyor…",
+    "tags": "etiketler yükleniyor…",
+    "previews": "preview'lar yükleniyor…",
+    "repositories": "repolar yükleniyor…",
+    "roadmap": "yol haritası yükleniyor…",
+    "earlierVersions": "önceki sürümler yükleniyor…",
+    "workspaces": "workspace'ler yükleniyor…"
+  },
+  "shell": {
+    "home": "Ana sayfa",
+    "pages": "Sayfalar",
+    "connect": "Bağlan",
+    "settings": "Ayarlar",
+    "testMode": "test modu",
+    "authOff": "auth kapalı",
+    "authOffTip": "BOARD_ENV={{env}}, oturum açma kapalı: {{actor}} olarak oturum açık. Canlı pano değil.",
+    "connectAgent": "Ajan bağla"
+  },
+  "time": {
+    "never": "—",
+    "justNow": "az önce",
+    "minutesAgo": "{{count}} dk önce",
+    "hoursAgo": "{{count}} sa önce",
+    "daysAgo": "{{count}} g önce",
+    "minutesAgoLong_one": "{{count}} dakika önce",
+    "minutesAgoLong_other": "{{count}} dakika önce",
+    "hoursAgoLong_one": "{{count}} saat önce",
+    "hoursAgoLong_other": "{{count}} saat önce",
+    "yesterday": "dün",
+    "daysAgoLong_one": "{{count}} gün önce",
+    "daysAgoLong_other": "{{count}} gün önce",
+    "weeksAgoLong_one": "{{count}} hafta önce",
+    "weeksAgoLong_other": "{{count}} hafta önce"
+  },
+  "settings": {
+    "title": "Ayarlar",
+    "tabs": {
+      "label": "Ayarlar",
+      "board": "Pano",
+      "projectLabel": "Bu proje: {{name}}",
+      "project": "Bu proje:"
+    },
+    "board": {
+      "defaultAgent": {
+        "title": "Varsayılan ajan CLI'ı",
+        "text": "<goto>Ajan bağla</goto> sayfasının açıldığı CLI; yalnızca onun komutlarını gösterir."
+      },
+      "previews": {
+        "title": "Preview'lar",
+        "text": "Panonun tüm projelerde aynı anda derleyip çalıştırdığı preview sayısı (1 ile 32 arası). Her biri, verinin kendi kopyasıyla çalışan eksiksiz bir panodur; sınırı aşan başlatma reddedilir. Projenin Preview'lar sayfası kaç tanesinin kullanımda olduğunu gösterir."
+      },
+      "theme": {
+        "title": "Tema",
+        "text": "Varsayılan olarak sistemini izler. Seçim panoda değil, bu tarayıcıda saklanır.",
+        "system": "Sistem",
+        "light": "Açık",
+        "dark": "Koyu"
+      },
+      "language": {
+        "title": "Dil",
+        "text": "Tarih ve sayılar dahil tüm arayüzün dili. Panoda saklanır, böylece oturum açtığın her cihazda seni izler. İnsanların ve ajanların yazdıkları olduğu gibi kalır.",
+        "search": "Dil ara",
+        "none": "Eşleşen dil yok",
+        "failed": "Bu dil yüklenemedi. Sayfayı yeniden yükle ve yeniden dene."
+      }
+    }
+  },
+  "connect": {
+    "copied": "Kopyalandı",
+    "couldNotCopy": "Kopyalanamadı",
+    "browserNoCopy": "Tarayıcı kopyalamaya izin vermedi; metni seçip kopyala",
+    "copy": "Kopyala",
+    "save": "Kaydet",
+    "revoke": "Geçersiz kıl",
+    "keep": "Sakla",
+    "turnOff": "Kapat",
+    "checkAgain": "Yeniden kontrol et",
+    "title": "Ajan bağla",
+    "intro": "Bir CLI bağla: <strong>Komut üret</strong> onun MCP token'ını üretir; skill bu makineye bir düğmeyle (başka makinede satırla) kurulur. Varsayılan CLI <goto>Ayarlar</goto>'da seçilir.",
+    "step1": {
+      "title": "1. MCP sunucusunu bağla",
+      "command": "Terminalde bir kez çalıştır; sunucuyu tüm repolar için kaydeder.",
+      "config": "<code>{{file}}</code> dosyasına ekle.",
+      "configOpencode": "<code>{{file}}</code> dosyasına ekle (dosyada zaten \"mcp\" varsa pano girdisini ona birleştir)."
+    },
+    "step2": {
+      "title": "2. Skill'i kur",
+      "text": "Panonun güncel skill'ini <code>{{path}}</code> yoluna indirir; {{agent}} onu her repoda bulur.",
+      "textCodex": "Panonun güncel skill'ini <code>{{path}}</code> yoluna indirir; {{agent}} onu her repoda bulur. OpenCode da bu klasörü okur.",
+      "textOpencode": "Panonun güncel skill'ini <code>{{path}}</code> yoluna indirir; {{agent}} onu her repoda bulur. OpenCode ~/.claude/skills klasörünü de okur: Claude Code'da zaten varsa bunu atla.",
+      "tokenNote": "Kurulum satırları <time>{{at}}</time> anında sona eren bir indirme token'ı taşır: yaklaşık on dakika. Sonrasında yenisi için satırı yeniden kopyala.",
+      "skillCopied": "SKILL.md kopyalandı",
+      "copySkill": "SKILL.md'yi kopyala",
+      "previewSkill": "SKILL.md önizle",
+      "session": "Ayrıca panoyla oturum açan skill'i, <code>/session</code>'ı kurar: sana kısa bir özet verir, andığın her ticket'ı devreder ve seni bekleyenleri hep aynı biçimde bildirir."
+    },
+    "step3": {
+      "title": "3. İnceleme skill'lerini kur (Claude Code)"
+    },
+    "opencode": {
+      "section": "OpenCode çok katmanlı devretme",
+      "checkAria": "OpenCode yapılandırmasını yeniden kontrol et",
+      "readFailed": "OpenCode yapılandırması okunamadı",
+      "readFailedText": "Dosyayı düzelt, sonra yeniden kontrol et. Yapılandırma okunana kadar çok katmanlı devretme kapalı kalır.",
+      "on": "Çok katmanlı devretme açık (derinlik {{depth}})",
+      "readFrom": "<code>{{source}}</code> kaynağından okundu. Sistem genelindeki yapılandırma, genel ve proje dosyalarından önceliklidir.",
+      "off": "Çok katmanlı devretme kapalı: alt ajanlar başka alt ajan başlatamaz",
+      "offText": "Bunu <code>{{source}}</code> dosyasına ekle (varsa <code>experimental</code> bloğunun içine), sonra OpenCode'u yeniden başlat. <code>experimental</code> bloğu tanımlayan son yapılandırma dosyası belirleyicidir; sistem genelindeki yapılandırma genel ve proje dosyalarından önceliklidir, bu yüzden sonraki bir dosya önceki bir derinliği ezebilir. Pano yalnızca dosyaları okur.",
+      "copySnippet": "Parçayı kopyala",
+      "deprecated": "<code>{{source}}</code> içindeki üst düzey <code>subagent_depth</code> artık OpenCode tarafından okunmuyor; yalnızca <code>experimental.subagent_depth</code> geçerli."
+    },
+    "generate": {
+      "agentName": "Ajan adı",
+      "button": "Komut üret",
+      "newOrchestrator": "Aşağıdaki komutlar, <strong>{{name}}</strong> için {{until}} tarihine kadar geçerli yeni bir orchestrator token'ı taşır. Yalnızca bu kez gösterilir: gerekeni şimdi kopyala. Sayfadan ayrılırsan kaybolur; yeniden basarsan bir tane daha üretilir.",
+      "newWorker": "Aşağıdaki komutlar, <strong>{{name}}</strong> için {{until}} tarihine kadar geçerli yeni bir worker token'ı taşır. Yalnızca bu kez gösterilir: gerekeni şimdi kopyala. Sayfadan ayrılırsan kaybolur; yeniden basarsan bir tane daha üretilir.",
+      "intro": "Bu ajan için bir token üretir ve bu sayfadaki her komuta yerleştirir. Varsayılan olarak bir <strong>orchestrator</strong>'dır, yani projelerin talimatlarını da değiştirebilir; Ayarlar, Ajan token'ları bölümünden worker yapabilirsin. Ad, ajanın panodaki adıdır. Token 1 yıl oturum açar (iptal edilmedikçe) ve yalnızca bir kez gösterilir."
+    }
+  },
+  "tokens": {
+    "title": "Ajan token'ları",
+    "listText": "Yukarıdaki komutların taşıdığı token'lar, her biri rolüyle: projelerin talimatlarını da değiştiren bir orchestrator ya da bir worker (ikisi de Ayarlar, Ajan token'ları'ndan seçilir; yeni token orchestrator olur). Birini geçersiz kıl; onu kullanan ajanın oturumu bir sonraki isteğinde kapanır.",
+    "none": "Henüz yok.",
+    "meta": "oluşturma {{made}} · {{used}} · bitiş {{at}}",
+    "metaExpired": "oluşturma {{made}} · {{used}} · doldu {{at}}",
+    "lastUsed": "son kullanım {{when}}",
+    "neverUsed": "hiç kullanılmadı",
+    "revokeAria": "Geçersiz kıl: {{name}}, {{when}} oluşturuldu",
+    "revokeTitle": "{{name}} için token geçersiz kılınsın mı?",
+    "revokeText": "Onu kullanan ajan bir sonraki isteğinden itibaren reddedilir. Yeni bir token ile bağlamak için komutları yeniden üret.",
+    "identities": {
+      "text": "Kim kim: her ajan token'ı panoda bir kimliktir; worker yapmazsan orchestrator'dır. Onun altında kendini tanıtan alt ajanları da onunla birlikte listelenir, hep worker olarak; uzun liste kapalı başlar, kalanı için göz düğmesi vardır.",
+      "empty": "Henüz ajan token'ı yok: Ajan bağla sayfası üretir.",
+      "agentAria": "Ajan {{name}}",
+      "orchestratorTip": "Orchestrator projelerin talimatlarını da değiştirir; her değişiklik sen inceleyene ya da geri alana kadar Seni bekliyor listende durur. Kim olduğunu söyleyen alt ajanları (<token>/<name>) worker kalır.",
+      "orchestrator": "Orchestrator",
+      "orchestratorAria": "{{name}}: orchestrator",
+      "nowOrchestrator": "{{name}} artık orchestrator",
+      "nowWorker": "{{name}} artık worker",
+      "revokeAria": "Geçersiz kıl: {{name}}",
+      "revokeText": "Onu kullanan ajan ve altında çalışan her alt ajan bir sonraki isteğinden itibaren reddedilir. Yeni bir token ile bağlamak için Ajan bağla sayfasında komutları yeniden üret.",
+      "hide": "Ajanları gizle",
+      "show_one": "{{count}} ajanı göster",
+      "show_other": "{{count}} ajanı göster",
+      "workingUnder": "Çalıştığı token: {{token}}",
+      "seen": "görüldü {{when}}"
+    }
+  },
+  "devices": {
+    "thisMachine": "bu makine",
+    "title": "Cihazlar",
+    "add": "Cihaz ekle",
+    "signOut": "Oturumu kapat",
+    "text": "Panoda oturum açan passkey'ler. Passkey, oluşturulduğu adreste çalışır: bu makinede (localhost) ya da diğer cihazların için panonun tailnet adında.",
+    "link": "Bu bağlantıyı yeni cihazda aç ve orada bir passkey oluştur. Bir kez çalışır, {{until}} tarihine kadar.",
+    "copyLinkAria": "Bağlantıyı kopyala: {{where}}",
+    "passkeys": "Passkey'ler",
+    "passkeyMeta": "{{where}} · eklendi {{added}} · son kullanım {{used}}",
+    "passkeyMetaSessions_one": "{{where}} · eklendi {{added}} · son kullanım {{used}} · {{count}} oturum",
+    "passkeyMetaSessions_other": "{{where}} · eklendi {{added}} · son kullanım {{used}} · {{count}} oturum",
+    "lastLocal": "son olarak bu makinede",
+    "revokeAria": "Geçersiz kıl: {{name}}",
+    "revokeTitle": "{{name}} geçersiz kılınsın mı?",
+    "revokeText": "Passkey artık oturum açmaz ve onunla oturum açmış tarayıcıların oturumu kapanır.",
+    "signedIn": "Oturum açık",
+    "sessions": "Oturumlar",
+    "thisBrowser": "bu tarayıcı",
+    "sessionMeta": "{{where}} · oturum açıldı {{signedIn}} · görüldü {{seen}} · bitiş {{until}}",
+    "signOutAria": "Oturumu kapat: {{name}}, {{when}} açıldı"
+  },
+  "tailnet": {
+    "title": "Diğer cihazlar (tailnet)",
+    "text": "Panoyu diğer cihazlarından ve bulut ajanlarından tailnet üzerinden, HTTPS ile aç. Buradan etkinleştir; düzenlenecek dosya yok. Cihazların kendi passkey'leriyle oturum açar (aşağıda, Cihazlar).",
+    "signInOff": "Bu panoda oturum açma kapalı (BOARD_ENV={{env}}): yalnızca bu makinede yanıt verir, tailnet üzerinden asla; bu yüzden giriş burada kaydedilemez.",
+    "fromEnv": "config.env (ya da .env) içinde ayarlı: <code>PUBLIC_ORIGIN={{origin}}</code>. Bu ayardan önceliklidir, bu yüzden giriş burada salt okunurdur. Ayarlar'dan değiştirmek için oradaki satırı kaldır.",
+    "funnel": "Tailscale Funnel açık: panoyu internete açar, pano bunu reddeder. Kapat (<code>tailscale funnel off</code> ya da <code>tailscale serve reset</code>); o zamana kadar kaydetme reddedilir.",
+    "unserved": "Kayıtlı giriş sunulmuyor: {{reason}}.",
+    "tailscale": "Tailscale",
+    "version": "sürüm {{version}}",
+    "installed": "kurulu",
+    "notInstalled": "kurulu değil",
+    "signedIn": "Oturum açık",
+    "yes": "evet",
+    "no": "hayır ({{state}})",
+    "notRunning": "çalışmıyor",
+    "thisMachine": "Bu makine",
+    "noName": "tailnet adı yok",
+    "https": "HTTPS",
+    "certsOn": "sertifikalar açık",
+    "certsOff": "sertifikalar kapalı",
+    "serve": "443'te sun",
+    "serveBoard": "pano ({{target}})",
+    "serveNothing": "hiçbir şey",
+    "funnelLabel": "Funnel",
+    "funnelUnknown": "Funnel okunamadı",
+    "funnelOn": "açık (reddedildi)",
+    "funnelOff": "kapalı",
+    "said": "Tailscale şunu dedi: {{error}}",
+    "entrance": "Giriş",
+    "use": "https://{{name}} kullan",
+    "turnOffTitle": "Tailnet girişi kapatılsın mı?",
+    "turnOffText": "Pano {{origin}} adresinde yanıt vermeyi bırakır. O ad üzerinden oturum açmış tarayıcıların oturumu kapanır (passkey'leri listede kalır).",
+    "hint": "Yalnızca https, bir ana makine adı; port ve yol yok. Panonun veritabanına kaydedilir ve yeniden başlatmadan hemen uygulanır.",
+    "servedConfig": "Şu an sunulan: {{origin}} (config.env'de ayarlı).",
+    "servedSetting": "Şu an sunulan: {{origin}} (bu ayardan).",
+    "servedNone": "Şu an sunulan: hiçbir şey; pano yalnızca bu makinede yanıt verir.",
+    "entranceOff": "Giriş kapalı",
+    "test": "Girişi sına",
+    "works": "Çalışıyor.",
+    "notYet": "Henüz değil.",
+    "next": {
+      "notInstalled": "Tailscale bu makinede kurulu değil: kur ve oturum aç, sonra yeniden kontrol et (README: Using it from other devices).",
+      "notSignedIn": "Bu makinede Tailscale durumu: {{state}}. tailscale up çalıştır ve oturum aç, sonra yeniden kontrol et.",
+      "noName": "Bu makinenin tailnet adı yok: Tailscale yönetim konsolunda MagicDNS'i aç, sonra yeniden kontrol et.",
+      "httpsOff": "{{name}} için HTTPS sertifikaları kapalı: Tailscale yönetim konsolunda aç, sonra yeniden kontrol et.",
+      "ready": "Hazır: bu makine tailnet'inde {{name}} adını taşıyor ve serve onu panoya yönlendiriyor."
+    },
+    "serveOther": "Bu makinenin 443 portu şu an {{target}} sunuyor. https://{{name}} adresini bunun yerine panoya yönlendirmek için şunu burada çalıştır:",
+    "serveNotSet": "Serve henüz kurulu değil. Panoyu https://{{name}} adresinde açmak için şunu burada çalıştır:",
+    "copyServe": "Serve komutunu kopyala",
+    "neverRuns": "Pano bunu asla kendisi çalıştırmaz. Sonra yeniden kontrol et. Durdurmak için: <code>tailscale serve --https=443 off</code>."
+  },
+  "updates": {
+    "badgeTip": "CrossBoard {{version}} hazır (kurulu: {{installed}})",
+    "badgeAria": "Güncelleme var",
+    "badge": "Güncelle",
+    "title": "Güncellemeler",
+    "checkout": "Bu pano bir checkout'tan çalışıyor; güncelleyicisi yok. Güncellemek için o checkout'ta <code>main</code> üzerinde <code>git pull</code> çalıştır, sonra <code>pnpm start</code> (README: \"Running it\"). Buradan yalnızca masaüstü uygulaması yeni sürümleri denetler ve kurar.",
+    "installed": "Kurulu",
+    "installedValue": "CrossBoard {{version}}",
+    "newestRelease": "En yeni sürüm",
+    "unsupported": "Uygulamanın bu kopyası kendini güncelleyemez: yükleyicisinden ya da bir paketten değil, açılmış bir klasörden çalışıyor. Buradan güncelleme almak için GitHub'dan bir sürüm kur.",
+    "checking": "Denetleniyor…",
+    "checkNow": "Şimdi denetle",
+    "install": "İndir ve kur",
+    "downloadAria": "İndir",
+    "downloading": "{{version}} indiriliyor… %{{percent}}",
+    "installing": "{{version}} kuruluyor: pano bir an durur ve uygulama yeni sürümle yeniden başlar.",
+    "whatsNew": "{{version}} yenilikleri",
+    "autoCheck": "Güncellemeleri başlangıçta ve altı saatte bir denetle",
+    "prereleases": "Ön sürümleri dahil et (0.3.0-beta.1 gibi)",
+    "note": "İndir ve kur'a basana kadar hiçbir şey indirilmez ya da kurulmaz. Her indirme önce sürümün meta verisindeki sha512 ile doğrulanır.",
+    "notChecked": "Henüz denetlenmedi",
+    "none": "Daha yeni yok (denetlendi {{when}})",
+    "unknown": "Bilinmiyor (denetlendi {{when}})",
+    "skipped": "{{version}} atlandı: güncelleme kartı bunun için bir daha görünmez.",
+    "undo": "Geri al",
+    "manual": "Kurmak için bunu terminalde çalıştır, sonra uygulamayı yeniden başlat:",
+    "copyCommand": "Komutu kopyala",
+    "card": {
+      "artwork": "Sürüm görseli",
+      "available": "CrossBoard {{version}} hazır",
+      "skip": "Bu sürümü atla",
+      "installNow": "Şimdi kur"
+    }
+  },
+  "skills": {
+    "install": "Skill'i kur",
+    "update": "Skill'i güncelle",
+    "installedBoard": "Pano skill'i kuruldu: <time>{{at}}</time>",
+    "installedReview": "İnceleme skill'leri kuruldu: <time>{{at}}</time>",
+    "installedBoardAria": "Pano skill'i kuruldu",
+    "installedReviewAria": "İnceleme skill'leri kuruldu",
+    "installedFiles": "Kurulan dosyalar",
+    "failedBoard": "Pano skill'i kurulamadı (HTTP {{status}})",
+    "failedReview": "İnceleme skill'leri kurulamadı (HTTP {{status}})",
+    "failedBoardAria": "Pano skill'i kurulamadı",
+    "failedReviewAria": "İnceleme skill'leri kurulamadı",
+    "failedHint": "Klasörün panonun çalıştığı kullanıcıya ait olduğunu ve yazılabildiğini kontrol et.",
+    "retry": "Yeniden dene",
+    "action": {
+      "created": "oluşturuldu",
+      "updated": "güncellendi",
+      "unchanged": "değişmedi"
+    },
+    "fileStatus": {
+      "current": "güncel",
+      "outdated": "eski",
+      "missing": "eksik"
+    },
+    "intro": "<code>/todo-review</code> To do ticket'larını devre kadar yürütür, <code>/review-queue</code> PR kuyruğunu inceler; ikisi de bu ajanlara devreder. <code>/feature-review</code> ise her değişiklikte çalıştırdıkları incelemedir. Tek satır üçünü de ajanlarıyla birlikte <code>~/.claude</code> içine kurar (Claude Code; OpenCode da skill'lerini okur), aynı adlı dosyaların üzerine yazar.",
+    "placeholderNote": "Bir satır kopyalanana kadar <code>{{placeholder}}</code> taşır: pano o zaman bu sayfadaki her kurulum satırı için yaklaşık on dakika geçerli bir indirme token'ı üretir.",
+    "filesInstalled_one": "Kurduğu {{count}} dosya",
+    "filesInstalled_other": "Kurduğu {{count}} dosya",
+    "track": "İzle",
+    "global": "Genel",
+    "byRepo": "Repoya göre",
+    "repoStatus": {
+      "current": "Güncel",
+      "outdated": "Eski",
+      "none": "Repoda kurulu değil",
+      "unreachable": "Checkout okunamıyor"
+    },
+    "globalStatus": {
+      "current": "Güncel",
+      "outdated": "Eski",
+      "none": "Kurulu değil",
+      "unreachable": "Klasör okunamıyor"
+    },
+    "onMachine": "Bu makinede",
+    "globalText": "Panonun çalıştığı makinedeki <code>~/.claude</code> kopyası; Claude Code, kendi kopyası olmayan her repoda bunu kullanır. Yukarıdaki satır onu günceller.",
+    "globalHomeText": "Panonun çalıştığı makinede <code>~/.claude</code> yerine <code>CLAUDE_HOME</code>'un gösterdiği klasördeki kopya. Yukarıdaki satır <code>~/.claude</code> içine kurar: bu kopyanın dosyaları o klasöre kuran kendi satırı vardır.",
+    "claudeOnMachine": "Bu makinedeki ~/.claude",
+    "noneGlobal": "Bu dosyaların hiçbiri henüz yok: yukarıdaki satır onları kurar.",
+    "noneHome": "Bu dosyaların hiçbiri henüz yok: bu satır onları kurar.",
+    "inRepos": "Repolarında",
+    "reposText": "Bir repo kendi <code>.claude</code> klasöründe kendi kopyasını taşıyabilir; Claude Code orada <code>~/.claude</code> içindekinin yerine onu kullanır. Eski bir kopyanın, bu dosyaları o reponun <code>.claude</code> klasörüne kuran bir satırı vardır; aynı adlı dosyaların üzerine yazar, kalanlara dokunmaz.",
+    "noReposProject": "Bu projede henüz repo yok.",
+    "noReposBoard": "Panoda henüz repo yok.",
+    "repoLabel": "{{project}} içinde {{repo}}",
+    "usesGlobal": "<code>~/.claude</code> kurulumunu kullanır.",
+    "differ_one": "{{total}} dosyadan {{count}} tanesi farklı ya da eksik",
+    "differ_other": "{{total}} dosyadan {{count}} tanesi farklı ya da eksik",
+    "notUpToDate": "Güncel olmayan dosyalar"
+  },
+  "skillDiff": {
+    "description": "Kurulum satırının neyi değiştireceği: - ile işaretli satırlar kurulu kopyadadır ve gider, + ile işaretli satırlar panonun sunduğu kopyadan gelir. Satır sonları hariç.",
+    "unreadable": "Kurulu kopya metin olarak okunamıyor ({{reason}}): <code>{{path}}</code>",
+    "noChanges": "Değişiklik yok: kurulu kopya panonunkiyle güncel.",
+    "changes": "Değişiklikler"
+  },
+  "hostTools": {
+    "section": "Eksik araçlar",
+    "line": "<strong>{{problem}}</strong>: {{breaks}} çalışmaz. Çözüm: {{fix}}.",
+    "dismissTip": "Sonraki denetim {{name}} aracını hâlâ eksik bulana kadar gizle",
+    "dismissAria": "{{name}} uyarısını kapat",
+    "recheckTip": "git, gh, claude, node ve pnpm'i panonun PATH'inde yeniden ara",
+    "recheckAria": "Araçları yeniden kontrol et",
+    "text": {
+      "breaks": {
+        "git": "ticket branch'i ile commit durumu, merge denetimleri ve temizlik",
+        "gh": "PR kuyruğu, CI durumu ve PR ticket'ları",
+        "claude": "panonun kendi rapor üretimi (Raporlar → Üret)",
+        "node": "yönetilen preview'lar",
+        "pnpm": "yönetilen preview'lar",
+        "ghTooOld": "panonun gh oturumu denetimi"
+      },
+      "problem": {
+        "notFound": "{{name}} panonun PATH'inde bulunamadı",
+        "claudeNotFound": "claude bulunamadı: CLAUDE_BIN değeri {{bin}}",
+        "tooOld": "{{gh}} bu denetim için çok eski: --active seçeneğini bilmiyor",
+        "noConfigWhere": "gh yapılandırmasını bulamıyor: {{needs}} yok, bu yüzden {{file}} dosyasına baktı",
+        "noConfig": "gh yapılandırmasını bulamıyor: HOME ya da GH_CONFIG_DIR yok",
+        "signedOut": "gh oturumu açık değil"
+      },
+      "fix": {
+        "then": "sonra Yeniden kontrol et (klasörü PATH'te değilse panoyu yeniden başlat)",
+        "installGit": "git'i kur (https://git-scm.com/downloads), {{after}}",
+        "installGh": "GitHub CLI'ı kur (https://cli.github.com) ve gh auth login çalıştır, {{after}}",
+        "installClaude": "Claude Code'u kur (https://docs.claude.com/en/docs/claude-code/setup) ya da .env içinde (masaüstü uygulamasında config.env) CLAUDE_BIN'i tam yoluna ayarla, sonra panoyu yeniden başlat",
+        "installNode": "Node.js'i kur (https://nodejs.org), {{after}}",
+        "installPnpm": "corepack enable pnpm çalıştır (ya da kur: https://pnpm.io/installation), {{after}}",
+        "upgradeGh": "GitHub CLI'ı yükselt (https://cli.github.com; Debian ya da Ubuntu'da: sudo apt install --only-upgrade gh, macOS'ta: brew upgrade gh), sonra Yeniden kontrol et",
+        "noConfig": "panoyu, HOME gh'nin oturum açtığı ev klasörüne ayarlı olarak başlat (ya da GH_CONFIG_DIR'i hosts.yml'yi tutan klasöre), sonra Yeniden kontrol et",
+        "signedOut": "bu makinede gh auth login çalıştır, sonra Yeniden kontrol et"
+      }
+    }
+  },
+  "previewLimit": {
+    "label": "Preview sınırı",
+    "saving": "Kaydediliyor…"
+  },
+  "projectSettings": {
+    "intro": "Bu projenin işleyişi: yeni ticket'ların neyle başladığı, sunduğu etiketler, bir ticket'ın ne zaman durmuş sayıldığı, gösterdiği uyarılar, aşamaları, çalıştırmaları ve sayfalarının gösterdikleri. Ajanlarının talimatları kendi sayfasındadır.",
+    "save": "Kaydet",
+    "saving": "Kaydediliyor…",
+    "unsaved": "Kaydedilmemiş değişiklikler.",
+    "noChanges": "Değişiklik yok.",
+    "kinds": {
+      "title": "Türler",
+      "description": "Projenin ne için olduğu. Yazılım türü olmayan bir proje repolarını, PR'larını, CI'ını, preview'larını ve Temizlik'i gizler; repoları ve PR'ları saklanmaya devam eder."
+    },
+    "phases": {
+      "title": "Varsayılan fazlar",
+      "description": "Her yeni ticket'ın sırayla başladığı üst düzey görevler. Oluşturulurken verilen görevler ilkinin altına girer; lane bunlarsız başlar. Ajanlar her birini bitirince işaretler, uymayanları kaldırır ya da yeniden adlandırır. Ticket'ları görevsiz başlatmak için boş bırak.",
+      "empty": "Faz yok: yeni ticket'lar görevsiz başlar.",
+      "new": "Yeni faz",
+      "list": "Varsayılan fazlar",
+      "placeholder": "Faz ekle",
+      "add": "Faz ekle",
+      "useBuiltIn": "Yerleşik listeyi kullan"
+    },
+    "tags": {
+      "title": "Etiket önerileri",
+      "description": "Bir ticket'ın etiketlerinin altında çip olarak sunulan etiketler; ardından ticket'larının zaten taşıdığı etiketler gelir. Ajanlar bunları <code>get_project</code> içinde okur ve yeniden kullanır. Yalnızca kullanımdaki etiketleri sunmak için boş bırak.",
+      "empty": "Öneri yok: yalnızca kullanımdaki etiketler sunulur.",
+      "new": "Yeni etiket",
+      "placeholder": "Etiket ekle",
+      "add": "Etiket ekle",
+      "useDefaults": "Varsayılanları kullan"
+    },
+    "stall": {
+      "title": "Durmuş ticket'lar",
+      "description": "Bir ticket'ın nasıl göründüğünü iki saat belirler. Kira, ajanın heartbeat'inin ya da gönderisinin canlı tuttuğu süredir: on dakika sürer ve açık bir span varken biterse ticket <lost>Bağlantı koptu</lost> görünür: ajan gitmiştir, seni beklemiyor. Açık hiçbir şeyi olmayan ticket, hiçbir ajanın sözü (heartbeat, span, bekleme, devir) ve panonun onda gördüğü hiçbir şey (bir push, PR'ı, preview'ı) bu süre boyunca gelmediyse <stalled>Durmuş</stalled> görünür. Bu ayar o sessizlik eşiğini belirler ve önce o geçerlidir: on dakikadan kısa bir eşik, sessiz bir ticket'ı kira bitmeden işaretler. Kiranın on dakikası sabit kalır.",
+      "label": "Durma süresi (dakika)",
+      "invalid": "{{min}} ile {{max}} arasında bir tam sayı."
+    }
+  },
+  "kinds": {
+    "legend": "Projenin ne için olduğu",
+    "hint": "Yazılım; repoları, branch'leri, PR'ları, CI'ı, preview'ları ve Temizlik'i ekler. Diğer türler işlerini git dışında tutar: pano kullandıklarını gösterir.",
+    "label": {
+      "software": "Yazılım",
+      "music": "Müzik",
+      "art": "Sanat",
+      "writing": "Yazı",
+      "video": "Video",
+      "research": "Araştırma",
+      "lawyer": "Avukat",
+      "accountant": "Muhasebeci",
+      "cybersecurity": "Siber güvenlik",
+      "life": "Yaşam"
+    }
+  },
+  "lists": {
+    "tasks": "Görevler",
+    "addTask": "Görev ekle",
+    "addTaskLabel": "Görev ekle",
+    "moveUp": "Yukarı taşı",
+    "moveDown": "Aşağı taşı",
+    "moveItemUp": "{{item}} öğesini yukarı taşı",
+    "moveItemDown": "{{item}} öğesini aşağı taşı",
+    "remove": "Kaldır",
+    "removeItem": "{{item}} öğesini kaldır"
+  },
+  "tagsInput": {
+    "tooLong": "{{max}} karakterden uzun",
+    "remove": "Kaldır",
+    "removeTag": "{{tag}} etiketini kaldır",
+    "suggested": "Önerilen etiketler",
+    "addTag": "{{tag}} etiketini ekle",
+    "tooMany": "En fazla {{max}} etiket.",
+    "tooLongTag": "Bir etiket en fazla {{max}} karakter olabilir."
+  },
+  "stagesEditor": {
+    "title": "Aşamalar",
+    "description": "Özellik panosunun sütunları, soldan sağa. Panonun kuralları türe göre işler (üstlenme, reddetme, lane ilerlemesi); ajanlar her aşamanın anahtarını, adını ve türünü görür. Yeniden adlandırma anahtarı korur.",
+    "moveEarlier": "{{name}} aşamasını öne al",
+    "moveLater": "{{name}} aşamasını geri al",
+    "tickets_one": "{{count}} ticket",
+    "tickets_other": "{{count}} ticket",
+    "newPlaceholder": "Yeni aşama, ör. QA",
+    "add": "Aşama ekle",
+    "moveAnyway": "Yine de taşı",
+    "kind": {
+      "open": "Açık",
+      "active": "Aktif",
+      "blocked": "Engelli",
+      "review": "İnceleme",
+      "done": "Bitti",
+      "cancelled": "İptal edildi",
+      "approved": "Onaylandı"
+    },
+    "hint": {
+      "open": "alınmayı bekliyor; üstlenme onu işin başladığı aşamaya taşır",
+      "active": "üzerinde çalışılıyor",
+      "blocked": "seni bekliyor",
+      "review": "incelemeye devredildi",
+      "done": "bitti; üstlenilemez",
+      "cancelled": "vazgeçildi; reddetme ticket'ı buraya taşır ve görevleri ilerlemeden çıkar",
+      "approved": "merge için onayın; hiçbir ajan ticket'ı buraya taşımaz"
+    },
+    "color": {
+      "gray": "gri",
+      "slate": "arduvaz",
+      "sky": "gök mavisi",
+      "blue": "mavi",
+      "teal": "petrol",
+      "emerald": "zümrüt",
+      "lime": "limon yeşili",
+      "amber": "kehribar",
+      "orange": "turuncu",
+      "rose": "gül",
+      "pink": "pembe",
+      "violet": "mor"
+    },
+    "colour": "Renk",
+    "stageName": "Aşama adı",
+    "firstActive": "İlk aktif aşama ({{name}})",
+    "firstActiveNone": "İlk aktif aşama (yok)",
+    "workStarts": "İş şurada başlar",
+    "workStartsHint": "Bir ticket'ı üstlenmenin onu koyduğu yer; \"devam ediyor\" ya da \"aktif\" durumu da bu aşama demektir.",
+    "delete": "{{name}} aşamasını sil",
+    "deleteTitle": "{{name}} aşaması silinsin mi?",
+    "holds_one": "İçinde {{count}} ticket var (lane'ler dahil). Taşınacakları aşamayı seç.",
+    "holds_other": "İçinde {{count}} ticket var (lane'ler dahil). Taşınacakları aşamayı seç.",
+    "holdsNone": "İçinde ticket yok.",
+    "moveTo": "Şuraya taşı…",
+    "cancel": "İptal",
+    "deleteConfirm": "Sil"
+  },
+  "runsSettings": {
+    "title": "Çalıştırmalar",
+    "description": "Panonun bir ticket'ın her repodaki worktree'sinden, ticket'ın Çalıştırmalar kartından ya da bir ajan isteyince başlattıkları: bir <strong>preview</strong> bir portta yanıt verir ve açılacak bir bağlantı alır, bir <strong>job</strong> bağlantısız bir arka plan worker'ıdır. Her biri worktree'de önce kurulumunu (yalnızca lockfile değiştiyse), sonra derlemesini, sonra başlatma komutunu çalıştırır. Ajanlar bunları başlatıp durdurur, ekleyip değiştirip silebilir de: her değişiklik projenin etkinliğinde ajanın adıyla görünür.",
+    "noRepos": "Projede henüz repo yok.",
+    "removed": "Kaldırıldı",
+    "groupLabel": "{{name}} çalıştırmaları",
+    "add": "Çalıştırma ekle",
+    "none": "Çalıştırma yok: bu repodaki ticket'ların başlatacağı bir şey yok.",
+    "typePreview": "Preview",
+    "typeJob": "Job",
+    "portHealth": "port {{port}} · sağlık {{path}}",
+    "portAuto": "otomatik",
+    "moveUp": "Yukarı taşı",
+    "moveDown": "Aşağı taşı",
+    "edit": "Düzenle",
+    "editRun": "{{name}} çalıştırmasını düzenle",
+    "delete": "Sil",
+    "deleteRun": "{{name}} çalıştırmasını sil",
+    "deleteTitle": "{{name}} çalıştırması silinsin mi?",
+    "deleteDescription": "Şu an nerede çalışıyorsa durdurulur ve {{repo}} reposunun ticket'ları onu artık sunmaz.",
+    "cancel": "İptal",
+    "newRun": "Yeni çalıştırma",
+    "portProblem": "port: otomatik ya da {{from}} ile {{to}} arası bir port",
+    "name": "Ad",
+    "type": "Tür",
+    "typePreviewLong": "Preview (bir port ve bir bağlantı)",
+    "typeJobLong": "Job (bir arka plan worker'ı)",
+    "install": "Kurulum",
+    "installPlaceholder": "pnpm install --frozen-lockfile (boş: yok)",
+    "build": "Derleme",
+    "buildPlaceholder": "pnpm build (boş: yok)",
+    "start": "Başlatma",
+    "startPreviewPlaceholder": "node server.js (PORT'u okur)",
+    "port": "Port",
+    "healthPath": "Sağlık yolu",
+    "envPreview": "Başlatma komutu için ortam: bir değerdeki {port} onun portudur; PORT ve HOST ayarlıdır",
+    "env": "Başlatma komutu için ortam",
+    "varName": "{{n}}. değişken adı",
+    "varValue": "{{n}}. değişken değeri",
+    "valuePlaceholder": "değer",
+    "removeVar": "{{n}}. değişkeni kaldır",
+    "addVar": "Değişken ekle",
+    "copyData": "Önce canlı panonun verisini data/preview içine kopyala (DATA_DIR olarak)",
+    "save": "Kaydet",
+    "saving": "Kaydediliyor…"
+  },
+  "layoutEditor": {
+    "title": "Düzen",
+    "description": "Bu projede neyin nerede görüneceği: menüsünün sayfaları, Genel bakış'ın kartları (ve Ana sayfadaki bloğunun kartları) ve ticket sayfasının bölümleri. Gizlemek için bir kutucuğu kapat, taşımak için sürükle ya da oklarını kullan; ticket bölümünü diğer sütuna taşıyabilirsin. Gizli bir sayfa bağlantısıyla yine açılır. <lock/> Kilitliler taşınır ama hep görünür.",
+    "area": {
+      "nav": "Proje menüsü",
+      "overview": "Genel bakış kartları",
+      "ticketMain": "Ticket sayfası, ana sütun",
+      "ticketSide": "Ticket sayfası, yan sütun"
+    },
+    "where": {
+      "nav": "Menüde",
+      "overview": "Genel bakışta",
+      "ticket": "Ticket sayfasında"
+    },
+    "menu": "Menü",
+    "overview": "Genel bakış",
+    "ticketPage": "Ticket sayfası",
+    "mainColumn": "Ana sütun",
+    "sideColumn": "Yan sütun",
+    "hiddenCount_one": "{{count}} gizli.",
+    "hiddenCount_other": "{{count}} gizli.",
+    "reset": "Varsayılana dön",
+    "shown": "{{total}} içinden {{shown}} görünüyor",
+    "dropHere": "Buraya bırak",
+    "empty": "Boş: bölümleri buraya sürükle",
+    "moveUp": "Yukarı taşı",
+    "moveDown": "Aşağı taşı",
+    "moveUpIn": "{{where}} {{name}} öğesini yukarı taşı",
+    "moveDownIn": "{{where}} {{name}} öğesini aşağı taşı",
+    "toSideTip": "Yan sütuna taşı",
+    "toMainTip": "Ana sütuna taşı",
+    "toSide": "{{name}} öğesini yan sütuna taşı",
+    "toMain": "{{name}} öğesini ana sütuna taşı",
+    "alwaysShown": "Hep görünür: {{reason}}",
+    "show": "Göster",
+    "hide": "Gizle",
+    "showIn": "{{where}} {{name}} öğesini göster",
+    "element": {
+      "nav": {
+        "overview": "Genel bakış",
+        "prs": "PR kuyruğu",
+        "features": "Süren özellikler",
+        "roadmap": "Yol haritası",
+        "previews": "Preview'lar",
+        "gallery": "Galeri",
+        "agents": "Ekip",
+        "daily": "Günlük",
+        "cleanup": "Temizlik",
+        "repositories": "Repolar",
+        "instructions": "Talimatlar",
+        "workflow": "İş akışı"
+      },
+      "overview": {
+        "needsYou": "Seni bekliyor",
+        "inProgress": "Sürüyor",
+        "doneToday": "Bugün biten",
+        "carryingOver": "Devredenler",
+        "notes": "Notlar",
+        "agents": "Çalışan ajanlar",
+        "lostContact": "Bağlantı koptu"
+      },
+      "ticket": {
+        "instructions": "Talimatlar",
+        "tasks": "Görevler",
+        "timeline": "Zaman çizelgesi",
+        "lanes": "Lane'ler",
+        "activity": "Etkinlik",
+        "runs": "Çalıştırmalar",
+        "details": "Ayrıntılar",
+        "branch": "Branch",
+        "workspaces": "Workspace'ler",
+        "resume": "Devam ettir"
+      }
+    },
+    "locked": {
+      "nav": {
+        "overview": "Projenin açılış sayfası",
+        "features": "Projenin panosu"
+      },
+      "ticket": {
+        "instructions": "Ticket'ın kendi metni",
+        "tasks": "Engelli görev bağlantılarının indiği yer",
+        "activity": "Seni bekleyen kararlar ve konuşmalar burada"
+      }
+    }
+  },
+  "repoDialog": {
+    "newProject": "Yeni proje…",
+    "editTitle": "{{name}} düzenle",
+    "newTitle": "Yeni repo",
+    "description": "Yerel bir git checkout'u. Pano onu git ve gh ile okur; asla yazmaz.",
+    "project": "Proje",
+    "projectName": "Proje adı",
+    "moves": "PR'ları, ticket'ları ve inceleme sonuçları onunla taşınır.",
+    "path": "Repo yolu",
+    "pathPlaceholder": "/home/you/code/… ya da C:\\code\\…",
+    "browse": "Gözat…",
+    "name": "Ad",
+    "namePlaceholder": "GitHub'dan ya da klasörden",
+    "baseBranch": "Ana branch",
+    "removeRepo": "Repoyu kaldır",
+    "removeTitle": "{{name}} kaldırılsın mı?",
+    "removeDescription": "PR kuyruğu girdileri onunla gider. Ticket'lar ve inceleme sonuçları projede kalır, ama PR ticket'ları onunla gider. Diskteki checkout'a dokunulmaz.",
+    "keep": "Sakla",
+    "remove": "Kaldır",
+    "saving": "Kaydediliyor…",
+    "save": "Kaydet",
+    "add": "Repo ekle"
+  },
+  "folderPicker": {
+    "title": "Checkout'u seç",
+    "description": "Panonun çalıştığı makinedeki klasörler. <repo/> bir git checkout'unu işaretler.",
+    "up": "Bir üst klasör",
+    "home": "Ana klasör",
+    "path": "Klasör yolu",
+    "folders": "Klasörler",
+    "none": "Burada klasör yok.",
+    "git": "git",
+    "isRepo": "Bu klasör bir git checkout'u.",
+    "notRepo": "Git checkout'u değil.",
+    "use": "Bu klasörü kullan"
+  },
+  "instructions": {
+    "state": {
+      "pending": "seni bekliyor",
+      "accepted": "incelendi",
+      "reverted": "geri alındı"
+    },
+    "markedReviewed": "İncelendi olarak işaretlendi",
+    "reverted": "Proje talimatları geri alındı",
+    "historyTitle": "Talimat geçmişi",
+    "historyDescription": "Senin ya da bir orchestrator'ın yaptığı her değişiklik, öncesindeki metinle birlikte. Orchestrator değişikliği hemen uygulanır ve incelemeni bekler.",
+    "noChanges": "Henüz değişiklik yok.",
+    "changeBy": "Değişikliği yapan: {{name}}",
+    "aRevert": "bir geri alma",
+    "revertedBy": "{{name}} geri aldı, {{when}}",
+    "reviewedBy": "{{name}} inceledi, {{when}}",
+    "hideChange": "Değişikliği gizle",
+    "showChange": "Değişikliği göster",
+    "reviewed": "İncelendi",
+    "revertTip": "Talimatları bu değişiklikten önceki hâline döndür",
+    "revertBlocked": "Talimatlar o zamandan beri yine değişti: önce sonraki değişikliği geri al",
+    "revert": "Geri al",
+    "diffLabel": "Talimatlarda ne değişti",
+    "pageTitle": "Talimatlar",
+    "pageDescription": "Her ajanın burada çalışmadan önce okuduğu metin. Her değişiklik aşağıda saklanır.",
+    "reposLine": "Repolar: <goto>Repolar sayfası</goto>. Projeyi yeniden adlandırmak ya da silmek için: proje menüsü → Projeleri yönet.",
+    "sectionLabel": "Proje talimatları",
+    "edit": "düzenle",
+    "placeholder": "Repoların nasıl çalıştırılacağı, uyulacak kurallar, asla yapılmaması gerekenler.",
+    "unsavedHint": "Kaydedilmemiş değişiklikler. Ctrl/⌘+Enter kaydeder.",
+    "noChangesHint": "Değişiklik yok.",
+    "cancel": "İptal",
+    "save": "Kaydet",
+    "saving": "Kaydediliyor…",
+    "clickToEdit": "Düzenlemek için tıkla",
+    "empty": "Henüz talimat yok. Yazmak için tıkla.",
+    "discardTitle": "Değişikliklerin atılsın mı?",
+    "discardDescription": "Proje talimatlarında kaydedilmemiş değişiklikler var. Ajanlar kayıtlı olanları okumaya devam eder.",
+    "keepEditing": "Düzenlemeye devam et",
+    "discard": "At"
+  },
+  "repositories": {
+    "title": "Repolar",
+    "description": "Bu projenin okuduğu checkout'lar.",
+    "new": "Yeni repo",
+    "baseLine": "ana {{branch}} · <path>{{path}}</path>",
+    "empty": "Bu projede henüz repo yok. Birini ekle: yerel bir git checkout'unun yolu."
+  },
+  "reports": {
+    "status": {
+      "done": "bitti",
+      "missing": "eksik",
+      "upcoming": "yaklaşan",
+      "off": "kapalı"
+    },
+    "weekday": {
+      "1": "Pazartesi",
+      "2": "Salı",
+      "3": "Çarşamba",
+      "4": "Perşembe",
+      "5": "Cuma",
+      "6": "Cumartesi",
+      "7": "Pazar"
+    },
+    "weekdayShort": {
+      "1": "Pzt",
+      "2": "Sal",
+      "3": "Çar",
+      "4": "Per",
+      "5": "Cum",
+      "6": "Cmt",
+      "7": "Paz"
+    },
+    "weekOf": "{{date}} haftası",
+    "scheduleOff": "kapalı",
+    "scheduleDaily": "günlük, en geç {{end}}, {{format}}",
+    "scheduleWeekly": "haftalık, {{day}} günü en geç {{end}}, {{format}}",
+    "formatFile": "dosya",
+    "formatText": "metin"
+  },
+  "daily": {
+    "title": "Günlük",
+    "subtitle": "Dönemin raporu ve saat saat yapılanlar.",
+    "previousDay": "Önceki gün",
+    "nextDay": "Sonraki gün",
+    "opening": "Günlük açılıyor…"
+  },
+  "reportDue": {
+    "region": "Bekleyen raporlar",
+    "notifyTitleDue": "{{project}}: rapor zamanı",
+    "notifyTitleMissing": "{{project}}: rapor eksik",
+    "notifyBodyDaily": "{{label}} için günlük rapor: son saat {{time}}.",
+    "notifyBodyWeekly": "{{label}} için haftalık rapor: son saat {{time}}.",
+    "missing": ": rapor eksik, vardiya {{time}} anında bitti",
+    "due": ": rapor teslimine {{left}} var, saat {{time}}",
+    "leftMinutes": "{{count}} dk",
+    "leftHours": "{{hours}} sa",
+    "leftHoursMinutes": "{{hours}} sa {{minutes}} dk",
+    "notificationsOn": "Bildirimler bu tarayıcıda açık",
+    "notificationsBlocked": "Bildirimler bu tarayıcıda engelli",
+    "notifyTip": "Bir rapor zamanı gelince tarayıcı bildirimi (bir pano sekmesi açıkken)",
+    "notifyMe": "Bildir"
+  },
+  "activityLog": {
+    "region": "Etkinlik",
+    "empty": "{{date}} tarihinde hiçbir şey olmadı.",
+    "actions_one": "{{count}} eylem",
+    "actions_other": "{{count}} eylem",
+    "contributors_one": "{{count}} katılımcıdan",
+    "contributors_other": "{{count}} katılımcıdan",
+    "contributorsTitle": "Katılımcılar",
+    "by": "yapan: {{names}}",
+    "openAll": "Tümünü aç",
+    "closeAll": "Tümünü kapat",
+    "openReview": "İnceleme sonucunu aç",
+    "kind": {
+      "ticket_one": "{{count}} ticket",
+      "ticket_other": "{{count}} ticket",
+      "task_one": "{{count}} görev",
+      "task_other": "{{count}} görev",
+      "update_one": "{{count}} güncelleme",
+      "update_other": "{{count}} güncelleme",
+      "comment_one": "{{count}} yorum",
+      "comment_other": "{{count}} yorum",
+      "pr_one": "{{count}} PR",
+      "pr_other": "{{count}} PR",
+      "review_one": "{{count}} inceleme",
+      "review_other": "{{count}} inceleme",
+      "workspace_one": "{{count}} workspace",
+      "workspace_other": "{{count}} workspace",
+      "agent_one": "{{count}} ajan",
+      "agent_other": "{{count}} ajan",
+      "project_one": "{{count}} proje",
+      "project_other": "{{count}} proje",
+      "summary_one": "{{count}} özet",
+      "summary_other": "{{count}} özet",
+      "report_one": "{{count}} rapor",
+      "report_other": "{{count}} rapor",
+      "handoff_one": "{{count}} devir",
+      "handoff_other": "{{count}} devir"
+    }
+  },
+  "generateReport": {
+    "wrote": "claude raporu yazdı",
+    "loading": "Yükleniyor…",
+    "off": "Raporlar kapalı: önce rapor ayarlarında bir sıklık belirle",
+    "file": "Bu projenin raporları dosyadır: claude yalnızca metin raporu yazar",
+    "none": "Bu gün için rapor istenmiyor",
+    "fix": "{{problem}}. Çözüm: {{fix}}.",
+    "tip": "claude raporu prompt'tan, şablondan ve etkinlikten yazar",
+    "writing": "claude yazıyor…",
+    "generate": "claude ile üret",
+    "failed": "claude yazamadı: {{message}}"
+  },
+  "pushedToday": {
+    "commits_one": "{{count}} commit",
+    "commits_other": "{{count}} commit",
+    "label": "Bugün push edilen: {{commits}}, {{added}} satır eklendi, {{removed}} silindi",
+    "labelNone": "Bugün push edilen: hiçbir şey",
+    "nothing": "Bugün push edilen yok",
+    "title": "Bugün push edilenler",
+    "checked": "origin denetlendi {{ago}}",
+    "notFetched": "origin henüz çekilmedi",
+    "byRepo": "Bugün push edilenler, repoya göre",
+    "emptyRepos": "Bugün bu projenin repolarında origin'e hiçbir şey ulaşmadı.",
+    "hint": "Bugün origin'in bir branch'ine ulaşan commit'ler, her biri bir kez, merge'ler hariç."
+  },
+  "reportCalendar": {
+    "region": "Rapor takvimi",
+    "counts": "{{done}} bitti · {{missing}} eksik",
+    "openMissing": "{{period}} dönemini aç, en yakın eksik rapor",
+    "nothingMissing": "Eksik yok",
+    "nextMissing": "Sıradaki eksik",
+    "dayLabel": "{{day}}: {{status}}"
+  },
+  "reportCard": {
+    "region": "Rapor",
+    "title": "Rapor",
+    "off": "Bu proje için raporlar kapalı: rapor ayarlarında ne sıklıkla gerektiğini seç.",
+    "notAsked": "{{date}} için rapor istenmiyor.",
+    "due": "son {{date}}",
+    "replace": "değiştir",
+    "post": "raporu gönder",
+    "versions_one": "{{count}} sürüm",
+    "versions_other": "{{count}} sürüm",
+    "version": "sürüm {{n}}",
+    "none": "{{label}} için henüz rapor yok.",
+    "history": "Geçmiş ({{count}})",
+    "earlier": "Önceki sürümler",
+    "forLabel": "Rapor: {{label}}",
+    "placeholderFile": "Rapor dosyasını ekle; hakkında bir satır isteğe bağlı.",
+    "placeholderText": "Rapor, prompt'un istediği gibi. Eklemek için dosyaları yapıştır ya da bırak.",
+    "attach": "ekle",
+    "cancel": "İptal",
+    "attachFirst": "Önce rapor dosyasını ekle",
+    "posting": "Gönderiliyor…",
+    "replaceButton": "Değiştir",
+    "postButton": "Gönder"
+  },
+  "reportSettings": {
+    "region": "Rapor ayarları",
+    "title": "Rapor ayarları",
+    "field": {
+      "prompt": "prompt",
+      "template": "şablon"
+    },
+    "formatText": "Metin",
+    "formatFile": "Dosya (ör. PDF)",
+    "prompt": "Prompt",
+    "promptKindFile": "dosya",
+    "promptKindText": "metin",
+    "edit": "düzenle",
+    "clickToEdit": "Düzenlemek için tıkla",
+    "noPrompt": "Henüz rapor prompt'u yok. Raporun neyi nasıl içermesi gerektiğini, kısa metin mi dosya mı olduğunu yazmak için tıkla.",
+    "promptLabel": "Rapor prompt'u",
+    "promptPlaceholder": "Raporun ne söylemesi gerektiği ve nasıl: kim okuyor, üslup, neyin vurgulanacağı, kısa metin mi PDF mi.",
+    "as": "Biçim",
+    "cancel": "İptal",
+    "save": "Kaydet",
+    "saving": "Kaydediliyor…",
+    "sections": "Üretilen raporun bölümleri şunlardır, bu sırayla: {{headings}}.",
+    "noHeadings": "Başlık yok: üretilen rapor buna göre denetlenmez.",
+    "template": "Şablon",
+    "theDefault": "varsayılan",
+    "templateLabel": "Rapor şablonu",
+    "useDefault": "Varsayılanı kullan",
+    "diffGroup": "Rapor alanında ne değişti: {{field}}",
+    "bothEmpty": "İkisi de boş.",
+    "state": {
+      "pending": "seni bekliyor",
+      "accepted": "saklandı",
+      "reverted": "geri alındı"
+    },
+    "dialogTitle": "Rapor alanı değişikliği: {{field}}",
+    "dialogTitleGeneric": "Rapor ayarı değişikliği",
+    "loading": "Yükleniyor…",
+    "byAgent": "<who>{{name}}</who> (bir ajan)",
+    "by": "<who>{{name}}</who>",
+    "keptBy": "saklayan: {{name}}",
+    "revertedBy": "geri alan: {{name}}",
+    "showChange": "Ne değiştiğini göster",
+    "noticesRegion": "İncelenecek ajan değişiklikleri",
+    "keptToast": "Yeni rapor alanı saklandı: {{field}}",
+    "revertedToast": "Rapor alanı geri alındı: {{field}}",
+    "noticeLabel": "Rapor alanını {{name}} değiştirdi: {{field}}",
+    "noticeText": "<who>{{name}}</who> raporun {{field}} alanını değiştirdi; geri alınsın mı?",
+    "hideChange": "Değişikliği gizle",
+    "showTheChange": "Değişikliği göster",
+    "accept": "Kabul et",
+    "revert": "Geri al",
+    "laterChange": "{{field}} o zamandan beri yine değişti: önce o değişikliği geri al"
+  },
+  "shift": {
+    "notWorkday": "iş günü değil",
+    "before": "vardiya öncesi",
+    "on": "vardiyada",
+    "after": "vardiya sonrası",
+    "tip": "Bugünkü vardiya {{span}}; şimdi {{now}}, {{where}}. Rapor vardiya bitince teslim edilir.",
+    "label": "Vardiya {{span}}, şimdi {{now}}: {{where}}",
+    "cadence": {
+      "off": "Kapalı",
+      "daily": "Günlük",
+      "weekly": "Haftalık"
+    },
+    "badOrder": "Vardiya başlangıcından sonra bitmeli.",
+    "noWorkday": "En az bir iş günü seç.",
+    "badAlert": "Bitişten 0 ile 720 dakika önce arası hatırlat.",
+    "schedule": "Zamanlama",
+    "due": "Teslim",
+    "hintDaily": "Vardiya: rapor bittiğinde teslim edilir.",
+    "hintWeekly": "Vardiya: rapor bittiğinde, yukarıdaki günde teslim edilir.",
+    "start": "Vardiya başı",
+    "end": "Vardiya sonu",
+    "workdays": "İş günleri",
+    "workdaysHint": "Günlük rapor bu günlerde istenir; diğerleri kapalıdır, asla eksik sayılmaz.",
+    "remind": "Şuradan itibaren hatırlat (bitişten kaç dakika önce)",
+    "save": "Kaydet",
+    "saving": "Kaydediliyor…",
+    "weekdayLabel": "Gün"
+  },
+  "cleanup": {
+    "counts": {
+      "deleted_one": "{{count}} silindi",
+      "deleted_other": "{{count}} silindi",
+      "kept_one": "{{count}} saklandı",
+      "kept_other": "{{count}} saklandı",
+      "gone_one": "{{count}} zaten yok",
+      "gone_other": "{{count}} zaten yok"
+    },
+    "actions": {
+      "local": {
+        "row": "Branch'i sil",
+        "all": "Uygun tüm yerel branch'leri sil",
+        "title_one": "{{count}} yerel branch silinsin mi?",
+        "title_other": "{{count}} yerel branch silinsin mi?",
+        "confirm_one": "{{count}} yerel branch'i sil",
+        "confirm_other": "{{count}} yerel branch'i sil",
+        "what": "Her branch checkout'tan gider. Origin kendi kopyasını tutar."
+      },
+      "remote": {
+        "row": "Origin'den sil",
+        "all": "Origin'deki uygun tüm branch'leri sil",
+        "title_one": "Origin'deki {{count}} branch silinsin mi?",
+        "title_other": "Origin'deki {{count}} branch silinsin mi?",
+        "confirm_one": "Origin'deki {{count}} branch'i sil",
+        "confirm_other": "Origin'deki {{count}} branch'i sil",
+        "what": "Her branch origin'den, onunla çalışan herkes için gider. Yerel branch'ler kalır."
+      },
+      "worktrees": {
+        "row": "Worktree + branch'i kaldır",
+        "all": "Uygun tüm worktree'leri branch'leriyle kaldır",
+        "title_one": "{{count}} branch'in worktree'si ve branch kaldırılsın mı?",
+        "title_other": "{{count}} branch'in worktree'leri ve branch'ler kaldırılsın mı?",
+        "confirm_one": "Worktree'yi kaldır, {{count}} branch'i sil",
+        "confirm_other": "Worktree'leri kaldır, {{count}} branch'i sil",
+        "what": "Her worktree klasörü gider (node_modules gibi yok sayılan dosyalar da), sonra yerel branch. İçindeki bir bağlantı bağlantı olarak gider: gösterdiği worktree dışındaki klasör kalır. Origin kendi kopyasını tutar."
+      }
+    },
+    "previewState": {
+      "running": ":{{port}} üzerinde çalışıyor",
+      "building": "derleniyor",
+      "starting": "başlatılıyor"
+    },
+    "copied": "Kopyalandı",
+    "sweep": {
+      "partial_one": "{{count}} dosya silindi; {{failed}} silinemedi ve sonraki çalıştırmaya kaldı",
+      "partial_other": "{{count}} dosya silindi; {{failed}} silinemedi ve sonraki çalıştırmaya kaldı",
+      "done_one": "{{count}} dosya silindi ({{size}})",
+      "done_other": "{{count}} dosya silindi ({{size}})"
+    },
+    "toast": {
+      "keptSee": "{{counts}}: nedenini aşağıda gör",
+      "jobFailed": "{{title}} başarısız: {{reason}}"
+    },
+    "noReasonGiven": "neden belirtilmedi",
+    "title": "Temizlik",
+    "intro": "Temizlenecek biten işler, base'ine göre denetlenmiş.",
+    "refresh": "Yenile",
+    "agentsNote": "Ajanlar base'e ulaşmış yerel branch'leri silebilir (<tool>cleanup_delete</tool>); worktree'leri kaldırmak ve origin'deki branch'leri silmek bu sayfadan senin elinde kalır.",
+    "deleteOff": "Silme kapalı: {{reason}}.",
+    "repoError": "{{name}}: {{error}}. Branch'leri ve worktree'leri bilinmiyor, bu yüzden içinden hiçbir şey silinemez.",
+    "progress": {
+      "label": "Silme ilerlemesi",
+      "of": "{{done}} / {{total}}",
+      "starting": "Başlatılıyor…",
+      "failed": "Başarısız · {{reason}}",
+      "succeeded": "Başarılı · {{counts}}"
+    },
+    "empty": "Geride bir şey kalmadı. Kapatılan her ticket temizlendi.",
+    "group": {
+      "safe": {
+        "title": "Silmek güvenli",
+        "hint": "Her commit ya da aynı yamalar base'te var."
+      },
+      "edited": {
+        "title": "Düzenlenmiş ama var",
+        "hint": "Commit'ler girerken değişti, ama branch'i merge etmek hiçbir şey eklemez."
+      },
+      "unique": {
+        "title": "Hâlâ özgün işi var",
+        "hint": "Branch'te base'lerinde olmayan değişiklikler var. Sakla ya da işin nereye gittiğine bak."
+      },
+      "kept": {
+        "title": "Saklananlar",
+        "hint": "Süren bir ticket'ın ya da açık bir PR'ın, bir base'in, reponun ana branch'inin, ana checkout'un branch'inin ya da origin'in varsayılan branch'inin kullandığı: buradan asla silinmez."
+      },
+      "other": {
+        "title": "Karşılaştırılacak bir şey yok",
+        "hint": "Branch'siz kayıtlı workspace'ler ya da karşılaştırılacak base'i olmayan bir branch."
+      }
+    },
+    "workspacesRegistered_one": "{{count}} workspace kayıtlı",
+    "workspacesRegistered_other": "{{count}} workspace kayıtlı",
+    "previewStop": "preview {{state}}: ticket'tan durdur",
+    "notLocal": "yerel değil",
+    "worktreeKept": "{{path}}: saklandı, {{reason}}",
+    "mainCheckout": "ana checkout",
+    "originSha": "origin {{sha}}",
+    "copyRestore": "Geri yükleme komutunu kopyala: {{command}}",
+    "col": {
+      "ticket": "Ticket",
+      "branch": "Branch",
+      "reach": "Durum",
+      "worktree": "Worktree",
+      "origin": "Origin",
+      "branchOnOrigin": "Origin'deki branch"
+    },
+    "remote": {
+      "title": "Origin'de kalan branch'ler",
+      "intro": "Son fetch'e göre; pano birini silmeden önce origin'i yeniden çeker. Her biri, kendi commit'lerine göre ve base'lerin origin'deki kopyalarıyla karşılaştırılarak ya da başı tam bu commit olan merge edilmiş bir PR ile değerlendirilir."
+    },
+    "prMerged": "PR #{{number}} bu commit'te merge edildi",
+    "prWasMerged": "PR #{{number}} bu commit'te merge edilmişti",
+    "untracked": {
+      "title": "Takipsiz worktree'ler",
+      "intro": "Hiçbir ticket'ın ya da workspace'in sahip çıkmadığı worktree'ler. Ticket'larına kaydet ya da kaldır."
+    },
+    "detached": "ayrık {{sha}}",
+    "uploads": {
+      "title": "Bağlanmamış yüklemeler",
+      "intro": "Bir günden önce yüklenmiş ve panoda hiçbir şeyin kullanmadığı dosyalar: oluşturulmadan kapatılan bir Yeni ticket penceresi, göndermeden önce bir gönderiden çıkarılan dosya. Pano bunları her saat siler; bir günden yeni dosyalara dokunulmaz.",
+      "introRecent": "Bir günden önce yüklenmiş ve panoda hiçbir şeyin kullanmadığı dosyalar: oluşturulmadan kapatılan bir Yeni ticket penceresi, göndermeden önce bir gönderiden çıkarılan dosya. Pano bunları her saat siler; bir günden yeni dosyalara dokunulmaz (şu an {{recent}}).",
+      "summary_one": "{{count}} dosya, {{size}}",
+      "summary_other": "{{count}} dosya, {{size}}",
+      "deleteNow": "Şimdi sil",
+      "confirmTitle": "Bağlanmamış yüklemeler silinsin mi?",
+      "confirmText_one": "Bir günden önce yüklenmiş, hiçbir gönderinin, yanıtın, ticket'ın ya da ajan resminin kullanmadığı {{count}} dosya ({{size}}). Bu geri alınamaz.",
+      "confirmText_other": "Bir günden önce yüklenmiş, hiçbir gönderinin, yanıtın, ticket'ın ya da ajan resminin kullanmadığı {{count}} dosya ({{size}}). Bu geri alınamaz."
+    },
+    "keep": "Sakla",
+    "delete": "Sil",
+    "keptReason": "Saklandı: {{reason}}",
+    "noLocalBranch": "yerel branch yok",
+    "kind": {
+      "remote": "origin'de",
+      "local": "yerel",
+      "worktrees": "worktree'leriyle"
+    },
+    "worktreePath": "worktree {{path}}",
+    "stopsPreview": "preview'ını durdurur ({{state}})",
+    "stopsServer": "bu worktree'den çalışıyorsa :{{port}} üzerindeki sunucuyu durdurur",
+    "confirmChecked": "Her biri gitmeden hemen önce yeniden denetlenir, bir şey değiştiyse saklanır; hiçbir şey zorlanmaz. Geri yükleme komutları sonrasında gösterilir.",
+    "toDelete": "Silinecek",
+    "toDeleteEdited": "Silinecek, düzenlenmiş",
+    "editedOnTheWay": "Girerken düzenlenmiş: bu commit'ler base'ten farklı, ama merge etmek hiçbir şey eklemez",
+    "outcome": {
+      "deleted": "Silindi",
+      "refused": "Saklandı",
+      "failed": "Başarısız",
+      "gone": "Zaten yok"
+    },
+    "advice": {
+      "changes": "Worktree'de commit'le ya da stash'le, sonra yenile.",
+      "prune": "git worktree prune çalıştır, sonra yenile.",
+      "moved": "Yenile, sonra yeni commit için yeniden onayla.",
+      "checkedOut": "Önce orada başka bir branch'e geç (checkout)."
+    },
+    "removed": "kaldırıldı: {{path}}",
+    "removedLink": "{{path}} bağlantısı kaldırıldı; gösterdiği {{target}} kalır",
+    "copyCommand": "Kopyala: {{command}}",
+    "results": {
+      "label": "Silme sonuçları",
+      "title": "Son silme",
+      "retry": "Saklananları yeniden dene",
+      "dismiss": "Yok say"
+    }
+  },
+  "gallery": {
+    "kind": {
+      "image": "Görseller",
+      "video": "Videolar",
+      "pdf": "PDF'ler",
+      "docs": "Belgeler ve metin",
+      "other": "Diğer"
+    },
+    "sort": {
+      "newest": "Önce en yeni",
+      "oldest": "Önce en eski",
+      "name": "Ad A-Z",
+      "name-desc": "Ad Z-A",
+      "largest": "Önce en büyük",
+      "smallest": "Önce en küçük",
+      "type": "Türe göre"
+    },
+    "page": {
+      "title": "Galeri",
+      "intro": "Projenin ticket'larındaki tüm dosyalar.",
+      "filters": "Filtreler",
+      "fileType": "Dosya türü",
+      "from": "Başlangıç",
+      "to": "Bitiş",
+      "sortTip": "Sıralama: {{sort}}",
+      "sort": "Sırala",
+      "archivedTip": "Arşivlenmiş ticket'ların dosyaları da",
+      "includeArchived": "Arşivlenenleri dahil et",
+      "clearFilters": "Filtreleri temizle",
+      "loadError": "Dosyalar yüklenemedi: {{error}}",
+      "noMatch": "Bu filtrelere uyan dosya yok.",
+      "none": "Bu projede henüz dosya yok.",
+      "loadingMore": "Daha fazla dosya yükleniyor…"
+    }
+  },
+  "files": {
+    "copyImage": {
+      "unsupported": "Bu tarayıcı görselleri panoya kopyalayamıyor",
+      "failedNamed": "Kopyalanamadı: {{name}}",
+      "copied": "Kopyalandı",
+      "failed": "Kopyalanamadı",
+      "copy": "Görseli kopyala"
+    },
+    "attachments": {
+      "notesOn": "Notlar: {{name}}",
+      "sizeKb": "{{kb}} KB"
+    },
+    "grid": {
+      "open": "Aç: {{name}}",
+      "inLaneTip": "Lane {{lane}} içinde",
+      "inLane": "lane {{lane}} içinde",
+      "openTicket": "Ticket'ı aç",
+      "replyTip": "Birlikte geldiği yanıt",
+      "postTip": "Birlikte geldiği gönderi",
+      "openThread": "Konuşmayı aç"
+    },
+    "pending": {
+      "preview": "Önizle: {{name}}",
+      "uploading": "yükleniyor",
+      "remove": "Kaldır",
+      "removeNamed": "Kaldır: {{name}}"
+    },
+    "viewer": {
+      "openInNewTab": "Yeni sekmede aç",
+      "download": "İndir",
+      "close": "Kapat (Esc)",
+      "notes": "Görseldeki notlar",
+      "previous": "Önceki",
+      "next": "Sonraki",
+      "noPreview": "Bu dosya türü için önizleme yok.",
+      "zoomOut": "Uzaklaştır (-)",
+      "fit": "Sığdır (0)",
+      "zoomIn": "Yakınlaştır (+)",
+      "loadFailed": "Bu dosya yüklenemedi.",
+      "empty": "(boş dosya)",
+      "cut": "İlk {{limit}} karakter gösteriliyor. Gerisi için dosyayı indir."
+    }
+  },
+  "annotate": {
+    "cannotDraw": "bu tarayıcı görseli çizemiyor",
+    "couldNotSave": "görsel kaydedilemedi",
+    "title": "Görseli işaretle",
+    "description": "{{name}}: üzerine çiz ve her işaretin ne anlama geldiğini yaz. Görsel burada göründüğü gibi eklenir, notlar da onunla gider.",
+    "toolbar": "Çizim araçları",
+    "tool": {
+      "select": {
+        "label": "Seç",
+        "hint": "İşaretleri taşımak, döndürmek ya da silmek için seç"
+      },
+      "pen": {
+        "label": "Kalem",
+        "hint": "Serbest çiz"
+      },
+      "rect": {
+        "label": "Kutu",
+        "hint": "Bir şeyin çevresine kutu çiz"
+      },
+      "arrow": {
+        "label": "Ok",
+        "hint": "Bir şeyi göster"
+      },
+      "ellipse": {
+        "label": "Elips",
+        "hint": "Bir şeyin çevresini daire içine al"
+      },
+      "text": {
+        "label": "Metin",
+        "hint": "Görselin üzerine yaz"
+      },
+      "note": {
+        "label": "Not",
+        "hint": "Notunu yazmak için bir işarete tıkla"
+      },
+      "line": {
+        "label": "Çizgi",
+        "hint": "Düz çizgi çiz"
+      }
+    },
+    "colour": "Renk",
+    "strokeWidth": "Çizgi kalınlığı",
+    "fill": "Dolgu",
+    "textToPlace": "Yerleştirilecek metin",
+    "undo": "Geri al",
+    "redo": "Yinele",
+    "clear": "Temizle",
+    "notePlaceholder": "Bu işaret ne anlama geliyor?",
+    "notePlaceholderEmpty": "Bir işaret çiz ya da Not'u seçip birine tıkla",
+    "canvas": "İşaretlenecek görsel",
+    "cannotOpen": "Bu görsel tuvalde açılamıyor.",
+    "opening": "Görsel açılıyor…",
+    "notes": "Notlar",
+    "locked": "Görsel eklenene kadar işaretler kilitli.",
+    "attachOriginal": "Aslını ekle",
+    "attaching": "Ekleniyor…",
+    "attach": "Ekle"
+  },
+  "reach": {
+    "merged": {
+      "label": "merge edildi",
+      "title": "Her commit olduğu gibi base'te. Silmek güvenli."
+    },
+    "rebased": {
+      "label": "rebase edildi",
+      "title": "Commit'ler rebase edildi ya da cherry-pick yapıldı; aynı yamalar base'te var. Silmek güvenli."
+    },
+    "edited": {
+      "label": "düzenlenerek girdi",
+      "title": "Yamalar farklı, ama branch'i merge etmek base'te hiçbir şeyi değiştirmez. Silmek güvenli."
+    },
+    "unique": {
+      "label": "özgün iş",
+      "title": "Branch'te base'in henüz sahip olmadığı değişiklikler var. Sakla."
+    }
+  },
+  "runsCard": {
+    "step": {
+      "install": "bağımlılıklar kuruluyor",
+      "build": "derleniyor",
+      "copy": "canlı veri kopyalanıyor",
+      "server": "başlatılıyor"
+    },
+    "status": {
+      "stopped": "Durdu",
+      "building": "Derleniyor",
+      "buildingStep": "Derleniyor · {{step}}",
+      "running": "Çalışıyor",
+      "failed": "Başarısız"
+    },
+    "notStarted_one": "{{count}} başlatılmadı: {{list}}",
+    "notStarted_other": "{{count}} başlatılmadı: {{list}}",
+    "nothingRunning": "Çalışan bir şey yoktu",
+    "startAllTip": "Ticket'ın repolarındaki henüz çalışmayan her çalıştırmayı başlat",
+    "startAll": "Tümünü başlat",
+    "stopAllTip": "Ticket'ın derlenen ya da çalışan her çalıştırmasını durdur",
+    "stopAll": "Tümünü durdur",
+    "inUse": "Panoda {{limit}} çalıştırmadan {{inUse}} tanesi sürüyor",
+    "primary": "birincil",
+    "workspaceTip": "workspace {{name}}, {{path}} içinde",
+    "workspaceTipNoPath": "workspace {{name}}",
+    "noRuns": "Çalıştırma yok: insan bunları projenin ayarlarında ekler.",
+    "orphaned": "Artık bu ticket'ta değil",
+    "orphanedHint": "durdurulabilir, buradan yeniden başlatılamaz",
+    "alsoRunning": "Ayrıca çalışıyor",
+    "alsoRunningHint": "buradan durdurulabilir; satırı, gösterdiği çalıştırmayı başlatır",
+    "links": "Bağlantılar",
+    "openTip": "Preview'ı CrossBoard içinde, sayfanın üzerinde göster: pano olduğu gibi kalır",
+    "open": "Aç",
+    "openBrowser": "Tarayıcıda aç",
+    "throughBoard": "Pano üzerinden",
+    "startTipPreview": "Ticket'ın worktree'sinden derle ve boş bir portta çalıştır",
+    "startTipJob": "Ticket'ın worktree'sinden derle ve arka planda başlat",
+    "start": "Başlat",
+    "stop": "Durdur",
+    "restartTip": "Durdur, yeniden derle ve başlat",
+    "restart": "Yeniden başlat",
+    "cannotStart": "Başlatılamıyor: {{reason}}",
+    "onPort": ":{{port}} üzerinde",
+    "runningPlain": "Çalışıyor",
+    "since": ", {{time}} beri",
+    "buildLog": "derleme günlüğü",
+    "runLog": "çalıştırma günlüğü",
+    "logAria": "{{name}} günlüğü"
+  },
+  "previews": {
+    "step": {
+      "install": "bağımlılıklar kuruluyor",
+      "build": "derleniyor",
+      "copy": "canlı veri kopyalanıyor",
+      "server": "sunucu başlatılıyor"
+    },
+    "group": {
+      "running": "Çalışıyor",
+      "runningHint": "Panonun derleyip çalıştırdığı ya da bu makinede yanıt veren bir bağlantı.",
+      "stopped": "Çalışmıyor",
+      "stoppedHint": "Durmuş, başarısız, yanıt vermeyen bir bağlantı ya da panonun denetlemediği, bu makine dışındaki bir bağlantı."
+    },
+    "subtitle": "Çalışsın çalışmasın tüm preview'lar.",
+    "empty": "Henüz preview yok. Bir ajan bir ticket'ın workspace'ine preview bağlantısı kaydedince ya da pano worktree'sinden birini çalıştırınca burada görünür.",
+    "noneIn": "{{name}} içinde preview yok.",
+    "showAll": "Tüm aşamaları göster",
+    "allStages": "Tüm aşamalar",
+    "stage": "Aşama",
+    "stageTip": "Bu aşamadaki ticket'ların preview'larını gösterir",
+    "nothingToStop": "Durdurulacak bir şey yok",
+    "couldNotStop_one": "{{count}} durdurulamadı: {{list}}",
+    "couldNotStop_other": "{{count}} durdurulamadı: {{list}}",
+    "stoppedCount_one": "{{count}} durduruldu",
+    "stoppedCount_other": "{{count}} durduruldu",
+    "barTip": "Panonun tüm projelerde derlediği ya da çalıştırdığı preview'lar ve aynı anda en fazla kaç tane çalıştırdığı",
+    "bar": "Panonun çalıştırdığı preview'lar: <strong>{{limit}} içinden {{inUse}} kullanımda</strong> <muted>(tüm pano)</muted>",
+    "stopAllTitle": "Bu projenin çalışan tüm preview'ları durdurulsun mu?",
+    "stopAllDescription": "Panonun çalıştırdığı preview'lar durur ve portlarını boşaltır. Bağlantılar, pano sunucularının workspace'in worktree'sinden çalıştığını anlayabildiğinde durur; diğerleri çalışmaya devam eder ve bildirim nedenini söyler. Bağlantılar sayfada kalır.",
+    "keepThem": "Sakla",
+    "uncheckedLink": "Pano yalnızca bu makinedeki bağlantıları denetler",
+    "throughBoard": "Pano üzerinden:",
+    "openThrough": "Pano üzerinden aç",
+    "linkNotStopped": "Pano bunu durdurmaz: {{reason}}",
+    "stoppedStillListening": "Durduruldu, ama :{{port}} üzerinde hâlâ bir şey dinliyor",
+    "stopLinkTip": "Bu bağlantının arkasındaki sunucuyu durdur (workspace'in worktree'sinden çalışır) ve portunu boşalt",
+    "startTip": "Bu worktree'yi derle ve canlı verinin yeni bir kopyasıyla boş bir portta çalıştır",
+    "stopTip": "Preview'ı durdur ve portunu boşalt",
+    "restartTip": "Durdur, yeniden derle ve verinin yeni bir kopyasıyla başlat",
+    "answered": "{{time}} anında HTTP {{status}} ile yanıt verdi",
+    "notRunning": "Çalışmıyor",
+    "noAnswer": "{{time}} anında yanıt yok",
+    "notChecked": "Denetlenmedi",
+    "checking": "Denetleniyor…",
+    "checkingTitle": "Yanıt verip vermediği denetleniyor",
+    "fullLog": "tam günlük",
+    "log": "günlük",
+    "serverLog": "sunucu günlüğü",
+    "building": "Derleniyor…",
+    "buildingStep": "Derleniyor… {{step}}",
+    "startingOn": ":{{port}} üzerinde başlatılıyor…",
+    "startingOnStep": ":{{port}} üzerinde başlatılıyor… {{step}}",
+    "runBy": "Pano :{{port}} üzerinde çalıştırıyor",
+    "runBySince": "Pano :{{port}} üzerinde çalıştırıyor, {{time}} beri",
+    "failed": "Başarısız: {{reason}}",
+    "stoppedReason": "Durduruldu: {{reason}}",
+    "stopAllRuns": "Tümünü durdur"
+  },
+  "previewWindow": {
+    "building": "Derleniyor… çalışınca burada görünür.",
+    "failed": "Preview başarısız oldu. Günlüğüne ticket'tan bak.",
+    "failedReason": "Preview başarısız oldu: {{reason}}. Günlüğüne ticket'tan bak.",
+    "blocked": "Bu preview pano içinde gösterilmeyecek: çerçevelenmeyi reddediyor.",
+    "blockedReason": "Bu preview pano içinde gösterilmeyecek: {{reason}}.",
+    "stoppedThrough": "Bu preview durdu. Ticket'ın Çalıştırmalar kartından ya da Preview'lar sayfasından başlat.",
+    "stoppedDirect": "Preview bu makinede yanıt vermiyor. Sunucusunu çalıştığı yerde yeniden başlat.",
+    "frameTitle": "Preview: {{title}}",
+    "copied": "Bağlantı kopyalandı",
+    "couldNotCopy": "Bağlantı kopyalanamadı",
+    "window": "Preview penceresi",
+    "openPreviews": "Preview'ları aç",
+    "reloadTip": "Preview'ı yeniden yükle",
+    "reload": "Preview'ı yeniden yükle",
+    "restoreTip": "Yüzen pencereye dön",
+    "maximizeTip": "Tüm ekranı kullan",
+    "restore": "Preview penceresini geri yükle",
+    "maximize": "Preview penceresini büyüt",
+    "closeTip": "Preview'ı kapat (çalıştırma sürer)",
+    "close": "Preview penceresini kapat",
+    "url": "Preview URL'si",
+    "copyTip": "Preview'ın bağlantısını kopyala",
+    "copy": "Preview bağlantısını kopyala"
+  },
+  "roleLabels": {
+    "human": "İnsan",
+    "orchestrator": "Orchestrator",
+    "worker": "Ajan",
+    "board": "Pano"
+  },
+  "runReport": {
+    "section": {
+      "brief": "Görev tanımı ve yeterli olup olmadığı",
+      "readRan": "Ne okudu, ne çalıştırdı",
+      "problems": "Yolda yaşanan sorunlar",
+      "gaps": "Neyi denetleyemedi ve varsayımları",
+      "moreTime": "Daha fazla zamanla ne yapardı",
+      "improvements": "Çalıştırmayı neyin daha iyi yapacağı",
+      "intent": "Niyetin nereden geldiği",
+      "inferences": "Ne çıkarım yapmak zorunda kaldı",
+      "questions": "Ticket'ın yanıtlayamadığı sorular",
+      "approach": "Yaklaşım ve reddedilen alternatifler",
+      "alternatives": "Değerlendirilip reddedilen alternatifler",
+      "selfTests": "Neyi kendisi test etti ve nasıl",
+      "fixPass": "Düzeltme turunun neyi değiştirdiği ve ilkinin neden kaçırdığı",
+      "scheduling": "Çalıştırdığı fazları nasıl planladığı",
+      "judging": "Fazların döndürdüklerini nasıl değerlendirdiği",
+      "provisioning": "Çalışma ortamının nasıl hazırlandığı ve neyin başarısız olduğu",
+      "freshness": "Güncelliğin nasıl kanıtlandığı",
+      "evidence": "Her kabul ölçütünün nasıl denetlendiği",
+      "unexercised": "Denenemeyen ölçütler",
+      "techniques": "Hata aramada kullanılan teknikler",
+      "surfaces": "Kapsanan ve kapsanmayan yüzeyler",
+      "candidates": "Adayların nasıl üretildiği ve neyin elendiği",
+      "disproof": "Her bulguyu çürütmeye nasıl çalıştığı",
+      "unsettled": "Karara bağlayamadığı bulgular ve nedeni",
+      "asked": "İnsanın kendi sözleriyle istediği",
+      "compared": "Her isteğin sonuçla nasıl karşılaştırıldığı",
+      "conflicts": "Merge, çakışmaları ve nasıl okunduğu"
+    },
+    "label": "{{agent}} tur {{round}}",
+    "notReported": "bildirilmedi",
+    "effort": "efor: {{effort}}",
+    "briefedBy": "görevi veren: <actor />",
+    "duration": "Süre",
+    "durationMeasured": "Süre (ölçülen)",
+    "durationSelf": "Süre (kendi bildirdiği)",
+    "ownEstimate": "Kendi tahmini",
+    "difficulty": "Zorluk",
+    "confidence": "Güven",
+    "started": "Başladı",
+    "ended": "Bitti",
+    "time": {
+      "readingMs": "okuma",
+      "runningMs": "çalıştırma",
+      "waitingMs": "bekleme",
+      "writingMs": "yazma",
+      "otherMs": "diğer"
+    },
+    "steps": "Adımlar",
+    "dialogTitle": "Çalıştırma raporu: {{label}}",
+    "dialogTitleEmpty": "Çalıştırma raporu",
+    "round": "tur {{round}}",
+    "difficultyShort": "zorluk {{n}}/5",
+    "confidenceShort": "güven {{n}}/5"
+  },
+  "projectAgents": {
+    "title": "Ekip",
+    "text": "Ajanların çalıştığı roller. Bir ticket'ı birine ayırmak için ona ata.",
+    "new": "Yeni ajan",
+    "empty": "Henüz ajan yok. Her ticket bağlı ajanlarca ortak kullanılır.",
+    "added": "Eklendi: {{names}}",
+    "defaults": {
+      "title": "Varsayılan ajanlar",
+      "files": "Maker işin dosyalarını projenin klasöründe üretir ve ticket'a ekler; insan onları onaylar ya da ticket'ı geri gönderir. Sonra düzenle. Bu projede çalışan bir ajan, panonun adresinde <code>{{path}}</code> yoluna bağlanır (Ajan bağla sayfasındakiyle aynı MCP, bu projenin metni ve araçlarıyla).",
+      "software": "Derleme ve inceleme döngüsü: <strong>spec</strong> kabul ölçütlerini yazar, <strong>builder</strong> kodu yazar, <strong>runner</strong> onu inceler ve incelemenin fazları (<strong>env</strong>, <strong>verify</strong>, <strong>hunt</strong>, <strong>refute</strong>, <strong>merge</strong>) onu kırmaya çalışır; bulgular builder'a geri döner. Sonra <strong>intent</strong> sonucu insanın kendi sözleriyle karşılaştırır. Her biri kendi talimatları ve orchestrator'ın devrederken kullandığı notlarla gelir. Sonra hepsini düzenleyebilirsin.",
+      "addAll": "Varsayılan ajanları ekle",
+      "addNames": "Ekle: {{names}}",
+      "allAdded": "Hepsi eklendi",
+      "skills": "Bu döngüyü yürüten skill'ler ve ajanın MCP bağlantısı <goto>Ajan bağla</goto> sayfasında kurulur."
+    },
+    "noReserved": "ona ayrılmış ticket yok",
+    "remove": "{{name}} ajanını kaldır",
+    "removeTitle": "{{name}} kaldırılsın mı?",
+    "removeReserved_one": "Ona ayrılmış {{count}} ticket ortak olur ve atanmamış kalır.",
+    "removeReserved_other": "Ona ayrılmış {{count}} ticket ortak olur ve atanmamış kalır.",
+    "removeKept": "Daha önce gönderdikleri adını taşımaya devam eder.",
+    "keep": "Sakla",
+    "removeAction": "Kaldır",
+    "instructions": "Talimatlar",
+    "instructionsHint": "ajanın çalışma ilkeleri",
+    "delegate": "Ne zaman devredilir",
+    "delegateHint": "orchestrator'ın karar verirken dayandığı",
+    "delegateEmpty": "Henüz devretme notu yok: orchestrator onu ne zaman çağıracağını bilmez.",
+    "report": "Çalıştırma raporu",
+    "reportHint": "her çalıştırmanın geri vermeden önce doldurduğu şablon",
+    "nothingYet": "Henüz bir şey yok.",
+    "lines_one": "{{count}} satır",
+    "lines_other": "{{count}} satır",
+    "picture": "Resim",
+    "choosePicture": "Resim seç",
+    "removePicture": "Resmi kaldır",
+    "namePlaceholder": "reviewer, frontend, qa…",
+    "nameRule": "Harf, rakam, - ve _; böylece @ad konuşmalarda çalışır",
+    "instructionsText": "Ajanın çalışma ilkeleri: kim olduğu, nasıl çalıştığı, asla yapmadıkları. Orchestrator alt ajanı bununla görevlendirir.",
+    "instructionsPlaceholder": "Sen Tester'sın. Her kabul ölçütünü çalışan preview'a karşı denetlersin…",
+    "delegateText": "Orchestrator'ın karar verirken dayandığı metin: işi bu ajana ne zaman vereceği, ona ne vereceği, ne döndürdüğü ve sonra ne geldiği.",
+    "delegatePlaceholder": "Builder bir adımı bitirince, preview bağlantısı ve kabul ölçütleriyle. Ölçüt başına PASS / FAIL döndürür. Hepsi geçerse sıra Breaker'da; bir hata varsa Builder'a geri.",
+    "templateLabel": "Çalıştırma raporu şablonu",
+    "templateText": "Bu ajanın her çalıştırmasının geri vermeden önce doldurduğu, çalıştırma başına bir rapor. Her raporun taşıdığı ortak kısımla başlar (kimlik, zaman, görev tanımı, adımlar, puanlar, sorunlar, eksikler); bu ajanın yaptığını ekle. Pano onu ajanla birlikte saklar.",
+    "templatePlaceholder": "## Kural …",
+    "add": "Ajan ekle"
+  },
+  "gettingStarted": {
+    "agentEmpty": "Henüz proje yok. İlkini insan, Ana sayfadaki Başlarken'den oluşturur.",
+    "title": "Başlarken · {{done}} / {{total}}",
+    "intro": "Bu panoda bir ajanın çalışabilmesi için dört adım. Her biri bitince kendiliğinden işaretlenir.",
+    "entryTip": "Bu panoda çalışmaya başlama adımları",
+    "entryAria": "Başlarken, {{total}} adımdan {{done}} tamamlandı",
+    "entryShort": "Başlarken ·",
+    "popoverIntro": "Her adım bitince kendiliğinden işaretlenir.",
+    "dismissTip": "Başlarken'i kalıcı olarak gizle",
+    "dismissAria": "Başlarken'i kapat",
+    "menuItem": "Başlarken · {{done}}/{{total}}",
+    "stepsAria": "Başlarken adımları",
+    "stepAria": "{{title}}: {{state}}",
+    "titles": {
+      "tools": "Bu makinedeki araçlar",
+      "project": "Bir proje oluştur ve ilk reposunu ekle",
+      "agent": "Ajan bağla",
+      "ticket": "İlk ticket'ı yaz ve ajana ver"
+    },
+    "state": {
+      "done": "Bitti",
+      "checking": "Denetleniyor…",
+      "notDone": "Bitmedi"
+    },
+    "couldNotCheck": "Bu adım denetlenemedi: {{error}}",
+    "tools": {
+      "hint": "Pano PATH'indeki <code>git</code> ve <code>gh</code>'yi (oturum açık) çalıştırır; <code>claude</code> isteğe bağlıdır, yalnızca panonun kendi raporları için (Raporlar → Üret); <code>node</code> ve <code>pnpm</code> yalnızca preview'lar için.",
+      "missing": "<problem>{{problem}}</problem>. Çözüm: {{fix}}."
+    },
+    "project": {
+      "hint": "Bir proje, ajanların çalıştığı checkout'ları bir araya getirir. İlk reposu checkout'un klasörünü, GitHub reposunu ve ana branch'ini alır.",
+      "addRepo": "Projeye repo ekle: {{name}}",
+      "new": "Yeni proje"
+    },
+    "agent": {
+      "hint": "Ajan bağla sayfasında Komut üret, ajanın token'ını ve terminalinde çalıştıracağın komutları üretir: panonun MCP sunucusunu bağla ve pano skill'ini kur."
+    },
+    "ticket": {
+      "hint": "Yapılacakları projenin Özellikler sayfasında bir ticket olarak yaz. Sonra reponda <code>claude</code> çalıştır ve <code>/board pick up the next ticket</code> de.",
+      "write": "Ticket yaz",
+      "createFirst": "Önce bir proje oluştur (2. adım)."
+    },
+    "checkAgain": "Yeniden kontrol et"
+  },
+  "projectSwitcher": {
+    "project": "Proje",
+    "select": "Proje seç",
+    "projects": "Projeler",
+    "repos_one": "{{count}} repo",
+    "repos_other": "{{count}} repo",
+    "tickets_one": "{{count}} ticket",
+    "tickets_other": "{{count}} ticket",
+    "openPrs_one": "{{count}} açık PR",
+    "openPrs_other": "{{count}} açık PR",
+    "newProject": "Yeni proje…",
+    "manage": "Projeleri yönet…",
+    "newTitle": "Yeni proje",
+    "newDescription": "Bir proje repoları bir araya getirir. Repolarını Repolar sayfasından ekle.",
+    "name": "Ad",
+    "create": "Oluştur",
+    "manageDescription": "Bir projeyi yeniden adlandır ya da sil. Repolarını Repolar sayfasında ekle, taşı ya da kaldır.",
+    "renamed": "Yeni ad: {{name}}",
+    "nameOf": "Ad: {{name}}",
+    "rename": "Yeniden adlandır",
+    "deleteName": "{{name}} projesini sil",
+    "deleteTitle": "{{name}} silinsin mi?",
+    "deleteText": "Onunla gider: {{repos}}, {{tickets}}, {{openPrs}}, incelemeleri ve günlük kaydı. Diskteki checkout'lara dokunulmaz. Bir repoyu saklamak için önce başka bir projeye taşı.",
+    "keep": "Sakla",
+    "delete": "Sil",
+    "noRepos": "repo yok",
+    "counts": "{{tickets}} · {{openPrs}}"
+  },
+  "newTicket": {
+    "newTicket": "Yeni ticket",
+    "newLane": "Yeni lane",
+    "description": "Bir meslektaşına görev verir gibi yaz: ajanlar başlamadan önce bunu okur.",
+    "laneDescription": "<parent>{{title}}</parent> ticket'ının paralel bir parçası; kendi branch'i, atananı, görevleri ve güncellemeleri var.",
+    "title": "Başlık",
+    "instructions": "Talimatlar",
+    "instructionsPlaceholder": "Ne yapılacak, bittiği nasıl anlaşılacak, asla ne yapılmayacak. Eklemek için dosyaları yapıştır ya da bırak.",
+    "initialTasks": "İlk görevler",
+    "phases": "Projenin fazlarıyla başlar: {{phases}}. Buraya yazılan görevler {{first}} altına girer.",
+    "stage": "Aşama",
+    "complexity": "Karmaşıklık",
+    "repository": "Repo",
+    "assignee": "Atanan (isteğe bağlı)",
+    "tags": "Etiketler (isteğe bağlı)",
+    "tagsPlaceholder": "Yüksek, Formlar",
+    "branchesOff": "Aynı repodaysa <branch>{{branch}}</branch> üzerinden dallanır.",
+    "uploading": "Yükleniyor…",
+    "create": "Oluştur",
+    "workflow": "İş akışı"
+  },
+  "notes": {
+    "title": "Notlar",
+    "manageAll": "Tümünü yönet ({{count}})",
+    "add": "Not ekle",
+    "dialogTitle": "Notlar ({{count}})",
+    "dialogDescription": "Her biri kısa bir bilgi, sabitlenenler önde. Bir notu yazarı, bir orchestrator ya da insan değiştirebilir.",
+    "empty": "Not, sonraki oturumun yeniden keşfetmemesi gereken kısa bir bilgidir: bir komut, bir yol, bir kural, bir hatırlatma. Her birini tek bilgiyle sınırla, asla belge yazma.",
+    "exampleLabel": "Sürüm komutu",
+    "exampleLabel2": "Preview portları",
+    "exampleBody2": "47101 ve üstü, çalıştırma başına bir",
+    "unpinTip": "Bu notun sabitlemesini kaldır",
+    "pinTip": "Bu notu diğerlerinin üstüne sabitle",
+    "unpin": "Sabitlemeyi kaldır: {{label}}",
+    "pin": "Sabitle: {{label}}",
+    "editTip": "Bu notu düzenle",
+    "edit": "Düzenle: {{label}}",
+    "deleteTip": "Bu notu sil",
+    "delete": "Sil: {{label}}",
+    "labelAria": "Not etiketi",
+    "bodyAria": "Not metni",
+    "save": "Notu kaydet",
+    "cancel": "İptal"
+  },
+  "actor": {
+    "howBoard": "pano, otomatik kaydedilir",
+    "howHuman": "sen, passkey ile oturum açmış",
+    "howOrchestrator": "insanın orchestrator yaptığı bir token ile oturum açmış bir ajan: projelerin talimatlarını da değiştirir",
+    "howWorkerUnder": "bir ajan, {{parent}} altında bir worker",
+    "howAgent": "bir ajan, bir token ile oturum açmış",
+    "projectAgent": "{{name}} (projenin ajanlarından biri)",
+    "projectAgentVia": "{{name}} (projenin ajanlarından biri, {{chain}} üzerinden gönderdi)",
+    "via": "{{via}} üzerinden",
+    "tip": "{{chain}}: {{how}}",
+    "under": "{{parent}} altında",
+    "by": "yapan: <actor/>"
+  },
+  "postTools": {
+    "editText": "Metni düzenle",
+    "cancel": "İptal",
+    "saving": "Kaydediliyor…",
+    "save": "Kaydet",
+    "edited": "düzenlendi",
+    "editedAt": "düzenlendi {{when}}",
+    "editLabel": "düzenle",
+    "edit": "Düzenle",
+    "deleteLabel": "sil",
+    "delete": "Sil",
+    "deletePostTitle": "Bu gönderi silinsin mi?",
+    "deleteReplyTitle": "Bu yanıt silinsin mi?",
+    "deleteText": "Yanıtları ve dosyaları onunla gider. Bu geri alınamaz.",
+    "keep": "Sakla"
+  },
+  "pickers": {
+    "unassigned": "Atanmamış",
+    "reserved": "{{name}} (ayrılmış)",
+    "projectAgents": "Proje ajanları: yalnızca onlar çalışır",
+    "connectedAgents": "Bağlı ajanlar: ortak",
+    "noBranchYet": "— henüz yok —",
+    "clear": "Temizle: {{what}}"
+  },
+  "prState": {
+    "merge": {
+      "clean": {
+        "label": "merge edilebilir",
+        "title": "Base ile çakışma yok."
+      },
+      "conflicts": {
+        "label": "çakışma var",
+        "title": "Base branch ile çakışıyor: girmeden önce rebase ya da merge gerekir."
+      },
+      "behind": {
+        "label": "base'in gerisinde",
+        "title": "Base ilerledi ve branch koruması branch'in önce güncel olmasını istiyor."
+      },
+      "blocked": {
+        "label": "engelli",
+        "title": "Branch koruması: gerekli bir inceleme ya da denetim hâlâ eksik."
+      },
+      "checking": {
+        "label": "denetleniyor",
+        "title": "GitHub hâlâ merge edilip edilmeyeceğini hesaplıyor (genellikle bir push'tan hemen sonra). Biraz sonra yenile."
+      }
+    },
+    "ci": {
+      "passing": "CI geçiyor",
+      "failing": "CI başarısız",
+      "pending": "CI çalışıyor",
+      "none": "CI yok"
+    },
+    "review": {
+      "APPROVED": "onaylandı",
+      "CHANGES_REQUESTED": "değişiklik istendi",
+      "REVIEW_REQUIRED": "inceleme gerekli"
+    },
+    "checkedLocal": "{{title}} Burada origin/{{base}} ile karşılaştırılarak denetlendi.",
+    "checkedLocalAt": "{{title}} Burada origin/{{base}} ile karşılaştırılarak denetlendi, {{when}}.",
+    "outdated": "origin/{{base}}, GitHub'ın bilgisinden sonra ilerledi: GitHub'ın yeniden bakması bekleniyor.",
+    "outdatedAt": "origin/{{base}}, GitHub'ın {{when}} tarihli bilgisinden sonra ilerledi: GitHub'ın yeniden bakması bekleniyor.",
+    "githubAt": "{{title}} GitHub'ın {{when}} tarihli bilgisi.",
+    "githubLast": "{{title}} GitHub'ın son yenilemedeki bilgisi.",
+    "checks": "{{pass}} geçti · {{failed}} başarısız · {{pending}} çalışıyor · {{skipped}} atlandı",
+    "noChecks": "Head commit'inde denetim yok.",
+    "draft": "taslak",
+    "failed": "başarısız:",
+    "mergeConflicts": "merge çakışmaları"
+  },
+  "pushDot": {
+    "pushed": "push edildi",
+    "pushedBehind": "push edildi, {{count}} geride",
+    "pushedBehindTitle_one": "push edildi; origin'de {{count}} commit daha var",
+    "pushedBehindTitle_other": "push edildi; origin'de {{count}} commit daha var",
+    "ahead": "{{count}} push edilmedi",
+    "aheadTitle_one": "push edilmedi: yalnızca burada {{count}} commit var",
+    "aheadTitle_other": "push edilmedi: yalnızca burada {{count}} commit var",
+    "aheadBehindTitle_one": "push edilmedi: yalnızca burada {{count}} commit var; origin'de bu branch'te olmayan {{behind}} commit de var",
+    "aheadBehindTitle_other": "push edilmedi: yalnızca burada {{count}} commit var; origin'de bu branch'te olmayan {{behind}} commit de var",
+    "localOnly": "origin'de yok",
+    "localOnlyTitle": "push edilmedi: origin'de böyle bir branch yok",
+    "localOnlyAheadTitle_one": "push edilmedi: origin'de böyle bir branch yok, yalnızca burada {{count}} commit var",
+    "localOnlyAheadTitle_other": "push edilmedi: origin'de böyle bir branch yok, yalnızca burada {{count}} commit var",
+    "itsBase": "base'i",
+    "merged": "{{into}} içine merge edildi",
+    "mergedTitle": "{{into}} içine merge edildi; branch origin'de yok",
+    "remoteOnly": "yalnızca origin'de",
+    "remoteOnlyTitle": "yalnızca origin'de: yerel branch yok",
+    "none": "bulunamadı",
+    "noneTitle": "burada ya da origin'de böyle bir branch yok",
+    "checked": "denetlendi {{ago}}",
+    "notFetched": "origin henüz çekilmedi",
+    "fetchNow": "Origin'i şimdi çek"
+  },
+  "clock": {
+    "typeTime": "{{label}} (saat yaz)",
+    "amPm": "{{label}}: ÖÖ ya da ÖS",
+    "setHourOrMinute": "{{label}}: saati ya da dakikayı ayarla",
+    "hour": "Saat",
+    "minute": "Dakika"
+  },
+  "markdown": {
+    "agentChip": "{{name}}, projenin ajanlarından biri",
+    "pages_one": "{{count}} sayfa",
+    "pages_other": "{{count}} sayfa"
+  },
+  "editor": {
+    "text": "Metin",
+    "bold": "Kalın",
+    "italic": "İtalik",
+    "strikethrough": "Üstü çizili",
+    "inlineCode": "Satır içi kod",
+    "heading": "Başlık",
+    "bulletList": "Madde işaretli liste",
+    "numberedList": "Numaralı liste",
+    "checklist": "Yapılacaklar listesi",
+    "quote": "Alıntı",
+    "codeBlock": "Kod bloğu",
+    "link": "Bağlantı",
+    "linkTo": "Bağlantı adresi",
+    "attaching": "Dosyalar ekleniyor…",
+    "attach": "Dosya ekle",
+    "formatting": "Biçimlendirme"
+  },
+  "projectNav": {
+    "homeText": "Tüm projeler bir bakışta: seni bekleyenler, süren işler, bugün biten işler ve sıradakiler.",
+    "overviewText": "Seni bekleyenler, ilerleyenler, sıradakiler.",
+    "page": "Proje sayfası",
+    "toggle": {
+      "expanded": "Kenar çubuğunu daralt",
+      "shrunk": "Kenar çubuğunu gizle",
+      "hidden": "Kenar çubuğunu göster"
+    }
+  },
+  "palette": {
+    "page": {
+      "overview": {
+        "title": "Genel bakış",
+        "subtitle": "Projenin özeti",
+        "keywords": "ana sayfa, proje, özet, seni bekliyor, home, summary, overview"
+      },
+      "board": {
+        "title": "Pano",
+        "subtitle": "Süren özellikler",
+        "keywords": "ticket, özellikler, kanban, aşamalar, sürüyor, board, features"
+      },
+      "roadmap": {
+        "title": "Yol haritası",
+        "subtitle": "İşlerin zaman çizelgesi",
+        "keywords": "zaman çizelgesi, iş, plan, timeline, roadmap"
+      },
+      "prs": {
+        "title": "PR kuyruğu",
+        "subtitle": "İncelenecek ve başkalarını bekleyen pull request'ler",
+        "keywords": "pr, pull request, inceleme, merge, review"
+      },
+      "reviews": {
+        "title": "İncelemeler",
+        "subtitle": "İnceleme sonuçları, PR kuyruğunda",
+        "keywords": "karar, bulgular, inceleme sonuçları, pr, verdict, findings"
+      },
+      "previews": {
+        "title": "Preview'lar",
+        "subtitle": "Panonun çalıştırdığı preview'lar",
+        "keywords": "çalıştırma, sunucu, port, runs, servers"
+      },
+      "gallery": {
+        "title": "Galeri",
+        "subtitle": "Dosyalar ve ekran görüntüleri",
+        "keywords": "dosya, görsel, yükleme, files, images, uploads"
+      },
+      "team": {
+        "title": "Ekip",
+        "subtitle": "Projenin birlikte çalıştığı ajanlar",
+        "keywords": "ajanlar, persona, ayırma, agents, team"
+      },
+      "daily": {
+        "title": "Günlük",
+        "subtitle": "Projenin günü",
+        "keywords": "etkinlik, bugün, rapor, activity, daily, report"
+      },
+      "cleanup": {
+        "title": "Temizlik",
+        "subtitle": "Geride kalan branch'ler ve worktree'ler",
+        "keywords": "branch, worktree, sil, artıklar, cleanup, delete"
+      },
+      "repositories": {
+        "title": "Repolar",
+        "subtitle": "Bu projenin okuduğu checkout'lar",
+        "keywords": "repo, git, checkout, depo, repositories"
+      },
+      "instructions": {
+        "title": "Talimatlar",
+        "subtitle": "Ayarlar: her ajanın okuduğu",
+        "keywords": "ayarlar, proje ayarları, kurallar, düzen, fazlar, aşamalar, çalıştırmalar, settings, instructions"
+      },
+      "home": {
+        "title": "Ana sayfa",
+        "subtitle": "Tüm projeler bir bakışta",
+        "keywords": "projeler, özet, pano, home, projects"
+      },
+      "dailyGlobal": {
+        "title": "Günlük",
+        "subtitle": "Her projenin yaptıkları",
+        "keywords": "etkinlik, raporlar, bugün, activity, reports, daily"
+      },
+      "connect": {
+        "title": "Bağlan",
+        "subtitle": "Ajan bağla ve skill'i kur",
+        "keywords": "ajanlar, mcp, token, kurulum, bağlan, connect, setup, install"
+      },
+      "settingsGlobal": {
+        "title": "Ayarlar",
+        "subtitle": "Tüm pano için tercihler",
+        "keywords": "tercihler, tema, preview, cihazlar, settings, preferences"
+      },
+      "workflow": {
+        "title": "İş akışı",
+        "subtitle": "Ajanların bir ticket için izlediği adımlar, ağaç olarak",
+        "keywords": "adımlar, hazır ayarlar, inceleme turları, devir, devretme, sıra, workflow, steps, presets"
+      }
+    },
+    "setting": {
+      "theme": {
+        "title": "Tema",
+        "subtitle": "Sistem, açık ya da koyu",
+        "keywords": "görünüm, renk, koyu, açık, sistem, theme, dark, light"
+      },
+      "defaultAgent": {
+        "title": "Varsayılan ajan CLI'ı",
+        "subtitle": "Bağlan'ın açıldığı CLI",
+        "keywords": "ajan, claude, codex, opencode, bağlan, agent, connect"
+      },
+      "previewsLimit": {
+        "title": "Preview sınırı",
+        "subtitle": "Aynı anda kaç preview çalışır",
+        "keywords": "preview, çalıştırma, sınır, port, limit"
+      },
+      "updates": {
+        "title": "Güncellemeler",
+        "subtitle": "Pano uygulamasının güncellemeleri",
+        "keywords": "sürüm, yükseltme, güncelle, version, release, upgrade, update"
+      },
+      "agentRoles": {
+        "title": "Ajan rolleri",
+        "subtitle": "Worker ya da orchestrator",
+        "keywords": "ajanlar, token, orchestrator, worker, izinler, agents, permissions"
+      },
+      "tailnet": {
+        "title": "Tailnet girişi",
+        "subtitle": "Panoya başka bir cihazdan eriş",
+        "keywords": "tailscale, ağ, uzak, herkese açık, network, remote, public"
+      },
+      "devices": {
+        "title": "Cihazlar ve passkey'ler",
+        "subtitle": "Oturum açan cihazlar",
+        "keywords": "passkey, oturumlar, oturum aç, güvenlik, sessions, sign in, security, devices"
+      },
+      "instructions": {
+        "title": "Proje talimatları",
+        "subtitle": "Her ajanın okuduğu",
+        "keywords": "kurallar, ajanlar, prompt, rules, agents"
+      },
+      "instructionsHistory": {
+        "title": "Talimat geçmişi",
+        "subtitle": "Talimatlardaki her değişiklik",
+        "keywords": "sürümler, geçmiş, değişiklikler, versions, history, changes"
+      },
+      "defaultPhases": {
+        "title": "Varsayılan fazlar",
+        "subtitle": "Her yeni ticket'ın başladığı görevler",
+        "keywords": "görevler, fazlar, yeni ticket, tasks, phases"
+      },
+      "tagSuggestions": {
+        "title": "Etiket önerileri",
+        "subtitle": "Ticket'larda sunulan etiketler",
+        "keywords": "etiketler, tags, labels"
+      },
+      "stalledTickets": {
+        "title": "Durmuş ticket'lar",
+        "subtitle": "Bir ticket'ın ne zaman durmuş göründüğü",
+        "keywords": "durma, dakika, boşta, stall, minutes, idle"
+      },
+      "notifications": {
+        "title": "Bildirimler",
+        "subtitle": "Bu projenin gösterdiği uyarılar",
+        "keywords": "uyarılar, sessize al, zil, hatırlatmalar, alerts, mute, bell, reminders"
+      },
+      "stages": {
+        "title": "Aşamalar",
+        "subtitle": "Pano sütunları ve anlamları",
+        "keywords": "sütunlar, iş akışı, durum, columns, workflow, status, stages"
+      },
+      "runs": {
+        "title": "Çalıştırmalar",
+        "subtitle": "Panonun çalıştırdığı preview'lar ve job'lar",
+        "keywords": "preview, job, komutlar, derleme, commands, build, runs"
+      },
+      "layout": {
+        "title": "Düzen",
+        "subtitle": "Sayfalar, kartlar ve ticket bölümleri",
+        "keywords": "düzenle, menü, kenar çubuğu, arrange, menu, sidebar, layout"
+      },
+      "agentTokens": {
+        "title": "Ajan token'ları",
+        "subtitle": "Ajanların oturum açtığı token'lar",
+        "keywords": "token, ajanlar, anahtarlar, geçersiz kıl, roller, agents, keys, revoke, roles"
+      },
+      "skills": {
+        "title": "İnceleme skill'leri",
+        "subtitle": "İnceleme skill'lerini kur (Claude Code)",
+        "keywords": "skill, inceleme, kur, review, install"
+      }
+    },
+    "kinds": {
+      "ticket": "Ticket'lar",
+      "page": "Sayfalar",
+      "setting": "Ayarlar",
+      "action": "Eylemler"
+    },
+    "keywords": {
+      "newTicket": "oluştur, ekle, ticket, lane, yeni, create, add, new",
+      "copyLink": "url, paylaş, pano, bağlantı, share, clipboard, link",
+      "startPreview": "çalıştır, preview, başlat, sunucu, run, start, server",
+      "stopPreview": "çalıştır, preview, durdur, sunucu, run, stop, server",
+      "switchProject": "proje, geç, aç, project, switch, open"
+    },
+    "recent": "Son kullanılanlar",
+    "notStarted_one": "{{count}} başlatılmadı: {{details}}",
+    "notStarted_other": "{{count}} başlatılmadı: {{details}}",
+    "notStopped_one": "{{count}} durdurulmadı: {{details}}",
+    "notStopped_other": "{{count}} durdurulmadı: {{details}}",
+    "nothingRunning": "Çalışan bir şey yoktu",
+    "createIn": "{{name}} içinde ticket oluştur",
+    "createInThis": "Bu projede ticket oluştur",
+    "copyLink": "Ticket bağlantısını kopyala",
+    "copyLinkText": "Bu ticket'ın adresini panoya koy",
+    "linkCopied": "Ticket bağlantısı kopyalandı",
+    "startPreview": "Preview'ı başlat",
+    "startPreviewText": "Ticket'ın preview'larını ve job'larını başlat",
+    "stopPreview": "Preview'ı durdur",
+    "stopPreviewText": "Ticket'ın preview'larını ve job'larını durdur",
+    "switchTo": "Geç: {{name}}",
+    "currentProject": "Geçerli proje",
+    "openOverview": "Genel bakışını aç",
+    "searchTip": "Panoda ara (Ctrl+F)",
+    "search": "Panoda ara",
+    "description": "Ticket, sayfa, ayar ve eylem ara. Gezinmek için yukarı ve aşağı tuşları, çalıştırmak için Enter, kapatmak için Escape.",
+    "placeholder": "Ticket, sayfa, ayar ve eylem ara…",
+    "close": "Aramayı kapat",
+    "results": "Arama sonuçları",
+    "searching": "Aranıyor…",
+    "noMatches": "“{{query}}” için eşleşme yok.",
+    "type": "Panoda aramak için yaz.",
+    "toMove": "gezinmek için",
+    "toOpen": "açmak için",
+    "toClose": "kapatmak için",
+    "anywhere": "her yerde"
+  },
+  "signIn": {
+    "finishTitle": "Kurulumu ana makinede bitir",
+    "finishBody": "Bu panonun henüz hesabı yok. Hesap, panonun çalıştığı makinede oluşturulur: orada {{url}} adresini aç. Sonra bu cihazı panodan aldığın bir bağlantıyla eklemek için buraya dön.",
+    "setupTitle": "Kurulum",
+    "setupHeading": "CrossBoard'u kur",
+    "setupIntro": "Bu makinede panonun hesabını ve ilk passkey'ini oluştur. Diğer cihazlar sonra Ayarlar'dan, tek kullanımlık bir bağlantıyla eklenir.",
+    "nameLabel": "Panodaki adın",
+    "deviceLabel": "Bu cihaz",
+    "deviceDefault": "Bu bilgisayar",
+    "devicePlaceholder": "Telefon, dizüstü…",
+    "createPasskey": "Passkey oluştur",
+    "loginTitle": "Oturum aç",
+    "loginHeading": "Oturum aç",
+    "loginWelcomeMachine": "Tekrar hoş geldin, {{name}}. Bu makinenin passkey'iyle oturum aç.",
+    "loginWelcomeDevice": "Tekrar hoş geldin, {{name}}. Bu cihazın passkey'iyle oturum aç.",
+    "loginButton": "Passkey ile oturum aç",
+    "enrollTitle": "Cihaz ekle",
+    "enrollNeedsLinkHeading": "Cihaz ekle",
+    "enrollNeedsLink": "Bu sayfa panodan bir bağlantı gerektirir: oturum açık bir cihazda Ayarlar, Cihazlar'ı aç ve Cihaz ekle'ye bas.",
+    "enrollHeading": "Bu cihazı ekle",
+    "enrollIntro": "Bu cihazda {{name}} için bir passkey oluştur. Bağlantı 15 dakika boyunca bir kez çalışır.",
+    "noPasskeys": "Bu tarayıcı burada passkey kullanamıyor.",
+    "promptClosed": "Passkey penceresi kapandı ya da zaman aşımına uğradı. Yeniden dene."
+  },
+  "ticketBoard": {
+    "stage": "Aşama",
+    "archiveTip_one": "{{stage}} aşamasındaki {{count}} ticket'ı arşivle",
+    "archiveTip_other": "{{stage}} aşamasındaki {{count}} ticket'ı arşivle",
+    "archiveAll": "Tümünü arşivle",
+    "archiveTitle_one": "{{count}} ticket arşivlensin mi?",
+    "archiveTitle_other": "{{count}} ticket arşivlensin mi?",
+    "archiveDescription": "{{stage}} aşamasındaki her ticket lane'leriyle birlikte panodan kalkar. Arşivlenenler altında durur, her biri geri yüklenebilir ve sayfaları yine açılır.",
+    "cancel": "İptal",
+    "archive": "Arşivle",
+    "decisions_one": "karar gerekli",
+    "decisions_other": "{{count}} karar gerekli",
+    "tasksBlocked_one": "{{count}} görev engelli",
+    "tasksBlocked_other": "{{count}} görev engelli",
+    "previousStage": "Önceki aşama",
+    "nextStage": "Sonraki aşama",
+    "lanes_one": "{{count}} lane",
+    "lanes_other": "{{count}} lane",
+    "laneStage": "{{count}} {{stage}}",
+    "hitInstructions": "Talimatlar",
+    "hitPost": "Gönderi",
+    "hitReply": "Yanıt",
+    "noTickets": "Ticket yok.",
+    "nothingArchived": "Arşivlenen yok.",
+    "archived": "arşivlendi {{when}}",
+    "archivedBy": "arşivlendi {{when}}, yapan: <actor/>",
+    "restore": "Geri yükle"
+  },
+  "ticketList": {
+    "archivedToast_one": "{{count}} ticket arşivlendi",
+    "archivedToast_other": "{{count}} ticket arşivlendi",
+    "restoredToast": "#{{id}} panoya geri yüklendi",
+    "title": "Süren özellikler",
+    "board": "Pano",
+    "list": "Liste",
+    "archived": "Arşivlenen",
+    "noMatch": "“{{query}}” ile eşleşen ticket yok.",
+    "clearSearch": "Aramayı temizle",
+    "state": "Durum",
+    "clearState": "Durum filtresini temizle",
+    "allTags": "Tüm etiketler",
+    "filterByTag": "Etikete göre filtrele",
+    "tags": "Etiketler",
+    "searchTags": "Etiket ara",
+    "noTagsMatch": "Eşleşen etiket yok",
+    "tickets_one": "{{count}} ticket",
+    "tickets_other": "{{count}} ticket",
+    "showEveryTag": "Tüm etiketleri göster",
+    "clearTag": "Etiket filtresini temizle",
+    "loadingTags": "Etiketler yükleniyor…",
+    "couldNotLoadTags": "Etiketler yüklenemedi.",
+    "retry": "Yeniden dene",
+    "searchTickets": "Ticket ara",
+    "searchPlaceholder": "Ada ya da konuşmaya göre ara",
+    "clearSearchAria": "Aramayı temizle"
+  },
+  "needs": {
+    "titleIn": "#{{id}} {{title}}: {{branch}}, {{into}} içinde",
+    "titleNotIn": "#{{id}} {{title}}: {{branch}}, {{into}} içine merge edilmedi",
+    "titleDone": "#{{id}} {{title}}: bitti",
+    "titleNotDone": "#{{id}} {{title}}: bitmedi, branch yok",
+    "markDoneAnyway": "Yine de bitti olarak işaretle",
+    "mergeFirst": "Önce merge et:\n{{list}}",
+    "badge": "bağımlı: {{list}}",
+    "statusMerged": "Bağımlı #{{id}} · merge edildi",
+    "statusNotMerged": "Bağımlı #{{id}} · henüz merge edilmedi",
+    "removeNeed": "#{{id}} bağımlılığını kaldır",
+    "addPlaceholder": "Ticket ekle…",
+    "noOthers": "Başka ticket yok",
+    "includes": "<goto>{{ref}}</goto> ticket'ından merge edilmemiş iş içerir",
+    "addAsNeed": "Bağımlılık olarak ekle",
+    "autoTitle": "Pano ekledi: bu ticket'ın branch'i, o ticket'ın merge edilmemiş commit'lerini içeriyor. Branch artık içermediğinde kalkar; burada kaldırırsan kalıcı olur (aynı commit'ler için yeniden eklenmez).",
+    "addedByBoard": "Pano ekledi",
+    "cannotBeDoneUnsure": "Pano bu commit'lerin kime ait olduğundan emin olamadı, bu yüzden bağımlılık eklemedi. #{{id}}, #{{need}} ticket'ının branch'i base'ine merge edilene kadar bitemez."
+  },
+  "verdict": {
+    "approve": "Onayla",
+    "disapprove": "Reddet",
+    "approved": "Onaylandı",
+    "disapproved": "Reddedildi",
+    "disapproveTip": "Reddet: bu lane'i iptal eder",
+    "approvedBy": "{{who}} onayladı, {{when}}. Geri almak için tıkla.",
+    "disapprovedBy": "{{who}} reddetti, {{when}}. Geri almak için tıkla (yeniden açar)."
+  },
+  "reviewResult": {
+    "pr": "PR #{{number}}",
+    "counts": "{{confirmed}} doğrulandı · {{plausible}} olası · {{unverified}} doğrulanmadı",
+    "title": "İnceleme sonucu"
+  },
+  "thread": {
+    "replyActions": "Yanıt eylemleri",
+    "replyLabel": "yanıt",
+    "reply": "Yanıtla",
+    "ask": " · @{{name}} o ajana sorar",
+    "empty": "Henüz yorum yok.",
+    "replyingTo": "yanıtlanan: {{name}}",
+    "cancel": "iptal",
+    "placeholderCompact": "Yanıtla…{{ask}}",
+    "placeholder": "Yanıt yaz{{ask}}",
+    "sending": "Gönderiliyor…"
+  },
+  "prQueue": {
+    "title": "PR kuyruğu",
+    "subtitle": "İncelenecek PR'lar ve kendi PR'ların, inceleme durumuna göre.",
+    "filters": {
+      "me": {
+        "label": "İncelenecek",
+        "title": "İncelediğin başkalarının PR'ları: onayını bekleyen, senin onayladığın ya da yorumların yüzünden beklemede olan"
+      },
+      "others": {
+        "label": "Başkalarını bekleyen",
+        "title": "Kendi PR'ların (ajanlarınkiler dahil): onay bekleyen, tüm inceleyenlerin onayladığı ya da yorumları yüzünden beklemede olan"
+      },
+      "all": {
+        "label": "Tüm PR'lar",
+        "title": "Repoların tüm açık PR'ları: kimin yazdığına ve seni ilgilendirip ilgilendirmediğine bakılmaksızın"
+      }
+    },
+    "reviewers": {
+      "mine": "Yalnızca ben inceleyenim",
+      "involving": "Beni ilgilendiren"
+    },
+    "tabs": {
+      "pending": "Bekleyen",
+      "reviewed": "İncelenen",
+      "on_hold": "Beklemede",
+      "done": "Bitti"
+    },
+    "empty": {
+      "me": "İncelenecek {{stage}} bir şey yok.",
+      "others": "Başkalarını bekleyen {{stage}} bir şey yok.",
+      "all": "Açık PR'lar arasında {{stage}} bir şey yok."
+    },
+    "refresh": "Yenile",
+    "mergeAfterTip": "Ticket'ı önce bunların merge edilmesini gerektiriyor:\n{{list}}",
+    "mergeAfterItem": "PR #{{number}} (#{{ticketId}} {{title}} ticket'ından)",
+    "mergeAfter": "şundan sonra merge et: <refs/>",
+    "updated": "güncellendi {{when}}",
+    "merged": "merge edildi {{when}}",
+    "myReview": "incelemem: {{state}}",
+    "myReviewState": {
+      "approved": "onaylandı",
+      "changes_requested": "değişiklik istendi",
+      "commented": "yorum yapıldı",
+      "dismissed": "yok sayıldı",
+      "pending": "bekliyor"
+    },
+    "forYourReview": "senin incelemen için",
+    "yourPr": "senin PR'ın",
+    "fromTicket": "#{{id}} {{title}} ticket'ından",
+    "reviewFresh": "bu SHA'da incelendi",
+    "reviewStale": "inceleme daha eski bir SHA için",
+    "openTicket": "Ticket'ı aç",
+    "release": "bırak",
+    "hold": "beklemeye al",
+    "holdTitle": "#{{number}} beklemeye alınsın mı",
+    "holdText": "Senin ve ajanlar için bir not. GitHub'a dokunulmaz.",
+    "holdPlaceholder": "Neden bekliyor…",
+    "holdConfirm": "Beklemeye al",
+    "notInvolvingYou": "seni ilgilendirmiyor"
+  },
+  "workStatus": {
+    "state": {
+      "waiting": "Seni bekliyor",
+      "yourTurn": "Sıra sende",
+      "lost": "Bağlantı koptu",
+      "noWord": "Haber yok",
+      "quiet": "Sessiz",
+      "working": "Şimdi çalışıyor",
+      "nothing": "Açık iş yok"
+    },
+    "line": {
+      "yourTurn": "Sıra sende · {{duration}} bekliyor",
+      "lost": "Bağlantı koptu · {{duration}}",
+      "noWord": "{{duration}} haber yok",
+      "quiet": "{{duration}} sessiz",
+      "working": "Şimdi çalışıyor · son haber {{duration}}"
+    },
+    "unit": {
+      "m": "{{count}}dk",
+      "h": "{{count}}sa",
+      "d": "{{count}}g"
+    },
+    "since": "{{time}} beri",
+    "minutes": "{{count}} dk",
+    "lastWord": "son haber {{count}} dk önce",
+    "noWordYet": "henüz haber yok",
+    "why": {
+      "inStage": "{{stage}} aşamasında, {{time}} beri hiçbir ajandan haber yok",
+      "waitingOn": "{{on}} bekleniyor, {{time}} beri kimseden haber yok",
+      "nothingOpen": "{{time}} beri açık bir şey yok",
+      "work": "iş",
+      "ended": "{{time}} anında biten {{phase}} sonrası açık bir şey yok",
+      "endedQuote": "{{time}} anında biten {{phase}} sonrası açık bir şey yok ('{{quote}}')",
+      "noProgress": "{{time}} beri ilerleme gönderisi yok"
+    },
+    "verb": {
+      "spec": "Spec yazıyor",
+      "build": "Geliştiriyor",
+      "review": "İnceliyor",
+      "verify": "Doğruluyor",
+      "pr": "PR açıyor",
+      "preview": "Preview çalıştırıyor",
+      "merge": "Merge ediyor",
+      "work": "Çalışıyor"
+    },
+    "nobodyHeard": "Henüz kimseden haber yok",
+    "lastHeard": "Son haber {{time}}",
+    "worked": "Çalıştı",
+    "waited": "Bekledi",
+    "onYou": "Sende",
+    "defs": {
+      "worked": "Çalıştı: bir ajanın açık işi olduğu, bir kişiyi beklemediği süre.",
+      "waited": "Bekledi: ticket'ta hiçbir şeyin ilerlemediği ve hiçbir kişinin beklenmediği süre.",
+      "onYou": "Sende: bir kişiyi beklenen süre (bir insan beklemesi ya da engelli bir aşama)."
+    }
+  },
+  "workTimeline": {
+    "noWork": "Henüz kayıtlı iş yok.",
+    "now": "şimdi",
+    "board": "Pano",
+    "unnamed": "adsız",
+    "work": "iş",
+    "theHuman": "insan",
+    "running": "çalışıyor",
+    "neverClosed": "hiç kapanmadı",
+    "phaseRound": "{{phase}} tur {{round}}",
+    "phaseRoundShort": "{{phase}} t{{round}}",
+    "delegatedTo": "devredilen: {{on}}",
+    "subAgentOf": "{{name}}, {{parent}} ajanının alt ajanı",
+    "created": "işten {{count}} dk önce oluşturuldu",
+    "notToScaleNote": "Bu süre gerçek uzunluğunda değil, kısa bir blok olarak gösterilir.",
+    "alsoThenItem": "{{name}}, {{time}}",
+    "duration": {
+      "seconds": "{{count}}sn",
+      "minutes": "{{count}}dk",
+      "hours": "{{count}}sa",
+      "hoursMinutes": "{{h}}sa {{m}}dk"
+    },
+    "spoken": {
+      "underMinute": "bir dakikadan az",
+      "days": "{{count}} g",
+      "minutes": "{{count}} dk",
+      "hours": "{{count}} sa",
+      "hoursMinutes": "{{h}} sa {{m}} dk"
+    },
+    "mark": {
+      "push": "push",
+      "pr": "pull request",
+      "preview": "preview",
+      "merge": "merge",
+      "other": "pano olayı"
+    },
+    "label": {
+      "via": " ({{by}} üzerinden)",
+      "open": ", açık",
+      "span": "{{agent}}{{via}}: {{phase}}, {{from}} - {{to}}, {{duration}}{{open}}",
+      "wait": "bekleme: {{reason}} ({{agent}}), {{from}} - {{to}}, {{duration}}{{open}}{{note}}",
+      "delegation": "devir: {{agent}} → {{on}}, {{from}} - {{to}}, {{duration}}{{open}}{{note}}",
+      "handoff": "devir: {{from}} → {{to}}, {{time}}{{note}}",
+      "mark": "{{name}}{{note}}, {{time}}",
+      "collapsed": "{{label}}, {{from}} - {{to}}, {{duration}}, ölçeksiz çizildi"
+    },
+    "fact": {
+      "delegatedTo": "Devredilen",
+      "by": "Yapan",
+      "started": "Başladı",
+      "ended": "Bitti",
+      "note": "Not",
+      "waiting": "Bekleyen",
+      "waitingFor": "Beklenen",
+      "on": "Beklenen",
+      "duration": "Süre",
+      "who": "Kim",
+      "work": "İş",
+      "from": "Kimden",
+      "to": "Kime",
+      "at": "Zaman",
+      "event": "Olay",
+      "notToScale": "Ölçeksiz",
+      "alsoThen": "Aynı anda"
+    },
+    "summary": {
+      "noAgentWork": "Kayıtlı ajan işi yok.",
+      "worked": "{{duration}} çalıştı",
+      "waited": "{{target}} için {{duration}} bekledi",
+      "delegated": "devretti: {{on}}",
+      "clause": "{{agent}}: {{parts}}",
+      "workBy_one": "{{over}} içinde {{count}} ajanın işi: {{clauses}}.{{live}}{{scale}}",
+      "workBy_other": "{{over}} içinde {{count}} ajanın işi: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_one": "{{over}} içinde {{count}} ajanın etkinliği: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_other": "{{over}} içinde {{count}} ajanın etkinliği: {{clauses}}.{{live}}{{scale}}",
+      "stillGoing": " Hâlâ sürüyor.",
+      "notToScale": " Ölçeksiz: {{skipped}}."
+    },
+    "card": {
+      "title": "Zaman çizelgesi",
+      "showMore": "Daha fazla göster",
+      "showLess": "Daha az göster",
+      "story": "Zaman çizelgesi öyküsü"
+    },
+    "story": {
+      "waitingFor": "bekleme: {{who}} · {{duration}}",
+      "waitedFor": "bekledi: {{who}} · {{duration}}{{note}}",
+      "started": "{{phase}} başladı{{note}}",
+      "ended": "{{phase}} bitti{{note}}",
+      "handoff": "işin devri{{from}}, devralan: {{to}}{{note}}",
+      "handoffFrom": ", devreden: {{name}}",
+      "someone": "biri",
+      "waiting": "bekleme: {{who}}",
+      "stoppedWaiting": "beklemeyi bıraktı: {{who}}{{note}}",
+      "movedTo": "{{stage}} aşamasına taşındı",
+      "createdIn": "{{stage}} aşamasında oluşturuldu",
+      "pushed": "push edildi",
+      "openedPr": "PR açıldı{{note}}",
+      "merged": "merge edildi",
+      "preview": "preview {{note}}",
+      "somethingElse": "başka bir şey",
+      "lockNote": "kilit ({{note}})",
+      "lock": "kilit",
+      "you": "sen",
+      "mcp": "MCP sunucusu",
+      "seconds": "{{count}} sn",
+      "minutes": "{{count}} dk",
+      "minutesSeconds": "{{m}} dk {{s}} sn",
+      "hours": "{{count}} sa",
+      "hoursMinutes": "{{h}} sa {{m}} dk"
+    },
+    "stretch": {
+      "start": "Başlamayı bekliyor",
+      "blocked": "Engelli",
+      "human": "İnsanı bekliyor",
+      "review": "İncelemede",
+      "merge": "Merge bekliyor",
+      "decision": "Karar bekliyor"
+    },
+    "skipped": {
+      "start": "başlamayı bekledi, {{duration}}",
+      "blocked": "engelli, {{duration}}",
+      "human": "insanı bekledi, {{duration}}",
+      "review": "incelemede, {{duration}}",
+      "merge": "merge bekledi, {{duration}}"
+    },
+    "openReport": "Raporu aç ({{agent}}): {{label}}",
+    "openReportRound": "Raporu aç ({{agent}}), tur {{round}}: {{label}}",
+    "reportDescription": "Bu çalıştırma için yazılan rapor",
+    "factsDescription": "Bu çalıştırmanın bilgileri",
+    "loadingReport": "Çalıştırma raporu yükleniyor…",
+    "reportsFailed": "Raporlar yüklenemedi.",
+    "noReport": "Bu çalıştırma için rapor yok.",
+    "noReportYet": "Bu çalıştırma için henüz rapor yok."
+  },
+  "roadmap": {
+    "title": "Yol haritası",
+    "subtitle": "Yoldaki her ticket: biten, şimdiki, sıradaki.",
+    "filter": {
+      "all": "Tümü",
+      "blocked": "Engelli",
+      "review": "İnceleme bekleyen"
+    },
+    "timeAxis": "Zaman ekseni, her satır:",
+    "window": {
+      "today": "Bugün",
+      "24h": "24 sa",
+      "7d": "7 g",
+      "fit": "Tüm satırlara sığdır"
+    },
+    "range": "{{start}} - şimdi",
+    "stat": {
+      "tickets_one": "ticket",
+      "tickets_other": "ticket",
+      "lanes_one": "lane",
+      "lanes_other": "lane",
+      "workingNow": "şimdi çalışıyor",
+      "blocked": "engelli",
+      "inReview": "incelemede",
+      "noWord": "haber yok"
+    },
+    "projectWork": "Proje işi, her ticket ve lane:",
+    "empty": {
+      "all": "Sürmekte, engelli ya da incelemede ticket yok.",
+      "blocked": "Engelli bir şey yok.",
+      "review": "İnceleme bekleyen ticket yok."
+    },
+    "lanes_one": "{{count}} lane",
+    "lanes_other": "{{count}} lane",
+    "unassigned": "Atanmamış",
+    "progress": "{{total}} içinden {{done}} bitti",
+    "workTimeline": "İş zaman çizelgesi",
+    "noTasks": "Henüz görev yok.",
+    "tasks": "Görevler",
+    "step": {
+      "done": "bitti",
+      "now": "şimdi",
+      "next": "sıradaki",
+      "later": "sonra",
+      "blocked": "engelli"
+    }
+  },
+  "overview": {
+    "loadError": "Özet yüklenemedi: {{error}}",
+    "projectOverview": "{{name}}: genel bakış",
+    "headline": {
+      "waiting": "{{count}} seni bekliyor",
+      "inProgress": "{{count}} sürüyor",
+      "doneToday": "{{count}} bugün bitti"
+    },
+    "allHidden": "Bu genel bakışın tüm kartları gizli. <goto>Düzen ayarlarında yeniden göster</goto>.",
+    "showFewer": "Daha az göster",
+    "viewAll": "{{count}} öğenin tümünü gör",
+    "unassigned": "atanmamış",
+    "projectAgent": "{{name}} (projenin ajanlarından biri)",
+    "sinceDate": "{{date}} beri",
+    "laneOf": "#{{id}} lane'i",
+    "draft": "taslak",
+    "pr": "PR #{{number}}",
+    "prTitle": "PR #{{number}} {{title}}",
+    "openOnGithub": "GitHub'da aç",
+    "option_one": "{{count}} seçenek",
+    "option_other": "{{count}} seçenek",
+    "lane_one": "{{count}} lane",
+    "lane_other": "{{count}} lane",
+    "previewOf": "Preview: {{workspace}}",
+    "preview": "Preview",
+    "needsYou": {
+      "title": "Seni bekliyor",
+      "empty": "Seni bekleyen bir şey yok.",
+      "decide": "Karar ver: {{question}}",
+      "asked": "{{options}} · soran: {{author}}, {{ago}}",
+      "waitingOnYou": "Seni bekliyor: {{since}} · {{agent}}",
+      "reviewPr": "PR #{{number}} {{title}} incele",
+      "prBy": "yazan: {{author}} · güncellendi {{ago}}",
+      "newReplies": "{{count}} yeni · ",
+      "blocked": "engelli",
+      "instructionsChanged": "Proje talimatları değişti",
+      "changedBy": "yapan: <actor/>",
+      "reviewed": "İncelendi",
+      "revertTip": "Talimatları bu değişiklikten önceki hâline döndür",
+      "revertBlockedTip": "Talimatlar o zamandan beri yine değişti: önce sonraki değişikliği geri al",
+      "revert": "Geri al",
+      "last": "son"
+    },
+    "lost": {
+      "title": "Bağlantı koptu",
+      "empty": "Bağlantısı kopan yok.",
+      "lastHeardTip": "Son haber: {{when}}",
+      "lastHeard": "son haber {{duration}} önce"
+    },
+    "inProgress": {
+      "title": "Sürüyor",
+      "empty": "Süren bir şey yok."
+    },
+    "doneToday": {
+      "title": "Bugün biten",
+      "empty": "Bugün henüz biten yok.",
+      "closedTip": "Merge edildi ya da kapandı: inceleme kuyruğundan çıktı",
+      "closed": "kapandı {{time}}",
+      "activity_one": "Bugün {{count}} olay oldu: Günlük",
+      "activity_other": "Bugün {{count}} olay oldu: Günlük"
+    },
+    "carryingOver": {
+      "title": "Devredenler",
+      "startedTip": "Üzerindeki iş {{when}} başladı",
+      "days_one": "{{count}} gündür sürüyor",
+      "days_other": "{{count}} gündür sürüyor",
+      "emptyShown": "Bugünden önceden kalan engelli ya da incelemede bir şey yok."
+    }
+  },
+  "notifications": {
+    "title": "Bildirimler",
+    "clearFinished": "Bitenleri temizle",
+    "empty": "Çalışan bir şey yok",
+    "dismiss": "Kapat: {{label}}",
+    "of": "{{total}} içinden {{done}}",
+    "starting": "Başlatılıyor…",
+    "noReason": "neden belirtilmedi",
+    "failed": "{{title}} başarısız oldu",
+    "finished": "{{title}} bitti",
+    "finishedWith": "{{title}} bitti · {{summary}}",
+    "failedLine": "Başarısız · {{elapsed}} · {{reason}}",
+    "succeededLine": "Başarılı · {{elapsed}}",
+    "retryKept": "Saklananları yeniden dene",
+    "youAsked": "{{actor}} · Sen istedin: {{request}}",
+    "stale": "{{since}} süredir güncelleme yok · durmuş olabilir",
+    "trackedFailed": "Başarısız · {{reason}}",
+    "succeeded": "Başarılı",
+    "notice": "Bildirim",
+    "cannotWait": "Beklenemiyor: {{reason}}",
+    "muted": "Bu projede \"{{name}}\" sessize alındı",
+    "new": "Yeni",
+    "snooze": "Ertele",
+    "snoozeFor": "Erteleme süresi",
+    "mute": "Bu türü bu projede sessize al",
+    "copied": "Kopyalandı",
+    "copyFailed": "Kopyalanamadı: metni seç",
+    "unit": {
+      "s": "{{value}} sn",
+      "min": "{{value}} dk",
+      "h": "{{value}} sa",
+      "d": "{{value}} g"
+    },
+    "severity": {
+      "info": "Bilgi",
+      "warning": "Uyarı",
+      "problem": "Sorun"
+    }
+  },
+  "ticketPage": {
+    "archivedToast": "Arşivlendi: panodan çıktı, Arşivlenen altında",
+    "restoredToast": "Panoya geri yüklendi",
+    "disapprovedToast": "#{{id}} reddedildi ve iptal edildi",
+    "undo": "Geri al, reddi geri çeker ve ticket'ı {{stage}} aşamasına döndürür.",
+    "undoAction": "Geri al",
+    "summary": "Özet",
+    "updated": "güncellendi {{when}}",
+    "archivedBy": "Arşivleyen: {{name}}, {{when}}",
+    "archivedByLane": "Arşivleyen: {{name}}, {{when}}; bağlı olduğu ticket'la birlikte",
+    "someone": "biri",
+    "archivedBadge": "Arşivlendi",
+    "decisionNeeded": "karar gerekli",
+    "archiveTip": "Lane'leriyle birlikte panodan kaldır; özellikler sayfasındaki Arşivlenen onu geri getirir",
+    "deleteTitle": "Bu ticket silinsin mi?",
+    "deleteBody": "Görevleri, güncellemeleri, ekleri ve konuşması onunla gider.",
+    "deleteLanes_one": "{{count}} lane'i var: onu da sil ya da sakla ve bir üst düzeye taşı.",
+    "deleteLanes_other": "{{count}} lane'i var: onları da sil ya da sakla ve bir üst düzeye taşı.",
+    "deleteKeepLanes": "Sil, lane'leri sakla",
+    "deleteWithLanes": "Lane'lerle birlikte sil",
+    "title": "Başlık",
+    "clickToRename": "Yeniden adlandırmak için tıkla",
+    "tagsAria": "Etiketler, virgülle ayrılmış",
+    "tagsPlaceholder": "Yüksek, Formlar",
+    "editTagsTip": "Etiketleri düzenlemek için tıkla",
+    "addTags": "+ etiket",
+    "instructions": "Talimatlar",
+    "attaching": "ekleniyor…",
+    "attach": "ekle",
+    "edit": "düzenle",
+    "instructionsPlaceholder": "Ne yapılacak, bittiği nasıl anlaşılacak, asla ne yapılmayacak. Eklemek için dosyaları yapıştır ya da bırak.",
+    "showLess": "Daha az göster",
+    "showFull": "Tüm talimatları göster",
+    "removeNamed": "Kaldır: {{name}}",
+    "otherReposTip": "Ticket'ın projenin diğer repolarındaki işi, her biri kendi branch'inde: Branch ve Çalıştırmalar'da görünür",
+    "otherRepos": "Diğer repolar",
+    "repositoryNamed": "Repo: {{name}}",
+    "takeOffTip": "{{name}} reposunu ticket'tan çıkar (ticket için çalıştırmaları durur)",
+    "addRepo": "Repo ekle",
+    "addRepoPlaceholder": "Repo ekle…",
+    "details": "Ayrıntılar",
+    "assignee": "Atanan",
+    "reservedTip": "Bu proje ajanına ayrıldı: diğer ajanlar alamaz, yalnızca sen yeniden atayabilirsin",
+    "reserved": "ayrılmış",
+    "repository": "Repo",
+    "branch": "Branch",
+    "baseBranch": "Ana branch",
+    "needsTip": "Bu ticket'ın bitebilmesi için branch'leri onun base'ine merge edilmesi gereken ticket'lar",
+    "needs": "Bağımlı olduğu",
+    "neededBy": "bağımlı olanlar",
+    "autoTip": {
+      "Pushed": "Pano tarafından git'ten işaretlendi (branch tüm yerel commit'leriyle origin'de)",
+      "PR": "Pano tarafından GitHub'dan işaretlendi (ticket için açık ya da merge edilmiş bir PR)",
+      "CI": "Pano tarafından GitHub'dan işaretlendi (PR'ın denetimleri yeşil ya da head SHA'da \"CI run locally: green\" yorumu)",
+      "Preview": "Pano tarafından preview'lardan işaretlendi (ticket'ın workspace'lerinden biri preview çalıştırıyor ya da preview bağlantısı yanıt veriyor)",
+      "Summary": "Pano tarafından ticket'ın gönderilerinden işaretlendi (bir ajan özeti branch'in son commit'inden sonra yazdı ya da güncelledi)",
+      "Merged": "Pano tarafından GitHub ve git'ten işaretlendi (PR merge edildi ya da branch base'ine merge edildi)"
+    },
+    "tickedAuto": "Otomatik işaretlendi",
+    "blocked": "engelli",
+    "subtasksBlocked_one": "{{count}} alt görev engelli",
+    "subtasksBlocked_other": "{{count}} alt görev engelli",
+    "unblock": "Engeli kaldır: {{name}}",
+    "markBlockedNamed": "Engelli işaretle: {{name}}",
+    "addSubtask": "Alt görev ekle",
+    "addSubtaskTo": "Alt görev ekle: {{name}}",
+    "removeTask": "kaldır",
+    "removeTaskSubtasks": "kaldır, alt görevleriyle birlikte",
+    "blockedPlaceholder": "İnsanın ne yapması gerektiği (isteğe bağlı)",
+    "whyBlocked": "{{name}} neden engelli",
+    "markBlocked": "Engelli işaretle",
+    "tasks": "Görevler",
+    "noTasks": "Henüz görev yok. Yeni bir ticket'ın başladığı fazları ekle: Implementation, sonra devrin fazları (Pushed, PR, CI, Preview, Summary, Merged). Somut adımlar Implementation altına alt görev olarak girer. Pano Pushed, PR, CI, Preview, Summary ve Merged'ı kendisi işaretler.",
+    "subtasksOf": "Alt görevler: {{name}}",
+    "newSubtaskOf": "Yeni alt görev: {{name}}",
+    "add": "Ekle",
+    "addPhase": "Faz ekle: Implementation, Pushed, PR…",
+    "all": "Tümü",
+    "nounLane": "lane",
+    "laneOf": "lane {{n}} / {{count}}",
+    "filtered": "(filtreli)",
+    "nounTicketIn": "{{stage}} aşamasındaki ticket",
+    "stageOf": "{{stage}} içinde {{n}} / {{count}}",
+    "previousNoun": "Önceki {{noun}}",
+    "nextNoun": "Sonraki {{noun}}",
+    "stepKeysTip": "[ ve ] geri ve ileri gider",
+    "lanesCancelled": "{{count}} iptal edildi",
+    "allTasks": "tüm görevler {{done}}/{{total}}",
+    "noLanes": "Lane yok. Bir ticket'ın parçaları paralel yürüyorsa onu lane'lere böl: her lane'in kendi branch'i, atananı, görevleri ve güncellemeleri olur.",
+    "filterStage": "Aşama",
+    "filterTags": "Etiketler",
+    "showing": "{{total}} içinden {{shown}} gösteriliyor",
+    "clearFilters": "filtreleri temizle",
+    "activity": "Etkinlik",
+    "feed": "Akış",
+    "mainTip": "Senin için: gönderilerin ve altındaki yanıtlar, kararlar ve sorular",
+    "main": "Ana",
+    "agentsTip": "Ajanların çalışma kaydı: ilerleme, inceleme fazları, builder notları",
+    "agents": "Ajanlar",
+    "includeLanePosts": "lane gönderilerini dahil et",
+    "newCount_one": "{{count}} yeni",
+    "newCount_other": "{{count}} yeni",
+    "newPost": "Yeni gönderi",
+    "postPlaceholder": "Bir gönderi yaz: soru, yanıt, ilerleme. Ekran görüntülerini ve kayıtları yapıştır ya da bırak.",
+    "agentsPlaceholder": "Ajanların kaydına yaz: üzerinde çalışacak kişiye bir not. Dosyaları yapıştır ya da bırak.",
+    "posting": "Gönderiliyor…",
+    "post": "Gönder",
+    "postInAgents": "Ajanlar'a gönder",
+    "noPosts": "Henüz gönderi yok.",
+    "noPostsHere": "Burada henüz gönderi yok.",
+    "noAgentPosts": "Henüz ajan gönderisi yok.",
+    "sections": "Ticket bölümleri",
+    "summaryPosted": "gönderildi {{when}}",
+    "summaryUpdated": "güncellendi {{when}}",
+    "summaryWritten": "yazıldı {{when}}",
+    "history": "Geçmiş ({{count}})",
+    "noSummary": "Henüz özet yok: bir ajan yazana kadar en son ilerleme gönderisi onun yerini tutar.",
+    "earlierVersions": "Önceki sürümler",
+    "firstVersion": "ilk sürüm",
+    "replies_one": "{{count}} yanıt",
+    "replies_other": "{{count}} yanıt",
+    "summaryActions": "Özet eylemleri",
+    "hideRepliesLabel": "yanıtları gizle",
+    "replyLabel": "yanıtla",
+    "hideReplies": "Yanıtları gizle",
+    "showReplies": "{{replies}} göster",
+    "replySummary": "Özeti yanıtla",
+    "laneSummaryTip": "Lane'in özeti: işinin ajanlarınca tutulan durumu",
+    "summaryChip": "özet",
+    "progress": "ilerleme",
+    "postActions": "Gönderi eylemleri",
+    "notProgressLabel": "ilerleme değil",
+    "markProgressLabel": "ilerleme olarak işaretle",
+    "notProgressTip": "İlerleme değil: sıradan bir gönderi yap",
+    "markProgressTip": "İlerleme olarak işaretle",
+    "decisionArchived": "Arşivlendi {{ids}}: panodan çıktı, Arşivlenen altında",
+    "notArchived": "Arşivlenmedi: {{why}}",
+    "decision": "Karar",
+    "decidedInChat": "Sohbette sen karar verdin ·",
+    "relayedTip": "Orchestrator yanıtını sohbetten kaydetti. Karta tıklanmadı.",
+    "relayed": "aktarıldı",
+    "relayedBy": "aktaran: <actor/> {{when}} ·",
+    "decidedBy": "karar veren: <actor/> {{when}} ·",
+    "change": "değiştir",
+    "decisionNeededHere": "Kararın gerekli",
+    "recommended": "önerilen",
+    "saidInChat": "Sohbette söylediğin:",
+    "agentNotePlaceholder": "Ajan için bir not (isteğe bağlı)",
+    "agentNote": "Ajan için not",
+    "decide": "Karar ver",
+    "vsBase": "base'e göre +{{ahead}} / −{{behind}} ·",
+    "branchNotInCheckout": "branch henüz checkout'ta yok",
+    "reviewOlder": "inceleme daha eski bir SHA için",
+    "latestReview": "son inceleme",
+    "branchIn": "Branch: {{name}}",
+    "base": "base {{name}}",
+    "noBranch": "Henüz branch yok: yukarıdan birini seç ya da ajan ayarlasın.",
+    "workspaces": "Workspace'ler",
+    "workspacesDesc": "Ajanların bu ticket için açtığı worktree'ler, alt branch'ler ve alt ajan sandbox'ları.",
+    "workspacesDescLanes": "Ajanların bu ticket ve lane'leri için açtığı worktree'ler, alt branch'ler ve alt ajan sandbox'ları.",
+    "noneYet": "Henüz yok.",
+    "breadcrumb": "Gezinti yolu",
+    "scrollSideUp": "Yan sütunu yukarı kaydır",
+    "scrollSideDown": "Yan sütunu aşağı kaydır",
+    "workflow": "İş akışı",
+    "workflowOwn": "Şu iş akışını izler: {{workflow}}. Bu ticket'ta ayarlandı.",
+    "workflowProject": "Projenin iş akışını izler ({{workflow}}).",
+    "workflowSteps": "Adımlara bak",
+    "lanesProgress": "{{done}}/{{total}} bitti"
+  },
+  "complexity": {
+    "label": {
+      "low": "Düşük",
+      "mid": "Orta",
+      "high": "Yüksek",
+      "max": "Maks"
+    },
+    "workflowHint": "Düşük: Standart iş akışında spec ve inceleme yok. Orta, Yüksek ve Maks: projenin iş akışının belirlediği inceleme turları (Standart: bir, üç, en fazla on). Maks, sıfırdan yazılan işler içindir; mevcut bir kod tabanındaki özellik ne kadar zor olursa olsun asla maks değildir.",
+    "levelHint": {
+      "low": "Düşük: projenin iş akışının belirlediği inceleme turları (Standart: yok). Builder bunu kendisi doğrular.",
+      "mid": "Orta: projenin iş akışının belirlediği inceleme turları (Standart: bir).",
+      "high": "Yüksek: projenin iş akışının belirlediği inceleme turları (Standart: en fazla üç).",
+      "max": "Maks: projenin iş akışının belirlediği inceleme turları (Standart: en fazla on); sıfırdan yazılan bir site ya da uygulama, yeni bir ürün ya da bağımsız bir servis için; geçen ilk turda durur. Mevcut bir kod tabanındaki özellik ne kadar zor olursa olsun en fazla yüksektir."
+    }
+  },
+  "agentsAtWork": {
+    "title": "Çalışan ajanlar",
+    "error": "Kimin çalıştığı okunamadı.",
+    "empty": "Çalışan ajan yok",
+    "more_one": "+{{count}} daha",
+    "more_other": "+{{count}} daha",
+    "round": "{{phase}} tur {{round}}",
+    "waiting": "Bekliyor: {{what}}",
+    "blocked": "Engelli",
+    "quiet": "sessiz",
+    "lastHeard": "son haber {{time}}",
+    "label": "#{{id}} {{title}} — {{phase}}, {{since}}, {{state}}",
+    "labelAgent": "#{{id}} {{title}} — ajan {{agent}}, {{phase}}, {{since}}, {{state}}",
+    "state": {
+      "working": "çalışıyor",
+      "waiting": "bekliyor",
+      "asleep": "uykuda"
+    }
+  },
+  "notificationSettings": {
+    "title": "Bildirimler",
+    "intro": "Zilin bu proje için gösterebileceği uyarılar. Birini kapatırsan burada görünmez; pano onu izlemeye devam eder, diğer projeler kendi seçimini korur.",
+    "none": "Henüz uyarı yok",
+    "show": "Göster: {{label}}"
+  },
+  "alerts": {
+    "group": {
+      "setup": "Kurulum ve sürümler",
+      "work": "İş",
+      "machine": "Bu bilgisayar",
+      "housekeeping": "Temizlik"
+    },
+    "snooze": {
+      "minutes_one": "{{count}} dakika",
+      "minutes_other": "{{count}} dakika",
+      "hours_one": "{{count}} saat",
+      "hours_other": "{{count}} saat",
+      "days_one": "{{count}} gün",
+      "days_other": "{{count}} gün"
+    }
+  },
+  "workflowChips": {
+    "selfTip": "Ticket ajanı bunu kendisi yapar",
+    "agentTip": {
+      "picked": "Bunun için seçilen Ekip ajanı. Talimatları Ekip sayfasında yazılı. Rol ({{agent}}) span'lerini ve çalıştırma raporlarını adlandırır.",
+      "role": "Rolüyle ({{agent}}) aynı adı taşıyan Ekip ajanı. Talimatları Ekip sayfasında yazılı. Rol ({{agent}}) span'lerini ve çalıştırma raporlarını adlandırır.",
+      "default": "{{agent}} adında bir Ekip ajanı yok: yerleşik {{agent}} rolü olarak çalışır. Talimatları Ekip sayfasında yazılı. Rol ({{agent}}) span'lerini ve çalıştırma raporlarını adlandırır."
+    },
+    "agentMissing": "ajan yok",
+    "missingTip": "Bunun için {{picked}} seçilmişti ama Ekip'te artık bu adda bir ajan yok: ajan geri gelene ya da başkası seçilene kadar {{name}} olarak çalışır.",
+    "locked": "Kilitli",
+    "lockedAboveLow": "Düşükten yukarıda kilitli",
+    "skippedOnLow": "Düşükte atlanır",
+    "changed": "değişti",
+    "changedTip": "Hazır ayardan değişti: {{what}}"
+  },
+  "workflowGraph": {
+    "label": "{{label}} iş akışı, ticket karmaşıklığı: {{complexity}}",
+    "complexity": {
+      "low": "düşük",
+      "mid": "orta",
+      "high": "yüksek",
+      "max": "maks"
+    },
+    "roundSurvives": "tur geçer",
+    "roundFails": "tur geçmez",
+    "inParallel": "Paralel",
+    "reviewRound": "İnceleme turu",
+    "noRoundsOn": "İnceleme turu yok: {{complexity}}"
+  },
+  "workflowPanel": {
+    "idle": "Ne yaptığını görmek, kimin çalıştıracağını, eforunu, çalışıp çalışmayacağını ve sıradaki yerini değiştirmek için grafikte bir adım seç.",
+    "runnerAgents": "Ticket ajanı /feature-review'ı kendisi çalıştırır. Fazları, faz düğümlerinde seçilen kendi Ekip ajanlarını çalıştırır.",
+    "selfAgent": "Bunu ticket ajanı kendisi yapar: seçilecek Ekip ajanı yok.",
+    "whatItDoes": "Ne yapar",
+    "handoffTo": "Sonraki adıma devir: {{next}}",
+    "result": "Sonuç",
+    "team": {
+      "title": "Ekip ajanı",
+      "default": "Varsayılan ({{name}})",
+      "notInTeam": "{{name}} (Ekip'te yok)",
+      "missing": "Bunun için {{picked}} seçilmişti ama Ekip'te artık bu adda bir ajan yok. Ajan geri gelene ya da başkası seçilene kadar {{name}} olarak çalışır. Seçimi temizlemek için Varsayılan'ı seç.",
+      "runsAs": "{{name}} olarak çalışır. Talimatları Ekip sayfasında yazılı; rol ({{role}}) span'lerini ve çalıştırma raporlarını adlandırır.",
+      "runsAsDefault": "{{name}} olarak çalışır (yerleşik ajan: Ekip'te bu adda ajan yok). Talimatları Ekip sayfasında yazılı; rol ({{role}}) span'lerini ve çalıştırma raporlarını adlandırır."
+    },
+    "placeInOrder": "Sıradaki yeri",
+    "moveUp": "Yukarı taşı",
+    "moveDown": "Aşağı taşı",
+    "moveUpTip": "Yukarı taşı: {{step}} daha erken çalışır",
+    "moveDownTip": "Aşağı taşı: {{step}} daha geç çalışır",
+    "runs": "Çalışır",
+    "run": "Çalıştır: {{step}}",
+    "alsoRunOnLow": "Düşük ticket'larda da çalıştır: {{step}}",
+    "aboveLowNote": "Bu anahtar yalnızca düşük bir ticket'ta da çalışıp çalışmayacağına karar verir.",
+    "effort": "Efor",
+    "effortHint": "Agent aracının eforu olarak iletilir. {{hint}}.",
+    "reviewRuns": "Her turda {{total}} ayrı /feature-review çalıştırır: {{runs}}; her biri kendi ajan adıyla çalışır ve diğerinin bulgularını hiç görmez.",
+    "survival": "<strong>Bir tur şu durumda geçer:</strong> {{survival}}."
+  },
+  "workflowPage": {
+    "title": "İş akışı",
+    "intro": "Bir ticket'ın To do'dan devire kadar nasıl ilerlediği: ajanının sırayla çalıştırdığı adımlar, her birini kimin çalıştırdığı ve her birinin sonrakine ne devrettiği. Proje tek bir iş akışını izler; bir ticket kendi sayfasında başka birini seçebilir. Ajanlar bunu panodan okur, bu yüzden burada yapılan değişiklik sonraki çalıştırmalarından itibaren geçerli olur.",
+    "graphShows": "Grafik, karmaşıklığı {{complexity}} olan bir ticket'ı gösterir.",
+    "projectFollows": "Proje bu iş akışını izliyor",
+    "use": "Bu iş akışını kullan",
+    "resetThis": "Bu iş akışını sıfırla",
+    "resetTitle": "{{label}} iş akışı sıfırlansın mı?",
+    "resetBody": "Sırası, anahtarları, eforları, Ekip ajanları ve inceleme turları {{label}} hazır ayarının varsayılanlarına döner. Diğer hazır ayarlar içlerinde yapılan değişiklikleri korur.",
+    "cancel": "İptal",
+    "reset": "Sıfırla",
+    "sectionLabel": "{{label}} iş akışı",
+    "projects": "projenin",
+    "summary_one": "{{count}} adım · karmaşıklık {{complexity}} · inceleme: {{rounds}}",
+    "summary_other": "{{count}} adım · karmaşıklık {{complexity}} · inceleme: {{rounds}}"
+  },
+  "workflowPresets": {
+    "group": "Hazır iş akışları",
+    "active": "Etkin",
+    "tweaked": "Değiştirilmiş",
+    "complexity": "Karmaşıklık",
+    "stats_one": "{{count}} adım · inceleme turları {{rounds}}",
+    "stats_other": "{{count}} adım · inceleme turları {{rounds}}",
+    "light": {
+      "label": "Hafif",
+      "description": "Yapım, kontrol, tek inceleyen, niyet kontrolü ve devir: spec ajanı, ortam ve ayrı hata avları yok."
+    },
+    "standard": {
+      "label": "Standart",
+      "description": "Tam döngü: spec, yapım, kontrol; spec, ortam, doğrulama, iki bağımsız hata avı, çürütme ve merge kontrolünden oluşan inceleme turları; ardından niyet kontrolü, PR, CI, preview ve devir."
+    },
+    "thorough": {
+      "label": "Kapsamlı",
+      "description": "Standart, artı özel bir test yazma geçişi, güvenlik kontrol listesiyle üçüncü bir hata avı, her inceleme turunun sonunda niyet kontrolü ve düşükten yukarıdaki her seviyede bir inceleme turu daha."
+    },
+    "maximum": {
+      "label": "Maksimum",
+      "description": "Kapsamlı, artı ikinci bir bağımsız spec, her turun ilkini hiç görmeyen farklı bir ajanla ikinci tam incelemesi ve her ajanda yüksek efor."
+    }
+  },
+  "workflowReview": {
+    "legend": "Karmaşıklığa göre inceleme turları",
+    "changed": "değişti",
+    "notSaved": "Kaydedilmedi: {{reason}}",
+    "default": "varsayılan {{value}}"
+  },
+  "workflowReads": {
+    "title": "Ajanların okuduğu",
+    "hint": "get_workflow'un bu iş akışı için sunduğu metin",
+    "textLabel": "İş akışı metni"
+  },
+  "workflowSelect": {
+    "project": "Projenin iş akışı ({{label}})",
+    "hint": "Ajanının izlediği iş akışı: projenin kendisi ya da yalnızca bu ticket için dört hazır ayardan biri. Projenin iş akışını değiştirmek, kendi iş akışını seçmiş bir ticket'ı etkilemez."
+  },
+  "workflowView": {
+    "noRounds": "inceleme turu yok",
+    "rounds_one": "{{count}} tur",
+    "rounds_other": "{{count}} tur",
+    "complexity": {
+      "low": "Düşük",
+      "mid": "Orta",
+      "high": "Yüksek",
+      "max": "Maks"
+    },
+    "effort": {
+      "auto": "Otomatik",
+      "low": "Düşük",
+      "medium": "Orta",
+      "high": "Yüksek"
+    },
+    "effortLevel": {
+      "low": "düşük",
+      "medium": "orta",
+      "high": "yüksek"
+    },
+    "autoLevel": "Otomatik: {{level}}",
+    "autoEffortHint": "Otomatik ticket'ı izler: düşük ticket için düşük, orta ve yüksek için orta, maks için yüksek",
+    "separator": ", ",
+    "you": "sen",
+    "skippedNoRounds": "İnceleme turu yok",
+    "skippedOff": "Kapalı",
+    "changed": {
+      "moved": "sıradaki yeri",
+      "off": "kapatıldı",
+      "effort": "eforu",
+      "agent": "Ekip ajanı"
+    },
+    "name": {
+      "agent": "ajan {{name}}",
+      "locked": "kilitli",
+      "skipsOnLow": "düşük ticket'larda atlanır"
+    },
+    "lockReason": {
+      "claim": "Kilitli: ticket okunup üstlenilmeden hiçbir şey başlayamaz.",
+      "build": "Kilitli: değişiklik yapılmadan hiçbir şey teslim edilmez.",
+      "gate": "Kilitli: hiçbir değişiklik denetlenmeden ilerlemez.",
+      "intent": "Düşükten yukarıda kilitli: düşükten yukarıdaki her ticket, devredilmeden önce insanın kendi sözleriyle karşılaştırılır.",
+      "always": "Kilitli: ticket onsuz devredilemez."
+    },
+    "survival": {
+      "light": "inceleyen hiçbir bulguyu yeniden üretemedi ve builder'ın kanıtları her kabul ölçütünü kapsıyor",
+      "standard": "karar SHIP, çalışıyor kontrolü YES, base kontrolü NO ve her kabul ölçütü çalıştırılarak PASS (UNVERIFIED yalnızca, aşılamayan ve yükseltme kurallarında adı geçen bir neden için)",
+      "thoroughIntent": "karar SHIP, çalışıyor kontrolü YES, base kontrolü NO ve her kabul ölçütü çalıştırılarak PASS (UNVERIFIED yalnızca, aşılamayan ve yükseltme kurallarında adı geçen bir neden için) ve turun sonundaki niyet kontrolü örtüşüyor",
+      "maximum": "iki inceleme de geçiyor ({{standard}}) ve uzlaştırma hiçbir bulguyu açık bırakmıyor",
+      "maximumIntent": "iki inceleme de geçiyor ({{standard}}), uzlaştırma hiçbir bulguyu açık bırakmıyor ve turun sonundaki niyet kontrolü örtüşüyor"
+    },
+    "move": {
+      "after": "{{step}}, {{other}} adımından sonra gelmeli",
+      "stayFirst": "{{step}} ilk adım kalmalı",
+      "stayLast": "{{step}} son adım kalmalı",
+      "alreadyFirst": "{{step}} zaten ilk adım",
+      "alreadyLast": "{{step}} zaten son adım"
+    }
+  },
+  "backToModule": {
+    "back": "Geri: {{label}}",
+    "home": "Ana sayfa"
+  },
+  "ticketLine": {
+    "openedBy": "Açan: {{name}} ({{role}}), {{when}}",
+    "updated": "Güncellendi: {{when}}",
+    "opened": "Açıldı: {{when}}"
+  },
+  "resumeSettings": {
+    "title": "Devam ettirme",
+    "intro": "Soru soran bir ajan turunu bitirir. Buraya bir komut yazarsan, panodaki bir karar kartını yanıtladığında ya da bir ticket'ı engelli ya da inceleme aşamasından aktif bir aşamaya geri taşıdığında pano işe kendisi devam eder: komutu bu makinede, ticket'ın worktree'sinde çalıştırır; soru ve yanıtın (ya da son sözlerin) standart girdisinde ve <code>BOARD_RESUME_PROMPT_FILE</code> adlı dosyadadır; <code>BOARD_URL</code>, <code>BOARD_PROJECT_ID</code>, <code>BOARD_TICKET_ID</code> ve <code>BOARD_AGENT_NAME</code> ayarlıdır. Canlı ajanı olan ya da zaten devam ettirilen bir ticket için hiçbir şey başlatılmaz. Pano kullanıcısının yetkileriyle çalışır ve yalnızca sen ayarlayabilirsin. Boş bırakmak kapatır.",
+    "presets": "Hazır ayarlar",
+    "found": "bulundu",
+    "notFound": "bulunamadı",
+    "command": "Devam ettirme komutu",
+    "commandPlaceholder": "claude -p (boş: kapalı)",
+    "timeout": "Şu kadar sonra durdur (dakika)",
+    "save": "Kaydet",
+    "saving": "Kaydediliyor…",
+    "timeoutProblem": "{{min}} ile {{max}} arasında bir tam sayı.",
+    "unsaved": "Kaydedilmemiş değişiklikler var.",
+    "noChanges": "Değişiklik yok.",
+    "off": "Devam ettirme kapalı."
+  },
+  "resumeCard": {
+    "title": "Devam ettir",
+    "resume": "Devam ettir",
+    "retry": "Yeniden dene",
+    "started": "Pano işi yeniden başlattı",
+    "empty": "Bu ticket'ı henüz devam ettiren olmadı.",
+    "setInSettings": "İnsan bunu projenin ayarlarında belirler.",
+    "failed": "Pano devam ettiremedi: {{reason}}",
+    "log": "Günlük",
+    "state": {
+      "queued": "Başlıyor",
+      "running": "Çalışıyor",
+      "succeeded": "Bitti",
+      "failed": "Başarısız",
+      "skipped": "Başlamadı"
+    }
+  },
+  "runReportsWindow": {
+    "reports": "Raporlar",
+    "reportsCount": "Raporlar ({{n}})",
+    "title": "Çalıştırma raporları",
+    "description": "Bu ticket'ın çalıştırma raporları; filtreler ve sıralamayla. Birini açmak onu tam olarak gösterir.",
+    "back": "Raporlara dön",
+    "none": "Henüz çalıştırma raporu yok.",
+    "noMatch": "Bu filtrelere uyan rapor yok.",
+    "count_one": "{{count}} rapordan {{shown}}",
+    "count_other": "{{count}} rapordan {{shown}}",
+    "clearFilters": "Filtreleri temizle",
+    "filter": {
+      "agent": "Ajan",
+      "round": "Tur",
+      "time": "Zaman",
+      "difficulty": "Zorluk",
+      "confidence": "Güven",
+      "duration": "Süre",
+      "sortBy": "Sıralama"
+    },
+    "items": {
+      "allAgents": "Tüm ajanlar",
+      "allRounds": "Tüm turlar",
+      "round": "Tur {{n}}",
+      "noRound": "Turu yok"
+    },
+    "time": {
+      "any": "Her zaman",
+      "hour": "Son saat",
+      "today": "Bugün",
+      "week": "Son 7 gün"
+    },
+    "duration": {
+      "any": "Hepsi",
+      "reported": "Bildirilen",
+      "unreported": "Bildirilmeyen"
+    },
+    "rating": {
+      "any": "Hepsi",
+      "unrated": "Puanlanmamış"
+    },
+    "sort": {
+      "newest": "En yeni",
+      "oldest": "En eski",
+      "longest": "En uzun",
+      "difficulty": "En yüksek zorluk",
+      "confidence": "En yüksek güven"
+    }
+  }
+}

@@ -1,25 +1,8 @@
+import { useTranslation } from 'react-i18next'
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
 import { COMPLEXITIES, type Complexity } from '#/lib/constants'
-
-/** How each level is written: the select's options, and the chip on a card. */
-const COMPLEXITY_LABEL: Record<Complexity, string> = { low: 'Low', mid: 'Mid', high: 'High', max: 'Max' }
-
-/**
- * The hover hint of the select: how many review rounds each level gets is the project's workflow's to say (the
- * Standard one gives none, one, three and up to ten), and where max stops being the answer (a feature in an
- * existing codebase is at most high).
- */
-const SELECT_HINT =
-  "Low: no spec or review in the Standard workflow. Mid, High and Max: the review rounds the project's workflow sets (Standard: one, three, up to ten). Max is for work built from scratch; a feature in an existing codebase is never max, however difficult."
-
-/** The hover hint of a level's chip: what that level does to the review under the project's workflow. */
-const LEVEL_HINT: Record<Complexity, string> = {
-  low: "Low: the review rounds the project's workflow sets (Standard: none). The builder verifies it itself.",
-  mid: "Mid: the review rounds the project's workflow sets (Standard: one).",
-  high: "High: the review rounds the project's workflow sets (Standard: up to three).",
-  max: "Max: the review rounds the project's workflow sets (Standard: up to ten), for a whole site or app built from scratch, a new product or a standalone service, and it stops at the first round that survives. A feature in an existing codebase is at most high, however difficult.",
-}
 
 const CHIP_COLOR: Record<Complexity, string> = {
   low: 'bg-muted text-muted-foreground',
@@ -45,9 +28,12 @@ export function ComplexitySelect({
   size?: 'sm' | 'default'
   className?: string
 }) {
+  const { t } = useTranslation()
+  // How each level is written: the select's options, and the chip on a card.
+  const labels = Object.fromEntries(COMPLEXITIES.map((l) => [l, t(`complexity.label.${l}`)]))
   return (
-    <Select value={value} onValueChange={(v) => v && onChange(v as Complexity)} items={COMPLEXITY_LABEL}>
-      <Tip content={SELECT_HINT}>
+    <Select value={value} onValueChange={(v) => v && onChange(v as Complexity)} items={labels}>
+      <Tip content={t('complexity.workflowHint')}>
         <SelectTrigger id={id} size={size} className={className}>
           <SelectValue />
         </SelectTrigger>
@@ -55,7 +41,7 @@ export function ComplexitySelect({
       <SelectContent>
         {COMPLEXITIES.map((level) => (
           <SelectItem key={level} value={level}>
-            {COMPLEXITY_LABEL[level]}
+            {labels[level]}
           </SelectItem>
         ))}
       </SelectContent>
@@ -65,12 +51,13 @@ export function ComplexitySelect({
 
 /** A ticket's review level on its card: a chip that says what the level does to the review on hover. */
 export function ComplexityChip({ level, className = '' }: { level: Complexity; className?: string }) {
+  const { t } = useTranslation()
   return (
-    <Tip content={LEVEL_HINT[level]}>
+    <Tip content={t(`complexity.levelHint.${level}`)}>
       <span
         className={`inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[11px] leading-none font-medium ${CHIP_COLOR[level]} ${className}`}
       >
-        {COMPLEXITY_LABEL[level]}
+        {t(`complexity.label.${level}`)}
       </span>
     </Tip>
   )

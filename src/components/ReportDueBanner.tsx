@@ -1,11 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, useRouter } from '@tanstack/react-router'
+import type { TFunction } from 'i18next'
 import { AlarmClock, Bell, BellOff, TriangleAlert } from 'lucide-react'
 import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Button } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
+import { currentLocale } from '#/i18n'
 import { get, type ReportDueList } from '#/lib/api'
+import { periodLabel } from '#/lib/reports'
 import { useHydrated } from '#/lib/useHydrated'
 import { useNow } from '#/lib/useNow'
 import { cn } from '#/lib/utils'
@@ -16,6 +20,7 @@ import { cn } from '#/lib/utils'
  * asks for notifications by itself: only the Notify me button does.
  */
 export function ReportDueBanner() {
+  const { t } = useTranslation()
   const { data } = useQuery({
     queryKey: ['report-due'],
     queryFn: () => get<ReportDueList>('/api/report-due'),
@@ -35,10 +40,18 @@ export function ReportDueBanner() {
       if (notified(key)) continue
       remember(key)
       try {
-        const n = new Notification(`${d.project}: report ${d.state === 'due' ? 'due' : 'missing'}`, {
-          body: `The ${d.cadence} report for ${d.label} is due at ${clock(d.dueAt)}.`,
-          tag: `report-due-${key}`,
-        })
+        const n = new Notification(
+          t(d.state === 'due' ? 'reportDue.notifyTitleDue' : 'reportDue.notifyTitleMissing', {
+            project: d.project,
+          }),
+          {
+            body: t(d.cadence === 'weekly' ? 'reportDue.notifyBodyWeekly' : 'reportDue.notifyBodyDaily', {
+              label: periodLabel(d.cadence, d.period, t),
+              time: clock(d.dueAt),
+            }),
+            tag: `report-due-${key}`,
+          },
+        )
         n.onclick = () => {
           window.focus()
           void router.navigate({ to: '/projects/$id/daily', params: { id: String(d.projectId) } })
@@ -47,12 +60,12 @@ export function ReportDueBanner() {
         // Some browsers (Chrome on Android) only notify from a service worker: the banner still says it.
       }
     }
-  }, [items, permission, router])
+  }, [items, permission, router, t])
 
   if (!hydrated || !items?.length) return null
   return (
     <section
-      aria-label="Reports due"
+      aria-label={t('reportDue.region')}
       className="border-b border-amber-300/60 bg-amber-50 text-amber-950 dark:border-amber-400/20 dark:bg-amber-950/40 dark:text-amber-100"
     >
       <div className="mx-auto flex max-w-7xl flex-col items-start gap-1.5 px-4 py-2 text-sm sm:flex-row sm:items-center sm:gap-4">
@@ -76,8 +89,8 @@ export function ReportDueBanner() {
                 >
                   <span className="font-medium">{d.project}</span>
                   {missing
-                    ? `: report missing, the shift ended at ${clock(d.dueAt)}`
-                    : `: report due in ${left(Date.parse(d.dueAt) - now)}, at ${clock(d.dueAt)}`}
+                    ? t('reportDue.missing', { time: clock(d.dueAt) })
+                    : t('reportDue.due', { left: left(Date.parse(d.dueAt) - now, t), time: clock(d.dueAt) })}
                 </Link>
               </li>
             )
@@ -94,6 +107,7 @@ export function ReportDueBanner() {
  * Nothing where the browser has no notifications.
  */
 export function NotifyMe({ className }: { className?: string }) {
+  const { t } = useTranslation()
   const permission = useNotificationPermission()
   const [asking, setAsking] = useState(false)
   if (permission === 'unsupported') return null
@@ -102,17 +116,17 @@ export function NotifyMe({ className }: { className?: string }) {
       <span className={cn('flex items-center gap-1 text-xs opacity-80', className)}>
         {permission === 'granted' ? (
           <>
-            <Bell className="size-3.5" aria-hidden /> Notifications on in this browser
+            <Bell className="size-3.5" aria-hidden /> {t('reportDue.notificationsOn')}
           </>
         ) : (
           <>
-            <BellOff className="size-3.5" aria-hidden /> Notifications blocked in this browser
+            <BellOff className="size-3.5" aria-hidden /> {t('reportDue.notificationsBlocked')}
           </>
         )}
       </span>
     )
   return (
-    <Tip content="A browser notification when a report is due (while a board tab is open)">
+    <Tip content={t('reportDue.notifyTip')}>
       <Button
         type="button"
         variant="outline"
@@ -129,7 +143,7 @@ export function NotifyMe({ className }: { className?: string }) {
           }
         }}
       >
-        <Bell data-icon="inline-start" /> Notify me
+        <Bell data-icon="inline-start" /> {t('reportDue.notifyMe')}
       </Button>
     </Tip>
   )
@@ -170,11 +184,15 @@ function remember(key: string) {
   }
 }
 
-const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+const clock = (iso: string) =>
+  new Date(iso).toLocaleTimeString(currentLocale(), { hour: 'numeric', minute: '2-digit' })
 
 /** "25 min", "1 h 20 min". */
-function left(ms: number) {
+function left(ms: number, t: TFunction) {
   const minutes = Math.max(1, Math.ceil(ms / 60_000))
-  const h = Math.floor(minutes / 60)
-  return h ? `${h} h${minutes % 60 ? ` ${minutes % 60} min` : ''}` : `${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  if (!hours) return t('reportDue.leftMinutes', { count: minutes })
+  return minutes % 60
+    ? t('reportDue.leftHoursMinutes', { hours, minutes: minutes % 60 })
+    : t('reportDue.leftHours', { hours })
 }

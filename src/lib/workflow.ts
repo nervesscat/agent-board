@@ -512,7 +512,8 @@ function standardPhases(prefix: string, extraHunts: boolean): ReviewSubStepDef[]
   ]
 }
 
-const ROUND_INTENT_ID = 'review.intent'
+/** The review phase that checks intent at the end of a round (Thorough and Maximum). */
+export const ROUND_INTENT_ID = 'review.intent'
 
 const INTENT_EACH_ROUND = sub(
   ROUND_INTENT_ID,

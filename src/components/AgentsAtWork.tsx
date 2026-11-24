@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { Bot } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import { AgentPet } from '#/components/AgentPet'
 import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
@@ -22,6 +23,7 @@ import { onServerClock } from '#/lib/workStatus'
  * it, and light enough for many: the motion is CSS alone.
  */
 export function AgentsAtWork({ p, className }: { p: ProjectSummary; className?: string }) {
+  const { t } = useTranslation()
   const projectId = p.project.id
   const { data, isLoading, error } = useQuery({
     queryKey: ['live-work', projectId],
@@ -35,7 +37,7 @@ export function AgentsAtWork({ p, className }: { p: ProjectSummary; className?: 
     <Card size="sm" className={className}>
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2">
-          <Bot className="size-4 text-muted-foreground" /> Agents at work
+          <Bot className="size-4 text-muted-foreground" /> {t('agentsAtWork.title')}
           {live > 0 && (
             <span className="rounded-full bg-muted px-1.5 text-xs font-normal tabular-nums text-muted-foreground">
               {live}
@@ -47,11 +49,11 @@ export function AgentsAtWork({ p, className }: { p: ProjectSummary; className?: 
         {isLoading ? (
           <Skeleton className="h-12 w-full max-w-sm" />
         ) : error ? (
-          <p className="text-sm text-muted-foreground">Could not read who is working.</p>
+          <p className="text-sm text-muted-foreground">{t('agentsAtWork.error')}</p>
         ) : !pets.length ? (
           <div data-testid="agents-empty" className="flex min-h-11 items-center gap-2.5">
             <AgentPet state="asleep" />
-            <span className="text-sm text-muted-foreground">No agents working</span>
+            <span className="text-sm text-muted-foreground">{t('agentsAtWork.empty')}</span>
           </div>
         ) : (
           <ul
@@ -65,7 +67,7 @@ export function AgentsAtWork({ p, className }: { p: ProjectSummary; className?: 
             ))}
             {more > 0 && (
               <li className="flex items-center px-2 text-xs text-muted-foreground tabular-nums">
-                +{more} more
+                {t('agentsAtWork.more', { count: more })}
               </li>
             )}
           </ul>

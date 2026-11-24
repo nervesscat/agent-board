@@ -1,0 +1,37 @@
+// The desktop app's own texts in ko (see ../strings.mjs). Every key of en.mjs, the same {{placeholders}} and <tags>.
+export default {
+  open: '열기',
+  openInBrowser: '브라우저에서 열기',
+  retryNow: '지금 다시 시도',
+  startAtLogin: '로그인 시 시작',
+  quit: '종료',
+  openSettings: '설정 파일 열기',
+  openLogs: '로그 폴더 열기',
+  openHome: '앱 폴더 열기',
+  startAtLoginFailed: '로그인 시 시작 설정을 바꿀 수 없어요.',
+  cannotStart: '보드를 시작할 수 없어요.',
+  settingsInvalid: '보드의 설정이 올바르지 않아요.',
+  homeUnusable:
+    '앱 폴더를 사용할 수 없어요: {{home}}\n{{error}}\n\nAGENT_BOARD_HOME에 쓰기가 가능한 폴더를 지정하거나, 기본값을 쓰려면 이 설정을 제거하세요.',
+  homeLine: '{{error}}\n\n앱 폴더: {{home}}',
+  dataFolderUnusable:
+    '데이터 폴더를 사용할 수 없어요: {{dir}}\n{{error}}\n\n{{file}} 또는 환경 변수에 다른 DATA_DIR을 지정한 뒤 앱을 다시 시작하세요.',
+  logsLine: '{{detail}}\n\n로그: {{logs}}',
+  stopped: '보드가 중지됐어요.',
+  restartedTimes_other: ' {{count}}번 다시 시작됐어요.',
+  noOutput: '(출력 없음)',
+  exitedSignal: '{{time}}에 {{signal}} 신호로 종료됐어요.',
+  exitedCode: '{{time}}에 종료됐어요. 종료 코드: {{code}}',
+  exited: '{{time}}에 종료됐어요.',
+  reasonCode: '종료 코드 {{code}}',
+  reasonSignal: '신호 {{signal}}',
+  reasonNone: '종료 코드 없음',
+  tipRestarting: '{{name}}: 보드 다시 시작 중({{reason}})',
+  tipRestarted: '{{name}}: {{url}}({{reason}} 후 {{time}}에 다시 시작됨)',
+  notifyRestarted: '보드가 다시 시작됐어요({{reason}}).',
+  didNotStart: '보드가 시작되지 않았어요.',
+  didNotAnswer: '1분 안에 {{url}}에서 응답하지 않았어요.',
+  unreachableHeading: '<code>{{address}}</code>의 보드에 연결할 수 없어요.',
+  unreachableBody:
+    '보드가 다른 컴퓨터에서 실행 중이에요. 이 컴퓨터가 온라인인지, 그곳에서 보드가 실행 중인지 확인하세요. 앱이 스스로 다시 시도하며, 바로 시도하려면 “{{retry}}” 항목을 누르세요.',
+}

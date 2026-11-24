@@ -47,6 +47,7 @@ describe('test mode through the API router', () => {
       parent: '',
       boardEnv: 'test',
       authOff: true,
+      language: null,
     })
     expect(await (await call('GET', '/api/me')).json()).toMatchObject({ actor: 'human', agent: false })
   })

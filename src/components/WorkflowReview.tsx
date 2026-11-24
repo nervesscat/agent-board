@@ -1,11 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { COMPLEXITIES, type Complexity } from '#/lib/constants'
 import { ROUNDS_MAX, type ResolvedReview } from '#/lib/workflow'
 import { parseRounds } from '#/lib/workflowEdit'
-import { COMPLEXITY_NAMES } from '#/lib/workflowView'
 import { cn } from '#/lib/utils'
 
 /** The Review step's four round counts, as the fields in its settings panel. */
@@ -34,9 +34,10 @@ export function RoundsEditor({
   flightOf: (level: Complexity) => RoundsFlight
   onChange: (level: Complexity, rounds: number) => Promise<string | null>
 }) {
+  const { t } = useTranslation()
   return (
     <fieldset className="space-y-1.5">
-      <legend className="text-xs font-medium text-muted-foreground">Review rounds per complexity</legend>
+      <legend className="text-xs font-medium text-muted-foreground">{t('workflowReview.legend')}</legend>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {COMPLEXITIES.map((level) => (
           <RoundsField
@@ -73,6 +74,7 @@ function RoundsField({
   /** Answers with the reason the count was not saved, or null once it was. */
   onChange: (rounds: number) => Promise<string | null>
 }) {
+  const { t } = useTranslation()
   const id = useId()
   const [draft, setDraft] = useState(String(value))
   const [failure, setFailure] = useState<string | null>(null)
@@ -137,8 +139,8 @@ function RoundsField({
   return (
     <div className={cn('space-y-1 rounded-md border p-1.5', current && 'border-primary/50 bg-primary/5')}>
       <Label htmlFor={id} className="text-xs font-normal text-muted-foreground">
-        {COMPLEXITY_NAMES[level]}
-        {value !== fallback && <span className="ml-auto text-primary">changed</span>}
+        {t(`complexity.label.${level}`)}
+        {value !== fallback && <span className="ml-auto text-primary">{t('workflowReview.changed')}</span>}
       </Label>
       <Input
         id={id}
@@ -182,10 +184,10 @@ function RoundsField({
           </span>
         ) : failure ? (
           <span id={`${id}-failure`} role="alert" className="text-destructive">
-            Not saved: {failure}
+            {t('workflowReview.notSaved', { reason: failure })}
           </span>
         ) : (
-          <>default {fallback}</>
+          <>{t('workflowReview.default', { value: fallback })}</>
         )}
       </p>
     </div>

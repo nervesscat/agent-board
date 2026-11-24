@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Check, Copy, ExternalLink, Loader2, Maximize2, Minimize2, RotateCw, X } from 'lucide-react'
 import { createElement, useEffect, useState, useSyncExternalStore } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DelayedLoading, SkeletonText } from '#/components/Loading'
@@ -71,6 +72,7 @@ function inDesktop() {
 
 /** The window, over the board's pages; nothing until a preview is opened. */
 export function PreviewWindows() {
+  const { t: tr } = useTranslation()
   const windows = usePreviewWindows()
   const tab = activeTab(windows)
   // The desktop app's embedded browser view is made after mount, so the server's page (an iframe) and
@@ -102,27 +104,27 @@ export function PreviewWindows() {
 
   if (!tab) return null
   const health = previewHealth(tab, preview.data)
-  const notice = previewNotice(health, tab, preview.data?.managed?.reason, preview.data?.frameBlocked)
+  const notice = previewNotice(health, tab, preview.data?.managed?.reason, preview.data?.frameBlocked, tr)
   const blocked = health === 'blocked'
   const link =
     tab.browser ?? (typeof window === 'undefined' ? tab.src : `${window.location.origin}${tab.src}`)
   const loads = windows.loads[tab.key] ?? 0
   const frameKey = `${tab.key}:${loads}`
-  const frameTitle = `Preview of ${tab.title}`
+  const frameTitle = tr('previewWindow.frameTitle', { title: tab.title })
 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(link)
       setCopied(true)
-      toast.success('Link copied')
+      toast.success(tr('previewWindow.copied'))
     } catch {
-      toast.error('The link could not be copied')
+      toast.error(tr('previewWindow.couldNotCopy'))
     }
   }
 
   return (
     <section
-      aria-label="Preview window"
+      aria-label={tr('previewWindow.window')}
       data-testid="preview-window"
       className={cn(
         'fixed z-30 flex flex-col overflow-hidden border bg-background shadow-2xl',
@@ -136,7 +138,7 @@ export function PreviewWindows() {
       {windows.tabs.length > 1 && (
         <div
           role="tablist"
-          aria-label="Open previews"
+          aria-label={tr('previewWindow.openPreviews')}
           className="flex shrink-0 gap-1 overflow-x-auto border-b px-1.5 pt-1.5"
         >
           {windows.tabs.map((t) => (
@@ -173,22 +175,22 @@ export function PreviewWindows() {
         {(health === 'building' || slowPending) && (
           <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" aria-hidden />
         )}
-        <Tip content="Load the preview again">
+        <Tip content={tr('previewWindow.reloadTip')}>
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Reload preview"
+            aria-label={tr('previewWindow.reload')}
             data-testid="preview-reload"
             onClick={() => set(reloadTabs(state, tab.key))}
           >
             <RotateCw />
           </Button>
         </Tip>
-        <Tip content={windows.maximized ? 'Back to the floating window' : 'Use the whole screen'}>
+        <Tip content={windows.maximized ? tr('previewWindow.restoreTip') : tr('previewWindow.maximizeTip')}>
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label={windows.maximized ? 'Restore preview window' : 'Maximize preview window'}
+            aria-label={windows.maximized ? tr('previewWindow.restore') : tr('previewWindow.maximize')}
             data-testid="preview-maximize"
             // A phone already shows it full screen.
             className="hidden sm:inline-flex"
@@ -197,11 +199,11 @@ export function PreviewWindows() {
             {windows.maximized ? <Minimize2 /> : <Maximize2 />}
           </Button>
         </Tip>
-        <Tip content="Close the preview (the run keeps going)">
+        <Tip content={tr('previewWindow.closeTip')}>
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Close preview window"
+            aria-label={tr('previewWindow.close')}
             data-testid="preview-close"
             onClick={() => set(closeTab(state, tab.key))}
           >
@@ -212,17 +214,17 @@ export function PreviewWindows() {
       <div className="flex shrink-0 items-center gap-1.5 px-2 py-1.5">
         <input
           readOnly
-          aria-label="Preview URL"
+          aria-label={tr('previewWindow.url')}
           data-testid="preview-url"
           value={link}
           onFocus={(e) => e.currentTarget.select()}
           className="min-w-0 flex-1 rounded-md border bg-muted/40 px-2 py-1 font-mono text-[11px] text-muted-foreground"
         />
-        <Tip content="Copy the preview's link">
+        <Tip content={tr('previewWindow.copyTip')}>
           <Button
             variant="outline"
             size="icon-sm"
-            aria-label="Copy preview link"
+            aria-label={tr('previewWindow.copy')}
             data-testid="preview-copy"
             onClick={() => void copy()}
           >
@@ -237,7 +239,7 @@ export function PreviewWindows() {
             data-testid="preview-open-browser"
             className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-border px-2 text-xs font-medium whitespace-nowrap hover:bg-muted"
           >
-            <span className="hidden sm:inline">Open in browser</span>
+            <span className="hidden sm:inline">{tr('runsCard.openBrowser')}</span>
             <ExternalLink className="size-3.5" />
           </a>
         )}
@@ -269,7 +271,7 @@ export function PreviewWindows() {
                 data-testid="preview-blocked-open"
                 className={buttonVariants({ size: 'sm' })}
               >
-                Open in browser <ExternalLink />
+                {tr('runsCard.openBrowser')} <ExternalLink />
               </a>
             )}
           </div>
@@ -299,7 +301,7 @@ export function PreviewWindows() {
         )}
         {!blocked && !desktop && loadedFrame !== frameKey && (
           <DelayedLoading
-            label="Loading preview…"
+            label={tr('loading.preview')}
             className="pointer-events-none absolute inset-0 bg-white p-4"
           >
             <SkeletonText lines={5} />

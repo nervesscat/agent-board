@@ -1,0 +1,38 @@
+// The desktop app's own texts in de (see ../strings.mjs). Every key of en.mjs, the same {{placeholders}} and <tags>.
+export default {
+  open: 'Öffnen',
+  openInBrowser: 'Im Browser öffnen',
+  retryNow: 'Jetzt wiederholen',
+  startAtLogin: 'Bei Anmeldung starten',
+  quit: 'Beenden',
+  openSettings: 'Einstellungsdatei öffnen',
+  openLogs: 'Log-Ordner öffnen',
+  openHome: 'App-Ordner öffnen',
+  startAtLoginFailed: 'Der Start bei der Anmeldung ließ sich nicht ändern.',
+  cannotStart: 'Das Board kann nicht starten.',
+  settingsInvalid: 'Die Einstellungen des Boards sind ungültig.',
+  homeUnusable:
+    'Der App-Ordner {{home}} lässt sich nicht verwenden: {{error}}\n\nSetze AGENT_BOARD_HOME auf einen beschreibbaren Ordner oder entferne die Variable, um den Standard zu nutzen.',
+  homeLine: '{{error}}\n\nDer App-Ordner: {{home}}',
+  dataFolderUnusable:
+    'Sein Datenordner {{dir}} lässt sich nicht verwenden: {{error}}\n\nSetze ein anderes DATA_DIR in {{file}} oder in der Umgebung und starte die App erneut.',
+  logsLine: '{{detail}}\n\nLogs: {{logs}}',
+  stopped: 'Das Board wurde gestoppt.',
+  restartedTimes_one: ' Es wurde {{count}} Mal neu gestartet.',
+  restartedTimes_other: ' Es wurde {{count}} Mal neu gestartet.',
+  noOutput: '(keine Ausgabe)',
+  exitedSignal: 'Es wurde um {{time}} von {{signal}} beendet.',
+  exitedCode: 'Es endete um {{time}} mit Code {{code}}.',
+  exited: 'Es endete um {{time}}.',
+  reasonCode: 'Exit-Code {{code}}',
+  reasonSignal: 'Signal {{signal}}',
+  reasonNone: 'kein Exit-Code',
+  tipRestarting: '{{name}}: Board wird neu gestartet ({{reason}})',
+  tipRestarted: '{{name}}: {{url}} (um {{time}} nach {{reason}} neu gestartet)',
+  notifyRestarted: 'Das Board wurde neu gestartet ({{reason}}).',
+  didNotStart: 'Das Board ist nicht gestartet.',
+  didNotAnswer: 'Es hat binnen einer Minute auf {{url}} nicht geantwortet.',
+  unreachableHeading: 'Das Board unter <code>{{address}}</code> ist nicht erreichbar.',
+  unreachableBody:
+    'Das Board läuft auf einem anderen Rechner: Prüfe, ob dieser online ist und das Board dort läuft. Die App versucht es von selbst erneut, und {{retry}} versucht es sofort.',
+}

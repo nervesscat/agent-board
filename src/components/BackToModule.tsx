@@ -1,5 +1,6 @@
 import { Link, type LinkProps } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import { buttonVariants } from '#/components/ui/button'
 import { LAST_MODULE, backTarget } from '#/lib/lastModule'
@@ -13,6 +14,7 @@ import { cn } from 'cn'
  * changed since (`backTarget`).
  */
 export function BackToModule() {
+  const { t } = useTranslation()
   const { isPending } = useProjects()
   const project = useSelectedProject()
   const last = useRemembered(LAST_MODULE)
@@ -31,7 +33,7 @@ export function BackToModule() {
           className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), '-ml-2.5 text-muted-foreground')}
         >
           <ArrowLeft />
-          Back to {target.label}
+          {t('backToModule.back', { label: target.label })}
         </Link>
       )}
     </div>

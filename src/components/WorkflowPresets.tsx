@@ -1,11 +1,11 @@
 import { Check, Pencil } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import { Chip } from '#/components/WorkflowChips'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { COMPLEXITIES, type Complexity } from '#/lib/constants'
 import type { WorkflowOverview } from '#/lib/api'
 import type { WorkflowPresetId } from '#/lib/workflow'
-import { COMPLEXITY_NAMES } from '#/lib/workflowView'
 import { cn } from '#/lib/utils'
 
 type Preset = WorkflowOverview['presets'][number]
@@ -25,8 +25,13 @@ export function PresetSwitcher({
   viewed: WorkflowPresetId
   onView: (preset: WorkflowPresetId) => void
 }) {
+  const { t } = useTranslation()
   return (
-    <div role="group" aria-label="Workflow presets" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+    <div
+      role="group"
+      aria-label={t('workflowPresets.group')}
+      className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
+    >
       {presets.map((p) => {
         const steps = p.steps.length
         return (
@@ -42,21 +47,24 @@ export function PresetSwitcher({
             )}
           >
             <span className="flex w-full flex-wrap items-center gap-1.5">
-              <span className="text-sm font-semibold">{p.label}</span>
+              <span className="text-sm font-semibold">{t(`workflowPresets.${p.id}.label`)}</span>
               {p.id === active && (
                 <Chip tone="edited" icon={<Check aria-hidden />}>
-                  Active
+                  {t('workflowPresets.active')}
                 </Chip>
               )}
               {p.tweaked && (
                 <Chip tone="lock" icon={<Pencil aria-hidden />}>
-                  Tweaked
+                  {t('workflowPresets.tweaked')}
                 </Chip>
               )}
             </span>
-            <span className="text-xs text-muted-foreground">{p.description}</span>
+            <span className="text-xs text-muted-foreground">{t(`workflowPresets.${p.id}.description`)}</span>
             <span className="mt-auto text-[11px] text-muted-foreground">
-              {steps} steps · review rounds {COMPLEXITIES.map((level) => p.rounds[level]).join(' / ')}
+              {t('workflowPresets.stats', {
+                count: steps,
+                rounds: COMPLEXITIES.map((level) => p.rounds[level]).join(' / '),
+              })}
             </span>
           </button>
         )
@@ -73,12 +81,13 @@ export function ComplexityPicker({
   value: Complexity
   onChange: (level: Complexity) => void
 }) {
+  const { t } = useTranslation()
   return (
     <Tabs value={value} onValueChange={(v) => onChange(v as Complexity)}>
-      <TabsList aria-label="Complexity" className="w-full sm:w-fit">
+      <TabsList aria-label={t('workflowPresets.complexity')} className="w-full sm:w-fit">
         {COMPLEXITIES.map((level) => (
           <TabsTrigger key={level} value={level} className="px-3">
-            {COMPLEXITY_NAMES[level]}
+            {t(`complexity.label.${level}`)}
           </TabsTrigger>
         ))}
       </TabsList>

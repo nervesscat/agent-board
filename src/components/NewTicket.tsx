@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { AssigneeSelect } from '#/components/AssigneeSelect'
@@ -60,6 +61,7 @@ export function NewTicket({
   /** False when another control draws the trigger. */
   trigger?: boolean
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [internalOpen, setInternalOpen] = useState(false)
   const open = externalOpen ?? internalOpen
@@ -154,7 +156,7 @@ export function NewTicket({
   useEffect(() => {
     if (open) setComplexity(DEFAULT_COMPLEXITY)
   }, [open])
-  const noun = parent ? 'lane' : 'ticket'
+  const titleText = parent ? t('newTicket.newLane') : t('newTicket.newTicket')
   return (
     <Dialog
       open={open}
@@ -168,7 +170,7 @@ export function NewTicket({
         <DialogTrigger
           render={<Button size={parent ? 'sm' : 'default'} variant={parent ? 'outline' : 'default'} />}
         >
-          <Plus data-icon="inline-start" /> New {noun}
+          <Plus data-icon="inline-start" /> {titleText}
         </DialogTrigger>
       )}
       {/* Long instructions, tasks or files scroll the form, which never outgrows the screen; the
@@ -190,24 +192,25 @@ export function NewTicket({
             ref={measureHead}
             className="sticky -top-4 z-10 -mx-4 -mt-4 mb-0 rounded-t-xl bg-popover p-4"
           >
-            <DialogTitle>New {noun}</DialogTitle>
+            <DialogTitle>{titleText}</DialogTitle>
             <DialogDescription>
               {parent ? (
-                <>
-                  A parallel piece of <span className="text-foreground">{parent.title}</span>, with its own
-                  branch, assignee, tasks and updates.
-                </>
+                <Trans
+                  i18nKey="newTicket.laneDescription"
+                  values={{ title: parent.title }}
+                  components={{ parent: <span className="text-foreground" /> }}
+                />
               ) : (
-                'Write it the way you would brief a colleague: agents read this before they start.'
+                t('newTicket.description')
               )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="t">Title</Label>
+            <Label htmlFor="t">{t('newTicket.title')}</Label>
             <Input id="t" value={title} onChange={(e) => setTitle(e.target.value)} required autoFocus />
           </div>
           <div className="space-y-2">
-            <Label>Instructions</Label>
+            <Label>{t('newTicket.instructions')}</Label>
             <input
               ref={fileInput}
               type="file"
@@ -229,8 +232,8 @@ export function NewTicket({
               // the screen with room left for a task to be added without it running out of height.
               minHeight="min-h-28"
               caretRoom={caretRoom}
-              label="Instructions"
-              placeholder="What to do, how to know it is done, what never to do. Paste or drop files to attach them."
+              label={t('newTicket.instructions')}
+              placeholder={t('newTicket.instructionsPlaceholder')}
             />
             {files.files.length > 0 && (
               <div className="flex flex-wrap items-end gap-3 pt-1">
@@ -245,7 +248,7 @@ export function NewTicket({
           </div>
           <div className="space-y-2">
             {/* Not `tasks`: the ticket page's Tasks card has that id, and a lane is made on that page. */}
-            <Label htmlFor="new-ticket-tasks">Initial tasks</Label>
+            <Label htmlFor="new-ticket-tasks">{t('newTicket.initialTasks')}</Label>
             <ListInput
               id="new-ticket-tasks"
               value={tasks}
@@ -254,14 +257,13 @@ export function NewTicket({
               onTextChange={setTaskText}
             />
             {!parent && projectPending && (
-              <DelayedLoading label="Loading the project's phases…">
+              <DelayedLoading label={t('loading.projectPhases')}>
                 <SkeletonText lines={2} />
               </DelayedLoading>
             )}
             {phases.length > 0 && (
               <p className="text-xs text-muted-foreground">
-                It starts with the project&apos;s phases: {phases.join(', ')}. The tasks typed here go under{' '}
-                {phases[0]}.
+                {t('newTicket.phases', { phases: phases.join(', '), first: phases[0] })}
               </p>
             )}
           </div>
@@ -271,15 +273,15 @@ export function NewTicket({
               <div className="flex gap-4">
                 {!status && projectPending && (
                   <div className="min-w-0 flex-1 space-y-2">
-                    <Label>Stage</Label>
-                    <DelayedLoading label="Loading stages…">
+                    <Label>{t('newTicket.stage')}</Label>
+                    <DelayedLoading label={t('loading.stages')}>
                       <Skeleton className="h-8 w-full" />
                     </DelayedLoading>
                   </div>
                 )}
                 {status && (
                   <div className="min-w-0 flex-1 space-y-2">
-                    <Label htmlFor="stage">Stage</Label>
+                    <Label htmlFor="stage">{t('newTicket.stage')}</Label>
                     <StatusSelect
                       id="stage"
                       stages={project?.stages ?? []}
@@ -291,7 +293,7 @@ export function NewTicket({
                   </div>
                 )}
                 <div className="w-28 space-y-2">
-                  <Label htmlFor="complexity">Complexity</Label>
+                  <Label htmlFor="complexity">{t('newTicket.complexity')}</Label>
                   <ComplexitySelect
                     id="complexity"
                     value={complexity}
@@ -304,7 +306,7 @@ export function NewTicket({
             )}
             {repos.length > 1 && (
               <div className="space-y-2">
-                <Label htmlFor="repo">Repository</Label>
+                <Label htmlFor="repo">{t('newTicket.repository')}</Label>
                 <Select
                   value={repoId}
                   onValueChange={(v) => {
@@ -327,19 +329,19 @@ export function NewTicket({
             )}
             {parent && (
               <div className="space-y-2">
-                <Label htmlFor="assignee">Assignee (optional)</Label>
+                <Label htmlFor="assignee">{t('newTicket.assignee')}</Label>
                 <AssigneeSelect id="assignee" value={assignee} onChange={setAssignee} />
               </div>
             )}
             <div className={cn('space-y-2', stacked && 'sm:row-span-2')}>
-              <Label htmlFor="tags">Tags (optional)</Label>
+              <Label htmlFor="tags">{t('newTicket.tags')}</Label>
               <TagsInput
                 id="tags"
                 value={tags}
                 onChange={setTags}
                 text={tagText}
                 onTextChange={setTagText}
-                placeholder="High, Forms"
+                placeholder={t('newTicket.tagsPlaceholder')}
                 choices={tagChoices}
               />
             </div>
@@ -347,7 +349,7 @@ export function NewTicket({
                 Stage and Complexity, in the room Tags' suggestions leave beside them, so it adds no row. */}
             {hasWorkflow && (
               <div className="space-y-2">
-                <Label htmlFor="workflow">Workflow</Label>
+                <Label htmlFor="workflow">{t('newTicket.workflow')}</Label>
                 <WorkflowSelect
                   id="workflow"
                   value={workflow}
@@ -361,13 +363,16 @@ export function NewTicket({
           </div>
           {parent && (parent.branch || parent.baseBranch) && (
             <p className="text-xs text-muted-foreground">
-              Branches off <span className="font-mono">{parent.branch || parent.baseBranch}</span> when it is
-              in the same repo.
+              <Trans
+                i18nKey="newTicket.branchesOff"
+                values={{ branch: parent.branch || parent.baseBranch }}
+                components={{ branch: <span className="font-mono" /> }}
+              />
             </p>
           )}
           <DialogFooter className="sticky -bottom-4 z-10 bg-popover bg-linear-to-b from-muted/50 to-muted/50">
             <Button type="submit" disabled={create.isPending || files.uploading || !ready || tagsOver}>
-              {files.uploading ? 'Uploading…' : 'Create'}
+              {files.uploading ? t('newTicket.uploading') : t('newTicket.create')}
             </Button>
           </DialogFooter>
         </form>

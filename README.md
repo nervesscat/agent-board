@@ -1019,6 +1019,37 @@ are written through to `data/cache`, and any file an agent is handed (MCP, or RE
 fetched there first if it has gone; copies nobody opened for 30 days leave the cache. While MinIO is
 down, uploads fail with a clear error and cached files still open.
 
+## Language
+
+The interface speaks the twenty most spoken languages that read left to right: English, Chinese (Simplified),
+Hindi, Spanish, French, Bengali, Portuguese, Russian, Indonesian, German, Japanese, Marathi, Vietnamese,
+Telugu, Turkish, Korean, Tamil, Italian, Polish and Ukrainian. Settings, Board tab, Language is a dropdown of
+them, each by its own name (searchable by that name or the English one): the choice applies at once, with no
+reload (the whole page is drawn again in it, and `<html lang>` follows), and it is kept on the board under the
+person's name, so it follows them to every device they sign in from (GET `/api/me` returns `language`, `null`
+until they pick one; PATCH `/api/me` `{language: "en" | "zh" | "es" | … | null}`, the human's alone: an agent
+gets 403). Before one is picked, and on the sign-in pages, the browser's language decides between the twenty
+(its `Accept-Language`, else English; any Chinese tag reads the Simplified text); a cookie, `lang`, carries
+the last one shown so the first render of a page is already in it. Dates, relative times ("2 h ago") and
+numbers follow the language's conventions through `Intl` (`src/lib/format.ts`; Bengali and Marathi write
+their own digits). Geist draws Latin, Cyrillic and Vietnamese; Devanagari, Bengali, Telugu, Tamil, Chinese, Japanese and Korean
+draw with the system's own fonts (the stack in `src/styles.css`, with the right Han fonts first for each
+language; no font is downloaded for them). What people and agents write (tickets, posts, comments, summaries, run reports, tags), the MCP
+tool descriptions and the skills, and the server's logs are never translated.
+
+The texts are in `src/i18n/locales/<language>.json`, grouped by area, with `{{placeholders}}`, plurals
+(`key_one`, `key_other`) and `<tag>` markup for links; components read them with `useTranslation()` and
+`t('area.key')`. `en.json` is the model: the typecheck refuses a key it does not have. Adding a language is
+a new file there with every key, its entry in `src/i18n/languages.ts` and the desktop app's table
+(`desktop/app/strings/`); each language's choices of terms are in `docs/translations/<language>.md`. A language's
+file is fetched only when it is shown.
+`pnpm check:i18n` (also part of `pnpm test`, so of CI) fails on a key a language lacks or has extra, on
+placeholders or tags that differ from the English text, on a language without the plural forms it writes
+(`Intl.PluralRules`: Russian, Polish and Ukrainian need one, few, many and other; Japanese only other), and on English text left in a component (text
+between tags, `title`, `aria-label`, `placeholder`, `alt`, `label`, `content`, a toast message); a literal
+that is not language carries `// i18n-ignore` and why. The component files that are not moved yet are in
+`scripts/i18n-pending.txt`, a list that only shrinks.
+
 ## Tags
 
 Tickets and lanes carry short tags the human filters by (`?tag=` on the Board and the List, in any
@@ -1451,6 +1482,7 @@ pnpm format          # prettier
 pnpm test            # vitest (path mapping, actors, PR status, …)
 pnpm test:e2e        # Playwright against a built board in test mode (Testing, below)
 pnpm check:migrations # the drizzle folder and its journal agree
+pnpm check:i18n     # every text in every language, no English left in a component (Language, above)
 pnpm bench           # in a worktree: the benchmark (Benchmark, below)
 pnpm db:generate     # after editing src/db/schema.ts; migrations in ./drizzle apply at boot
 pnpm desktop:package # the installer or Linux packages and the unpacked app in desktop/dist (The desktop app, above)

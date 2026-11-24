@@ -1,0 +1,2959 @@
+{
+  "common": {
+    "saved": "Tersimpan",
+    "close": "Tutup"
+  },
+  "loading": {
+    "ticket": "Memuat tiket…",
+    "tickets": "Memuat tiket…",
+    "agents": "Memuat agen…",
+    "branches": "Memuat branch…",
+    "recentTickets": "Memuat tiket terbaru…",
+    "folders": "Memuat folder…",
+    "projectPhases": "Memuat fase proyek…",
+    "stages": "Memuat tahap…",
+    "preview": "Memuat preview…",
+    "file": "Memuat file…",
+    "files": "Memuat file…",
+    "instructionsHistory": "Memuat riwayat instruksi…",
+    "instructions": "Memuat instruksi…",
+    "notes": "Memuat catatan…",
+    "reviewResult": "Memuat hasil tinjauan…",
+    "changes": "Memuat perubahan…",
+    "replies": "Memuat balasan…",
+    "timeline": "Memuat linimasa…",
+    "activity": "Memuat aktivitas…",
+    "pushedToday": "Memuat yang di-push hari ini…",
+    "calendar": "Memuat kalender…",
+    "report": "Memuat laporan…",
+    "reportSettings": "Memuat pengaturan laporan…",
+    "shift": "Memuat shift…",
+    "cleanup": "Memuat pembersihan…",
+    "runs": "Memuat eksekusi…",
+    "branchState": "Memuat status branch…",
+    "tags": "Memuat tag…",
+    "previews": "Memuat preview…",
+    "repositories": "Memuat repositori…",
+    "roadmap": "Memuat roadmap…",
+    "earlierVersions": "Memuat versi sebelumnya…",
+    "workspaces": "Memuat workspace…"
+  },
+  "shell": {
+    "home": "Beranda",
+    "pages": "Halaman",
+    "connect": "Hubungkan",
+    "settings": "Pengaturan",
+    "testMode": "mode uji",
+    "authOff": "auth mati",
+    "authOffTip": "BOARD_ENV={{env}}, login nonaktif: masuk sebagai {{actor}}. Bukan papan utama.",
+    "connectAgent": "Hubungkan agen"
+  },
+  "time": {
+    "never": "—",
+    "justNow": "baru saja",
+    "minutesAgo": "{{count}} mnt lalu",
+    "hoursAgo": "{{count}} j lalu",
+    "daysAgo": "{{count}} h lalu",
+    "minutesAgoLong_other": "{{count}} menit lalu",
+    "hoursAgoLong_other": "{{count}} jam lalu",
+    "yesterday": "kemarin",
+    "daysAgoLong_other": "{{count}} hari lalu",
+    "weeksAgoLong_other": "{{count}} minggu lalu"
+  },
+  "settings": {
+    "title": "Pengaturan",
+    "tabs": {
+      "label": "Pengaturan",
+      "board": "Papan",
+      "projectLabel": "Proyek ini: {{name}}",
+      "project": "Proyek ini:"
+    },
+    "board": {
+      "defaultAgent": {
+        "title": "CLI agen bawaan",
+        "text": "CLI yang dibuka oleh <goto>Hubungkan agen</goto>, dengan hanya menampilkan perintahnya."
+      },
+      "previews": {
+        "title": "Preview",
+        "text": "Berapa preview yang dibangun dan dijalankan papan sekaligus, di semua proyek (1 sampai 32). Setiap preview adalah papan utuh dengan salinan datanya sendiri; permintaan start di atas batas ditolak. Halaman Preview proyek menunjukkan berapa yang terpakai."
+      },
+      "theme": {
+        "title": "Tema",
+        "text": "Mengikuti sistem Anda secara bawaan. Pilihan disimpan di browser ini, bukan di papan.",
+        "system": "Sistem",
+        "light": "Terang",
+        "dark": "Gelap"
+      },
+      "language": {
+        "title": "Bahasa",
+        "text": "Bahasa seluruh antarmuka, termasuk tanggal dan angka. Disimpan di papan, jadi ikut ke setiap perangkat tempat Anda masuk. Tulisan manusia dan agen tetap seperti aslinya.",
+        "search": "Cari bahasa",
+        "none": "Tidak ada bahasa yang cocok",
+        "failed": "Tidak dapat memuat bahasa itu. Muat ulang halaman, lalu coba lagi."
+      }
+    }
+  },
+  "connect": {
+    "copied": "Tersalin",
+    "couldNotCopy": "Tidak bisa menyalin",
+    "browserNoCopy": "Browser tidak mengizinkan penyalinan; pilih teksnya saja",
+    "copy": "Salin",
+    "save": "Simpan",
+    "revoke": "Cabut",
+    "keep": "Pertahankan",
+    "turnOff": "Matikan",
+    "checkAgain": "Periksa lagi",
+    "title": "Hubungkan agen",
+    "intro": "Hubungkan sebuah CLI: <strong>Buat perintah</strong> membuat token MCP-nya, dan skill dipasang di mesin ini dengan satu tombol (atau dengan barisnya, di mesin lain). CLI bawaan diatur di <goto>Pengaturan</goto>.",
+    "step1": {
+      "title": "1. Hubungkan server MCP",
+      "command": "Jalankan sekali di terminal; ini mendaftarkan server untuk semua repo.",
+      "config": "Tambahkan ke <code>{{file}}</code>.",
+      "configOpencode": "Tambahkan ke <code>{{file}}</code> (gabungkan entri papan ke \"mcp\" jika file sudah punya)."
+    },
+    "step2": {
+      "title": "2. Pasang skill",
+      "text": "Mengunduh skill papan terbaru ke <code>{{path}}</code>, tempat {{agent}} menemukannya di semua repo.",
+      "textCodex": "Mengunduh skill papan terbaru ke <code>{{path}}</code>, tempat {{agent}} menemukannya di semua repo. OpenCode juga membaca folder ini.",
+      "textOpencode": "Mengunduh skill papan terbaru ke <code>{{path}}</code>, tempat {{agent}} menemukannya di semua repo. OpenCode juga membaca ~/.claude/skills: lewati ini jika Claude Code sudah memilikinya.",
+      "tokenNote": "Baris pemasangan membawa token unduhan yang kedaluwarsa <time>{{at}}</time>: sekitar sepuluh menit. Salin baris lagi setelahnya untuk mendapat yang baru.",
+      "skillCopied": "SKILL.md tersalin",
+      "copySkill": "Salin SKILL.md",
+      "previewSkill": "Preview SKILL.md",
+      "session": "Memasang juga <code>/session</code>, skill yang membuka sesi dengan papan: memberi Anda ringkasan singkat, mendelegasikan setiap tiket yang Anda sebut, dan menjaga satu bentuk pesan berisi hal yang perlu Anda."
+    },
+    "step3": {
+      "title": "3. Pasang skill tinjauan (Claude Code)"
+    },
+    "opencode": {
+      "section": "Delegasi bertingkat OpenCode",
+      "checkAria": "Periksa lagi konfigurasi OpenCode",
+      "readFailed": "Tidak bisa membaca konfigurasi OpenCode",
+      "readFailedText": "Perbaiki file itu, lalu periksa lagi. Delegasi bertingkat tetap mati sampai konfigurasi bisa dibaca.",
+      "on": "Delegasi bertingkat aktif (kedalaman {{depth}})",
+      "readFrom": "Dibaca dari <code>{{source}}</code>. Konfigurasi sistem mengalahkan file global dan proyek.",
+      "off": "Delegasi bertingkat mati: subagen tidak bisa meluncurkan subagen",
+      "offText": "Tambahkan ini ke <code>{{source}}</code> (di dalam blok <code>experimental</code> jika ada), lalu mulai ulang OpenCode. File konfigurasi terakhir yang mendefinisikan blok <code>experimental</code> menentukan; konfigurasi sistem mengalahkan file global dan proyek, jadi yang belakangan bisa menimpa kedalaman sebelumnya. Papan hanya membaca file.",
+      "copySnippet": "Salin cuplikan",
+      "deprecated": "<code>subagent_depth</code> tingkat atas di <code>{{source}}</code> tidak lagi dibaca OpenCode; hanya <code>experimental.subagent_depth</code> yang dihitung."
+    },
+    "generate": {
+      "agentName": "Nama agen",
+      "button": "Buat perintah",
+      "newOrchestrator": "Perintah di bawah membawa token orkestrator baru untuk <strong>{{name}}</strong>, berlaku sampai {{until}}. Token hanya ditampilkan sekali ini: salin yang Anda perlukan sekarang. Meninggalkan halaman menghilangkannya; menekan lagi membuat yang lain.",
+      "newWorker": "Perintah di bawah membawa token pekerja baru untuk <strong>{{name}}</strong>, berlaku sampai {{until}}. Token hanya ditampilkan sekali ini: salin yang Anda perlukan sekarang. Meninggalkan halaman menghilangkannya; menekan lagi membuat yang lain.",
+      "intro": "Membuat token untuk agen ini dan mengisinya ke setiap perintah di halaman ini. Secara bawaan ia <strong>orkestrator</strong>, jadi bisa juga mengubah instruksi proyek; jadikan pekerja di Pengaturan, Token agen. Nama adalah nama agen di papan. Token berlaku 1 tahun untuk masuk, kecuali dicabut, dan hanya ditampilkan sekali."
+    }
+  },
+  "tokens": {
+    "title": "Token agen",
+    "listText": "Token yang dibawa perintah di atas, masing-masing dengan perannya: orkestrator, yang juga mengubah instruksi proyek, atau pekerja (keduanya diatur di Pengaturan, Token agen; yang baru adalah orkestrator). Cabut satu dan agen yang memakainya keluar pada permintaan berikutnya.",
+    "none": "Belum ada.",
+    "meta": "dibuat {{made}} · {{used}} · kedaluwarsa {{at}}",
+    "metaExpired": "dibuat {{made}} · {{used}} · kedaluwarsa {{at}}",
+    "lastUsed": "terakhir dipakai {{when}}",
+    "neverUsed": "belum pernah dipakai",
+    "revokeAria": "Cabut {{name}}, dibuat {{when}}",
+    "revokeTitle": "Cabut token {{name}}?",
+    "revokeText": "Agen yang memakainya ditolak mulai permintaan berikutnya. Buat perintah lagi untuk menghubungkannya dengan token baru.",
+    "identities": {
+      "text": "Siapa adalah siapa: setiap token agen adalah identitas di papan, orkestrator kecuali Anda menjadikannya pekerja. Subagennya yang menyebut dirinya di bawahnya dicantumkan bersamanya, selalu sebagai pekerja; daftar panjang dimulai terlipat, dengan tombol mata untuk sisanya.",
+      "empty": "Belum ada token agen: Hubungkan agen membuatnya.",
+      "agentAria": "Agen {{name}}",
+      "orchestratorTip": "Orkestrator juga mengubah instruksi proyek; setiap perubahan menunggu di Perlu Anda sampai Anda meninjau atau membatalkannya. Subagennya yang menyebut siapa dirinya (<token>/<name>) tetap pekerja.",
+      "orchestrator": "Orkestrator",
+      "orchestratorAria": "{{name}}: orkestrator",
+      "nowOrchestrator": "{{name}} adalah orkestrator",
+      "nowWorker": "{{name}} adalah pekerja",
+      "revokeAria": "Cabut {{name}}",
+      "revokeText": "Agen yang memakainya, dan setiap subagen yang bekerja di bawahnya, ditolak mulai permintaan berikutnya. Buat perintah lagi di Hubungkan agen untuk menghubungkannya dengan token baru.",
+      "hide": "Sembunyikan agen",
+      "show_other": "Tampilkan {{count}} agen",
+      "workingUnder": "Bekerja di bawah {{token}}",
+      "seen": "terlihat {{when}}"
+    }
+  },
+  "devices": {
+    "thisMachine": "mesin ini",
+    "title": "Perangkat",
+    "add": "Tambah perangkat",
+    "signOut": "Keluar",
+    "text": "Passkey yang dipakai masuk ke papan. Passkey berfungsi di alamat tempat ia dibuat: mesin ini (localhost), atau nama tailnet papan untuk perangkat Anda yang lain.",
+    "link": "Buka tautan ini di perangkat baru dan buat passkey di sana. Hanya berlaku sekali, sampai {{until}}.",
+    "copyLinkAria": "Salin tautan {{where}}",
+    "passkeys": "Passkey",
+    "passkeyMeta": "{{where}} · ditambahkan {{added}} · terakhir dipakai {{used}}",
+    "passkeyMetaSessions_other": "{{where}} · ditambahkan {{added}} · terakhir dipakai {{used}} · {{count}} sesi",
+    "lastLocal": "terakhir di mesin ini",
+    "revokeAria": "Cabut {{name}}",
+    "revokeTitle": "Cabut {{name}}?",
+    "revokeText": "Passkey tidak bisa lagi dipakai masuk, dan browser yang masuk dengannya akan keluar.",
+    "signedIn": "Masuk",
+    "sessions": "Sesi",
+    "thisBrowser": "browser ini",
+    "sessionMeta": "{{where}} · masuk {{signedIn}} · terlihat {{seen}} · sampai {{until}}",
+    "signOutAria": "Keluarkan {{name}}, masuk {{when}}"
+  },
+  "tailnet": {
+    "title": "Perangkat lain (tailnet)",
+    "text": "Buka papan dari perangkat lain dan agen cloud Anda lewat tailnet, dengan HTTPS. Aktifkan di sini; tanpa file yang perlu diedit. Perangkat Anda lalu masuk dengan passkey mereka sendiri (Perangkat, di bawah).",
+    "signInOff": "Login nonaktif di papan ini (BOARD_ENV={{env}}): papan hanya menjawab di mesin ini, tidak pernah lewat tailnet, jadi pintu masuk tidak bisa disimpan di sini.",
+    "fromEnv": "Diatur di config.env (atau .env): <code>PUBLIC_ORIGIN={{origin}}</code>. Ini mengalahkan pengaturan ini, jadi pintu masuk hanya-baca di sini. Hapus baris itu di sana untuk mengaturnya di Pengaturan.",
+    "funnel": "Tailscale Funnel aktif: ia menempatkan papan di internet, yang ditolak papan. Matikan (<code>tailscale funnel off</code>, atau <code>tailscale serve reset</code>); penyimpanan ditolak sampai saat itu.",
+    "unserved": "Pintu masuk tersimpan tidak dilayani: {{reason}}.",
+    "tailscale": "Tailscale",
+    "version": "versi {{version}}",
+    "installed": "terpasang",
+    "notInstalled": "tidak terpasang",
+    "signedIn": "Masuk",
+    "yes": "ya",
+    "no": "tidak ({{state}})",
+    "notRunning": "tidak berjalan",
+    "thisMachine": "Mesin ini",
+    "noName": "tanpa nama tailnet",
+    "https": "HTTPS",
+    "certsOn": "sertifikat aktif",
+    "certsOff": "sertifikat mati",
+    "serve": "Layani di 443",
+    "serveBoard": "papan ({{target}})",
+    "serveNothing": "tidak ada",
+    "funnelLabel": "Funnel",
+    "funnelUnknown": "tidak bisa membaca Funnel",
+    "funnelOn": "aktif (ditolak)",
+    "funnelOff": "mati",
+    "said": "Kata Tailscale: {{error}}",
+    "entrance": "Pintu masuk",
+    "use": "Pakai https://{{name}}",
+    "turnOffTitle": "Matikan pintu masuk tailnet?",
+    "turnOffText": "Papan berhenti menjawab di {{origin}}. Browser yang masuk lewat nama itu akan keluar (passkey mereka tetap tercantum).",
+    "hint": "Hanya https, nama host, tanpa port dan tanpa path. Disimpan di database papan dan langsung berlaku, tanpa mulai ulang.",
+    "servedConfig": "Dilayani sekarang: {{origin}} (diatur di config.env).",
+    "servedSetting": "Dilayani sekarang: {{origin}} (dari pengaturan ini).",
+    "servedNone": "Dilayani sekarang: tidak ada; papan hanya menjawab di mesin ini.",
+    "entranceOff": "Pintu masuk mati",
+    "test": "Uji pintu masuk",
+    "works": "Berfungsi.",
+    "notYet": "Belum.",
+    "next": {
+      "notInstalled": "Tailscale tidak terpasang di mesin ini: pasang dan masuk, lalu periksa lagi (README: Using it from other devices).",
+      "notSignedIn": "Tailscale {{state}} di mesin ini: jalankan tailscale up dan masuk, lalu periksa lagi.",
+      "noName": "Mesin ini tidak punya nama tailnet: aktifkan MagicDNS di konsol admin Tailscale, lalu periksa lagi.",
+      "httpsOff": "Sertifikat HTTPS mati untuk {{name}}: aktifkan di konsol admin Tailscale, lalu periksa lagi.",
+      "ready": "Siap: mesin ini adalah {{name}} di tailnet Anda, dan serve mengarahkannya ke papan."
+    },
+    "serveOther": "Port 443 mesin ini kini melayani {{target}}. Untuk mengarahkan https://{{name}} ke papan, jalankan ini di sini:",
+    "serveNotSet": "Serve belum disiapkan. Untuk membuka papan di https://{{name}}, jalankan ini di sini:",
+    "copyServe": "Salin perintah serve",
+    "neverRuns": "Papan tidak pernah menjalankannya. Lalu periksa lagi. Untuk menghentikan: <code>tailscale serve --https=443 off</code>."
+  },
+  "updates": {
+    "badgeTip": "CrossBoard {{version}} tersedia ({{installed}} terpasang)",
+    "badgeAria": "Pembaruan tersedia",
+    "badge": "Pembaruan",
+    "title": "Pembaruan",
+    "checkout": "Papan ini berjalan dari checkout, yang tidak punya pembaru. Untuk memperbaruinya, jalankan <code>git pull</code> di <code>main</code> pada checkout itu, lalu <code>pnpm start</code> (README: \"Running it\"). Hanya aplikasi desktop yang memeriksa dan memasang versi baru dari sini.",
+    "installed": "Terpasang",
+    "installedValue": "CrossBoard {{version}}",
+    "newestRelease": "Rilis terbaru",
+    "unsupported": "Salinan aplikasi ini tidak bisa memperbarui dirinya: ia berjalan dari folder yang diekstrak, bukan dari installer atau paketnya. Pasang rilis dari GitHub untuk mendapat pembaruan di sini.",
+    "checking": "Memeriksa…",
+    "checkNow": "Periksa sekarang",
+    "install": "Unduh dan pasang",
+    "downloadAria": "Unduh",
+    "downloading": "Mengunduh {{version}}… {{percent}}%",
+    "installing": "Memasang {{version}}: papan berhenti sebentar dan aplikasi mulai lagi sebagai versi baru.",
+    "whatsNew": "Yang baru di {{version}}",
+    "autoCheck": "Periksa pembaruan saat mulai dan setiap enam jam",
+    "prereleases": "Sertakan pra-rilis (0.3.0-beta.1 dan sejenisnya)",
+    "note": "Tidak ada yang diunduh atau dipasang sampai Anda menekan Unduh dan pasang. Setiap unduhan diperiksa dulu terhadap sha512 di metadata rilis.",
+    "notChecked": "Belum diperiksa",
+    "none": "Tidak ada yang lebih baru (diperiksa {{when}})",
+    "unknown": "Tidak diketahui (diperiksa {{when}})",
+    "skipped": "{{version}} dilewati: kartu pembaruan tidak akan muncul lagi untuknya.",
+    "undo": "Urungkan",
+    "manual": "Jalankan ini di terminal untuk memasangnya, lalu mulai aplikasi lagi:",
+    "copyCommand": "Salin perintah",
+    "card": {
+      "artwork": "Gambar rilis",
+      "available": "CrossBoard {{version}} tersedia",
+      "skip": "Lewati versi ini",
+      "installNow": "Pasang sekarang"
+    }
+  },
+  "skills": {
+    "install": "Pasang skill",
+    "update": "Perbarui skill",
+    "installedBoard": "Skill papan dipasang pada <time>{{at}}</time>",
+    "installedReview": "Skill tinjauan dipasang pada <time>{{at}}</time>",
+    "installedBoardAria": "Skill papan terpasang",
+    "installedReviewAria": "Skill tinjauan terpasang",
+    "installedFiles": "File terpasang",
+    "failedBoard": "Tidak bisa memasang skill papan (HTTP {{status}})",
+    "failedReview": "Tidak bisa memasang skill tinjauan (HTTP {{status}})",
+    "failedBoardAria": "Tidak bisa memasang skill papan",
+    "failedReviewAria": "Tidak bisa memasang skill tinjauan",
+    "failedHint": "Pastikan folder itu milik pengguna yang menjalankan papan, dan bisa ditulisi.",
+    "retry": "Coba lagi",
+    "action": {
+      "created": "dibuat",
+      "updated": "diperbarui",
+      "unchanged": "tidak berubah"
+    },
+    "fileStatus": {
+      "current": "terkini",
+      "outdated": "usang",
+      "missing": "hilang"
+    },
+    "intro": "<code>/todo-review</code> mengerjakan tiket To do sampai serah terima dan <code>/review-queue</code> meninjau antrean PR, keduanya mendelegasikan ke agen-agen ini. <code>/feature-review</code> adalah tinjauan yang mereka jalankan pada setiap perubahan. Satu baris memasang ketiganya, beserta agennya, ke <code>~/.claude</code> (Claude Code; OpenCode juga membaca skill-nya), menimpa file bernama sama.",
+    "placeholderNote": "Ini membawa <code>{{placeholder}}</code> sampai satu baris disalin: papan lalu membuat token unduhan, berlaku sekitar sepuluh menit, untuk setiap baris pemasangan di halaman ini.",
+    "filesInstalled_other": "{{count}} file yang dipasangnya",
+    "track": "Lacak",
+    "global": "Global",
+    "byRepo": "Per repo",
+    "repoStatus": {
+      "current": "Terbaru",
+      "outdated": "Usang",
+      "none": "Tidak terpasang di repo",
+      "unreachable": "Tidak bisa membaca checkout"
+    },
+    "globalStatus": {
+      "current": "Terbaru",
+      "outdated": "Usang",
+      "none": "Tidak terpasang",
+      "unreachable": "Tidak bisa membaca folder"
+    },
+    "onMachine": "Di mesin ini",
+    "globalText": "Salinan di <code>~/.claude</code> pada mesin tempat papan berjalan, yang dipakai Claude Code di setiap repo yang tidak punya salinan sendiri. Baris di atas memperbaruinya.",
+    "globalHomeText": "Salinan di folder yang disebut <code>CLAUDE_HOME</code> pada mesin tempat papan berjalan, sebagai ganti <code>~/.claude</code>. Baris di atas memasang ke <code>~/.claude</code>: salinan ini punya baris sendiri yang memasang file ke folder itu.",
+    "claudeOnMachine": "~/.claude di mesin ini",
+    "noneGlobal": "Belum ada file ini di sana: baris di atas memasangnya.",
+    "noneHome": "Belum ada file ini di sana: baris ini memasangnya.",
+    "inRepos": "Di repo Anda",
+    "reposText": "Sebuah repo bisa membawa salinannya sendiri di folder <code>.claude</code>, yang dipakai Claude Code di sana sebagai ganti yang ada di <code>~/.claude</code>. Salinan usang punya baris yang memasang file ini ke <code>.claude</code> repo itu, menimpa file bernama sama dan menyisakan sisanya.",
+    "noReposProject": "Belum ada repo di proyek ini.",
+    "noReposBoard": "Belum ada repo di papan.",
+    "repoLabel": "{{repo}} di {{project}}",
+    "usesGlobal": "Memakai pemasangan <code>~/.claude</code>.",
+    "differ_other": "{{count}} dari {{total}} file berbeda atau hilang",
+    "notUpToDate": "File tidak terbaru"
+  },
+  "skillDiff": {
+    "description": "Yang akan diubah baris pemasangan: baris bertanda - ada di salinan terpasang dan dihapus, baris bertanda + berasal dari salinan yang dilayani papan. Akhir baris diabaikan.",
+    "unreadable": "Salinan terpasang tidak bisa dibaca sebagai teks ({{reason}}): <code>{{path}}</code>",
+    "noChanges": "Tanpa perubahan: salinan terpasang sama dengan milik papan.",
+    "changes": "Perubahan"
+  },
+  "hostTools": {
+    "section": "Alat yang hilang",
+    "line": "<strong>{{problem}}</strong>: {{breaks}} tidak akan berfungsi. Solusi: {{fix}}.",
+    "dismissTip": "Sembunyikan ini sampai pemeriksaan berikutnya masih menemukan {{name}} hilang",
+    "dismissAria": "Tutup peringatan {{name}}",
+    "recheckTip": "Cari git, gh, claude, node, dan pnpm lagi di PATH papan",
+    "recheckAria": "Periksa alat lagi",
+    "text": {
+      "breaks": {
+        "git": "status branch dan commit tiket, pemeriksaan merge, dan pembersihan",
+        "gh": "antrean PR, status CI, dan tiket PR",
+        "claude": "pembuatan laporan oleh papan sendiri (Laporan → Buat)",
+        "node": "preview terkelola",
+        "pnpm": "preview terkelola",
+        "ghTooOld": "pemeriksaan papan bahwa gh sudah masuk"
+      },
+      "problem": {
+        "notFound": "{{name}} tidak ditemukan di PATH papan",
+        "claudeNotFound": "claude tidak ditemukan: CLAUDE_BIN adalah {{bin}}",
+        "tooOld": "{{gh}} terlalu lama untuk pemeriksaan ini: ia tidak mengenal --active",
+        "noConfigWhere": "gh tidak menemukan konfigurasinya: tidak ada {{needs}}, jadi ia mencari {{file}}",
+        "noConfig": "gh tidak menemukan konfigurasinya: tidak ada HOME atau GH_CONFIG_DIR",
+        "signedOut": "gh belum masuk"
+      },
+      "fix": {
+        "then": "lalu Periksa lagi (mulai ulang papan jika foldernya belum ada di PATH)",
+        "installGit": "pasang git (https://git-scm.com/downloads), {{after}}",
+        "installGh": "pasang GitHub CLI (https://cli.github.com) dan jalankan gh auth login, {{after}}",
+        "installClaude": "pasang Claude Code (https://docs.claude.com/en/docs/claude-code/setup), atau atur CLAUDE_BIN di .env (config.env untuk aplikasi desktop) ke path lengkapnya, lalu mulai ulang papan",
+        "installNode": "pasang Node.js (https://nodejs.org), {{after}}",
+        "installPnpm": "jalankan corepack enable pnpm (atau pasang: https://pnpm.io/installation), {{after}}",
+        "upgradeGh": "tingkatkan GitHub CLI (https://cli.github.com; di Debian atau Ubuntu: sudo apt install --only-upgrade gh, di macOS: brew upgrade gh), lalu Periksa lagi",
+        "noConfig": "mulai papan dengan HOME diatur ke home tempat gh masuk (atau GH_CONFIG_DIR ke folder berisi hosts.yml), lalu Periksa lagi",
+        "signedOut": "jalankan gh auth login di mesin ini, lalu Periksa lagi"
+      }
+    }
+  },
+  "previewLimit": {
+    "label": "Batas preview",
+    "saving": "Menyimpan…"
+  },
+  "projectSettings": {
+    "intro": "Cara proyek ini bekerja: awalan tiket baru, tag yang ditawarkan, kapan tiket dianggap macet, peringatan yang ditampilkan, tahapnya, eksekusinya, dan isi halamannya. Instruksi agennya ada di halaman tersendiri.",
+    "save": "Simpan",
+    "saving": "Menyimpan…",
+    "unsaved": "Ada perubahan belum disimpan.",
+    "noChanges": "Tanpa perubahan.",
+    "kinds": {
+      "title": "Jenis",
+      "description": "Untuk apa proyek ini. Proyek tanpa jenis software menyembunyikan repositori, PR, CI, preview, dan Pembersihan; repo dan PR-nya tetap tersimpan."
+    },
+    "phases": {
+      "title": "Fase bawaan",
+      "description": "Tugas tingkat atas yang menjadi awal setiap tiket baru, berurutan. Tugas yang diberikan saat tiket dibuat masuk di bawah yang pertama; lane dimulai tanpanya. Agen mencentang masing-masing saat selesai, dan menghapus atau mengubah kata yang tidak cocok. Biarkan kosong agar tiket dimulai tanpa tugas.",
+      "empty": "Tanpa fase: tiket baru dimulai tanpa tugas.",
+      "new": "Fase baru",
+      "list": "Fase bawaan",
+      "placeholder": "Tambah fase",
+      "add": "Tambah fase",
+      "useBuiltIn": "Pakai daftar bawaan"
+    },
+    "tags": {
+      "title": "Saran tag",
+      "description": "Tag yang ditawarkan sebagai chip di bawah tag tiket, diikuti tag yang sudah dibawa tiketnya. Agen membacanya di <code>get_project</code> dan memakainya lagi. Biarkan kosong agar hanya tag yang dipakai yang ditawarkan.",
+      "empty": "Tanpa saran: hanya tag yang dipakai yang ditawarkan.",
+      "new": "Tag baru",
+      "placeholder": "Tambah tag",
+      "add": "Tambah tag",
+      "useDefaults": "Pakai bawaan"
+    },
+    "stall": {
+      "title": "Tiket macet",
+      "description": "Dua jam menentukan tampilan sebuah tiket. Lease adalah yang dijaga tetap hidup oleh heartbeat atau kiriman agen: berlangsung sepuluh menit, dan jika habis saat sebuah span masih terbuka, tiket tampil sebagai <lost>Kontak hilang</lost> — agen sudah pergi, bukan menunggu Anda. Tiket tanpa yang terbuka tampil sebagai <stalled>Macet</stalled> setelah tidak ada kabar dari agen (heartbeat, span, penantian, serah terima) dan tidak ada yang dilihat papan darinya (push, PR, preview) selama waktu ini. Kenop ini mengatur ambang keheningan itu, dan ia menentukan lebih dulu: ambang di bawah sepuluh menit menandai tiket yang diam sebelum lease habis. Sepuluh menit lease tetap tidak berubah.",
+      "label": "Macet setelah (menit)",
+      "invalid": "Bilangan bulat dari {{min}} sampai {{max}}."
+    }
+  },
+  "kinds": {
+    "legend": "Untuk apa proyek ini",
+    "hint": "Software menambahkan repositori, branch, PR, CI, preview, dan Pembersihan. Jenis lain menjaga pekerjaannya di luar git: papan menampilkan yang mereka pakai.",
+    "label": {
+      "software": "Software",
+      "music": "Musik",
+      "art": "Seni",
+      "writing": "Tulisan",
+      "video": "Video",
+      "research": "Riset",
+      "lawyer": "Hukum",
+      "accountant": "Akuntansi",
+      "cybersecurity": "Keamanan siber",
+      "life": "Kehidupan"
+    }
+  },
+  "lists": {
+    "tasks": "Tugas",
+    "addTask": "Tambah tugas",
+    "addTaskLabel": "Tambah tugas",
+    "moveUp": "Naikkan",
+    "moveDown": "Turunkan",
+    "moveItemUp": "Naikkan {{item}}",
+    "moveItemDown": "Turunkan {{item}}",
+    "remove": "Hapus",
+    "removeItem": "Hapus {{item}}"
+  },
+  "tagsInput": {
+    "tooLong": "Lebih dari {{max}} karakter",
+    "remove": "Hapus",
+    "removeTag": "Hapus {{tag}}",
+    "suggested": "Tag yang disarankan",
+    "addTag": "Tambah tag {{tag}}",
+    "tooMany": "Paling banyak {{max}} tag.",
+    "tooLongTag": "Sebuah tag paling banyak {{max}} karakter."
+  },
+  "stagesEditor": {
+    "title": "Tahap",
+    "description": "Kolom papan fitur, dari kiri ke kanan. Jenis adalah yang dipakai aturan papan (mengklaim, menolak, kemajuan lane); agen melihat key, nama, dan jenis setiap tahap. Mengganti nama tetap mempertahankan key.",
+    "moveEarlier": "Majukan {{name}}",
+    "moveLater": "Mundurkan {{name}}",
+    "tickets_other": "{{count}} tiket",
+    "newPlaceholder": "Tahap baru, mis. QA",
+    "add": "Tambah tahap",
+    "moveAnyway": "Pindahkan saja",
+    "kind": {
+      "open": "Terbuka",
+      "active": "Aktif",
+      "blocked": "Terblokir",
+      "review": "Tinjauan",
+      "done": "Selesai",
+      "cancelled": "Dibatalkan",
+      "approved": "Disetujui"
+    },
+    "hint": {
+      "open": "menunggu diambil; mengklaim memindahkannya ke tahap tempat pekerjaan dimulai",
+      "active": "sedang dikerjakan",
+      "blocked": "menunggu Anda",
+      "review": "diserahkan untuk ditinjau",
+      "done": "selesai; tidak bisa diklaim",
+      "cancelled": "dibuang; menolak memindahkan tiket ke sini, dan tugasnya keluar dari kemajuan",
+      "approved": "persetujuan Anda untuk di-merge; tidak ada agen yang memindahkan tiket ke sini"
+    },
+    "color": {
+      "gray": "abu-abu",
+      "slate": "abu kebiruan",
+      "sky": "langit",
+      "blue": "biru",
+      "teal": "tosca",
+      "emerald": "zamrud",
+      "lime": "limau",
+      "amber": "ambar",
+      "orange": "oranye",
+      "rose": "mawar",
+      "pink": "merah muda",
+      "violet": "ungu"
+    },
+    "colour": "Warna",
+    "stageName": "Nama tahap",
+    "firstActive": "Tahap aktif pertama ({{name}})",
+    "firstActiveNone": "Tahap aktif pertama (tidak ada)",
+    "workStarts": "Pekerjaan dimulai di",
+    "workStartsHint": "Tempat tiket ditaruh saat diklaim; status sedang dikerjakan atau aktif juga berarti tahap ini.",
+    "delete": "Hapus {{name}}",
+    "deleteTitle": "Hapus tahap {{name}}?",
+    "holds_other": "Berisi {{count}} tiket (termasuk lane). Pilih tahap tujuan pemindahannya.",
+    "holdsNone": "Tidak ada tiket di dalamnya.",
+    "moveTo": "Pindahkan ke…",
+    "cancel": "Batal",
+    "deleteConfirm": "Hapus"
+  },
+  "runsSettings": {
+    "title": "Eksekusi",
+    "description": "Yang dimulai papan dari worktree tiket pada setiap repo, dari kartu Eksekusi tiket atau saat agen memintanya: <strong>preview</strong> menjawab di sebuah port dan mendapat tautan untuk dibuka, <strong>job</strong> adalah pekerja latar belakang tanpa tautan. Masing-masing menjalankan install (hanya bila lockfile berubah), build, lalu perintah start-nya, di worktree. Agen memulai dan menghentikannya, dan bisa juga menambah, mengubah, dan menghapusnya: setiap perubahan tampil di aktivitas proyek dengan nama agen.",
+    "noRepos": "Proyek belum punya repo.",
+    "removed": "Dihapus",
+    "groupLabel": "Eksekusi {{name}}",
+    "add": "Tambah eksekusi",
+    "none": "Tanpa eksekusi: tiket repo ini tidak punya apa pun untuk dijalankan.",
+    "typePreview": "Preview",
+    "typeJob": "Job",
+    "portHealth": "port {{port}} · health {{path}}",
+    "portAuto": "otomatis",
+    "moveUp": "Naikkan",
+    "moveDown": "Turunkan",
+    "edit": "Ubah",
+    "editRun": "Ubah {{name}}",
+    "delete": "Hapus",
+    "deleteRun": "Hapus {{name}}",
+    "deleteTitle": "Hapus eksekusi {{name}}?",
+    "deleteDescription": "Di mana pun ia berjalan sekarang, ia dihentikan, dan tiket {{repo}} tidak menawarkannya lagi.",
+    "cancel": "Batal",
+    "newRun": "Eksekusi baru",
+    "portProblem": "port: otomatis, atau port dari {{from}} sampai {{to}}",
+    "name": "Nama",
+    "type": "Tipe",
+    "typePreviewLong": "Preview (port dan tautan)",
+    "typeJobLong": "Job (pekerja latar belakang)",
+    "install": "Install",
+    "installPlaceholder": "pnpm install --frozen-lockfile (kosong: tidak ada)",
+    "build": "Build",
+    "buildPlaceholder": "pnpm build (kosong: tidak ada)",
+    "start": "Start",
+    "startPreviewPlaceholder": "node server.js (membaca PORT)",
+    "port": "Port",
+    "healthPath": "Path health",
+    "envPreview": "Environment, untuk perintah start: {port} dalam sebuah nilai adalah port-nya; PORT dan HOST diatur",
+    "env": "Environment, untuk perintah start",
+    "varName": "Nama variabel {{n}}",
+    "varValue": "Nilai variabel {{n}}",
+    "valuePlaceholder": "nilai",
+    "removeVar": "Hapus variabel {{n}}",
+    "addVar": "Tambah variabel",
+    "copyData": "Salin dulu data papan utama ke data/preview (sebagai DATA_DIR)",
+    "save": "Simpan",
+    "saving": "Menyimpan…"
+  },
+  "layoutEditor": {
+    "title": "Tata letak",
+    "description": "Apa yang tampil di proyek ini, dan di mana: halaman menunya, kartu Ikhtisarnya (dan blok di Beranda) serta bagian halaman tiket. Matikan sebuah ubin untuk menyembunyikannya, seret atau pakai panahnya untuk memindahkan, dan pindahkan bagian tiket ke kolom lain. Halaman tersembunyi tetap terbuka lewat tautannya. <lock/> Yang terkunci bisa dipindah tetapi selalu tampil.",
+    "area": {
+      "nav": "Menu proyek",
+      "overview": "Kartu Ikhtisar",
+      "ticketMain": "Halaman tiket, kolom utama",
+      "ticketSide": "Halaman tiket, kolom samping"
+    },
+    "where": {
+      "nav": "di menu",
+      "overview": "di Ikhtisar",
+      "ticket": "di halaman tiket"
+    },
+    "menu": "Menu",
+    "overview": "Ikhtisar",
+    "ticketPage": "Halaman tiket",
+    "mainColumn": "Kolom utama",
+    "sideColumn": "Kolom samping",
+    "hiddenCount_other": "{{count}} tersembunyi.",
+    "reset": "Kembalikan ke bawaan",
+    "shown": "{{shown}} dari {{total}} tampil",
+    "dropHere": "Letakkan di sini",
+    "empty": "Kosong: seret bagian ke sini",
+    "moveUp": "Naikkan",
+    "moveDown": "Turunkan",
+    "moveUpIn": "Naikkan {{name}} {{where}}",
+    "moveDownIn": "Turunkan {{name}} {{where}}",
+    "toSideTip": "Pindah ke kolom samping",
+    "toMainTip": "Pindah ke kolom utama",
+    "toSide": "Pindahkan {{name}} ke kolom samping",
+    "toMain": "Pindahkan {{name}} ke kolom utama",
+    "alwaysShown": "Selalu tampil: {{reason}}",
+    "show": "Tampilkan",
+    "hide": "Sembunyikan",
+    "showIn": "Tampilkan {{name}} {{where}}",
+    "element": {
+      "nav": {
+        "overview": "Ikhtisar",
+        "prs": "Antrean PR",
+        "features": "Fitur berjalan",
+        "roadmap": "Roadmap",
+        "previews": "Preview",
+        "gallery": "Galeri",
+        "agents": "Tim",
+        "daily": "Harian",
+        "cleanup": "Pembersihan",
+        "repositories": "Repositori",
+        "instructions": "Instruksi",
+        "workflow": "Alur kerja"
+      },
+      "overview": {
+        "needsYou": "Perlu Anda",
+        "inProgress": "Dikerjakan",
+        "doneToday": "Selesai hari ini",
+        "carryingOver": "Terbawa",
+        "notes": "Catatan",
+        "agents": "Agen bekerja",
+        "lostContact": "Kontak hilang"
+      },
+      "ticket": {
+        "instructions": "Instruksi",
+        "tasks": "Tugas",
+        "timeline": "Linimasa",
+        "lanes": "Lane",
+        "activity": "Aktivitas",
+        "runs": "Eksekusi",
+        "details": "Detail",
+        "branch": "Branch",
+        "workspaces": "Workspace",
+        "resume": "Lanjutkan"
+      }
+    },
+    "locked": {
+      "nav": {
+        "overview": "Halaman awal proyek",
+        "features": "Papan proyek"
+      },
+      "ticket": {
+        "instructions": "Teks tiket itu sendiri",
+        "tasks": "Tempat tautan tugas terblokir mendarat",
+        "activity": "Keputusan dan utas yang menunggu Anda ada di sini"
+      }
+    }
+  },
+  "repoDialog": {
+    "newProject": "Proyek baru…",
+    "editTitle": "Ubah {{name}}",
+    "newTitle": "Repositori baru",
+    "description": "Checkout git lokal. Papan membacanya dengan git dan gh; tidak pernah menulis ke dalamnya.",
+    "project": "Proyek",
+    "projectName": "Nama proyek",
+    "moves": "PR, tiket, dan hasil tinjauannya ikut pindah.",
+    "path": "Path repositori",
+    "pathPlaceholder": "/home/you/code/… atau C:\\code\\…",
+    "browse": "Telusuri…",
+    "name": "Nama",
+    "namePlaceholder": "dari GitHub atau folder",
+    "baseBranch": "Branch dasar",
+    "removeRepo": "Hapus repo",
+    "removeTitle": "Hapus {{name}}?",
+    "removeDescription": "Entri antrean PR-nya ikut terhapus. Tiket dan hasil tinjauan tetap di proyek, tetapi tiket PR-nya ikut terhapus. Checkout di disk tidak disentuh.",
+    "keep": "Pertahankan",
+    "remove": "Hapus",
+    "saving": "Menyimpan…",
+    "save": "Simpan",
+    "add": "Tambah repositori"
+  },
+  "folderPicker": {
+    "title": "Pilih checkout",
+    "description": "Folder di mesin tempat papan berjalan. <repo/> menandai checkout git.",
+    "up": "Naik satu folder",
+    "home": "Beranda",
+    "path": "Path folder",
+    "folders": "Folder",
+    "none": "Tidak ada folder di sini.",
+    "git": "git",
+    "isRepo": "Folder ini adalah checkout git.",
+    "notRepo": "Bukan checkout git.",
+    "use": "Pakai folder ini"
+  },
+  "instructions": {
+    "state": {
+      "pending": "menunggu Anda",
+      "accepted": "ditinjau",
+      "reverted": "dibatalkan"
+    },
+    "markedReviewed": "Ditandai ditinjau",
+    "reverted": "Instruksi proyek dikembalikan",
+    "historyTitle": "Riwayat instruksi",
+    "historyDescription": "Setiap perubahan, oleh Anda atau orkestrator, beserta teks sebelumnya. Perubahan orkestrator langsung berlaku dan menunggu tinjauan Anda.",
+    "noChanges": "Belum ada perubahan.",
+    "changeBy": "Perubahan oleh {{name}}",
+    "aRevert": "sebuah pembatalan",
+    "revertedBy": "dibatalkan oleh {{name}} {{when}}",
+    "reviewedBy": "ditinjau oleh {{name}} {{when}}",
+    "hideChange": "Sembunyikan perubahan",
+    "showChange": "Tampilkan perubahan",
+    "reviewed": "Ditinjau",
+    "revertTip": "Kembalikan instruksi seperti sebelum perubahan ini",
+    "revertBlocked": "Instruksi berubah lagi sejak itu: batalkan perubahan yang lebih baru dulu",
+    "revert": "Batalkan",
+    "diffLabel": "Yang berubah pada instruksi",
+    "pageTitle": "Instruksi",
+    "pageDescription": "Yang dibaca setiap agen sebelum bekerja di sini. Setiap perubahan disimpan di bawah.",
+    "reposLine": "Repo: <goto>halaman Repositori</goto>. Ganti nama atau hapus proyek: menu proyek → Kelola proyek.",
+    "sectionLabel": "Instruksi proyek",
+    "edit": "ubah",
+    "placeholder": "Cara menjalankan repo, konvensi yang diikuti, yang tidak boleh dilakukan.",
+    "unsavedHint": "Ada perubahan belum disimpan. Ctrl/⌘+Enter menyimpan.",
+    "noChangesHint": "Tanpa perubahan.",
+    "cancel": "Batal",
+    "save": "Simpan",
+    "saving": "Menyimpan…",
+    "clickToEdit": "Klik untuk mengubah",
+    "empty": "Belum ada instruksi. Klik untuk menulisnya.",
+    "discardTitle": "Buang perubahan Anda?",
+    "discardDescription": "Instruksi proyek punya perubahan belum disimpan. Agen tetap membaca yang tersimpan.",
+    "keepEditing": "Lanjut mengubah",
+    "discard": "Buang"
+  },
+  "repositories": {
+    "title": "Repositori",
+    "description": "Checkout yang dibaca proyek ini.",
+    "new": "Repositori baru",
+    "baseLine": "dasar {{branch}} · <path>{{path}}</path>",
+    "empty": "Belum ada repositori di proyek ini. Tambahkan satu: path checkout git lokal."
+  },
+  "reports": {
+    "status": {
+      "done": "selesai",
+      "missing": "belum ada",
+      "upcoming": "akan datang",
+      "off": "mati"
+    },
+    "weekday": {
+      "1": "Senin",
+      "2": "Selasa",
+      "3": "Rabu",
+      "4": "Kamis",
+      "5": "Jumat",
+      "6": "Sabtu",
+      "7": "Minggu"
+    },
+    "weekdayShort": {
+      "1": "Sen",
+      "2": "Sel",
+      "3": "Rab",
+      "4": "Kam",
+      "5": "Jum",
+      "6": "Sab",
+      "7": "Min"
+    },
+    "weekOf": "minggu {{date}}",
+    "scheduleOff": "mati",
+    "scheduleDaily": "harian sebelum {{end}}, {{format}}",
+    "scheduleWeekly": "mingguan tiap {{day}} sebelum {{end}}, {{format}}",
+    "formatFile": "file",
+    "formatText": "teks"
+  },
+  "daily": {
+    "title": "Harian",
+    "subtitle": "Laporan periode, dan apa yang selesai jam demi jam.",
+    "previousDay": "Hari sebelumnya",
+    "nextDay": "Hari berikutnya",
+    "opening": "Membuka Harian…"
+  },
+  "reportDue": {
+    "region": "Laporan jatuh tempo",
+    "notifyTitleDue": "{{project}}: laporan jatuh tempo",
+    "notifyTitleMissing": "{{project}}: laporan belum ada",
+    "notifyBodyDaily": "Laporan harian untuk {{label}} jatuh tempo pukul {{time}}.",
+    "notifyBodyWeekly": "Laporan mingguan untuk {{label}} jatuh tempo pukul {{time}}.",
+    "missing": ": laporan belum ada, shift berakhir pukul {{time}}",
+    "due": ": laporan jatuh tempo dalam {{left}}, pukul {{time}}",
+    "leftMinutes": "{{count}} mnt",
+    "leftHours": "{{hours}} j",
+    "leftHoursMinutes": "{{hours}} j {{minutes}} mnt",
+    "notificationsOn": "Notifikasi aktif di browser ini",
+    "notificationsBlocked": "Notifikasi diblokir di browser ini",
+    "notifyTip": "Notifikasi browser saat laporan jatuh tempo (selama tab papan terbuka)",
+    "notifyMe": "Beri tahu saya"
+  },
+  "activityLog": {
+    "region": "Aktivitas",
+    "empty": "Tidak ada kejadian pada {{date}}.",
+    "actions_other": "{{count}} aksi",
+    "contributors_other": "oleh {{count}} kontributor",
+    "contributorsTitle": "Kontributor",
+    "by": "oleh {{names}}",
+    "openAll": "Buka semua",
+    "closeAll": "Tutup semua",
+    "openReview": "Buka hasil tinjauan",
+    "kind": {
+      "ticket_other": "{{count}} tiket",
+      "task_other": "{{count}} tugas",
+      "update_other": "{{count}} pembaruan",
+      "comment_other": "{{count}} komentar",
+      "pr_other": "{{count}} PR",
+      "review_other": "{{count}} tinjauan",
+      "workspace_other": "{{count}} workspace",
+      "agent_other": "{{count}} agen",
+      "project_other": "{{count}} proyek",
+      "summary_other": "{{count}} ringkasan",
+      "report_other": "{{count}} laporan",
+      "handoff_other": "{{count}} serah terima"
+    }
+  },
+  "generateReport": {
+    "wrote": "claude menulis laporan",
+    "loading": "Memuat…",
+    "off": "Laporan mati: atur kadensnya di pengaturan laporan dulu",
+    "file": "Laporan proyek ini berupa file: claude hanya menulis laporan teks",
+    "none": "Tidak ada laporan yang diminta pada hari ini",
+    "fix": "{{problem}}. Solusi: {{fix}}.",
+    "tip": "claude menulis laporan dari prompt, templat, dan aktivitas",
+    "writing": "claude sedang menulis…",
+    "generate": "Buat dengan claude",
+    "failed": "claude tidak bisa menulisnya: {{message}}"
+  },
+  "pushedToday": {
+    "commits_other": "{{count}} commit",
+    "label": "Di-push hari ini: {{commits}}, {{added}} baris ditambah, {{removed}} dihapus",
+    "labelNone": "Di-push hari ini: tidak ada",
+    "nothing": "Tidak ada yang di-push hari ini",
+    "title": "Di-push hari ini",
+    "checked": "origin diperiksa {{ago}}",
+    "notFetched": "origin belum di-fetch",
+    "byRepo": "Di-push hari ini per repo",
+    "emptyRepos": "Tidak ada yang sampai ke origin hari ini di repo proyek ini.",
+    "hint": "Commit yang sampai ke sebuah branch origin hari ini, masing-masing sekali, tanpa merge."
+  },
+  "reportCalendar": {
+    "region": "Kalender laporan",
+    "counts": "{{done}} selesai · {{missing}} belum ada",
+    "openMissing": "Buka {{period}}, laporan terdekat yang belum ada",
+    "nothingMissing": "Tidak ada yang kurang",
+    "nextMissing": "Kekurangan berikutnya",
+    "dayLabel": "{{day}}: {{status}}"
+  },
+  "reportCard": {
+    "region": "Laporan",
+    "title": "Laporan",
+    "off": "Laporan mati untuk proyek ini: pilih seberapa sering laporan jatuh tempo di pengaturan laporan.",
+    "notAsked": "Tidak ada laporan yang diminta pada {{date}}.",
+    "due": "jatuh tempo {{date}}",
+    "replace": "ganti",
+    "post": "kirim laporan",
+    "versions_other": "{{count}} versi",
+    "version": "versi {{n}}",
+    "none": "Belum ada laporan untuk {{label}}.",
+    "history": "Riwayat ({{count}})",
+    "earlier": "Versi sebelumnya",
+    "forLabel": "Laporan untuk {{label}}",
+    "placeholderFile": "Lampirkan file laporan; satu baris tentangnya bersifat opsional.",
+    "placeholderText": "Laporan, sesuai permintaan prompt. Tempel atau lepas file untuk melampirkannya.",
+    "attach": "lampirkan",
+    "cancel": "Batal",
+    "attachFirst": "Lampirkan file laporan dulu",
+    "posting": "Mengirim…",
+    "replaceButton": "Ganti",
+    "postButton": "Kirim"
+  },
+  "reportSettings": {
+    "region": "Pengaturan laporan",
+    "title": "Pengaturan laporan",
+    "field": {
+      "prompt": "prompt",
+      "template": "templat"
+    },
+    "formatText": "Teks",
+    "formatFile": "File (mis. PDF)",
+    "prompt": "Prompt",
+    "promptKindFile": "file",
+    "promptKindText": "teks",
+    "edit": "ubah",
+    "clickToEdit": "Klik untuk mengubah",
+    "noPrompt": "Belum ada prompt laporan. Klik untuk menyebut isi laporan dan caranya, serta apakah berupa teks singkat atau file.",
+    "promptLabel": "Prompt laporan",
+    "promptPlaceholder": "Isi laporan dan caranya: siapa yang membaca, nadanya, yang ditekankan, teks singkat atau PDF.",
+    "as": "Sebagai",
+    "cancel": "Batal",
+    "save": "Simpan",
+    "saving": "Menyimpan…",
+    "sections": "Laporan yang dibuat memiliki bagian ini, dalam urutan ini: {{headings}}.",
+    "noHeadings": "Tanpa judul: laporan yang dibuat tidak diperiksa terhadapnya.",
+    "template": "Templat",
+    "theDefault": "bawaan",
+    "templateLabel": "Templat laporan",
+    "useDefault": "Pakai bawaan",
+    "diffGroup": "Yang berubah pada {{field}} laporan",
+    "bothEmpty": "Keduanya kosong.",
+    "state": {
+      "pending": "menunggu Anda",
+      "accepted": "dipertahankan",
+      "reverted": "dibatalkan"
+    },
+    "dialogTitle": "Perubahan {{field}} laporan",
+    "dialogTitleGeneric": "Perubahan pengaturan laporan",
+    "loading": "Memuat…",
+    "byAgent": "oleh <who>{{name}}</who> (agen)",
+    "by": "oleh <who>{{name}}</who>",
+    "keptBy": "dipertahankan oleh {{name}}",
+    "revertedBy": "dibatalkan oleh {{name}}",
+    "showChange": "Tampilkan yang berubah",
+    "noticesRegion": "Perubahan oleh agen untuk ditinjau",
+    "keptToast": "{{field}} laporan baru dipertahankan",
+    "revertedToast": "{{field}} laporan dikembalikan",
+    "noticeLabel": "{{field}} laporan diubah oleh {{name}}",
+    "noticeText": "{{field}} laporan diubah oleh <who>{{name}}</who>, batalkan?",
+    "hideChange": "Sembunyikan perubahan",
+    "showTheChange": "Tampilkan perubahan",
+    "accept": "Terima",
+    "revert": "Batalkan",
+    "laterChange": "{{field}} berubah lagi sejak itu: batalkan perubahan itu dulu"
+  },
+  "shift": {
+    "notWorkday": "bukan hari kerja",
+    "before": "sebelum shift",
+    "on": "sedang shift",
+    "after": "setelah shift",
+    "tip": "Shift hari ini {{span}}; sekarang {{now}}, {{where}}. Laporan jatuh tempo di akhirnya.",
+    "label": "Shift {{span}}, sekarang {{now}}: {{where}}",
+    "cadence": {
+      "off": "Mati",
+      "daily": "Harian",
+      "weekly": "Mingguan"
+    },
+    "badOrder": "Shift harus berakhir setelah dimulai.",
+    "noWorkday": "Pilih setidaknya satu hari kerja.",
+    "badAlert": "Ingatkan antara 0 dan 720 menit sebelum akhir.",
+    "schedule": "Jadwal",
+    "due": "Jatuh tempo",
+    "hintDaily": "Shift: laporan jatuh tempo saat berakhir.",
+    "hintWeekly": "Shift: laporan jatuh tempo saat berakhir, pada hari di atas.",
+    "start": "Mulai shift",
+    "end": "Akhir shift",
+    "workdays": "Hari kerja",
+    "workdaysHint": "Laporan harian diminta pada hari-hari ini; yang lain mati, tidak pernah dianggap kurang.",
+    "remind": "Ingatkan mulai (menit sebelum akhir)",
+    "save": "Simpan",
+    "saving": "Menyimpan…",
+    "weekdayLabel": "Pada"
+  },
+  "cleanup": {
+    "counts": {
+      "deleted_other": "{{count}} dihapus",
+      "kept_other": "{{count}} dipertahankan",
+      "gone_other": "{{count}} sudah hilang"
+    },
+    "actions": {
+      "local": {
+        "row": "Hapus branch",
+        "all": "Hapus semua branch lokal yang memenuhi syarat",
+        "title_other": "Hapus {{count}} branch lokal?",
+        "confirm_other": "Hapus {{count}} branch lokal",
+        "what": "Setiap branch dihapus dari checkout. Origin menyimpan salinannya."
+      },
+      "remote": {
+        "row": "Hapus di origin",
+        "all": "Hapus semua branch di origin yang memenuhi syarat",
+        "title_other": "Hapus {{count}} branch di origin?",
+        "confirm_other": "Hapus {{count}} branch di origin",
+        "what": "Setiap branch dihapus dari origin, untuk semua orang yang memakainya. Branch lokal tetap ada."
+      },
+      "worktrees": {
+        "row": "Hapus worktree + branch",
+        "all": "Hapus semua worktree yang memenuhi syarat beserta branch-nya",
+        "title_other": "Hapus worktree dari {{count}} branch, beserta branch-nya?",
+        "confirm_other": "Hapus worktree dan hapus {{count}} branch",
+        "what": "Setiap folder worktree dihapus (file yang diabaikan seperti node_modules ikut), lalu branch lokalnya. Tautan di dalamnya dihapus sebagai tautan: folder tujuannya di luar worktree tetap ada. Origin menyimpan salinannya."
+      }
+    },
+    "previewState": {
+      "running": "berjalan di :{{port}}",
+      "building": "membangun",
+      "starting": "memulai"
+    },
+    "copied": "Tersalin",
+    "sweep": {
+      "partial_other": "{{count}} file dihapus; {{failed}} tidak bisa dihapus dan tersisa untuk eksekusi berikutnya",
+      "done_other": "{{count}} file dihapus ({{size}})"
+    },
+    "toast": {
+      "keptSee": "{{counts}}: lihat alasannya di bawah",
+      "jobFailed": "{{title}} gagal: {{reason}}"
+    },
+    "noReasonGiven": "tanpa alasan",
+    "title": "Pembersihan",
+    "intro": "Pekerjaan selesai yang perlu dibersihkan, diperiksa terhadap dasarnya.",
+    "refresh": "Segarkan",
+    "agentsNote": "Agen boleh menghapus branch lokal yang sudah mendarat (<tool>cleanup_delete</tool>); menghapus worktree dan branch di origin tetap hak Anda, dari halaman ini.",
+    "deleteOff": "Penghapusan mati: {{reason}}.",
+    "repoError": "{{name}}: {{error}}. Branch dan worktree-nya tidak diketahui, jadi tidak ada yang bisa dihapus di dalamnya.",
+    "progress": {
+      "label": "Kemajuan penghapusan",
+      "of": "{{done}} dari {{total}}",
+      "starting": "Memulai…",
+      "failed": "Gagal · {{reason}}",
+      "succeeded": "Berhasil · {{counts}}"
+    },
+    "empty": "Tidak ada yang tertinggal. Setiap tiket yang ditutup sudah dibersihkan.",
+    "group": {
+      "safe": {
+        "title": "Aman dihapus",
+        "hint": "Setiap commit, atau patch yang sama, sudah ada di dasar."
+      },
+      "edited": {
+        "title": "Diubah tetapi ada",
+        "hint": "Commit berubah saat masuk, tetapi merge branch tidak akan menambah apa pun."
+      },
+      "unique": {
+        "title": "Masih punya pekerjaan unik",
+        "hint": "Branch punya perubahan yang tidak ada di dasarnya. Pertahankan, atau periksa ke mana pekerjaannya pergi."
+      },
+      "kept": {
+        "title": "Dipertahankan",
+        "hint": "Dipakai tiket yang sedang dikerjakan atau PR terbuka, sebuah dasar, branch dasar repo, branch checkout utama, atau branch bawaan origin: tidak pernah dihapus dari sini."
+      },
+      "other": {
+        "title": "Tidak ada pembanding",
+        "hint": "Workspace yang masih terdaftar tanpa branch, atau branch tanpa dasar untuk diperiksa."
+      }
+    },
+    "workspacesRegistered_other": "{{count}} workspace terdaftar",
+    "previewStop": "preview {{state}}: hentikan di tiket",
+    "notLocal": "bukan lokal",
+    "worktreeKept": "{{path}}: dipertahankan, {{reason}}",
+    "mainCheckout": "checkout utama",
+    "originSha": "origin {{sha}}",
+    "copyRestore": "Salin perintah pemulihan: {{command}}",
+    "col": {
+      "ticket": "Tiket",
+      "branch": "Branch",
+      "reach": "Jangkauan",
+      "worktree": "Worktree",
+      "origin": "Origin",
+      "branchOnOrigin": "Branch di origin"
+    },
+    "remote": {
+      "title": "Branch tersisa di origin",
+      "intro": "Per fetch terakhir; papan melakukan fetch origin lagi sebelum menghapus satu. Masing-masing dinilai dari commit-nya sendiri terhadap salinan dasar di origin, atau dari PR yang sudah di-merge yang head-nya tepat commit itu."
+    },
+    "prMerged": "PR #{{number}} di-merge pada commit ini",
+    "prWasMerged": "PR #{{number}} sudah di-merge pada commit ini",
+    "untracked": {
+      "title": "Worktree tak terlacak",
+      "intro": "Worktree yang tidak dicatat tiket atau workspace mana pun. Daftarkan pada tiketnya, atau hapus."
+    },
+    "detached": "detached {{sha}}",
+    "uploads": {
+      "title": "Unggahan tanpa lampiran",
+      "intro": "File yang diunggah lebih dari sehari lalu dan tidak dipakai apa pun di papan: jendela Tiket baru yang ditutup tanpa membuat, file yang dihapus dari kiriman sebelum dikirim. Papan menghapusnya setiap jam; file yang lebih muda dari sehari dibiarkan.",
+      "introRecent": "File yang diunggah lebih dari sehari lalu dan tidak dipakai apa pun di papan: jendela Tiket baru yang ditutup tanpa membuat, file yang dihapus dari kiriman sebelum dikirim. Papan menghapusnya setiap jam; file yang lebih muda dari sehari dibiarkan ({{recent}} sekarang).",
+      "summary_other": "{{count}} file, {{size}}",
+      "deleteNow": "Hapus sekarang",
+      "confirmTitle": "Hapus unggahan tanpa lampiran?",
+      "confirmText_other": "{{count}} file ({{size}}) yang tidak dipakai kiriman, balasan, tiket, atau gambar agen mana pun, diunggah lebih dari sehari lalu. Ini tidak bisa dibatalkan."
+    },
+    "keep": "Pertahankan",
+    "delete": "Hapus",
+    "keptReason": "Dipertahankan: {{reason}}",
+    "noLocalBranch": "tanpa branch lokal",
+    "kind": {
+      "remote": "di origin",
+      "local": "lokal",
+      "worktrees": "beserta worktree-nya"
+    },
+    "worktreePath": "worktree {{path}}",
+    "stopsPreview": "menghentikan preview-nya ({{state}})",
+    "stopsServer": "menghentikan server di :{{port}} jika berjalan dari worktree ini",
+    "confirmChecked": "Masing-masing diperiksa lagi tepat sebelum dihapus, dan dipertahankan jika ada yang berubah; tidak ada yang dipaksa. Perintah pemulihan ditampilkan sesudahnya.",
+    "toDelete": "Akan dihapus",
+    "toDeleteEdited": "Akan dihapus, diubah",
+    "editedOnTheWay": "Diubah saat masuk: commit ini berbeda dari dasar, tetapi merge tidak akan menambah apa pun",
+    "outcome": {
+      "deleted": "Dihapus",
+      "refused": "Dipertahankan",
+      "failed": "Gagal",
+      "gone": "Sudah hilang"
+    },
+    "advice": {
+      "changes": "Commit atau stash di worktree, lalu segarkan.",
+      "prune": "Jalankan git worktree prune, lalu segarkan.",
+      "moved": "Segarkan, lalu konfirmasi lagi pada commit baru.",
+      "checkedOut": "Checkout branch lain di sana dulu."
+    },
+    "removed": "{{path}} dihapus",
+    "removedLink": "tautan {{path}} ke {{target}} dihapus, target tetap ada",
+    "copyCommand": "Salin: {{command}}",
+    "results": {
+      "label": "Hasil penghapusan",
+      "title": "Penghapusan terakhir",
+      "retry": "Coba lagi yang dipertahankan",
+      "dismiss": "Tutup"
+    }
+  },
+  "gallery": {
+    "kind": {
+      "image": "Gambar",
+      "video": "Video",
+      "pdf": "PDF",
+      "docs": "Dokumen dan teks",
+      "other": "Lainnya"
+    },
+    "sort": {
+      "newest": "Terbaru dulu",
+      "oldest": "Terlama dulu",
+      "name": "Nama A ke Z",
+      "name-desc": "Nama Z ke A",
+      "largest": "Terbesar dulu",
+      "smallest": "Terkecil dulu",
+      "type": "Menurut tipe"
+    },
+    "page": {
+      "title": "Galeri",
+      "intro": "Setiap file pada tiket proyek.",
+      "filters": "Filter",
+      "fileType": "Tipe file",
+      "from": "Dari",
+      "to": "Sampai",
+      "sortTip": "Urutan: {{sort}}",
+      "sort": "Urutkan",
+      "archivedTip": "Termasuk file tiket yang diarsipkan",
+      "includeArchived": "Sertakan arsip",
+      "clearFilters": "Hapus filter",
+      "loadError": "Tidak bisa memuat file: {{error}}",
+      "noMatch": "Tidak ada file yang cocok dengan filter ini.",
+      "none": "Belum ada file di proyek ini.",
+      "loadingMore": "Memuat file lainnya…"
+    }
+  },
+  "files": {
+    "copyImage": {
+      "unsupported": "Browser ini tidak bisa menyalin gambar ke clipboard",
+      "failedNamed": "Tidak bisa menyalin {{name}}",
+      "copied": "Tersalin",
+      "failed": "Tidak bisa menyalin",
+      "copy": "Salin gambar"
+    },
+    "attachments": {
+      "notesOn": "Catatan pada {{name}}",
+      "sizeKb": "{{kb}} KB"
+    },
+    "grid": {
+      "open": "Buka {{name}}",
+      "inLaneTip": "Di lane {{lane}}",
+      "inLane": "di lane {{lane}}",
+      "openTicket": "Buka tiket",
+      "replyTip": "Balasan yang menyertainya",
+      "postTip": "Kiriman yang menyertainya",
+      "openThread": "Buka utas"
+    },
+    "pending": {
+      "preview": "Preview {{name}}",
+      "uploading": "mengunggah",
+      "remove": "Hapus",
+      "removeNamed": "Hapus {{name}}"
+    },
+    "viewer": {
+      "openInNewTab": "Buka di tab baru",
+      "download": "Unduh",
+      "close": "Tutup (Esc)",
+      "notes": "Catatan pada gambar",
+      "previous": "Sebelumnya",
+      "next": "Berikutnya",
+      "noPreview": "Tidak ada preview untuk tipe file ini.",
+      "zoomOut": "Perkecil (-)",
+      "fit": "Pas (0)",
+      "zoomIn": "Perbesar (+)",
+      "loadFailed": "Tidak bisa memuat file ini.",
+      "empty": "(file kosong)",
+      "cut": "Menampilkan {{limit}} karakter pertama. Unduh file untuk sisanya."
+    }
+  },
+  "annotate": {
+    "cannotDraw": "browser ini tidak bisa menggambar gambarnya",
+    "couldNotSave": "gambar tidak bisa disimpan",
+    "title": "Anotasi gambar",
+    "description": "{{name}}: gambar di atasnya dan tulis arti tiap tanda. Gambar dilampirkan seperti tampilannya di sini, beserta catatannya.",
+    "toolbar": "Alat gambar",
+    "tool": {
+      "select": {
+        "label": "Pilih",
+        "hint": "Pilih tanda untuk memindah, memutar, atau menghapusnya"
+      },
+      "pen": {
+        "label": "Pensil",
+        "hint": "Gambar bebas"
+      },
+      "rect": {
+        "label": "Kotak",
+        "hint": "Gambar kotak mengelilingi sesuatu"
+      },
+      "arrow": {
+        "label": "Panah",
+        "hint": "Tunjuk sesuatu"
+      },
+      "ellipse": {
+        "label": "Elips",
+        "hint": "Lingkari sesuatu"
+      },
+      "text": {
+        "label": "Teks",
+        "hint": "Tulis di atas gambar"
+      },
+      "note": {
+        "label": "Catatan",
+        "hint": "Klik tanda untuk menulis catatannya"
+      },
+      "line": {
+        "label": "Garis",
+        "hint": "Gambar garis lurus"
+      }
+    },
+    "colour": "Warna",
+    "strokeWidth": "Tebal garis",
+    "fill": "Isi",
+    "textToPlace": "Teks untuk ditempatkan",
+    "undo": "Urungkan",
+    "redo": "Ulangi",
+    "clear": "Hapus",
+    "notePlaceholder": "Apa arti tanda ini?",
+    "notePlaceholderEmpty": "Gambar tanda, atau pilih Catatan lalu klik satu",
+    "canvas": "Gambar untuk dianotasi",
+    "cannotOpen": "Gambar ini tidak bisa dibuka di kanvas.",
+    "opening": "Membuka gambar…",
+    "notes": "Catatan",
+    "locked": "Tanda terkunci sampai gambar dilampirkan.",
+    "attachOriginal": "Lampirkan asli",
+    "attaching": "Melampirkan…",
+    "attach": "Lampirkan"
+  },
+  "reach": {
+    "merged": {
+      "label": "di-merge",
+      "title": "Setiap commit ada di dasar apa adanya. Aman dihapus."
+    },
+    "rebased": {
+      "label": "di-rebase",
+      "title": "Commit di-rebase atau di-cherry-pick; patch yang sama ada di dasar. Aman dihapus."
+    },
+    "edited": {
+      "label": "diubah masuk",
+      "title": "Patch berbeda, tetapi merge branch tidak akan mengubah apa pun di dasar. Aman dihapus."
+    },
+    "unique": {
+      "label": "kerja unik",
+      "title": "Branch masih punya perubahan yang tidak ada di dasar. Pertahankan."
+    }
+  },
+  "runsCard": {
+    "step": {
+      "install": "memasang dependensi",
+      "build": "membangun",
+      "copy": "menyalin data utama",
+      "server": "memulai"
+    },
+    "status": {
+      "stopped": "Berhenti",
+      "building": "Membangun",
+      "buildingStep": "Membangun · {{step}}",
+      "running": "Berjalan",
+      "failed": "Gagal"
+    },
+    "notStarted_other": "{{count}} belum dimulai: {{list}}",
+    "nothingRunning": "Tidak ada yang berjalan",
+    "startAllTip": "Mulai setiap eksekusi repo tiket yang belum berjalan",
+    "startAll": "Mulai semua",
+    "stopAllTip": "Hentikan setiap eksekusi tiket yang sedang membangun atau berjalan",
+    "stopAll": "Hentikan semua",
+    "inUse": "{{inUse}} dari {{limit}} eksekusi berjalan di papan",
+    "primary": "utama",
+    "workspaceTip": "workspace {{name}} di {{path}}",
+    "workspaceTipNoPath": "workspace {{name}}",
+    "noRuns": "Tanpa eksekusi: manusia menambahkannya di pengaturan proyek.",
+    "orphaned": "Tidak lagi di tiket ini",
+    "orphanedHint": "bisa dihentikan, tidak bisa dimulai lagi dari sini",
+    "alsoRunning": "Juga berjalan",
+    "alsoRunningHint": "bisa dihentikan di sini; barisnya memulai yang ia tampilkan",
+    "links": "Tautan",
+    "openTip": "Tampilkan preview di dalam CrossBoard, di atas halaman: papan tetap seperti semula",
+    "open": "Buka",
+    "openBrowser": "Buka di browser",
+    "throughBoard": "Lewat papan",
+    "startTipPreview": "Bangun dan jalankan di port bebas, dari worktree tiket",
+    "startTipJob": "Bangun dan mulai di latar belakang, dari worktree tiket",
+    "start": "Mulai",
+    "stop": "Hentikan",
+    "restartTip": "Hentikan, bangun lagi, dan mulai",
+    "restart": "Mulai ulang",
+    "cannotStart": "Tidak bisa dimulai: {{reason}}",
+    "onPort": "Di :{{port}}",
+    "runningPlain": "Berjalan",
+    "since": ", sejak {{time}}",
+    "buildLog": "log build",
+    "runLog": "log eksekusi",
+    "logAria": "Log {{name}}"
+  },
+  "previews": {
+    "step": {
+      "install": "memasang dependensi",
+      "build": "membangun",
+      "copy": "menyalin data utama",
+      "server": "memulai server"
+    },
+    "group": {
+      "running": "Berjalan",
+      "runningHint": "Dibangun dan dijalankan oleh papan, atau tautan di mesin ini yang menjawab.",
+      "stopped": "Tidak berjalan",
+      "stoppedHint": "Berhenti, gagal, tautan yang tidak menjawab, atau yang di luar mesin ini dan tidak diperiksa papan."
+    },
+    "subtitle": "Semua preview, berjalan atau tidak.",
+    "empty": "Belum ada preview. Satu akan muncul di sini setelah agen mendaftarkan tautan preview pada workspace tiket, atau papan menjalankannya dari worktree-nya.",
+    "noneIn": "Tidak ada preview di {{name}}.",
+    "showAll": "Tampilkan semua tahap",
+    "allStages": "Semua tahap",
+    "stage": "Tahap",
+    "stageTip": "Menampilkan preview tiket di tahap ini",
+    "nothingToStop": "Tidak ada yang dihentikan",
+    "couldNotStop_other": "tidak bisa menghentikan {{count}}: {{list}}",
+    "stoppedCount_other": "{{count}} dihentikan",
+    "barTip": "Preview yang dibangun atau dijalankan papan, di semua proyek, dan berapa yang paling banyak berjalan sekaligus",
+    "bar": "Preview yang dijalankan papan: <strong>{{inUse}} dari {{limit}} terpakai</strong> <muted>(seluruh papan)</muted>",
+    "stopAllTitle": "Hentikan semua preview yang berjalan di proyek ini?",
+    "stopAllDescription": "Preview yang dijalankan papan berhenti dan membebaskan port-nya. Tautan berhenti bila papan bisa memastikan servernya berjalan dari worktree workspace; yang lain terus berjalan, dan toast menjelaskan alasannya. Tautannya tetap di halaman.",
+    "keepThem": "Biarkan",
+    "uncheckedLink": "Papan hanya memeriksa tautan di mesin ini",
+    "throughBoard": "Lewat papan:",
+    "openThrough": "Buka lewat papan",
+    "linkNotStopped": "Papan tidak akan menghentikannya: {{reason}}",
+    "stoppedStillListening": "Dihentikan, tetapi masih ada yang mendengarkan di :{{port}}",
+    "stopLinkTip": "Hentikan server di balik tautan ini (berjalan dari worktree workspace) dan bebaskan port-nya",
+    "startTip": "Bangun worktree ini dan jalankan di port bebas, dengan salinan baru data utama",
+    "stopTip": "Hentikan preview dan bebaskan port-nya",
+    "restartTip": "Hentikan, bangun lagi, dan mulai dengan salinan baru data",
+    "answered": "Dijawab dengan HTTP {{status}} pukul {{time}}",
+    "notRunning": "Tidak berjalan",
+    "noAnswer": "Tidak ada jawaban pukul {{time}}",
+    "notChecked": "Belum diperiksa",
+    "checking": "Memeriksa…",
+    "checkingTitle": "Memeriksa apakah menjawab",
+    "fullLog": "log lengkap",
+    "log": "log",
+    "serverLog": "log server",
+    "building": "Membangun…",
+    "buildingStep": "Membangun… {{step}}",
+    "startingOn": "Memulai di :{{port}}…",
+    "startingOnStep": "Memulai di :{{port}}… {{step}}",
+    "runBy": "Dijalankan papan di :{{port}}",
+    "runBySince": "Dijalankan papan di :{{port}}, sejak {{time}}",
+    "failed": "Gagal: {{reason}}",
+    "stoppedReason": "Dihentikan: {{reason}}",
+    "stopAllRuns": "Hentikan semua"
+  },
+  "previewWindow": {
+    "building": "Membangun… tampil di sini setelah berjalan.",
+    "failed": "Preview gagal. Lihat lognya di tiket.",
+    "failedReason": "Preview gagal: {{reason}}. Lihat lognya di tiket.",
+    "blocked": "Preview ini tidak akan ditampilkan di dalam papan: ia menolak dibingkai.",
+    "blockedReason": "Preview ini tidak akan ditampilkan di dalam papan: {{reason}}.",
+    "stoppedThrough": "Preview ini berhenti. Mulai dari kartu Eksekusi tiket atau halaman Preview.",
+    "stoppedDirect": "Preview tidak menjawab di mesin ini. Mulai lagi servernya di tempat ia berjalan.",
+    "frameTitle": "Preview {{title}}",
+    "copied": "Tautan tersalin",
+    "couldNotCopy": "Tautan tidak bisa disalin",
+    "window": "Jendela preview",
+    "openPreviews": "Buka preview",
+    "reloadTip": "Muat preview lagi",
+    "reload": "Muat ulang preview",
+    "restoreTip": "Kembali ke jendela mengambang",
+    "maximizeTip": "Pakai seluruh layar",
+    "restore": "Pulihkan jendela preview",
+    "maximize": "Maksimalkan jendela preview",
+    "closeTip": "Tutup preview (eksekusi tetap berjalan)",
+    "close": "Tutup jendela preview",
+    "url": "URL preview",
+    "copyTip": "Salin tautan preview",
+    "copy": "Salin tautan preview"
+  },
+  "roleLabels": {
+    "human": "Manusia",
+    "orchestrator": "Orkestrator",
+    "worker": "Agen",
+    "board": "Papan"
+  },
+  "runReport": {
+    "section": {
+      "brief": "Brief, dan apakah cukup",
+      "readRan": "Yang dibaca dan dijalankan",
+      "problems": "Masalah di tengah jalan",
+      "gaps": "Yang tidak bisa diperiksa, dan asumsinya",
+      "moreTime": "Yang akan dilakukan jika ada lebih banyak waktu",
+      "improvements": "Yang akan membuat eksekusi lebih baik",
+      "intent": "Dari mana maksudnya berasal",
+      "inferences": "Yang harus disimpulkan",
+      "questions": "Pertanyaan yang tidak terjawab tiket",
+      "approach": "Pendekatan, dan alternatif yang ditolak",
+      "alternatives": "Alternatif yang dipertimbangkan dan ditolak",
+      "selfTests": "Yang diuji sendiri, dan caranya",
+      "fixPass": "Yang diubah putaran perbaikan, dan mengapa yang pertama melewatkannya",
+      "scheduling": "Cara menjadwalkan fase yang dijalankan",
+      "judging": "Cara menilai yang dikembalikan fase",
+      "provisioning": "Cara runtime disiapkan, dan apa yang gagal",
+      "freshness": "Cara keterbaruan dibuktikan",
+      "evidence": "Cara setiap kriteria penerimaan diperiksa",
+      "unexercised": "Kriteria yang tidak bisa diuji",
+      "techniques": "Teknik yang dipakai untuk mencari cacat",
+      "surfaces": "Permukaan yang dicakup, dan yang tidak",
+      "candidates": "Cara kandidat dihasilkan, dan apa yang dibuang",
+      "disproof": "Cara mencoba membantah setiap temuan",
+      "unsettled": "Temuan yang tidak bisa dituntaskan, dan alasannya",
+      "asked": "Yang diminta manusia, dengan kata-katanya",
+      "compared": "Cara setiap permintaan dibandingkan dengan hasil",
+      "conflicts": "Merge, konfliknya, dan cara membacanya"
+    },
+    "label": "{{agent}} putaran {{round}}",
+    "notReported": "tidak dilaporkan",
+    "effort": "effort {{effort}}",
+    "briefedBy": "diarahkan oleh <actor />",
+    "duration": "Durasi",
+    "durationMeasured": "Durasi (terukur)",
+    "durationSelf": "Durasi (dilaporkan sendiri)",
+    "ownEstimate": "Estimasinya sendiri",
+    "difficulty": "Kesulitan",
+    "confidence": "Keyakinan",
+    "started": "Mulai",
+    "ended": "Selesai",
+    "time": {
+      "readingMs": "membaca",
+      "runningMs": "menjalankan",
+      "waitingMs": "menunggu",
+      "writingMs": "menulis",
+      "otherMs": "lainnya"
+    },
+    "steps": "Langkah",
+    "dialogTitle": "Laporan eksekusi: {{label}}",
+    "dialogTitleEmpty": "Laporan eksekusi",
+    "round": "putaran {{round}}",
+    "difficultyShort": "kesulitan {{n}}/5",
+    "confidenceShort": "keyakinan {{n}}/5"
+  },
+  "projectAgents": {
+    "title": "Tim",
+    "text": "Peran yang dijalankan agen. Tugaskan tiket untuk memesannya bagi satu agen.",
+    "new": "Agen baru",
+    "empty": "Belum ada agen. Setiap tiket dibagi oleh agen yang terhubung.",
+    "added": "{{names}} ditambahkan",
+    "defaults": {
+      "title": "Agen bawaan",
+      "files": "Maker membuat file pekerjaan di folder proyek dan melampirkannya ke tiket; manusia menyetujuinya atau mengembalikan tiket. Ubah sesudahnya. Agen yang mengerjakan proyek ini terhubung ke <code>{{path}}</code> pada alamat papan (MCP yang sama dengan halaman Hubungkan agen, dengan teks dan alat proyek ini).",
+      "software": "Siklus build dan tinjauan: <strong>spec</strong> menulis kriteria penerimaan, <strong>builder</strong> menulis kode, <strong>runner</strong> meninjaunya, dan fase tinjauan (<strong>env</strong>, <strong>verify</strong>, <strong>hunt</strong>, <strong>refute</strong>, <strong>merge</strong>) mencoba merusaknya; temuan kembali ke builder. <strong>intent</strong> lalu memeriksa hasilnya terhadap kata-kata manusia sendiri. Masing-masing disertai instruksi dan catatan yang dipakai orkestrator untuk mendelegasikan. Ubah mana pun sesudahnya.",
+      "addAll": "Tambah agen bawaan",
+      "addNames": "Tambah {{names}}",
+      "allAdded": "Semua ditambahkan",
+      "skills": "Skill yang menjalankan siklus ini, dan koneksi MCP agen, dipasang di <goto>Hubungkan agen</goto>."
+    },
+    "noReserved": "tidak ada tiket yang dipesan untuknya",
+    "remove": "Hapus {{name}}",
+    "removeTitle": "Hapus {{name}}?",
+    "removeReserved_other": "{{count}} tiket yang dipesan untuknya menjadi bersama dan tanpa penerima tugas.",
+    "removeKept": "Yang sudah dikirimkannya tetap atas namanya.",
+    "keep": "Pertahankan",
+    "removeAction": "Hapus",
+    "instructions": "Instruksi",
+    "instructionsHint": "pedoman kerja agen",
+    "delegate": "Kapan mendelegasikan",
+    "delegateHint": "dasar keputusan orkestrator",
+    "delegateEmpty": "Belum ada catatan delegasi: orkestrator tidak akan tahu kapan memanggilnya.",
+    "report": "Laporan eksekusi",
+    "reportHint": "templat yang diisi setiap eksekusi sebelum menyerahkan kembali",
+    "nothingYet": "Belum ada.",
+    "lines_other": "{{count}} baris",
+    "picture": "Gambar",
+    "choosePicture": "Pilih gambar",
+    "removePicture": "Hapus gambar",
+    "namePlaceholder": "reviewer, frontend, qa…",
+    "nameRule": "Huruf, angka, - dan _, agar @nama berfungsi di utas",
+    "instructionsText": "Pedoman kerja agen: siapa ia, cara kerjanya, yang tidak pernah dilakukannya. Orkestrator memberi brief ke subagen dengan ini.",
+    "instructionsPlaceholder": "Anda adalah Tester. Anda memeriksa setiap kriteria penerimaan terhadap preview yang berjalan…",
+    "delegateText": "Dasar keputusan orkestrator: kapan menyerahkan pekerjaan ke agen ini, apa yang diberikan, apa yang dikembalikan, dan apa yang berikutnya.",
+    "delegatePlaceholder": "Setelah Builder menyelesaikan satu langkah, dengan tautan preview dan kriteria penerimaan. Mengembalikan PASS / FAIL per kriteria. Semua lulus: Breaker berikutnya; ada yang gagal: kembali ke Builder.",
+    "templateLabel": "Templat laporan eksekusi",
+    "templateText": "Yang diisi satu eksekusi agen ini sebelum menyerahkan kembali, satu laporan per eksekusi. Dimulai dengan bagian umum yang dimiliki setiap laporan (identitas, waktu, brief, langkah, penilaian, masalah, celah); tambahkan yang dikerjakan agen ini. Papan menyimpannya bersama agen.",
+    "templatePlaceholder": "## Aturannya …",
+    "add": "Tambah agen"
+  },
+  "gettingStarted": {
+    "agentEmpty": "Belum ada proyek. Manusia membuat yang pertama dari Memulai di Beranda.",
+    "title": "Memulai · {{done}} dari {{total}}",
+    "intro": "Empat langkah sebelum agen bekerja di papan ini. Masing-masing tercentang sendiri setelah selesai.",
+    "entryTip": "Langkah untuk mulai bekerja di papan ini",
+    "entryAria": "Memulai, {{done}} dari {{total}} selesai",
+    "entryShort": "Memulai ·",
+    "popoverIntro": "Setiap langkah tercentang sendiri setelah selesai.",
+    "dismissTip": "Sembunyikan Memulai untuk selamanya",
+    "dismissAria": "Tutup Memulai",
+    "menuItem": "Memulai · {{done}}/{{total}}",
+    "stepsAria": "Langkah Memulai",
+    "stepAria": "{{title}}: {{state}}",
+    "titles": {
+      "tools": "Alat di mesin ini",
+      "project": "Buat proyek dan tambahkan repositori pertamanya",
+      "agent": "Hubungkan agen",
+      "ticket": "Tulis tiket pertama dan serahkan ke agen"
+    },
+    "state": {
+      "done": "Selesai",
+      "checking": "Memeriksa…",
+      "notDone": "Belum selesai"
+    },
+    "couldNotCheck": "Tidak bisa memeriksa langkah ini: {{error}}",
+    "tools": {
+      "hint": "Papan menjalankan <code>git</code> dan <code>gh</code> (sudah masuk) di PATH-nya; <code>claude</code> opsional, hanya untuk laporan papan sendiri (Laporan → Buat); <code>node</code> dan <code>pnpm</code> hanya untuk preview.",
+      "missing": "<problem>{{problem}}</problem>. Solusi: {{fix}}."
+    },
+    "project": {
+      "hint": "Proyek mengelompokkan checkout tempat agen bekerja. Repositori pertamanya mengambil folder checkout, repo GitHub, dan branch dasarnya.",
+      "addRepo": "Tambah repositori ke {{name}}",
+      "new": "Proyek baru"
+    },
+    "agent": {
+      "hint": "Di Hubungkan agen, Buat perintah membuat token agen dan perintah untuk dijalankan di terminal Anda: hubungkan server MCP papan dan pasang skill papan."
+    },
+    "ticket": {
+      "hint": "Tulis yang harus dikerjakan sebagai tiket di halaman Fitur proyek. Lalu, di repo Anda, jalankan <code>claude</code> dan ketik <code>/board pick up the next ticket</code>.",
+      "write": "Tulis tiket",
+      "createFirst": "Buat proyek dulu (langkah 2)."
+    },
+    "checkAgain": "Periksa lagi"
+  },
+  "projectSwitcher": {
+    "project": "Proyek",
+    "select": "Pilih proyek",
+    "projects": "Proyek",
+    "repos_other": "{{count}} repo",
+    "tickets_other": "{{count}} tiket",
+    "openPrs_other": "{{count}} PR terbuka",
+    "newProject": "Proyek baru…",
+    "manage": "Kelola proyek…",
+    "newTitle": "Proyek baru",
+    "newDescription": "Proyek mengelompokkan repositori. Tambahkan repo-nya dari halaman Repositori.",
+    "name": "Nama",
+    "create": "Buat",
+    "manageDescription": "Ganti nama atau hapus proyek. Tambah, pindah, atau hapus repo-nya di halaman Repositori.",
+    "renamed": "Diganti namanya menjadi {{name}}",
+    "nameOf": "Nama {{name}}",
+    "rename": "Ganti nama",
+    "deleteName": "Hapus {{name}}",
+    "deleteTitle": "Hapus {{name}}?",
+    "deleteText": "Ikut terhapus: {{repos}}, {{tickets}}, {{openPrs}}, serta tinjauan dan log hariannya. Checkout di disk tidak disentuh. Untuk mempertahankan repo, pindahkan dulu ke proyek lain.",
+    "keep": "Pertahankan",
+    "delete": "Hapus",
+    "noRepos": "tanpa repo",
+    "counts": "{{tickets}} · {{openPrs}}"
+  },
+  "newTicket": {
+    "newTicket": "Tiket baru",
+    "newLane": "Lane baru",
+    "description": "Tulis seperti Anda memberi brief ke rekan kerja: agen membaca ini sebelum mulai.",
+    "laneDescription": "Bagian paralel dari <parent>{{title}}</parent>, dengan branch, penerima tugas, tugas, dan pembaruannya sendiri.",
+    "title": "Judul",
+    "instructions": "Instruksi",
+    "instructionsPlaceholder": "Apa yang dikerjakan, bagaimana tahu sudah selesai, apa yang tidak boleh dilakukan. Tempel atau lepas file untuk melampirkannya.",
+    "initialTasks": "Tugas awal",
+    "phases": "Dimulai dengan fase proyek: {{phases}}. Tugas yang diketik di sini masuk di bawah {{first}}.",
+    "stage": "Tahap",
+    "complexity": "Kompleksitas",
+    "repository": "Repositori",
+    "assignee": "Penerima tugas (opsional)",
+    "tags": "Tag (opsional)",
+    "tagsPlaceholder": "Tinggi, Formulir",
+    "branchesOff": "Bercabang dari <branch>{{branch}}</branch> bila di repo yang sama.",
+    "uploading": "Mengunggah…",
+    "create": "Buat",
+    "workflow": "Alur kerja"
+  },
+  "notes": {
+    "title": "Catatan",
+    "manageAll": "Kelola semua ({{count}})",
+    "add": "Tambah catatan",
+    "dialogTitle": "Catatan ({{count}})",
+    "dialogDescription": "Satu fakta singkat masing-masing, yang disematkan di atas. Penulis catatan, orkestrator, atau manusia bisa mengubahnya.",
+    "empty": "Catatan adalah satu fakta singkat yang tidak boleh ditemukan ulang sesi berikutnya — perintah, path, aturan, pengingat. Jadikan satu fakta tiap catatan, jangan dokumen.",
+    "exampleLabel": "Perintah rilis",
+    "exampleLabel2": "Port preview",
+    "exampleBody2": "47101 ke atas, satu per eksekusi",
+    "unpinTip": "Lepas sematan catatan ini",
+    "pinTip": "Sematkan catatan ini di atas yang lain",
+    "unpin": "Lepas sematan {{label}}",
+    "pin": "Sematkan {{label}}",
+    "editTip": "Ubah catatan ini",
+    "edit": "Ubah {{label}}",
+    "deleteTip": "Hapus catatan ini",
+    "delete": "Hapus {{label}}",
+    "labelAria": "Label catatan",
+    "bodyAria": "Isi catatan",
+    "save": "Simpan catatan",
+    "cancel": "Batal"
+  },
+  "actor": {
+    "howBoard": "papan, dicatat otomatis",
+    "howHuman": "Anda, masuk dengan passkey",
+    "howOrchestrator": "agen, masuk dengan token yang dijadikan manusia sebagai orkestrator: ia juga mengubah instruksi proyek",
+    "howWorkerUnder": "agen, pekerja di bawah {{parent}}",
+    "howAgent": "agen, masuk dengan token",
+    "projectAgent": "{{name}} (salah satu agen proyek)",
+    "projectAgentVia": "{{name}} (salah satu agen proyek, dikirim lewat {{chain}})",
+    "via": "lewat {{via}}",
+    "tip": "{{chain}}: {{how}}",
+    "under": "di bawah {{parent}}",
+    "by": "oleh <actor/>"
+  },
+  "postTools": {
+    "editText": "Ubah teks",
+    "cancel": "Batal",
+    "saving": "Menyimpan…",
+    "save": "Simpan",
+    "edited": "diubah",
+    "editedAt": "diubah {{when}}",
+    "editLabel": "ubah",
+    "edit": "Ubah",
+    "deleteLabel": "hapus",
+    "delete": "Hapus",
+    "deletePostTitle": "Hapus kiriman ini?",
+    "deleteReplyTitle": "Hapus balasan ini?",
+    "deleteText": "Balasan dan file-nya ikut terhapus. Ini tidak bisa dibatalkan.",
+    "keep": "Pertahankan"
+  },
+  "pickers": {
+    "unassigned": "Belum ditugaskan",
+    "reserved": "{{name}} (dipesan)",
+    "projectAgents": "Agen proyek: hanya mereka yang mengerjakannya",
+    "connectedAgents": "Agen terhubung: dibagi",
+    "noBranchYet": "— belum ada —",
+    "clear": "Hapus {{what}}"
+  },
+  "prState": {
+    "merge": {
+      "clean": {
+        "label": "bisa di-merge",
+        "title": "Tidak ada konflik dengan dasar."
+      },
+      "conflicts": {
+        "label": "konflik",
+        "title": "Konflik dengan branch dasar: perlu rebase atau merge sebelum bisa mendarat."
+      },
+      "behind": {
+        "label": "tertinggal dari dasar",
+        "title": "Dasar sudah maju dan proteksi branch meminta branch diperbarui dulu."
+      },
+      "blocked": {
+        "label": "terblokir",
+        "title": "Proteksi branch: tinjauan atau pemeriksaan yang diwajibkan masih kurang."
+      },
+      "checking": {
+        "label": "memeriksa",
+        "title": "GitHub masih menghitung apakah bisa di-merge (biasanya tepat setelah push). Segarkan sebentar lagi."
+      }
+    },
+    "ci": {
+      "passing": "CI lulus",
+      "failing": "CI gagal",
+      "pending": "CI berjalan",
+      "none": "tanpa CI"
+    },
+    "review": {
+      "APPROVED": "disetujui",
+      "CHANGES_REQUESTED": "perubahan diminta",
+      "REVIEW_REQUIRED": "perlu tinjauan"
+    },
+    "checkedLocal": "{{title}} Diperiksa di sini terhadap origin/{{base}}.",
+    "checkedLocalAt": "{{title}} Diperiksa di sini terhadap origin/{{base}}, {{when}}.",
+    "outdated": "origin/{{base}} bergerak setelah kata GitHub: menunggu GitHub memeriksa lagi.",
+    "outdatedAt": "origin/{{base}} bergerak setelah kata GitHub pada {{when}}: menunggu GitHub memeriksa lagi.",
+    "githubAt": "{{title}} Kata GitHub per {{when}}.",
+    "githubLast": "{{title}} Kata GitHub per penyegaran terakhir.",
+    "checks": "{{pass}} lulus · {{failed}} gagal · {{pending}} berjalan · {{skipped}} dilewati",
+    "noChecks": "Tidak ada pemeriksaan pada commit head.",
+    "draft": "draf",
+    "failed": "gagal:",
+    "mergeConflicts": "konflik merge"
+  },
+  "pushDot": {
+    "pushed": "di-push",
+    "pushedBehind": "di-push, tertinggal {{count}}",
+    "pushedBehindTitle_other": "di-push; origin punya {{count}} commit lebih banyak",
+    "ahead": "{{count}} belum di-push",
+    "aheadTitle_other": "belum di-push: {{count}} commit hanya di sini",
+    "aheadBehindTitle_other": "belum di-push: {{count}} commit hanya di sini; origin juga punya {{behind}} yang tidak ada di branch ini",
+    "localOnly": "tidak ada di origin",
+    "localOnlyTitle": "belum di-push: tidak ada branch itu di origin",
+    "localOnlyAheadTitle_other": "belum di-push: tidak ada branch itu di origin, {{count}} commit hanya di sini",
+    "itsBase": "dasarnya",
+    "merged": "di-merge ke {{into}}",
+    "mergedTitle": "di-merge ke {{into}}; branch sudah hilang dari origin",
+    "remoteOnly": "hanya di origin",
+    "remoteOnlyTitle": "hanya di origin: tanpa branch lokal",
+    "none": "tidak ditemukan",
+    "noneTitle": "tidak ada branch itu di sini maupun di origin",
+    "checked": "diperiksa {{ago}}",
+    "notFetched": "origin belum di-fetch",
+    "fetchNow": "Fetch origin sekarang"
+  },
+  "clock": {
+    "typeTime": "{{label}} (ketik waktu)",
+    "amPm": "{{label}}: AM atau PM",
+    "setHourOrMinute": "{{label}}: atur jam atau menit",
+    "hour": "Jam",
+    "minute": "Menit"
+  },
+  "markdown": {
+    "agentChip": "{{name}}, salah satu agen proyek",
+    "pages_other": "{{count}} halaman"
+  },
+  "editor": {
+    "text": "Teks",
+    "bold": "Tebal",
+    "italic": "Miring",
+    "strikethrough": "Coret",
+    "inlineCode": "Kode inline",
+    "heading": "Judul",
+    "bulletList": "Daftar berpoin",
+    "numberedList": "Daftar bernomor",
+    "checklist": "Daftar centang",
+    "quote": "Kutipan",
+    "codeBlock": "Blok kode",
+    "link": "Tautan",
+    "linkTo": "Tautkan ke",
+    "attaching": "Melampirkan file…",
+    "attach": "Lampirkan file",
+    "formatting": "Pemformatan"
+  },
+  "projectNav": {
+    "homeText": "Semua proyek sekilas: yang menunggu Anda, yang sedang dikerjakan, yang selesai hari ini, dan yang berikutnya.",
+    "overviewText": "Yang perlu Anda, yang bergerak, yang berikutnya.",
+    "page": "Halaman proyek",
+    "toggle": {
+      "expanded": "Ciutkan bilah samping",
+      "shrunk": "Sembunyikan bilah samping",
+      "hidden": "Tampilkan bilah samping"
+    }
+  },
+  "palette": {
+    "page": {
+      "overview": {
+        "title": "Ikhtisar",
+        "subtitle": "Ringkasan proyek",
+        "keywords": "beranda, proyek, ringkasan, perlu anda, home, overview, summary, needs you"
+      },
+      "board": {
+        "title": "Papan",
+        "subtitle": "Fitur berjalan",
+        "keywords": "tiket, fitur, kanban, tahap, dikerjakan, tickets, features, stages, in progress"
+      },
+      "roadmap": {
+        "title": "Roadmap",
+        "subtitle": "Linimasa pekerjaan",
+        "keywords": "linimasa, pekerjaan, jadwal, timeline, work, schedule"
+      },
+      "prs": {
+        "title": "Antrean PR",
+        "subtitle": "Pull request untuk ditinjau dan yang menunggu orang lain",
+        "keywords": "pr, pull request, tinjauan, merge, prs, reviews"
+      },
+      "reviews": {
+        "title": "Tinjauan",
+        "subtitle": "Hasil tinjauan, di antrean PR",
+        "keywords": "putusan, temuan, hasil tinjauan, pr, verdict, findings, review results"
+      },
+      "previews": {
+        "title": "Preview",
+        "subtitle": "Preview yang dijalankan papan",
+        "keywords": "eksekusi, server, port, runs, servers, ports"
+      },
+      "gallery": {
+        "title": "Galeri",
+        "subtitle": "File dan tangkapan layar",
+        "keywords": "file, gambar, unggahan, files, images, uploads, screenshots"
+      },
+      "team": {
+        "title": "Tim",
+        "subtitle": "Agen yang bekerja dengan proyek",
+        "keywords": "agen, persona, pemesanan, team, agents, personas, reservations"
+      },
+      "daily": {
+        "title": "Harian",
+        "subtitle": "Hari proyek",
+        "keywords": "aktivitas, hari ini, laporan, daily, activity, today, report"
+      },
+      "cleanup": {
+        "title": "Pembersihan",
+        "subtitle": "Branch dan worktree yang tertinggal",
+        "keywords": "branch, worktree, hapus, sisa, cleanup, delete, leftovers"
+      },
+      "repositories": {
+        "title": "Repositori",
+        "subtitle": "Checkout yang dibaca proyek ini",
+        "keywords": "repo, git, checkout, repositories"
+      },
+      "instructions": {
+        "title": "Instruksi",
+        "subtitle": "Pengaturan: yang dibaca setiap agen",
+        "keywords": "pengaturan, aturan, tata letak, fase, tahap, eksekusi, settings, rules, layout, phases, stages, runs"
+      },
+      "home": {
+        "title": "Beranda",
+        "subtitle": "Semua proyek sekilas",
+        "keywords": "proyek, ringkasan, papan, projects, summary, board, home"
+      },
+      "dailyGlobal": {
+        "title": "Harian",
+        "subtitle": "Yang dikerjakan setiap proyek",
+        "keywords": "aktivitas, laporan, hari ini, daily, activity, reports, today"
+      },
+      "connect": {
+        "title": "Hubungkan",
+        "subtitle": "Hubungkan agen dan pasang skill",
+        "keywords": "agen, mcp, token, penyiapan, pasang, agents, setup, install, connect"
+      },
+      "settingsGlobal": {
+        "title": "Pengaturan",
+        "subtitle": "Preferensi seluruh papan",
+        "keywords": "preferensi, tema, preview, perangkat, preferences, theme, devices, settings"
+      },
+      "workflow": {
+        "title": "Alur kerja",
+        "subtitle": "Langkah yang diikuti agen untuk sebuah tiket, berupa pohon",
+        "keywords": "langkah, preset, putaran tinjauan, serah terima, delegasi, urutan, steps, presets, review rounds, hand-off, delegation, order"
+      }
+    },
+    "setting": {
+      "theme": {
+        "title": "Tema",
+        "subtitle": "Sistem, terang, atau gelap",
+        "keywords": "tampilan, warna, gelap, terang, sistem, appearance, colour, color, dark, light, system, theme"
+      },
+      "defaultAgent": {
+        "title": "CLI agen bawaan",
+        "subtitle": "CLI yang dibuka Hubungkan",
+        "keywords": "agen, claude, codex, opencode, hubungkan, agent, connect"
+      },
+      "previewsLimit": {
+        "title": "Batas preview",
+        "subtitle": "Berapa preview yang berjalan sekaligus",
+        "keywords": "preview, eksekusi, batas, port, runs, limit, ports"
+      },
+      "updates": {
+        "title": "Pembaruan",
+        "subtitle": "Pembaruan aplikasi papan",
+        "keywords": "versi, rilis, peningkatan, version, release, upgrade, updates"
+      },
+      "agentRoles": {
+        "title": "Peran agen",
+        "subtitle": "Pekerja atau orkestrator",
+        "keywords": "agen, token, orkestrator, pekerja, izin, agents, orchestrator, worker, permissions, roles"
+      },
+      "tailnet": {
+        "title": "Pintu masuk tailnet",
+        "subtitle": "Jangkau papan dari perangkat lain",
+        "keywords": "tailscale, jaringan, jarak jauh, publik, network, remote, public, tailnet"
+      },
+      "devices": {
+        "title": "Perangkat dan passkey",
+        "subtitle": "Perangkat yang masuk",
+        "keywords": "passkey, sesi, masuk, keamanan, sessions, sign in, security, devices"
+      },
+      "instructions": {
+        "title": "Instruksi proyek",
+        "subtitle": "Yang dibaca setiap agen",
+        "keywords": "aturan, agen, prompt, rules, agents, instructions"
+      },
+      "instructionsHistory": {
+        "title": "Riwayat instruksi",
+        "subtitle": "Setiap perubahan instruksi",
+        "keywords": "versi, riwayat, perubahan, versions, history, changes"
+      },
+      "defaultPhases": {
+        "title": "Fase bawaan",
+        "subtitle": "Tugas awal setiap tiket baru",
+        "keywords": "tugas, fase, tiket baru, tasks, phases, new ticket"
+      },
+      "tagSuggestions": {
+        "title": "Saran tag",
+        "subtitle": "Tag yang ditawarkan pada tiket",
+        "keywords": "tag, label, tags, labels"
+      },
+      "stalledTickets": {
+        "title": "Tiket macet",
+        "subtitle": "Kapan tiket tampil macet",
+        "keywords": "macet, menit, diam, stall, minutes, idle"
+      },
+      "notifications": {
+        "title": "Notifikasi",
+        "subtitle": "Peringatan yang ditampilkan proyek ini",
+        "keywords": "peringatan, bisukan, lonceng, pengingat, alerts, mute, bell, reminders"
+      },
+      "stages": {
+        "title": "Tahap",
+        "subtitle": "Kolom papan dan artinya",
+        "keywords": "kolom, alur kerja, status, tahap kerja, columns, workflow, work stage, stages"
+      },
+      "runs": {
+        "title": "Eksekusi",
+        "subtitle": "Preview dan job yang dijalankan papan",
+        "keywords": "preview, job, perintah, build, jobs, commands, runs"
+      },
+      "layout": {
+        "title": "Tata letak",
+        "subtitle": "Halaman, kartu, dan bagian tiket",
+        "keywords": "susun, menu, bilah samping, arrange, sidebar, layout"
+      },
+      "agentTokens": {
+        "title": "Token agen",
+        "subtitle": "Token yang dipakai agen untuk masuk",
+        "keywords": "token, agen, kunci, cabut, peran, tokens, agents, keys, revoke, roles"
+      },
+      "skills": {
+        "title": "Skill tinjauan",
+        "subtitle": "Pasang skill tinjauan (Claude Code)",
+        "keywords": "skill, tinjauan, pasang, skills, review, install"
+      }
+    },
+    "kinds": {
+      "ticket": "Tiket",
+      "page": "Halaman",
+      "setting": "Pengaturan",
+      "action": "Aksi"
+    },
+    "keywords": {
+      "newTicket": "buat, tambah, tiket, lane, baru, create, add, ticket, new",
+      "copyLink": "url, bagikan, clipboard, tautan, share, link",
+      "startPreview": "jalankan, preview, mulai, server, run, start",
+      "stopPreview": "jalankan, preview, hentikan, server, run, stop",
+      "switchProject": "proyek, ganti, buka, project, switch, open"
+    },
+    "recent": "Terbaru",
+    "notStarted_other": "{{count}} belum dimulai: {{details}}",
+    "notStopped_other": "{{count}} belum dihentikan: {{details}}",
+    "nothingRunning": "Tidak ada yang berjalan",
+    "createIn": "Buat tiket di {{name}}",
+    "createInThis": "Buat tiket di proyek ini",
+    "copyLink": "Salin tautan tiket",
+    "copyLinkText": "Taruh alamat tiket ini di clipboard",
+    "linkCopied": "Tautan tiket tersalin",
+    "startPreview": "Mulai preview",
+    "startPreviewText": "Mulai preview dan job tiket",
+    "stopPreview": "Hentikan preview",
+    "stopPreviewText": "Hentikan preview dan job tiket",
+    "switchTo": "Pindah ke {{name}}",
+    "currentProject": "Proyek saat ini",
+    "openOverview": "Buka Ikhtisarnya",
+    "searchTip": "Cari di papan (Ctrl+F)",
+    "search": "Cari di papan",
+    "description": "Cari tiket, halaman, pengaturan, dan aksi. Gunakan tombol atas dan bawah untuk bergerak, Enter untuk menjalankan, dan Escape untuk menutup.",
+    "placeholder": "Cari tiket, halaman, pengaturan, dan aksi…",
+    "close": "Tutup pencarian",
+    "results": "Hasil pencarian",
+    "searching": "Mencari…",
+    "noMatches": "Tidak ada yang cocok untuk “{{query}}”.",
+    "type": "Ketik untuk mencari di papan.",
+    "toMove": "untuk bergerak",
+    "toOpen": "untuk membuka",
+    "toClose": "untuk menutup",
+    "anywhere": "di mana saja"
+  },
+  "signIn": {
+    "finishTitle": "Selesaikan penyiapan di host",
+    "finishBody": "Papan ini belum punya akun. Akun dibuat di mesin tempat papan berjalan: buka {{url}} di sana. Lalu kembali ke sini untuk menambahkan perangkat ini dengan tautan dari papan.",
+    "setupTitle": "Penyiapan",
+    "setupHeading": "Siapkan CrossBoard",
+    "setupIntro": "Buat akun papan dan passkey pertamanya, di mesin ini. Perangkat lain ditambahkan nanti dari Pengaturan, dengan tautan sekali pakai.",
+    "nameLabel": "Nama Anda di papan",
+    "deviceLabel": "Perangkat ini",
+    "deviceDefault": "Komputer ini",
+    "devicePlaceholder": "Ponsel, laptop…",
+    "createPasskey": "Buat passkey",
+    "loginTitle": "Masuk",
+    "loginHeading": "Masuk",
+    "loginWelcomeMachine": "Selamat datang kembali, {{name}}. Masuk dengan passkey mesin ini.",
+    "loginWelcomeDevice": "Selamat datang kembali, {{name}}. Masuk dengan passkey perangkat ini.",
+    "loginButton": "Masuk dengan passkey",
+    "enrollTitle": "Tambah perangkat",
+    "enrollNeedsLinkHeading": "Tambah perangkat",
+    "enrollNeedsLink": "Halaman ini memerlukan tautan dari papan: di perangkat yang sudah masuk, buka Pengaturan, Perangkat, dan tekan Tambah perangkat.",
+    "enrollHeading": "Tambah perangkat ini",
+    "enrollIntro": "Buat passkey untuk {{name}} di perangkat ini. Tautan hanya berlaku sekali, selama 15 menit.",
+    "noPasskeys": "Browser ini tidak bisa memakai passkey di sini.",
+    "promptClosed": "Dialog passkey ditutup atau kedaluwarsa. Coba lagi."
+  },
+  "ticketBoard": {
+    "stage": "Tahap",
+    "archiveTip_other": "Arsipkan {{count}} tiket di {{stage}}",
+    "archiveAll": "Arsipkan semua",
+    "archiveTitle_other": "Arsipkan {{count}} tiket?",
+    "archiveDescription": "Setiap tiket di {{stage}} keluar dari papan, beserta lane-nya. Tiket tetap ada di Diarsipkan, tempat masing-masing bisa dipulihkan, dan halamannya tetap terbuka.",
+    "cancel": "Batal",
+    "archive": "Arsipkan",
+    "decisions_other": "{{count}} keputusan diperlukan",
+    "tasksBlocked_other": "{{count}} tugas terblokir",
+    "previousStage": "Tahap sebelumnya",
+    "nextStage": "Tahap berikutnya",
+    "lanes_other": "{{count}} lane",
+    "laneStage": "{{count}} {{stage}}",
+    "hitInstructions": "Instruksi",
+    "hitPost": "Kiriman",
+    "hitReply": "Balasan",
+    "noTickets": "Tidak ada tiket.",
+    "nothingArchived": "Tidak ada yang diarsipkan.",
+    "archived": "diarsipkan {{when}}",
+    "archivedBy": "diarsipkan {{when}} oleh <actor/>",
+    "restore": "Pulihkan"
+  },
+  "ticketList": {
+    "archivedToast_other": "{{count}} tiket diarsipkan",
+    "restoredToast": "#{{id}} dipulihkan ke papan",
+    "title": "Fitur berjalan",
+    "board": "Papan",
+    "list": "Daftar",
+    "archived": "Diarsipkan",
+    "noMatch": "Tidak ada tiket yang cocok dengan “{{query}}”.",
+    "clearSearch": "Hapus pencarian",
+    "state": "Status",
+    "clearState": "Hapus filter status",
+    "allTags": "Semua tag",
+    "filterByTag": "Filter menurut tag",
+    "tags": "Tag",
+    "searchTags": "Cari tag",
+    "noTagsMatch": "Tidak ada tag yang cocok",
+    "tickets_other": "{{count}} tiket",
+    "showEveryTag": "Tampilkan semua tag",
+    "clearTag": "Hapus filter tag",
+    "loadingTags": "Memuat tag…",
+    "couldNotLoadTags": "Tidak bisa memuat tag.",
+    "retry": "Coba lagi",
+    "searchTickets": "Cari tiket",
+    "searchPlaceholder": "Cari menurut nama atau utas",
+    "clearSearchAria": "Hapus pencarian"
+  },
+  "needs": {
+    "titleIn": "#{{id}} {{title}}: {{branch}} ada di {{into}}",
+    "titleNotIn": "#{{id}} {{title}}: {{branch}} belum di-merge ke {{into}}",
+    "titleDone": "#{{id}} {{title}}: selesai",
+    "titleNotDone": "#{{id}} {{title}}: belum selesai, tanpa branch",
+    "markDoneAnyway": "Tandai selesai saja",
+    "mergeFirst": "Merge dulu:\n{{list}}",
+    "badge": "butuh {{list}}",
+    "statusMerged": "Butuh #{{id}} · di-merge",
+    "statusNotMerged": "Butuh #{{id}} · belum di-merge",
+    "removeNeed": "Hapus kebutuhan akan #{{id}}",
+    "addPlaceholder": "Tambah tiket…",
+    "noOthers": "Tidak ada tiket lain",
+    "includes": "Mencakup pekerjaan belum di-merge dari <goto>{{ref}}</goto>",
+    "addAsNeed": "Tambah sebagai kebutuhan",
+    "autoTitle": "Ditambahkan oleh papan: branch tiket ini berisi commit tiket itu yang belum di-merge. Ini hilang saat branch tidak lagi berisinya, dan jika dihapus di sini, tidak ditambahkan lagi untuk commit yang sama.",
+    "addedByBoard": "Ditambahkan oleh papan",
+    "cannotBeDoneUnsure": "Papan tidak bisa memastikan milik siapa commit ini, jadi tidak menambahkan kebutuhan. #{{id}} tidak bisa selesai sampai branch #{{need}} di-merge ke dasarnya."
+  },
+  "verdict": {
+    "approve": "Setujui",
+    "disapprove": "Tolak",
+    "approved": "Disetujui",
+    "disapproved": "Ditolak",
+    "disapproveTip": "Tolak: membatalkan lane ini",
+    "approvedBy": "Disetujui oleh {{who}} {{when}}. Klik untuk menariknya kembali.",
+    "disapprovedBy": "Ditolak oleh {{who}} {{when}}. Klik untuk menariknya kembali (membukanya lagi)."
+  },
+  "reviewResult": {
+    "pr": "PR #{{number}}",
+    "counts": "{{confirmed}} terkonfirmasi · {{plausible}} masuk akal · {{unverified}} belum diverifikasi",
+    "title": "Hasil tinjauan"
+  },
+  "thread": {
+    "replyActions": "Aksi balasan",
+    "replyLabel": "balasan",
+    "reply": "Balas",
+    "ask": " · @{{name}} bertanya ke agen itu",
+    "empty": "Belum ada komentar.",
+    "replyingTo": "membalas {{name}}",
+    "cancel": "batal",
+    "placeholderCompact": "Balas…{{ask}}",
+    "placeholder": "Tulis balasan{{ask}}",
+    "sending": "Mengirim…"
+  },
+  "prQueue": {
+    "title": "Antrean PR",
+    "subtitle": "PR untuk ditinjau dan milik Anda, menurut status tinjauan.",
+    "filters": {
+      "me": {
+        "label": "Untuk ditinjau",
+        "title": "PR orang lain yang Anda tinjau: menunggu persetujuan Anda, disetujui Anda, atau ditahan karena komentar Anda"
+      },
+      "others": {
+        "label": "Menunggu orang lain",
+        "title": "PR Anda (juga milik agen): menunggu persetujuan, disetujui semua peninjau, atau ditahan karena komentar mereka"
+      },
+      "all": {
+        "label": "Semua PR",
+        "title": "Setiap PR terbuka di repositori, siapa pun penulisnya dan terlepas dari apakah melibatkan Anda"
+      }
+    },
+    "reviewers": {
+      "mine": "Hanya saya peninjaunya",
+      "involving": "Melibatkan saya"
+    },
+    "tabs": {
+      "pending": "Menunggu",
+      "reviewed": "Ditinjau",
+      "on_hold": "Ditahan",
+      "done": "Selesai"
+    },
+    "empty": {
+      "me": "Tidak ada yang {{stage}} untuk ditinjau.",
+      "others": "Tidak ada yang {{stage}} menunggu orang lain.",
+      "all": "Tidak ada yang {{stage}} di antara PR terbuka."
+    },
+    "refresh": "Segarkan",
+    "mergeAfterTip": "Tiketnya perlu ini di-merge dulu:\n{{list}}",
+    "mergeAfterItem": "PR #{{number}} (dari #{{ticketId}} {{title}})",
+    "mergeAfter": "merge setelah <refs/>",
+    "updated": "diperbarui {{when}}",
+    "merged": "di-merge {{when}}",
+    "myReview": "tinjauan saya: {{state}}",
+    "myReviewState": {
+      "approved": "disetujui",
+      "changes_requested": "perubahan diminta",
+      "commented": "berkomentar",
+      "dismissed": "dibatalkan",
+      "pending": "menunggu"
+    },
+    "forYourReview": "untuk Anda tinjau",
+    "yourPr": "PR Anda",
+    "fromTicket": "dari #{{id}} {{title}}",
+    "reviewFresh": "ditinjau pada SHA ini",
+    "reviewStale": "tinjauan untuk SHA yang lebih lama",
+    "openTicket": "Buka tiket",
+    "release": "lepas",
+    "hold": "tahan",
+    "holdTitle": "Tahan #{{number}}",
+    "holdText": "Catatan untuk Anda dan agen. GitHub tidak disentuh.",
+    "holdPlaceholder": "Mengapa menunggu…",
+    "holdConfirm": "Tahan",
+    "notInvolvingYou": "tidak melibatkan Anda"
+  },
+  "workStatus": {
+    "state": {
+      "waiting": "Menunggu Anda",
+      "yourTurn": "Giliran Anda",
+      "lost": "Kontak hilang",
+      "noWord": "Tanpa kabar",
+      "quiet": "Senyap",
+      "working": "Sedang bekerja",
+      "nothing": "Tidak ada yang terbuka"
+    },
+    "line": {
+      "yourTurn": "Giliran Anda · menunggu {{duration}}",
+      "lost": "Kontak hilang · {{duration}}",
+      "noWord": "Tanpa kabar {{duration}}",
+      "quiet": "Senyap {{duration}}",
+      "working": "Sedang bekerja · kabar terakhir {{duration}}"
+    },
+    "unit": {
+      "m": "{{count}}mnt",
+      "h": "{{count}}j",
+      "d": "{{count}}h"
+    },
+    "since": "sejak {{time}}",
+    "minutes": "{{count}} mnt",
+    "lastWord": "kabar terakhir {{count}} mnt lalu",
+    "noWordYet": "belum ada kabar",
+    "why": {
+      "inStage": "di {{stage}}, tidak ada kabar dari agen sejak {{time}}",
+      "waitingOn": "menunggu {{on}}, tidak ada kabar sejak {{time}}",
+      "nothingOpen": "tidak ada yang terbuka sejak {{time}}",
+      "work": "pekerjaan",
+      "ended": "tidak ada yang terbuka sejak {{phase}} berakhir pukul {{time}}",
+      "endedQuote": "tidak ada yang terbuka sejak {{phase}} berakhir pukul {{time}} ('{{quote}}')",
+      "noProgress": "tidak ada kiriman kemajuan sejak {{time}}"
+    },
+    "verb": {
+      "spec": "Menyusun spesifikasi",
+      "build": "Membangun",
+      "review": "Meninjau",
+      "verify": "Memverifikasi",
+      "pr": "Membuka PR",
+      "preview": "Melakukan preview",
+      "merge": "Merge",
+      "work": "Bekerja"
+    },
+    "nobodyHeard": "Belum ada kabar dari siapa pun",
+    "lastHeard": "Kabar terakhir {{time}}",
+    "worked": "Bekerja",
+    "waited": "Menunggu",
+    "onYou": "Pada Anda",
+    "defs": {
+      "worked": "Bekerja: waktu agen memiliki pekerjaan terbuka, tidak menunggu seseorang.",
+      "waited": "Menunggu: waktu tidak ada yang bergerak pada tiket dan tidak ada orang yang ditunggu.",
+      "onYou": "Pada Anda: waktu menunggu seseorang (penantian manusia, atau tahap terblokir)."
+    }
+  },
+  "workTimeline": {
+    "noWork": "Belum ada pekerjaan tercatat.",
+    "now": "sekarang",
+    "board": "Papan",
+    "unnamed": "tanpa nama",
+    "work": "pekerjaan",
+    "theHuman": "manusia",
+    "running": "berjalan",
+    "neverClosed": "tidak pernah ditutup",
+    "phaseRound": "{{phase}} putaran {{round}}",
+    "phaseRoundShort": "{{phase}} p{{round}}",
+    "delegatedTo": "didelegasikan ke {{on}}",
+    "subAgentOf": "{{name}}, subagen dari {{parent}}",
+    "created": "dibuat {{count}} mnt sebelum pekerjaan",
+    "notToScaleNote": "Waktu ini ditampilkan sebagai blok pendek, bukan sepanjang aslinya.",
+    "alsoThenItem": "{{name}}, {{time}}",
+    "duration": {
+      "seconds": "{{count}}d",
+      "minutes": "{{count}}mnt",
+      "hours": "{{count}}j",
+      "hoursMinutes": "{{h}}j {{m}}mnt"
+    },
+    "spoken": {
+      "underMinute": "kurang dari semenit",
+      "days": "{{count}} h",
+      "minutes": "{{count}} mnt",
+      "hours": "{{count}} j",
+      "hoursMinutes": "{{h}} j {{m}} mnt"
+    },
+    "mark": {
+      "push": "push",
+      "pr": "pull request",
+      "preview": "preview",
+      "merge": "merge",
+      "other": "peristiwa papan"
+    },
+    "label": {
+      "via": " (lewat {{by}})",
+      "open": ", terbuka",
+      "span": "{{phase}} oleh {{agent}}{{via}}, {{from}} sampai {{to}}, {{duration}}{{open}}",
+      "wait": "menunggu: {{reason}} ({{agent}}), {{from}} sampai {{to}}, {{duration}}{{open}}{{note}}",
+      "delegation": "didelegasikan ke {{on}} oleh {{agent}}, {{from}} sampai {{to}}, {{duration}}{{open}}{{note}}",
+      "handoff": "{{from}} menyerahkan pekerjaan ke {{to}}, {{time}}{{note}}",
+      "mark": "{{name}}{{note}}, {{time}}",
+      "collapsed": "{{label}}, {{from}} sampai {{to}}, {{duration}}, tidak digambar sesuai skala"
+    },
+    "fact": {
+      "delegatedTo": "Didelegasikan ke",
+      "by": "Oleh",
+      "started": "Mulai",
+      "ended": "Selesai",
+      "note": "Catatan",
+      "waiting": "Menunggu",
+      "waitingFor": "Menunggu",
+      "on": "Pada",
+      "duration": "Durasi",
+      "who": "Siapa",
+      "work": "Pekerjaan",
+      "from": "Dari",
+      "to": "Ke",
+      "at": "Pada",
+      "event": "Peristiwa",
+      "notToScale": "Tidak sesuai skala",
+      "alsoThen": "Juga saat itu"
+    },
+    "summary": {
+      "noAgentWork": "Tidak ada pekerjaan agen tercatat.",
+      "worked": "bekerja {{duration}}",
+      "waited": "menunggu {{duration}} untuk {{target}}",
+      "delegated": "{{on}}, didelegasikan",
+      "clause": "{{agent}} {{parts}}",
+      "workBy_other": "Pekerjaan oleh {{count}} agen selama {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_other": "Aktivitas oleh {{count}} agen selama {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "stillGoing": " Masih berlangsung.",
+      "notToScale": " Tidak sesuai skala: {{skipped}}."
+    },
+    "card": {
+      "title": "Linimasa",
+      "showMore": "Tampilkan lebih banyak",
+      "showLess": "Tampilkan lebih sedikit",
+      "story": "Kisah linimasa"
+    },
+    "story": {
+      "waitingFor": "menunggu {{who}} · {{duration}}",
+      "waitedFor": "menunggu {{who}} · {{duration}}{{note}}",
+      "started": "memulai {{phase}}{{note}}",
+      "ended": "mengakhiri {{phase}}{{note}}",
+      "handoff": "menyerahkan pekerjaan{{from}} ke {{to}}{{note}}",
+      "handoffFrom": " dari {{name}}",
+      "someone": "seseorang",
+      "waiting": "menunggu {{who}}",
+      "stoppedWaiting": "berhenti menunggu {{who}}{{note}}",
+      "movedTo": "dipindahkan ke {{stage}}",
+      "createdIn": "dibuat di {{stage}}",
+      "pushed": "di-push",
+      "openedPr": "membuka PR{{note}}",
+      "merged": "di-merge",
+      "preview": "preview {{note}}",
+      "somethingElse": "hal lain",
+      "lockNote": "kunci ({{note}})",
+      "lock": "kunci",
+      "you": "Anda",
+      "mcp": "server MCP",
+      "seconds": "{{count}} dtk",
+      "minutes": "{{count}} mnt",
+      "minutesSeconds": "{{m}} mnt {{s}} dtk",
+      "hours": "{{count}} j",
+      "hoursMinutes": "{{h}} j {{m}} mnt"
+    },
+    "stretch": {
+      "start": "Menunggu dimulai",
+      "blocked": "Terblokir",
+      "human": "Menunggu manusia",
+      "review": "Dalam tinjauan",
+      "merge": "Menunggu di-merge",
+      "decision": "Menunggu keputusan"
+    },
+    "skipped": {
+      "start": "menunggu dimulai {{duration}}",
+      "blocked": "terblokir {{duration}}",
+      "human": "menunggu manusia {{duration}}",
+      "review": "dalam tinjauan {{duration}}",
+      "merge": "menunggu di-merge {{duration}}"
+    },
+    "openReport": "Buka laporan {{agent}}: {{label}}",
+    "openReportRound": "Buka laporan {{agent}}, putaran {{round}}: {{label}}",
+    "reportDescription": "Laporan yang ditulis untuk eksekusi ini",
+    "factsDescription": "Fakta eksekusi ini",
+    "loadingReport": "Memuat laporan eksekusi…",
+    "reportsFailed": "Laporan tidak bisa dimuat.",
+    "noReport": "Tidak ada laporan untuk eksekusi ini.",
+    "noReportYet": "Belum ada laporan untuk eksekusi ini."
+  },
+  "roadmap": {
+    "title": "Roadmap",
+    "subtitle": "Setiap tiket yang berjalan: selesai, sekarang, berikutnya.",
+    "filter": {
+      "all": "Semua",
+      "blocked": "Terblokir",
+      "review": "Perlu tinjauan"
+    },
+    "timeAxis": "Sumbu waktu, setiap baris:",
+    "window": {
+      "today": "Hari ini",
+      "24h": "24 j",
+      "7d": "7 h",
+      "fit": "Muat semua baris"
+    },
+    "range": "{{start}} sampai sekarang",
+    "stat": {
+      "tickets_other": "tiket",
+      "lanes_other": "lane",
+      "workingNow": "sedang bekerja",
+      "blocked": "terblokir",
+      "inReview": "dalam tinjauan",
+      "noWord": "tanpa kabar"
+    },
+    "projectWork": "Pekerjaan proyek, setiap tiket dan lane:",
+    "empty": {
+      "all": "Tidak ada tiket yang dikerjakan, terblokir, atau dalam tinjauan.",
+      "blocked": "Tidak ada yang terblokir.",
+      "review": "Tidak ada tiket yang menunggu tinjauan."
+    },
+    "lanes_other": "{{count}} lane",
+    "unassigned": "Belum ditugaskan",
+    "progress": "{{done}} dari {{total}} selesai",
+    "workTimeline": "Linimasa kerja",
+    "noTasks": "Belum ada tugas.",
+    "tasks": "Tugas",
+    "step": {
+      "done": "selesai",
+      "now": "sekarang",
+      "next": "berikutnya",
+      "later": "nanti",
+      "blocked": "terblokir"
+    }
+  },
+  "overview": {
+    "loadError": "Tidak bisa memuat ringkasan: {{error}}",
+    "projectOverview": "{{name}}: ikhtisar",
+    "headline": {
+      "waiting": "{{count}} menunggu Anda",
+      "inProgress": "{{count}} dikerjakan",
+      "doneToday": "{{count}} selesai hari ini"
+    },
+    "allHidden": "Semua kartu ikhtisar ini tersembunyi. <goto>Tampilkan lagi di pengaturan tata letak</goto>.",
+    "showFewer": "Tampilkan lebih sedikit",
+    "viewAll": "Lihat semua {{count}}",
+    "unassigned": "belum ditugaskan",
+    "projectAgent": "{{name}} (salah satu agen proyek)",
+    "sinceDate": "sejak {{date}}",
+    "laneOf": "lane dari #{{id}}",
+    "draft": "draf",
+    "pr": "PR #{{number}}",
+    "prTitle": "PR #{{number}} {{title}}",
+    "openOnGithub": "Buka di GitHub",
+    "option_other": "{{count}} opsi",
+    "lane_other": "{{count}} lane",
+    "previewOf": "Preview {{workspace}}",
+    "preview": "Preview",
+    "needsYou": {
+      "title": "Perlu Anda",
+      "empty": "Tidak ada yang menunggu Anda.",
+      "decide": "Putuskan: {{question}}",
+      "asked": "{{options}} · ditanyakan oleh {{author}} {{ago}}",
+      "waitingOnYou": "Menunggu Anda {{since}} · {{agent}}",
+      "reviewPr": "Tinjau PR #{{number}} {{title}}",
+      "prBy": "oleh {{author}} · diperbarui {{ago}}",
+      "newReplies": "{{count}} baru · ",
+      "blocked": "terblokir",
+      "instructionsChanged": "Instruksi proyek berubah",
+      "changedBy": "oleh <actor/>",
+      "reviewed": "Ditinjau",
+      "revertTip": "Kembalikan instruksi seperti sebelum perubahan ini",
+      "revertBlockedTip": "Instruksi berubah lagi sejak itu: batalkan perubahan yang lebih baru dulu",
+      "revert": "Batalkan",
+      "last": "terakhir"
+    },
+    "lost": {
+      "title": "Kontak hilang",
+      "empty": "Tidak ada kontak yang hilang.",
+      "lastHeardTip": "Terakhir terdengar {{when}}",
+      "lastHeard": "terakhir terdengar {{duration}} lalu"
+    },
+    "inProgress": {
+      "title": "Dikerjakan",
+      "empty": "Tidak ada yang dikerjakan."
+    },
+    "doneToday": {
+      "title": "Selesai hari ini",
+      "empty": "Belum ada yang selesai hari ini.",
+      "closedTip": "Di-merge atau ditutup: keluar dari antrean tinjauan",
+      "closed": "ditutup {{time}}",
+      "activity_other": "{{count}} kejadian hari ini: Harian"
+    },
+    "carryingOver": {
+      "title": "Terbawa",
+      "startedTip": "Pekerjaannya dimulai {{when}}",
+      "days_other": "{{count}} hari dikerjakan",
+      "emptyShown": "Tidak ada yang terblokir atau dalam tinjauan sejak sebelum hari ini."
+    }
+  },
+  "notifications": {
+    "title": "Notifikasi",
+    "clearFinished": "Hapus yang selesai",
+    "empty": "Tidak ada yang berjalan",
+    "dismiss": "Tutup {{label}}",
+    "of": "{{done}} dari {{total}}",
+    "starting": "Memulai…",
+    "noReason": "tanpa alasan",
+    "failed": "{{title}} gagal",
+    "finished": "{{title}} selesai",
+    "finishedWith": "{{title}} selesai · {{summary}}",
+    "failedLine": "Gagal · {{elapsed}} · {{reason}}",
+    "succeededLine": "Berhasil · {{elapsed}}",
+    "retryKept": "Coba lagi yang dipertahankan",
+    "youAsked": "{{actor}} · Anda meminta: {{request}}",
+    "stale": "Tidak ada pembaruan selama {{since}} · mungkin berhenti",
+    "trackedFailed": "Gagal · {{reason}}",
+    "succeeded": "Berhasil",
+    "notice": "Pemberitahuan",
+    "cannotWait": "Tidak bisa menunggu: {{reason}}",
+    "muted": "\"{{name}}\" dibisukan di proyek ini",
+    "new": "Baru",
+    "snooze": "Tunda",
+    "snoozeFor": "Tunda selama",
+    "mute": "Bisukan jenis ini di proyek ini",
+    "copied": "Disalin",
+    "copyFailed": "Tidak bisa menyalin: pilih teksnya saja",
+    "unit": {
+      "s": "{{value}} dtk",
+      "min": "{{value}} mnt",
+      "h": "{{value}} j",
+      "d": "{{value}} h"
+    },
+    "severity": {
+      "info": "Info",
+      "warning": "Peringatan",
+      "problem": "Masalah"
+    }
+  },
+  "ticketPage": {
+    "archivedToast": "Diarsipkan: keluar dari papan, ada di Diarsipkan",
+    "restoredToast": "Dipulihkan ke papan",
+    "disapprovedToast": "#{{id}} ditolak dan dibatalkan",
+    "undo": "Urungkan menarik kembali penolakan dan mengembalikannya ke {{stage}}.",
+    "undoAction": "Urungkan",
+    "summary": "Ringkasan",
+    "updated": "diperbarui {{when}}",
+    "archivedBy": "Diarsipkan oleh {{name}} {{when}}",
+    "archivedByLane": "Diarsipkan oleh {{name}} {{when}}, bersama tiket induk lane ini",
+    "someone": "seseorang",
+    "archivedBadge": "Diarsipkan",
+    "decisionNeeded": "perlu keputusan",
+    "archiveTip": "Keluarkan dari papan, beserta lane-nya; Diarsipkan di halaman fitur mengembalikannya",
+    "deleteTitle": "Hapus tiket ini?",
+    "deleteBody": "Tugas, pembaruan, lampiran, dan utas ikut terhapus.",
+    "deleteLanes_other": "Tiket ini punya {{count}} lane: hapus juga, atau pertahankan dan naikkan satu tingkat.",
+    "deleteKeepLanes": "Hapus, pertahankan lane",
+    "deleteWithLanes": "Hapus beserta lane",
+    "title": "Judul",
+    "clickToRename": "Klik untuk mengganti nama",
+    "tagsAria": "Tag, dipisah koma",
+    "tagsPlaceholder": "Tinggi, Formulir",
+    "editTagsTip": "Klik untuk mengubah tag",
+    "addTags": "+ tag",
+    "instructions": "Instruksi",
+    "attaching": "melampirkan…",
+    "attach": "lampirkan",
+    "edit": "ubah",
+    "instructionsPlaceholder": "Apa yang dikerjakan, bagaimana tahu sudah selesai, apa yang tidak boleh dilakukan. Tempel atau lepas file untuk melampirkannya.",
+    "showLess": "Tampilkan lebih sedikit",
+    "showFull": "Tampilkan instruksi lengkap",
+    "removeNamed": "Hapus {{name}}",
+    "otherReposTip": "Pekerjaan tiket di repo lain proyek, masing-masing di branch sendiri: tampil di Branch dan Eksekusi",
+    "otherRepos": "Repositori lain",
+    "repositoryNamed": "Repositori {{name}}",
+    "takeOffTip": "Lepaskan {{name}} dari tiket (eksekusinya untuk tiket berhenti)",
+    "addRepo": "Tambah repositori",
+    "addRepoPlaceholder": "Tambah repositori…",
+    "details": "Detail",
+    "assignee": "Penerima tugas",
+    "reservedTip": "Dipesan untuk agen proyek ini: agen lain tidak bisa mengambilnya, hanya Anda yang bisa menugaskan ulang",
+    "reserved": "dipesan",
+    "repository": "Repositori",
+    "branch": "Branch",
+    "baseBranch": "Branch dasar",
+    "needsTip": "Tiket yang branch-nya harus di-merge ke dasar tiket ini sebelum bisa selesai",
+    "needs": "Butuh",
+    "neededBy": "dibutuhkan oleh",
+    "autoTip": {
+      "Pushed": "Dicentang papan dari git (branch ada di origin beserta semua commit lokal)",
+      "PR": "Dicentang papan dari GitHub (PR terbuka atau sudah di-merge untuk tiket)",
+      "CI": "Dicentang papan dari GitHub (pemeriksaan PR hijau, atau komentar \"CI run locally: green\" pada SHA head)",
+      "Preview": "Dicentang papan dari preview (salah satu workspace tiket menjalankan preview, atau tautan preview-nya menjawab)",
+      "Summary": "Dicentang papan dari kiriman tiket (agen menulis atau memperbarui ringkasannya setelah commit terakhir branch)",
+      "Merged": "Dicentang papan dari GitHub dan git (PR di-merge, atau branch di-merge ke dasarnya)"
+    },
+    "tickedAuto": "Dicentang otomatis",
+    "blocked": "terblokir",
+    "subtasksBlocked_other": "{{count}} subtugas terblokir",
+    "unblock": "Buka blokir {{name}}",
+    "markBlockedNamed": "Tandai {{name}} terblokir",
+    "addSubtask": "Tambah subtugas",
+    "addSubtaskTo": "Tambah subtugas ke {{name}}",
+    "removeTask": "hapus",
+    "removeTaskSubtasks": "hapus, beserta subtugasnya",
+    "blockedPlaceholder": "Yang harus dilakukan manusia (opsional)",
+    "whyBlocked": "Mengapa {{name}} terblokir",
+    "markBlocked": "Tandai terblokir",
+    "tasks": "Tugas",
+    "noTasks": "Belum ada tugas. Tambahkan fase awal tiket baru: Implementation, lalu fase serah terima (Pushed, PR, CI, Preview, Summary, Merged). Langkah konkret masuk di bawah Implementation sebagai subtugas. Papan mencentang Pushed, PR, CI, Preview, Summary, dan Merged sendiri.",
+    "subtasksOf": "Subtugas {{name}}",
+    "newSubtaskOf": "Subtugas baru {{name}}",
+    "add": "Tambah",
+    "addPhase": "Tambah fase: Implementation, Pushed, PR…",
+    "all": "Semua",
+    "nounLane": "lane",
+    "laneOf": "lane {{n}} dari {{count}}",
+    "filtered": "(difilter)",
+    "nounTicketIn": "tiket di {{stage}}",
+    "stageOf": "{{n}} dari {{count}} di {{stage}}",
+    "previousNoun": "{{noun}} sebelumnya",
+    "nextNoun": "{{noun}} berikutnya",
+    "stepKeysTip": "[ dan ] untuk mundur dan maju",
+    "lanesCancelled": "{{count}} dibatalkan",
+    "allTasks": "semua tugas {{done}}/{{total}}",
+    "noLanes": "Tanpa lane. Pecah tiket ini menjadi lane saat bagiannya berjalan paralel: setiap lane punya branch, penerima tugas, tugas, dan pembaruan sendiri.",
+    "filterStage": "Tahap",
+    "filterTags": "Tag",
+    "showing": "menampilkan {{shown}} dari {{total}}",
+    "clearFilters": "hapus filter",
+    "activity": "Aktivitas",
+    "feed": "Umpan",
+    "mainTip": "Untuk Anda: kiriman Anda beserta balasannya, keputusan, dan pertanyaan",
+    "main": "Utama",
+    "agentsTip": "Catatan kerja agen: kemajuan, fase tinjauan, catatan builder",
+    "agents": "Agen",
+    "includeLanePosts": "sertakan kiriman lane",
+    "newCount_other": "{{count}} baru",
+    "newPost": "Kiriman baru",
+    "postPlaceholder": "Tulis kiriman: pertanyaan, jawaban, kemajuan. Tempel atau lepas tangkapan layar dan rekaman.",
+    "agentsPlaceholder": "Tulis di catatan agen: pesan untuk yang mengerjakannya. Tempel atau lepas file.",
+    "posting": "Mengirim…",
+    "post": "Kirim",
+    "postInAgents": "Kirim di Agen",
+    "noPosts": "Belum ada kiriman.",
+    "noPostsHere": "Belum ada kiriman di sini.",
+    "noAgentPosts": "Belum ada kiriman agen.",
+    "sections": "Bagian tiket",
+    "summaryPosted": "dikirim {{when}}",
+    "summaryUpdated": "diperbarui {{when}}",
+    "summaryWritten": "ditulis {{when}}",
+    "history": "Riwayat ({{count}})",
+    "noSummary": "Belum ada ringkasan: kiriman kemajuan terbaru menggantikannya sampai agen menulis satu.",
+    "earlierVersions": "Versi sebelumnya",
+    "firstVersion": "versi pertama",
+    "replies_other": "{{count}} balasan",
+    "summaryActions": "Aksi ringkasan",
+    "hideRepliesLabel": "sembunyikan balasan",
+    "replyLabel": "balasan",
+    "hideReplies": "Sembunyikan balasan",
+    "showReplies": "Tampilkan {{replies}}",
+    "replySummary": "Balas ringkasan",
+    "laneSummaryTip": "Ringkasan lane: posisi pekerjaannya, sebagaimana dijaga agennya",
+    "summaryChip": "ringkasan",
+    "progress": "kemajuan",
+    "postActions": "Aksi kiriman",
+    "notProgressLabel": "bukan kemajuan",
+    "markProgressLabel": "tandai kemajuan",
+    "notProgressTip": "Bukan kemajuan: jadikan kiriman biasa",
+    "markProgressTip": "Tandai sebagai kemajuan",
+    "decisionArchived": "{{ids}} diarsipkan: keluar dari papan, ada di Diarsipkan",
+    "notArchived": "Tidak diarsipkan: {{why}}",
+    "decision": "Keputusan",
+    "decidedInChat": "Diputuskan di chat oleh Anda ·",
+    "relayedTip": "Orkestrator mencatat jawaban Anda dari chat. Tidak ada yang diklik pada kartu.",
+    "relayed": "diteruskan",
+    "relayedBy": "oleh <actor/> {{when}} ·",
+    "decidedBy": "diputuskan oleh <actor/> {{when}} ·",
+    "change": "ubah",
+    "decisionNeededHere": "Keputusan Anda diperlukan",
+    "recommended": "disarankan",
+    "saidInChat": "Yang Anda katakan di chat:",
+    "agentNotePlaceholder": "Pesan untuk agen (opsional)",
+    "agentNote": "Pesan untuk agen",
+    "decide": "Putuskan",
+    "vsBase": "+{{ahead}} / −{{behind}} vs dasar ·",
+    "branchNotInCheckout": "branch belum ada di checkout",
+    "reviewOlder": "tinjauan untuk SHA yang lebih lama",
+    "latestReview": "tinjauan terbaru",
+    "branchIn": "Branch di {{name}}",
+    "base": "dasar {{name}}",
+    "noBranch": "Belum ada branch: pilih di atas, atau agen yang mengaturnya.",
+    "workspaces": "Workspace",
+    "workspacesDesc": "Worktree, sub-branch, dan sandbox subagen yang dibuka agen untuk tiket ini.",
+    "workspacesDescLanes": "Worktree, sub-branch, dan sandbox subagen yang dibuka agen untuk tiket ini dan lane-nya.",
+    "noneYet": "Belum ada.",
+    "breadcrumb": "Jejak navigasi",
+    "scrollSideUp": "Gulir kolom samping ke atas",
+    "scrollSideDown": "Gulir kolom samping ke bawah",
+    "workflow": "Alur kerja",
+    "workflowOwn": "Mengikuti alur kerja {{workflow}}, diatur pada tiket ini.",
+    "workflowProject": "Mengikuti alur kerja proyek ({{workflow}}).",
+    "workflowSteps": "Lihat langkahnya",
+    "lanesProgress": "{{done}}/{{total}} selesai"
+  },
+  "complexity": {
+    "label": {
+      "low": "Rendah",
+      "mid": "Sedang",
+      "high": "Tinggi",
+      "max": "Maks"
+    },
+    "workflowHint": "Low: tanpa spec atau tinjauan di alur kerja Standard. Mid, High, dan Max: putaran tinjauan yang diatur alur kerja proyek (Standard: satu, tiga, hingga sepuluh). Max untuk pekerjaan yang dibangun dari nol; fitur di codebase yang sudah ada tidak pernah max, sesulit apa pun.",
+    "levelHint": {
+      "low": "Low: putaran tinjauan yang diatur alur kerja proyek (Standard: tidak ada). Builder memverifikasinya sendiri.",
+      "mid": "Mid: putaran tinjauan yang diatur alur kerja proyek (Standard: satu).",
+      "high": "High: putaran tinjauan yang diatur alur kerja proyek (Standard: hingga tiga).",
+      "max": "Max: putaran tinjauan yang diatur alur kerja proyek (Standard: hingga sepuluh), untuk seluruh situs atau aplikasi yang dibangun dari nol, produk baru, atau layanan mandiri, dan berhenti di putaran pertama yang lolos. Fitur di codebase yang sudah ada paling tinggi high, sesulit apa pun."
+    }
+  },
+  "agentsAtWork": {
+    "title": "Agen bekerja",
+    "error": "Tidak bisa membaca siapa yang bekerja.",
+    "empty": "Tidak ada agen bekerja",
+    "more_other": "+{{count}} lagi",
+    "round": "{{phase}} putaran {{round}}",
+    "waiting": "Menunggu: {{what}}",
+    "blocked": "Terblokir",
+    "quiet": "senyap",
+    "lastHeard": "kabar terakhir {{time}}",
+    "label": "#{{id}} {{title}} — {{phase}}, {{since}}, {{state}}",
+    "labelAgent": "#{{id}} {{title}} — agen {{agent}}, {{phase}}, {{since}}, {{state}}",
+    "state": {
+      "working": "bekerja",
+      "waiting": "menunggu",
+      "asleep": "tidur"
+    }
+  },
+  "notificationSettings": {
+    "title": "Notifikasi",
+    "intro": "Peringatan yang bisa ditampilkan lonceng untuk proyek ini. Matikan satu untuk berhenti melihatnya di sini; papan tetap mengawasinya, dan proyek lain punya pilihan sendiri.",
+    "none": "Belum ada peringatan",
+    "show": "Tampilkan {{label}}"
+  },
+  "alerts": {
+    "group": {
+      "setup": "Penyiapan dan versi",
+      "work": "Pekerjaan",
+      "machine": "Mesin ini",
+      "housekeeping": "Pemeliharaan"
+    },
+    "snooze": {
+      "minutes_other": "{{count}} menit",
+      "hours_other": "{{count}} jam",
+      "days_other": "{{count}} hari"
+    }
+  },
+  "workflowChips": {
+    "selfTip": "Agen tiket mengerjakannya sendiri",
+    "agentTip": {
+      "picked": "Agen Tim yang dipilih untuknya. Instruksinya ditulis di halaman Tim. Peran ({{agent}}) menamai span dan laporan eksekusinya.",
+      "role": "Agen Tim yang bernama sama dengan perannya ({{agent}}). Instruksinya ditulis di halaman Tim. Peran ({{agent}}) menamai span dan laporan eksekusinya.",
+      "default": "Tidak ada agen Tim bernama {{agent}}: langkah ini berjalan sebagai peran {{agent}} bawaan. Instruksinya ditulis di halaman Tim. Peran ({{agent}}) menamai span dan laporan eksekusinya."
+    },
+    "agentMissing": "agen tidak ada",
+    "missingTip": "{{picked}} dipilih untuknya, tetapi Tim tidak punya agen dengan nama itu sekarang: langkah ini berjalan sebagai {{name}} sampai agennya kembali atau agen lain dipilih.",
+    "locked": "Terkunci",
+    "lockedAboveLow": "Terkunci di atas low",
+    "skippedOnLow": "Dilewati pada low",
+    "changed": "diubah",
+    "changedTip": "Diubah dari preset: {{what}}"
+  },
+  "workflowGraph": {
+    "label": "Alur kerja {{label}} untuk tiket {{complexity}}",
+    "complexity": {
+      "low": "rendah",
+      "mid": "sedang",
+      "high": "tinggi",
+      "max": "maks"
+    },
+    "roundSurvives": "putaran lolos",
+    "roundFails": "putaran gagal",
+    "inParallel": "Paralel",
+    "reviewRound": "Putaran tinjauan",
+    "noRoundsOn": "Tanpa putaran tinjauan pada {{complexity}}"
+  },
+  "workflowPanel": {
+    "idle": "Pilih langkah di grafik untuk melihat fungsinya dan mengubah siapa yang menjalankannya, effort-nya, apakah dijalankan, dan tempatnya dalam urutan.",
+    "runnerAgents": "Agen tiket menjalankan /feature-review sendiri. Fasenya menjalankan agen Tim masing-masing, yang dipilih pada node fase.",
+    "selfAgent": "Agen tiket mengerjakannya sendiri: tidak ada agen Tim untuk dipilih.",
+    "whatItDoes": "Fungsinya",
+    "handoffTo": "Serah terima ke {{next}}",
+    "result": "Hasil",
+    "team": {
+      "title": "Agen Tim",
+      "default": "Bawaan ({{name}})",
+      "notInTeam": "{{name}} (tidak ada di Tim)",
+      "missing": "{{picked}} dipilih untuknya, tetapi Tim tidak punya agen dengan nama itu sekarang. Langkah ini berjalan sebagai {{name}} sampai agennya kembali atau agen lain dipilih. Pilih Bawaan untuk menghapus pilihan.",
+      "runsAs": "Berjalan sebagai {{name}}. Instruksinya ditulis di halaman Tim; peran ({{role}}) menamai span dan laporan eksekusinya.",
+      "runsAsDefault": "Berjalan sebagai {{name}} (agen bawaan: Tim tidak punya agen dengan nama itu). Instruksinya ditulis di halaman Tim; peran ({{role}}) menamai span dan laporan eksekusinya."
+    },
+    "placeInOrder": "Tempat dalam urutan",
+    "moveUp": "Naikkan",
+    "moveDown": "Turunkan",
+    "moveUpTip": "Naikkan: {{step}} berjalan lebih awal",
+    "moveDownTip": "Turunkan: {{step}} berjalan lebih akhir",
+    "runs": "Dijalankan",
+    "run": "Jalankan {{step}}",
+    "alsoRunOnLow": "Jalankan {{step}} juga pada tiket low",
+    "aboveLowNote": "Sakelar ini hanya menentukan apakah langkah ini juga berjalan untuk tiket low.",
+    "effort": "Effort",
+    "effortHint": "Diteruskan sebagai effort alat Agent. {{hint}}.",
+    "reviewRuns": "Menjalankan {{total}} eksekusi /feature-review terpisah setiap putaran: {{runs}}, masing-masing dengan nama agennya sendiri dan tidak pernah melihat temuan yang lain.",
+    "survival": "<strong>Putaran lolos jika</strong> {{survival}}."
+  },
+  "workflowPage": {
+    "title": "Alur kerja",
+    "intro": "Bagaimana sebuah tiket berjalan dari To do sampai serah terima: langkah yang dijalankan agennya, berurutan, siapa yang menjalankan masing-masing, dan apa yang diserahkan ke langkah berikutnya. Proyek mengikuti satu alur kerja; sebuah tiket bisa memilih yang lain di halamannya. Agen membacanya dari papan, jadi perubahan di sini diikuti mulai eksekusi mereka berikutnya.",
+    "graphShows": "Grafik menampilkan tiket {{complexity}}.",
+    "projectFollows": "Proyek mengikuti alur kerja ini",
+    "use": "Pakai alur kerja ini",
+    "resetThis": "Setel ulang alur kerja ini",
+    "resetTitle": "Setel ulang alur kerja {{label}}?",
+    "resetBody": "Urutan, sakelar, effort, agen Tim, dan putaran tinjauannya kembali ke bawaan preset {{label}}. Preset lain tetap mempertahankan perubahannya.",
+    "cancel": "Batal",
+    "reset": "Setel ulang",
+    "sectionLabel": "Alur kerja {{label}}",
+    "projects": "milik proyek",
+    "summary_other": "{{count}} langkah untuk tiket {{complexity}} · tinjauan: {{rounds}}"
+  },
+  "workflowPresets": {
+    "group": "Preset alur kerja",
+    "active": "Aktif",
+    "tweaked": "Diubah",
+    "complexity": "Kompleksitas",
+    "stats_other": "{{count}} langkah · putaran tinjauan {{rounds}}",
+    "light": {
+      "label": "Ringan",
+      "description": "Build, pemeriksaan, satu peninjau, pemeriksaan maksud, dan serah terima: tanpa agen spec, tanpa environment, tanpa pencarian terpisah."
+    },
+    "standard": {
+      "label": "Standard",
+      "description": "Siklus penuh: spec, build, pemeriksaan, putaran tinjauan dengan spec, environment, verifikasi, dua pencarian independen, sanggahan, dan pemeriksaan merge, lalu pemeriksaan maksud, PR, CI, preview, dan serah terima."
+    },
+    "thorough": {
+      "label": "Teliti",
+      "description": "Standard ditambah tahap khusus penulisan tes, pencarian ketiga dengan daftar periksa keamanan, pemeriksaan maksud di akhir setiap putaran tinjauan, dan satu putaran tinjauan lagi di setiap level di atas low."
+    },
+    "maximum": {
+      "label": "Maksimum",
+      "description": "Teliti ditambah spec kedua yang independen, tinjauan penuh kedua untuk setiap putaran oleh agen lain yang tidak pernah melihat yang pertama, dan effort tinggi pada setiap agen."
+    }
+  },
+  "workflowReview": {
+    "legend": "Putaran tinjauan per kompleksitas",
+    "changed": "diubah",
+    "notSaved": "Tidak disimpan: {{reason}}",
+    "default": "bawaan {{value}}"
+  },
+  "workflowReads": {
+    "title": "Yang dibaca agen",
+    "hint": "teks yang disajikan get_workflow untuk alur kerja ini",
+    "textLabel": "Teks alur kerja"
+  },
+  "workflowSelect": {
+    "project": "Alur kerja proyek ({{label}})",
+    "hint": "Alur kerja yang diikuti agennya: milik proyek, atau salah satu dari empat preset untuk tiket ini saja. Mengubah alur kerja proyek tidak memindahkan tiket yang sudah memilih satu."
+  },
+  "workflowView": {
+    "noRounds": "tanpa putaran tinjauan",
+    "rounds_other": "{{count}} putaran",
+    "complexity": {
+      "low": "Rendah",
+      "mid": "Sedang",
+      "high": "Tinggi",
+      "max": "Maks"
+    },
+    "effort": {
+      "auto": "Otomatis",
+      "low": "Rendah",
+      "medium": "Sedang",
+      "high": "Tinggi"
+    },
+    "effortLevel": {
+      "low": "rendah",
+      "medium": "sedang",
+      "high": "tinggi"
+    },
+    "autoLevel": "Otomatis: {{level}}",
+    "autoEffortHint": "Otomatis mengikuti tiket: rendah untuk tiket low, sedang untuk mid dan high, tinggi untuk max",
+    "separator": ", ",
+    "you": "Anda",
+    "skippedNoRounds": "Tanpa putaran tinjauan",
+    "skippedOff": "Mati",
+    "changed": {
+      "moved": "tempatnya dalam urutan",
+      "off": "dimatikan",
+      "effort": "effort-nya",
+      "agent": "agen Timnya"
+    },
+    "name": {
+      "agent": "agen {{name}}",
+      "locked": "terkunci",
+      "skipsOnLow": "dilewati pada tiket low"
+    },
+    "lockReason": {
+      "claim": "Terkunci: tidak ada yang bisa dimulai sebelum tiket dibaca dan diklaim.",
+      "build": "Terkunci: tidak ada yang diserahkan tanpa perubahannya dibangun.",
+      "gate": "Terkunci: tidak ada perubahan yang lanjut tanpa diperiksa.",
+      "intent": "Terkunci di atas low: setiap tiket di atas low diperiksa terhadap kata-kata manusia sendiri sebelum diserahkan.",
+      "always": "Terkunci: tiket tidak bisa diserahkan tanpanya."
+    },
+    "survival": {
+      "light": "peninjau tidak mereproduksi temuan apa pun dan bukti builder mencakup setiap kriteria penerimaan",
+      "standard": "putusannya SHIP, pemeriksaan berfungsi YES, pemeriksaan dasar NO, dan setiap kriteria penerimaan PASS lewat eksekusi (UNVERIFIED hanya karena alasan yang disebut aturan eskalasi dan tidak bisa diatasi)",
+      "thoroughIntent": "putusannya SHIP, pemeriksaan berfungsi YES, pemeriksaan dasar NO, dan setiap kriteria penerimaan PASS lewat eksekusi (UNVERIFIED hanya karena alasan yang disebut aturan eskalasi dan tidak bisa diatasi), dan pemeriksaan maksud di akhir putaran sesuai",
+      "maximum": "kedua tinjauan lolos ({{standard}}) dan rekonsiliasi tidak menyisakan temuan terbuka",
+      "maximumIntent": "kedua tinjauan lolos ({{standard}}), rekonsiliasi tidak menyisakan temuan terbuka, dan pemeriksaan maksud di akhir putaran sesuai"
+    },
+    "move": {
+      "after": "{{step}} harus berada setelah {{other}}",
+      "stayFirst": "{{step}} harus tetap pertama",
+      "stayLast": "{{step}} harus tetap terakhir",
+      "alreadyFirst": "{{step}} sudah yang pertama",
+      "alreadyLast": "{{step}} sudah yang terakhir"
+    }
+  },
+  "backToModule": {
+    "back": "Kembali ke {{label}}",
+    "home": "Beranda"
+  },
+  "ticketLine": {
+    "openedBy": "Dibuka oleh {{name}} ({{role}}) pada {{when}}",
+    "updated": "Diperbarui pada {{when}}",
+    "opened": "Dibuka pada {{when}}"
+  },
+  "resumeSettings": {
+    "title": "Lanjutkan",
+    "intro": "Agen yang mengajukan pertanyaan mengakhiri gilirannya. Dengan perintah di sini, papan melanjutkan pekerjaan sendiri saat Anda menjawab kartu keputusan di papan, atau memindahkan tiket dari tahap terblokir atau tinjauan kembali ke tahap aktif: papan menjalankan perintah itu di mesin ini, di worktree tiket, dengan pertanyaan dan jawaban Anda (atau kata-kata terakhir Anda) pada input standar dan di file bernama <code>BOARD_RESUME_PROMPT_FILE</code>; <code>BOARD_URL</code>, <code>BOARD_PROJECT_ID</code>, <code>BOARD_TICKET_ID</code>, dan <code>BOARD_AGENT_NAME</code> diatur. Tidak ada yang dimulai untuk tiket dengan agen yang masih aktif atau yang sudah dilanjutkan. Perintah berjalan dengan hak pengguna papan, dan hanya Anda yang bisa mengaturnya. Kosong berarti mati.",
+    "presets": "Preset",
+    "found": "ditemukan",
+    "notFound": "tidak ditemukan",
+    "command": "Perintah lanjutkan",
+    "commandPlaceholder": "claude -p (kosong: mati)",
+    "timeout": "Hentikan setelah (menit)",
+    "save": "Simpan",
+    "saving": "Menyimpan…",
+    "timeoutProblem": "Bilangan bulat dari {{min}} sampai {{max}}.",
+    "unsaved": "Ada perubahan belum disimpan.",
+    "noChanges": "Tidak ada perubahan.",
+    "off": "Melanjutkan mati."
+  },
+  "resumeCard": {
+    "title": "Lanjutkan",
+    "resume": "Lanjutkan",
+    "retry": "Coba lagi",
+    "started": "Papan memulai pekerjaan lagi",
+    "empty": "Belum ada yang melanjutkan tiket ini.",
+    "setInSettings": "Manusia mengaturnya di pengaturan proyek.",
+    "failed": "Papan tidak bisa melanjutkan: {{reason}}",
+    "log": "Log",
+    "state": {
+      "queued": "Memulai",
+      "running": "Berjalan",
+      "succeeded": "Selesai",
+      "failed": "Gagal",
+      "skipped": "Tidak dimulai"
+    }
+  },
+  "runReportsWindow": {
+    "reports": "Laporan",
+    "reportsCount": "Laporan ({{n}})",
+    "title": "Laporan eksekusi",
+    "description": "Laporan eksekusi tiket ini, dengan filter dan urutan. Membukanya menampilkan laporan lengkap.",
+    "back": "Kembali ke laporan",
+    "none": "Belum ada laporan eksekusi.",
+    "noMatch": "Tidak ada laporan yang cocok dengan filter ini.",
+    "count_other": "{{shown}} dari {{count}} laporan",
+    "clearFilters": "Hapus filter",
+    "filter": {
+      "agent": "Agen",
+      "round": "Putaran",
+      "time": "Waktu",
+      "difficulty": "Kesulitan",
+      "confidence": "Keyakinan",
+      "duration": "Durasi",
+      "sortBy": "Urutkan menurut"
+    },
+    "items": {
+      "allAgents": "Semua agen",
+      "allRounds": "Semua putaran",
+      "round": "Putaran {{n}}",
+      "noRound": "Tanpa putaran"
+    },
+    "time": {
+      "any": "Kapan saja",
+      "hour": "Sejam terakhir",
+      "today": "Hari ini",
+      "week": "7 hari terakhir"
+    },
+    "duration": {
+      "any": "Apa saja",
+      "reported": "Dilaporkan",
+      "unreported": "Tidak dilaporkan"
+    },
+    "rating": {
+      "any": "Apa saja",
+      "unrated": "Belum dinilai"
+    },
+    "sort": {
+      "newest": "Terbaru",
+      "oldest": "Terlama",
+      "longest": "Terpanjang",
+      "difficulty": "Kesulitan tertinggi",
+      "confidence": "Keyakinan tertinggi"
+    }
+  }
+}

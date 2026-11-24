@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, TriangleAlert, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Button } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, type HostTools, post } from '#/lib/api'
+import { hostToolText } from '#/lib/hostToolText'
 import { useHydrated } from '#/lib/useHydrated'
 
 /**
@@ -15,6 +17,7 @@ import { useHydrated } from '#/lib/useHydrated'
  * check (Check again, or the board's restart) finds it still missing; one found again goes away.
  */
 export function HostToolsBanner() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { data } = useQuery({
     queryKey: ['host-tools'],
@@ -33,7 +36,7 @@ export function HostToolsBanner() {
 
   // Not what the human is looking at: an optional tool's absence is told where that tool is used.
   const shown = (data?.tools ?? []).filter(
-    (t) => !t.ok && !t.optional && dismissed[t.name] !== data!.checkedAt,
+    (tool) => !tool.ok && !tool.optional && dismissed[tool.name] !== data!.checkedAt,
   )
   if (!hydrated || !data || !shown.length) return null
   const dismiss = (name: string) => {
@@ -43,28 +46,32 @@ export function HostToolsBanner() {
   }
   return (
     <section
-      aria-label="Missing tools"
+      aria-label={t('hostTools.section')}
       className="border-b border-rose-300/60 bg-rose-50 text-rose-950 dark:border-rose-400/20 dark:bg-rose-950/40 dark:text-rose-100"
     >
       <div className="mx-auto flex max-w-7xl flex-col items-start gap-1.5 px-4 py-2 text-sm sm:flex-row sm:gap-4">
         <ul className="flex w-full min-w-0 flex-1 flex-col gap-1">
-          {shown.map((t) => (
-            <li key={t.name} className="flex min-w-0 items-start gap-1.5">
+          {shown.map((tool) => (
+            <li key={tool.name} className="flex min-w-0 items-start gap-1.5">
               <TriangleAlert
                 className="mt-0.5 size-4 shrink-0 text-rose-600 dark:text-rose-400"
                 aria-hidden
               />
               <p className="min-w-0 flex-1 [overflow-wrap:anywhere]">
-                <span className="font-medium">{t.problem}</span>: {t.breaks} will not work. Fix: {t.fix}.
+                <Trans
+                  i18nKey="hostTools.line"
+                  values={hostToolText(tool, t)}
+                  components={{ strong: <span className="font-medium" /> }}
+                />
               </p>
-              <Tip content={`Hide this until the next check finds ${t.name} still missing`}>
+              <Tip content={t('hostTools.dismissTip', { name: tool.name })}>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon-xs"
                   className="shrink-0"
-                  aria-label={`Dismiss the ${t.name} warning`}
-                  onClick={() => dismiss(t.name)}
+                  aria-label={t('hostTools.dismissAria', { name: tool.name })}
+                  onClick={() => dismiss(tool.name)}
                 >
                   <X />
                 </Button>
@@ -72,18 +79,18 @@ export function HostToolsBanner() {
             </li>
           ))}
         </ul>
-        <Tip content="Look for git, gh, claude, node and pnpm again on the board's PATH">
+        <Tip content={t('hostTools.recheckTip')}>
           <Button
             type="button"
             variant="outline"
             size="sm"
             className="shrink-0"
-            aria-label="Check the tools again"
+            aria-label={t('hostTools.recheckAria')}
             disabled={check.isPending}
             onClick={() => check.mutate()}
           >
-            <RefreshCw data-icon="inline-start" className={check.isPending ? 'animate-spin' : ''} /> Check
-            again
+            <RefreshCw data-icon="inline-start" className={check.isPending ? 'animate-spin' : ''} />{' '}
+            {t('connect.checkAgain')}
           </Button>
         </Tip>
       </div>

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { ChevronRight, RefreshCw } from 'lucide-react'
 import { type ReactNode, useId, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { CopyBlock } from '#/components/AgentPicker'
@@ -72,6 +73,7 @@ export function ReviewSkills({
   onShellChange: (shell: Shell) => void
   projectId?: string
 }) {
+  const { t } = useTranslation()
   const { data: paths = [] } = useQuery({
     queryKey: ['review-skills'],
     queryFn: () => get<string[]>('/api/agent-setup/review-skills?list'),
@@ -83,39 +85,39 @@ export function ReviewSkills({
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
-          <code className="rounded bg-muted px-1">/todo-review</code> works the To do tickets to hand-off and{' '}
-          <code className="rounded bg-muted px-1">/review-queue</code> reviews the PR queue, both delegating
-          to these agents. <code className="rounded bg-muted px-1">/feature-review</code> is the review they
-          run on each change. One line installs all three, with their agents, into{' '}
-          <code className="rounded bg-muted px-1">~/.claude</code> (Claude Code; OpenCode reads its skills
-          too), replacing files of the same name.
+          <Trans i18nKey="skills.intro" components={{ code: <code className="rounded bg-muted px-1" /> }} />
           {!token && (
             <>
               {' '}
-              It carries <code className="rounded bg-muted px-1">{TOKEN_PLACEHOLDER}</code> until a line is
-              copied: the board then mints a download token, good for about ten minutes, for every install
-              line on this page.
+              <Trans
+                i18nKey="skills.placeholderNote"
+                values={{ placeholder: TOKEN_PLACEHOLDER }}
+                components={{ code: <code className="rounded bg-muted px-1" /> }}
+              />
             </>
           )}
         </p>
         <Tabs value={shell} onValueChange={(v) => onShellChange(v as Shell)}>
           <TabsList>
+            {/* i18n-ignore: shell names */}
             <TabsTrigger value="bash">bash / zsh</TabsTrigger>
+            {/* i18n-ignore: shell name */}
             <TabsTrigger value="powershell">PowerShell</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
       <CopyBlock
         text={reviewSkillsInstall(shell, boardUrl, token.trim())}
-        onCopy={copy((t) => reviewSkillsInstall(shell, boardUrl, t))}
+        onCopy={copy((tok) => reviewSkillsInstall(shell, boardUrl, tok))}
       />
       {paths.length > 0 && (
         <details className="rounded-md border">
           <summary className="cursor-pointer px-3 py-2 text-xs text-muted-foreground">
-            {paths.length} files it installs
+            {t('skills.filesInstalled', { count: paths.length })}
           </summary>
           <ul className="border-t p-3 font-mono text-xs text-muted-foreground">
             {paths.map((p) => (
+              // i18n-ignore: a path
               <li key={p}>~/.claude/{p}</li>
             ))}
           </ul>
@@ -175,6 +177,7 @@ function InstalledSkills({
   shell: Shell
   projectId?: string
 }) {
+  const { t } = useTranslation()
   const [tracking, track] = useSkillsTracking()
   const label = useId()
   if (!tracking) return null
@@ -182,12 +185,12 @@ function InstalledSkills({
     <>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span id={label} className="text-xs font-medium">
-          Track
+          {t('skills.track')}
         </span>
         <Tabs value={tracking} onValueChange={(v) => track(v as SkillsTracking)}>
           <TabsList aria-labelledby={label}>
-            <TabsTrigger value="global">Global</TabsTrigger>
-            <TabsTrigger value="repo">By repo</TabsTrigger>
+            <TabsTrigger value="global">{t('skills.global')}</TabsTrigger>
+            <TabsTrigger value="repo">{t('skills.byRepo')}</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
@@ -200,25 +203,27 @@ function InstalledSkills({
   )
 }
 
-const STATUS_LABEL: Record<RepoSkillsRow['status'], string> = {
-  current: 'Up to date',
-  outdated: 'Outdated',
-  none: 'Not installed in the repo',
-  unreachable: "Can't read the checkout",
-}
+const STATUS_LABEL = {
+  current: 'skills.repoStatus.current',
+  outdated: 'skills.repoStatus.outdated',
+  none: 'skills.repoStatus.none',
+  unreachable: 'skills.repoStatus.unreachable',
+} as const satisfies Record<RepoSkillsRow['status'], string>
 
-const GLOBAL_LABEL: Record<GlobalSkillsRow['status'], string> = {
-  current: 'Up to date',
-  outdated: 'Outdated',
-  none: 'Not installed',
-  unreachable: "Can't read the folder",
-}
+const GLOBAL_LABEL = {
+  current: 'skills.globalStatus.current',
+  outdated: 'skills.globalStatus.outdated',
+  none: 'skills.globalStatus.none',
+  unreachable: 'skills.globalStatus.unreachable',
+} as const satisfies Record<GlobalSkillsRow['status'], string>
 
 /** Reads the copies from disk again. */
 function CheckAgain({ status }: { status: ReturnType<typeof useSkillsStatus> }) {
+  const { t } = useTranslation()
   return (
     <Button variant="outline" size="sm" onClick={() => status.refetch()} disabled={status.isFetching}>
-      <RefreshCw data-icon="inline-start" className={status.isFetching ? 'animate-spin' : ''} /> Check again
+      <RefreshCw data-icon="inline-start" className={status.isFetching ? 'animate-spin' : ''} />{' '}
+      {t('connect.checkAgain')}
     </Button>
   )
 }
@@ -241,44 +246,43 @@ function GlobalSkills({
   shell: Shell
   projectId?: string
 }) {
+  const { t } = useTranslation()
   const status = useSkillsStatus(projectId)
   const { data, error } = status
   const installTo = data?.global.installTo ?? null
-  const build = (t: string) => reviewSkillsInstall(shell, boardUrl, t, installTo ?? undefined)
+  const build = (tok: string) => reviewSkillsInstall(shell, boardUrl, tok, installTo ?? undefined)
   return (
-    <section className="space-y-2" aria-label="On this machine">
+    <section className="space-y-2" aria-label={t('skills.onMachine')}>
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-xs font-medium">On this machine</h3>
+        <h3 className="text-xs font-medium">{t('skills.onMachine')}</h3>
         <CheckAgain status={status} />
       </div>
       {installTo === null ? (
         <p className="text-xs text-muted-foreground">
-          The copy in <code className="rounded bg-muted px-1">~/.claude</code> on the machine the board runs
-          on, which Claude Code uses in every repo without a copy of its own. The line above brings it up to
-          date.
+          <Trans
+            i18nKey="skills.globalText"
+            components={{ code: <code className="rounded bg-muted px-1" /> }}
+          />
         </p>
       ) : (
         <p className="text-xs text-muted-foreground">
-          The copy in the folder <code className="rounded bg-muted px-1">CLAUDE_HOME</code> names on the
-          machine the board runs on, in place of <code className="rounded bg-muted px-1">~/.claude</code>. The
-          line above installs into <code className="rounded bg-muted px-1">~/.claude</code>: this copy has a
-          line of its own that installs the files into that folder.
+          <Trans
+            i18nKey="skills.globalHomeText"
+            components={{ code: <code className="rounded bg-muted px-1" /> }}
+          />
         </p>
       )}
       {error && <p className="text-xs text-destructive">{errorMessage(error)}</p>}
       {data && (
         <ul className="divide-y rounded-md border">
           <SkillsItem
-            label="~/.claude on this machine"
+            label={t('skills.claudeOnMachine')}
+            // i18n-ignore: a path
             name={<span className="font-medium">~/.claude</span>}
             path={data.global.path}
             status={data.global.status}
-            statusLabel={GLOBAL_LABEL[data.global.status]}
-            none={
-              installTo === null
-                ? 'None of these files are there yet: the line above installs them.'
-                : 'None of these files are there yet: this line installs them.'
-            }
+            statusLabel={t(GLOBAL_LABEL[data.global.status])}
+            none={installTo === null ? t('skills.noneGlobal') : t('skills.noneHome')}
             noneLine={installTo !== null}
             files={data.global.files}
             total={data.files.length}
@@ -308,26 +312,23 @@ function RepoSkills({
   shell: Shell
   projectId?: string
 }) {
+  const { t } = useTranslation()
   const status = useSkillsStatus(projectId)
   const { data, error } = status
   return (
-    <section className="space-y-2" aria-label="In your repos">
+    <section className="space-y-2" aria-label={t('skills.inRepos')}>
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-xs font-medium">In your repos</h3>
+        <h3 className="text-xs font-medium">{t('skills.inRepos')}</h3>
         <CheckAgain status={status} />
       </div>
       <p className="text-xs text-muted-foreground">
-        A repo can carry its own copy in its <code className="rounded bg-muted px-1">.claude</code> folder,
-        which Claude Code uses there instead of the one in{' '}
-        <code className="rounded bg-muted px-1">~/.claude</code>. An outdated copy has a line that installs
-        these files into that repo&apos;s <code className="rounded bg-muted px-1">.claude</code>, replacing
-        files of the same name and keeping the rest.
+        <Trans i18nKey="skills.reposText" components={{ code: <code className="rounded bg-muted px-1" /> }} />
       </p>
       {error && <p className="text-xs text-destructive">{errorMessage(error)}</p>}
       {data &&
         (data.repos.length === 0 ? (
           <p className="rounded-md border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
-            {projectId ? 'No repos in this project yet.' : 'No repos on the board yet.'}
+            {projectId ? t('skills.noReposProject') : t('skills.noReposBoard')}
           </p>
         ) : (
           <ul className="divide-y rounded-md border">
@@ -335,7 +336,7 @@ function RepoSkills({
               <SkillsItem
                 key={r.repoId}
                 repoId={r.repoId}
-                label={`${r.repoName} in ${r.projectName}`}
+                label={t('skills.repoLabel', { repo: r.repoName, project: r.projectName })}
                 name={
                   <>
                     <span className="font-medium">{r.repoName}</span>
@@ -344,16 +345,17 @@ function RepoSkills({
                 }
                 path={r.repoPath}
                 status={r.status}
-                statusLabel={STATUS_LABEL[r.status]}
+                statusLabel={t(STATUS_LABEL[r.status])}
                 none={
-                  <>
-                    Uses the <code className="rounded bg-muted px-1">~/.claude</code> install.
-                  </>
+                  <Trans
+                    i18nKey="skills.usesGlobal"
+                    components={{ code: <code className="rounded bg-muted px-1" /> }}
+                  />
                 }
                 files={r.files}
                 total={data.files.length}
                 line={reviewSkillsInstall(shell, boardUrl, token, repoClaudeDir(r.repoPath))}
-                copy={copy((t) => reviewSkillsInstall(shell, boardUrl, t, repoClaudeDir(r.repoPath)))}
+                copy={copy((tok) => reviewSkillsInstall(shell, boardUrl, tok, repoClaudeDir(r.repoPath)))}
               />
             ))}
           </ul>
@@ -397,6 +399,7 @@ function SkillsItem({
   /** The same line to copy, with this page's download token minted on the first copy. */
   copy: () => Promise<string | null>
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   // The stale file whose changes are shown, and how many times one was opened: each opening reads anew.
   const [diffOf, setDiffOf] = useState<string | null>(null)
@@ -430,12 +433,12 @@ function SkillsItem({
             className="flex items-center gap-1 text-left text-xs text-muted-foreground hover:text-foreground"
           >
             <ChevronRight className={`size-3.5 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
-            {stale.length} of {total} files differ or are missing
+            {t('skills.differ', { count: stale.length, total })}
           </button>
           {/* Rendered only when open: the page has one install line per shell until a copy's is asked for. */}
           {open && (
             <div className="space-y-2">
-              <ul className="font-mono text-xs text-muted-foreground" aria-label="Files not up to date">
+              <ul className="font-mono text-xs text-muted-foreground" aria-label={t('skills.notUpToDate')}>
                 {stale.map((f) => (
                   <li key={f.path}>
                     {/* Opens what the line would change in this file. */}
@@ -448,8 +451,9 @@ function SkillsItem({
                       }}
                       className="flex w-full gap-2 rounded-sm text-left outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
                     >
-                      <span className="w-16 shrink-0">{f.status}</span>
+                      <span className="w-16 shrink-0">{t(`skills.fileStatus.${f.status}`)}</span>
                       <span className="min-w-0 break-all underline-offset-2 hover:underline">
+                        {/* i18n-ignore: a path */}
                         .claude/{f.path}
                       </span>
                     </button>

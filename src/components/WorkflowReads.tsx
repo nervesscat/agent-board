@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Skeleton } from '#/components/ui/skeleton'
 import { errorMessage, get, type WorkflowEffective } from '#/lib/api'
@@ -24,6 +25,7 @@ export function WhatAgentsRead({
   preset: WorkflowPresetId
   complexity: Complexity
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const { data, error } = useQuery({
     queryKey: [...readsKey(projectId), preset, complexity],
@@ -42,10 +44,8 @@ export function WhatAgentsRead({
     >
       <summary className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
         <ChevronRight className="size-4 transition-transform group-open:rotate-90" aria-hidden />
-        What agents read
-        <span className="text-xs font-normal text-muted-foreground">
-          the text get_workflow serves for this workflow
-        </span>
+        {t('workflowReads.title')}
+        <span className="text-xs font-normal text-muted-foreground">{t('workflowReads.hint')}</span>
       </summary>
       <div className="border-t p-3">
         {error ? (
@@ -54,7 +54,7 @@ export function WhatAgentsRead({
           </p>
         ) : data ? (
           <pre
-            aria-label="Workflow text"
+            aria-label={t('workflowReads.textLabel')}
             tabIndex={0}
             className="max-h-[32rem] overflow-auto rounded-md bg-muted/50 p-3 font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap"
           >

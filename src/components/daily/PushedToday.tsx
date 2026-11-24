@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { cn } from 'cn'
 import { GitCommitHorizontal } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import { DelayedLoading } from '#/components/Loading'
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
@@ -9,8 +10,6 @@ import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { get, type PushedToday } from '#/lib/api'
 import { ago } from '#/lib/format'
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 /** Lines added and removed, as `+340 −85`. */
 const lines = (t: { added: number; removed: number }) => `+${t.added} −${t.removed}`
@@ -21,6 +20,7 @@ const lines = (t: { added: number; removed: number }) => `+${t.added} −${t.rem
  * header.
  */
 export function PushedTodayBadge({ projectId }: { projectId: number }) {
+  const { t } = useTranslation()
   const { data, error } = useQuery({
     queryKey: ['pushed-today', projectId],
     queryFn: () => get<PushedToday>(`/api/projects/${projectId}/pushed-today`),
@@ -28,14 +28,18 @@ export function PushedTodayBadge({ projectId }: { projectId: number }) {
   })
   if (!data)
     return error ? null : (
-      <DelayedLoading label="Loading pushed today…">
+      <DelayedLoading label={t('loading.pushedToday')}>
         <Skeleton className="h-6 w-36 rounded-full" />
       </DelayedLoading>
     )
   const pushed = data.commits > 0
   const label = pushed
-    ? `Pushed today: ${plural(data.commits, 'commit')}, ${data.added} lines added, ${data.removed} removed`
-    : 'Pushed today: nothing'
+    ? t('pushedToday.label', {
+        commits: t('pushedToday.commits', { count: data.commits }),
+        added: data.added,
+        removed: data.removed,
+      })
+    : t('pushedToday.labelNone')
 
   return (
     <Popover>
@@ -56,22 +60,24 @@ export function PushedTodayBadge({ projectId }: { projectId: number }) {
         />
         {pushed ? (
           <>
-            <span className="truncate">{plural(data.commits, 'commit')}</span>
+            <span className="truncate">{t('pushedToday.commits', { count: data.commits })}</span>
             <span className="tabular-nums">{lines(data)}</span>
           </>
         ) : (
-          <span className="truncate">Nothing pushed today</span>
+          <span className="truncate">{t('pushedToday.nothing')}</span>
         )}
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)]">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="font-medium">Pushed today</span>
+          <span className="font-medium">{t('pushedToday.title')}</span>
           <span className="text-xs text-muted-foreground">
-            {data.checkedAt ? `origin checked ${ago(data.checkedAt)}` : 'origin not fetched yet'}
+            {data.checkedAt
+              ? t('pushedToday.checked', { ago: ago(data.checkedAt) })
+              : t('pushedToday.notFetched')}
           </span>
         </div>
         {pushed ? (
-          <ul aria-label="Pushed today by repo" className="space-y-2">
+          <ul aria-label={t('pushedToday.byRepo')} className="space-y-2">
             {data.repos.map((r) => (
               <li key={r.repoId} className="min-w-0">
                 <div className="flex items-baseline justify-between gap-2 font-medium">
@@ -109,23 +115,21 @@ export function PushedTodayBadge({ projectId }: { projectId: number }) {
             ))}
           </ul>
         ) : (
-          <p className="text-xs text-muted-foreground">
-            Nothing reached origin today on this project's repos.
-          </p>
+          <p className="text-xs text-muted-foreground">{t('pushedToday.emptyRepos')}</p>
         )}
-        <p className="text-xs text-muted-foreground">
-          Commits that reached a branch of origin today, each once, merges left out.
-        </p>
+        <p className="text-xs text-muted-foreground">{t('pushedToday.hint')}</p>
       </PopoverContent>
     </Popover>
   )
 }
 
-function Totals({ t }: { t: { commits: number; added: number; removed: number } }) {
+function Totals({ t: totals }: { t: { commits: number; added: number; removed: number } }) {
+  const { t } = useTranslation()
   return (
     <span className="shrink-0 text-xs font-normal whitespace-nowrap text-muted-foreground tabular-nums">
-      {plural(t.commits, 'commit')} <span className="text-emerald-700 dark:text-emerald-400">+{t.added}</span>{' '}
-      <span className="text-red-700 dark:text-red-400">−{t.removed}</span>
+      {t('pushedToday.commits', { count: totals.commits })}{' '}
+      <span className="text-emerald-700 dark:text-emerald-400">+{totals.added}</span>{' '}
+      <span className="text-red-700 dark:text-red-400">−{totals.removed}</span>
     </span>
   )
 }

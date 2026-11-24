@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { ImagePlus, Lock, Pencil, Plus, Sparkles, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { AgentAvatar } from '#/components/AgentAvatar'
@@ -37,6 +38,7 @@ export const Route = createFileRoute('/projects/$id/agents')({
 })
 
 function Agents() {
+  const { t: tr } = useTranslation()
   const { id } = Route.useParams()
   const { data: project, error: projectError } = useProject(id)
   // Every ticket, lanes included: an agent can hold a lane as much as a top-level ticket.
@@ -55,14 +57,12 @@ function Agents() {
     <div className="max-w-3xl space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Team</h1>
-          <p className="text-sm text-muted-foreground">
-            The roles agents work as. Assign a ticket to reserve it for one.
-          </p>
+          <h1 className="text-xl font-semibold tracking-tight">{tr('projectAgents.title')}</h1>
+          <p className="text-sm text-muted-foreground">{tr('projectAgents.text')}</p>
         </div>
         {!adding && (
           <Button className="w-full shrink-0 sm:w-auto" onClick={() => setAdding(true)}>
-            <Plus data-icon="inline-start" /> New agent
+            <Plus data-icon="inline-start" /> {tr('projectAgents.new')}
           </Button>
         )}
       </div>
@@ -76,13 +76,13 @@ function Agents() {
       )}
       {!project ? (
         !projectError && (
-          <DelayedLoading label="Loading agents…" className="space-y-3">
+          <DelayedLoading label={tr('loading.agents')} className="space-y-3">
             <SkeletonCard lines={4} />
             <SkeletonCard lines={4} />
           </DelayedLoading>
         )
       ) : project.agents.length === 0 && !adding ? (
-        <Empty>No agents yet. Every ticket is shared by the connected agents.</Empty>
+        <Empty>{tr('projectAgents.empty')}</Empty>
       ) : (
         <ul className="space-y-3">
           {project.agents.map((a) => (
@@ -104,6 +104,7 @@ function DefaultAgents({
   agents: ProjectAgent[]
   kinds: readonly string[]
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const have = new Set(agents.map((a) => a.name.toLowerCase()))
   // A project with no software kind has its maker, not the review cycle.
@@ -115,31 +116,26 @@ function DefaultAgents({
       post<{ added: string[]; kept: string[] }>(`/api/projects/${projectId}/agents/defaults`, {}),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['project', projectId] })
-      toast.success(`Added ${r.added.join(', ')}`)
+      toast.success(t('projectAgents.added', { names: r.added.join(', ') }))
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
   return (
-    <section className="space-y-3 rounded-lg border p-4" aria-label="Default agents">
-      <div className="flex items-start gap-4">
-        <div className="flex-1 space-y-1">
-          <h2 className="text-sm font-medium">Default agents</h2>
+    <section className="space-y-3 rounded-lg border p-4" aria-label={t('projectAgents.defaults.title')}>
+      <div className="flex flex-wrap items-start gap-4">
+        <div className="min-w-48 flex-1 space-y-1">
+          <h2 className="text-sm font-medium">{t('projectAgents.defaults.title')}</h2>
           {!software ? (
             <p className="text-xs text-muted-foreground">
-              The maker makes the work&apos;s files in the project&apos;s folder and attaches them to the
-              ticket; the human approves them or sends the ticket back. Edit it after. An agent that works
-              this project connects to <code className="font-mono">{`/api/mcp?project=${projectId}`}</code> on
-              the board&apos;s address (the same MCP as the Connect an agent page, with this project&apos;s
-              text and tools).
+              <Trans
+                i18nKey="projectAgents.defaults.files"
+                values={{ path: `/api/mcp?project=${projectId}` }}
+                components={{ code: <code className="font-mono" /> }}
+              />
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              The build and review cycle: <strong>spec</strong> writes the acceptance criteria,{' '}
-              <strong>builder</strong> writes the code, <strong>runner</strong> reviews it, and the
-              review&apos;s phases (<strong>env</strong>, <strong>verify</strong>, <strong>hunt</strong>,{' '}
-              <strong>refute</strong>, <strong>merge</strong>) try to break it; findings go back to the
-              builder. <strong>intent</strong> then checks the result against the human&apos;s own words. Each
-              comes with its instructions and the notes the orchestrator delegates by. Edit any of them after.
+              <Trans i18nKey="projectAgents.defaults.software" components={{ strong: <strong /> }} />
             </p>
           )}
         </div>
@@ -151,18 +147,21 @@ function DefaultAgents({
             onClick={() => add.mutate()}
           >
             <Sparkles data-icon="inline-start" />
-            {missing.length === names.length ? 'Add the default agents' : `Add ${missing.join(', ')}`}
+            {missing.length === names.length
+              ? t('projectAgents.defaults.addAll')
+              : t('projectAgents.defaults.addNames', { names: missing.join(', ') })}
           </Button>
         ) : (
-          <span className="shrink-0 text-xs text-muted-foreground">All added</span>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {t('projectAgents.defaults.allAdded')}
+          </span>
         )}
       </div>
       <p className="border-t pt-3 text-xs text-muted-foreground">
-        The skills that run this cycle, and the agent&apos;s MCP connection, install on{' '}
-        <Link to="/agents" className="underline hover:text-foreground">
-          Connect an agent
-        </Link>
-        .
+        <Trans
+          i18nKey="projectAgents.defaults.skills"
+          components={{ goto: <Link to="/agents" className="underline hover:text-foreground" /> }}
+        />
       </p>
     </section>
   )
@@ -178,6 +177,7 @@ function AgentCard({
   /** Undefined until the tickets are read. */
   reserved: TicketRow[] | undefined
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [editing, setEditing] = useState(false)
   const remove = useMutation({
@@ -203,61 +203,76 @@ function AgentCard({
           ) : reserved.length > 0 ? (
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
               <Lock className="size-3" />
-              {reserved.map((t) => (
+              {reserved.map((tk) => (
                 <Link
-                  key={t.id}
+                  key={tk.id}
                   to="/projects/$id/features/$ticketId"
-                  params={{ id: projectId, ticketId: String(t.id) }}
+                  params={{ id: projectId, ticketId: String(tk.id) }}
                   className="hover:text-foreground hover:underline"
                 >
-                  #{t.id} {t.title}
+                  #{tk.id} {tk.title}
                 </Link>
               ))}
             </div>
           ) : (
-            <div className="mt-1 text-xs text-muted-foreground">no tickets reserved for it</div>
+            <div className="mt-1 text-xs text-muted-foreground">{t('projectAgents.noReserved')}</div>
           )}
         </div>
-        <Tip content="Edit">
-          <Button variant="ghost" size="icon-sm" aria-label="Edit" onClick={() => setEditing(true)}>
+        <Tip content={t('runsSettings.edit')}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t('runsSettings.edit')}
+            onClick={() => setEditing(true)}
+          >
             <Pencil />
           </Button>
         </Tip>
         <AlertDialog>
-          <Tip content={`Remove ${agent.name}`}>
+          <Tip content={t('projectAgents.remove', { name: agent.name })}>
             <AlertDialogTrigger
-              render={<Button variant="ghost" size="icon-sm" aria-label={`Remove ${agent.name}`} />}
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t('projectAgents.remove', { name: agent.name })}
+                />
+              }
             >
               <TrashIcon />
             </AlertDialogTrigger>
           </Tip>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Remove {agent.name}?</AlertDialogTitle>
+              <AlertDialogTitle>{t('projectAgents.removeTitle', { name: agent.name })}</AlertDialogTitle>
               <AlertDialogDescription>
-                {reserved?.length
-                  ? `Its ${reserved.length} reserved ticket${reserved.length === 1 ? '' : 's'} become shared and unassigned. `
-                  : ''}
-                What it already posted keeps its name.
+                {reserved?.length ? `${t('projectAgents.removeReserved', { count: reserved.length })} ` : ''}
+                {t('projectAgents.removeKept')}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Keep</AlertDialogCancel>
-              <AlertDialogAction onClick={() => remove.mutate()}>Remove</AlertDialogAction>
+              <AlertDialogCancel>{t('projectAgents.keep')}</AlertDialogCancel>
+              <AlertDialogAction onClick={() => remove.mutate()}>
+                {t('projectAgents.removeAction')}
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       </div>
-      <AgentText title="Instructions" hint="what the agent works by" text={agent.instructions} />
       <AgentText
-        title="When to delegate"
-        hint="what the orchestrator decides by"
-        text={agent.delegation}
-        empty="No delegation notes yet: the orchestrator will not know when to call it."
+        title={t('projectAgents.instructions')}
+        hint={t('projectAgents.instructionsHint')}
+        text={agent.instructions}
       />
       <AgentText
-        title="Run report"
-        hint="the template each run fills in before it hands back"
+        title={t('projectAgents.delegate')}
+        hint={t('projectAgents.delegateHint')}
+        text={agent.delegation}
+        empty={t('projectAgents.delegateEmpty')}
+      />
+      <AgentText
+        title={t('projectAgents.report')}
+        hint={t('projectAgents.reportHint')}
         text={agent.reportTemplate}
       />
     </li>
@@ -269,13 +284,14 @@ function AgentText({
   title,
   hint,
   text,
-  empty = 'Nothing yet.',
+  empty,
 }: {
   title: string
   hint: string
   text: string
   empty?: string
 }) {
+  const { t } = useTranslation()
   const heading = (
     <>
       {title} <span className="font-normal">· {hint}</span>
@@ -285,14 +301,17 @@ function AgentText({
     return (
       <div className="mt-3 border-t pt-3">
         <h3 className="mb-1 text-xs font-medium text-muted-foreground">{heading}</h3>
-        <p className="text-sm text-muted-foreground">{empty}</p>
+        <p className="text-sm text-muted-foreground">{empty ?? t('projectAgents.nothingYet')}</p>
       </div>
     )
   return (
     <details className="group mt-3 border-t pt-3" open={text.length <= 1200}>
       <summary className="mb-1 cursor-pointer text-xs font-medium text-muted-foreground select-none">
         {heading}
-        <span className="font-normal group-open:hidden"> · {text.split('\n').length} lines</span>
+        <span className="font-normal group-open:hidden">
+          {' '}
+          · {t('projectAgents.lines', { count: text.split('\n').length })}
+        </span>
       </summary>
       <Markdown>{text}</Markdown>
     </details>
@@ -312,6 +331,7 @@ function AgentForm({
   defaultTemplate?: string
   onDone: () => void
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [name, setName] = useState(agent?.name ?? '')
   const [instructions, setInstructions] = useState(agent?.instructions ?? '')
@@ -359,14 +379,14 @@ function AgentForm({
     >
       <div className="flex items-end gap-4">
         <div className="space-y-2">
-          <Label>Picture</Label>
+          <Label>{t('projectAgents.picture')}</Label>
           <div className="relative">
-            <Tip content="Choose a picture">
+            <Tip content={t('projectAgents.choosePicture')}>
               <button
                 type="button"
                 onClick={() => file.current?.click()}
                 className="flex size-16 items-center justify-center overflow-hidden rounded-full border bg-muted text-muted-foreground hover:text-foreground"
-                aria-label="Choose a picture"
+                aria-label={t('projectAgents.choosePicture')}
               >
                 {avatar ? (
                   <img src={avatar.url} alt="" className="size-full object-cover" />
@@ -378,12 +398,12 @@ function AgentForm({
               </button>
             </Tip>
             {avatar && (
-              <Tip content="Remove the picture">
+              <Tip content={t('projectAgents.removePicture')}>
                 <button
                   type="button"
                   onClick={() => setAvatar(null)}
                   className="absolute -top-1 -right-1 rounded-full border bg-background p-0.5 text-muted-foreground hover:text-foreground"
-                  aria-label="Remove the picture"
+                  aria-label={t('projectAgents.removePicture')}
                 >
                   <X className="size-3" />
                 </button>
@@ -403,69 +423,59 @@ function AgentForm({
           </div>
         </div>
         <div className="flex-1 space-y-2">
-          <Label htmlFor="agent-name">Name</Label>
+          <Label htmlFor="agent-name">{t('runsSettings.name')}</Label>
           <Input
             id="agent-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="reviewer, frontend, qa…"
+            placeholder={t('projectAgents.namePlaceholder')}
             required
             autoFocus
             maxLength={40}
             pattern="[A-Za-z0-9][A-Za-z0-9_\-]*"
-            title="Letters, digits, - and _, so @name works in threads"
+            title={t('projectAgents.nameRule')}
           />
         </div>
       </div>
       <div className="space-y-2">
-        <Label>Instructions</Label>
-        <p className="text-xs text-muted-foreground">
-          What the agent works by: who it is, how it works, what it never does. The orchestrator briefs a
-          subagent with this.
-        </p>
+        <Label>{t('projectAgents.instructions')}</Label>
+        <p className="text-xs text-muted-foreground">{t('projectAgents.instructionsText')}</p>
         <RichEditor
           value={instructions}
           onChange={setInstructions}
           minHeight="min-h-40"
-          label="Instructions"
-          placeholder="You are the Tester. You check every acceptance criterion against the running preview…"
+          label={t('projectAgents.instructions')}
+          placeholder={t('projectAgents.instructionsPlaceholder')}
         />
       </div>
       <div className="space-y-2">
-        <Label>When to delegate</Label>
-        <p className="text-xs text-muted-foreground">
-          What the orchestrator decides by: when to hand work to this agent, what to give it, what it returns,
-          and what comes next.
-        </p>
+        <Label>{t('projectAgents.delegate')}</Label>
+        <p className="text-xs text-muted-foreground">{t('projectAgents.delegateText')}</p>
         <RichEditor
           value={delegation}
           onChange={setDelegation}
           minHeight="min-h-28"
-          label="When to delegate"
-          placeholder="After the Builder finishes a step, with the preview link and the acceptance criteria. Returns PASS / FAIL per criterion. All pass: the Breaker next; a failure: back to the Builder."
+          label={t('projectAgents.delegate')}
+          placeholder={t('projectAgents.delegatePlaceholder')}
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="agent-report-template">Run report template</Label>
-        <p className="text-xs text-muted-foreground">
-          What a run of this agent fills in before it hands back, one report per run. It starts with the
-          common part every report carries (identity, time, brief, steps, ratings, problems, gaps); add what
-          this agent does. The board keeps it with the agent.
-        </p>
+        <Label htmlFor="agent-report-template">{t('projectAgents.templateLabel')}</Label>
+        <p className="text-xs text-muted-foreground">{t('projectAgents.templateText')}</p>
         <Textarea
           id="agent-report-template"
           value={reportTemplate}
           onChange={(e) => setReportTemplate(e.target.value)}
           className="min-h-40 font-mono text-xs"
-          placeholder="## The rule …"
+          placeholder={t('projectAgents.templatePlaceholder')}
         />
       </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onDone}>
-          Cancel
+          {t('runsSettings.cancel')}
         </Button>
         <Button type="submit" disabled={save.isPending || pick.isPending || !name.trim()}>
-          {agent ? 'Save' : 'Add agent'}
+          {agent ? t('connect.save') : t('projectAgents.add')}
         </Button>
       </div>
     </form>

@@ -1,0 +1,37 @@
+// The desktop app's own texts in id (see ../strings.mjs). Every key of en.mjs, the same {{placeholders}} and <tags>.
+export default {
+  open: 'Buka',
+  openInBrowser: 'Buka di browser',
+  retryNow: 'Coba lagi sekarang',
+  startAtLogin: 'Mulai saat login',
+  quit: 'Keluar',
+  openSettings: 'Buka file pengaturan',
+  openLogs: 'Buka folder log',
+  openHome: 'Buka folder aplikasi',
+  startAtLoginFailed: 'Pengaturan mulai saat login tidak bisa diubah.',
+  cannotStart: 'Papan tidak bisa dimulai.',
+  settingsInvalid: 'Pengaturan papan tidak valid.',
+  homeUnusable:
+    'Folder aplikasi {{home}} tidak bisa dipakai: {{error}}\n\nAtur AGENT_BOARD_HOME ke folder yang bisa ditulisi, atau hapus untuk memakai folder bawaan.',
+  homeLine: '{{error}}\n\nFolder aplikasi: {{home}}',
+  dataFolderUnusable:
+    'Folder datanya {{dir}} tidak bisa dipakai: {{error}}\n\nAtur DATA_DIR lain di {{file}}, atau di environment, lalu mulai aplikasi lagi.',
+  logsLine: '{{detail}}\n\nLog: {{logs}}',
+  stopped: 'Papan berhenti.',
+  restartedTimes_other: ' Papan dimulai ulang {{count}} kali.',
+  noOutput: '(tanpa output)',
+  exitedSignal: 'Dihentikan oleh {{signal}} pukul {{time}}.',
+  exitedCode: 'Keluar dengan kode {{code}} pukul {{time}}.',
+  exited: 'Keluar pukul {{time}}.',
+  reasonCode: 'kode keluar {{code}}',
+  reasonSignal: 'sinyal {{signal}}',
+  reasonNone: 'tanpa kode keluar',
+  tipRestarting: '{{name}}: memulai ulang papan ({{reason}})',
+  tipRestarted: '{{name}}: {{url}} (dimulai ulang pukul {{time}} setelah {{reason}})',
+  notifyRestarted: 'Papan dimulai ulang ({{reason}}).',
+  didNotStart: 'Papan tidak mulai.',
+  didNotAnswer: 'Tidak menjawab di {{url}} dalam satu menit.',
+  unreachableHeading: 'Papan di <code>{{address}}</code> tidak bisa dijangkau.',
+  unreachableBody:
+    'Papan berjalan di mesin lain: pastikan mesin ini daring dan papan berjalan di sana. Aplikasi mencoba lagi sendiri, dan {{retry}} mencoba seketika.',
+}

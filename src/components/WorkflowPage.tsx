@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Empty } from '#/components/Empty'
@@ -27,7 +28,7 @@ import type { Complexity } from '#/lib/constants'
 import { type PresetTweak, type WorkflowPresetId, moveStep, resolveWorkflow } from '#/lib/workflow'
 import { tweakBody, withEffort, withEnabled, withAgent, withOrder, withRounds } from '#/lib/workflowEdit'
 import { findNode } from '#/lib/workflowGraph'
-import { COMPLEXITY_NAMES, roundsText } from '#/lib/workflowView'
+import { roundsText } from '#/lib/workflowView'
 
 /** The project's workflow: the overview of every preset, read once and kept as each change answers with the new one. */
 const overviewKey = (projectId: string) => ['workflow', projectId] as const
@@ -67,6 +68,7 @@ export function WorkflowPage({
   onView: (preset: WorkflowPresetId) => void
   onComplexity: (level: Complexity) => void
 }) {
+  const { t: tr } = useTranslation()
   const qc = useQueryClient()
   const key = overviewKey(projectId)
   const { data, error } = useQuery({
@@ -76,7 +78,7 @@ export function WorkflowPage({
   // Saves wait for each other: the next is built from what the one before it saved, never from older data.
   const queue = useRef<Promise<unknown>>(Promise.resolve())
   // The answer is the reason a save failed, or null once it was kept: an editor stays open on a refusal.
-  const run = (job: () => Promise<WorkflowOverview>, message = 'Saved') => {
+  const run = (job: () => Promise<WorkflowOverview>, message = tr('common.saved')) => {
     const next = queue.current.then(job).then(
       (overview): string | null => {
         qc.setQueryData(key, overview)
@@ -143,10 +145,17 @@ export function WorkflowPage({
       }),
   }
   const makeActive = () =>
-    run(() => put<WorkflowOverview>(`/api/projects/${projectId}/workflow`, { preset: viewed }), 'Saved')
+    run(
+      () => put<WorkflowOverview>(`/api/projects/${projectId}/workflow`, { preset: viewed }),
+      tr('common.saved'),
+    )
   const reset = () =>
-    run(() => del<WorkflowOverview>(`/api/projects/${projectId}/workflow/${viewed}`), 'Reset')
+    run(
+      () => del<WorkflowOverview>(`/api/projects/${projectId}/workflow/${viewed}`),
+      tr('workflowPage.reset'),
+    )
   const isActive = viewed === active
+  const presetLabel = tr(`workflowPresets.${current.id}.label`)
   const rounds = workflow.rounds[complexity]
   const flightOf = (level: Complexity) => {
     const flightKey = `${workflow.preset}:${level}`
@@ -178,12 +187,8 @@ export function WorkflowPage({
   return (
     <div className="max-w-6xl space-y-6">
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold tracking-tight">Workflow</h1>
-        <p className="text-sm text-muted-foreground">
-          How a ticket goes from To do to hand-off: the steps its agent runs, in order, who runs each and what
-          each hands to the next. The project follows one workflow; a ticket can name another on its page. The
-          agents read it from the board, so a change here is followed from their next run.
-        </p>
+        <h1 className="text-xl font-semibold tracking-tight">{tr('workflowPage.title')}</h1>
+        <p className="text-sm text-muted-foreground">{tr('workflowPage.intro')}</p>
       </div>
 
       <PresetSwitcher presets={data.presets} active={data.active} viewed={viewed} onView={onView} />
@@ -191,41 +196,40 @@ export function WorkflowPage({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <ComplexityPicker value={complexity} onChange={onComplexity} />
         <span className="text-xs text-muted-foreground">
-          The graph shows a {COMPLEXITY_NAMES[complexity].toLowerCase()} ticket.
+          {tr('workflowPage.graphShows', { complexity: tr(`workflowGraph.complexity.${complexity}`) })}
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {isActive ? (
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-              <Check className="size-3.5" aria-hidden /> The project follows this workflow
+              <Check className="size-3.5" aria-hidden /> {tr('workflowPage.projectFollows')}
             </span>
           ) : (
             <Button type="button" size="sm" onClick={makeActive}>
-              <Check data-icon="inline-start" /> Use this workflow
+              <Check data-icon="inline-start" /> {tr('workflowPage.use')}
             </Button>
           )}
           <AlertDialog open={confirmingReset} onOpenChange={setConfirmingReset}>
             <AlertDialogTrigger
               render={<Button type="button" variant="outline" size="sm" disabled={!current.tweaked} />}
             >
-              <RotateCcw data-icon="inline-start" /> Reset this workflow
+              <RotateCcw data-icon="inline-start" /> {tr('workflowPage.resetThis')}
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Reset the {current.label} workflow?</AlertDialogTitle>
+                <AlertDialogTitle>{tr('workflowPage.resetTitle', { label: presetLabel })}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Its order, switches, efforts, Team agents and review rounds go back to what the{' '}
-                  {current.label} preset ships with. The other presets keep what was changed in them.
+                  {tr('workflowPage.resetBody', { label: presetLabel })}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogCancel>{tr('workflowPage.cancel')}</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={() => {
                     setConfirmingReset(false)
                     reset()
                   }}
                 >
-                  Reset
+                  {tr('workflowPage.reset')}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -233,17 +237,22 @@ export function WorkflowPage({
         </div>
       </div>
 
-      <section aria-label={`${current.label} workflow`} className="space-y-3">
+      <section aria-label={tr('workflowPage.sectionLabel', { label: presetLabel })} className="space-y-3">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <h2 className="text-base font-semibold">
-            {current.label}
+            {presetLabel}
             {isActive && (
-              <span className="ml-2 text-xs font-normal text-muted-foreground">the project&apos;s</span>
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                {tr('workflowPage.projects')}
+              </span>
             )}
           </h2>
           <p className="text-xs text-muted-foreground" data-summary>
-            {workflow.numbered} steps for a {COMPLEXITY_NAMES[complexity].toLowerCase()} ticket · review:{' '}
-            {roundsText(rounds)}
+            {tr('workflowPage.summary', {
+              count: workflow.numbered,
+              complexity: tr(`workflowGraph.complexity.${complexity}`),
+              rounds: roundsText(rounds),
+            })}
           </p>
         </div>
         <div

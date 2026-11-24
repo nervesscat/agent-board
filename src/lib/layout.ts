@@ -5,6 +5,10 @@
  * saved (null: the defaults); what is handed out is always the effective one (`mergeLayout`).
  */
 
+import type { TFunction } from 'i18next'
+
+import { shared } from '#/i18n'
+
 /**
  * Where an element can go. The menu and the Overview are one ordered list each; a ticket's page has
  * a main column and a side column (one above the other on a phone).
@@ -71,6 +75,18 @@ export type LayoutElement = {
 const ELEMENTS = new Map<string, LayoutElement>(LAYOUT_ELEMENTS.map((e) => [e.id, e]))
 
 export const layoutElement = (id: LayoutId): LayoutElement => ELEMENTS.get(id)!
+
+type LockedId = Extract<(typeof LAYOUT_ELEMENTS)[number], { locked: string }>['id']
+
+/**
+ * An element's name in the language shown. `label` above is the English one; pass the `t` of
+ * `useTranslation()` when drawing it in a component (the shared instance is what the server renders with).
+ */
+export const layoutLabel = (id: LayoutId, t: TFunction = shared.t): string => t(`layoutEditor.element.${id}`)
+
+/** Why an element is never hidden, in the language shown; undefined when it can be hidden. */
+export const layoutLocked = (id: LayoutId, t: TFunction = shared.t): string | undefined =>
+  layoutElement(id).locked ? t(`layoutEditor.locked.${id as LockedId}`) : undefined
 
 /** The areas an element may be put in: a ticket's section goes in either column, the rest stay put. */
 export const allowedAreas = (id: LayoutId): readonly LayoutArea[] => {

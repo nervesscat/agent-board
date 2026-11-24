@@ -17,6 +17,7 @@ import type {
   Workspace,
   Activity,
 } from '#/db/schema'
+import type { Language } from '#/i18n/languages'
 import type { AnnotationDoc } from '#/lib/annotations'
 import { annotationsOf } from '#/lib/annotations'
 import type { ReportStatus } from '#/lib/reports'
@@ -263,6 +264,8 @@ export interface Me {
   parent: string
   boardEnv: 'production' | 'development' | 'test'
   authOff: boolean
+  /** The language of the interface this person picked, kept on the board; null until they pick one. */
+  language: Language | null
 }
 
 export type CommentRow = Comment & { attachments: (Attachment & { url: string })[] }

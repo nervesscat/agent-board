@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronUp, Plus, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
@@ -19,9 +20,9 @@ export function ListInput({
   onChange,
   text,
   onTextChange,
-  label = 'Tasks',
-  placeholder = 'Add a task',
-  addLabel = 'Add task',
+  label,
+  placeholder,
+  addLabel,
   reorderable = false,
 }: {
   /** The text input's, for a `<Label htmlFor>`. */
@@ -38,6 +39,10 @@ export function ListInput({
   /** Up and down buttons on each item, for a list whose order matters. */
   reorderable?: boolean
 }) {
+  const { t } = useTranslation()
+  label ??= t('lists.tasks')
+  placeholder ??= t('lists.addTask')
+  addLabel ??= t('lists.addTaskLabel')
   const input = useRef<HTMLInputElement>(null)
   const list = useRef<HTMLUListElement>(null)
   // After a move, the button to focus: the same one on the item where it landed, or its other one when
@@ -78,38 +83,38 @@ export function ListInput({
               <span className="min-w-0 flex-1 wrap-anywhere">{item}</span>
               {reorderable && (
                 <>
-                  <Tip content="Move up">
+                  <Tip content={t('lists.moveUp')}>
                     <button
                       type="button"
                       data-move={`up-${i}`}
                       className={iconButton}
                       disabled={i === 0}
                       onClick={() => move(i, 'up')}
-                      aria-label={`Move ${item} up`}
+                      aria-label={t('lists.moveItemUp', { item })}
                     >
                       <ChevronUp className="size-3.5" />
                     </button>
                   </Tip>
-                  <Tip content="Move down">
+                  <Tip content={t('lists.moveDown')}>
                     <button
                       type="button"
                       data-move={`down-${i}`}
                       className={iconButton}
                       disabled={i === value.length - 1}
                       onClick={() => move(i, 'down')}
-                      aria-label={`Move ${item} down`}
+                      aria-label={t('lists.moveItemDown', { item })}
                     >
                       <ChevronDown className="size-3.5" />
                     </button>
                   </Tip>
                 </>
               )}
-              <Tip content="Remove">
+              <Tip content={t('lists.remove')}>
                 <button
                   type="button"
                   className={iconButton}
                   onClick={() => onChange(value.filter((_, j) => j !== i))}
-                  aria-label={`Remove ${item}`}
+                  aria-label={t('lists.removeItem', { item })}
                 >
                   <X className="size-3.5" />
                 </button>

@@ -2,8 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
 import { Bell, CircleAlert, Info, TriangleAlert, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { shared } from '#/i18n'
 import { Button, buttonVariants } from '#/components/ui/button'
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '#/components/ui/popover'
 import { Progress } from '#/components/ui/progress'
@@ -21,8 +23,10 @@ import {
   type NoticeCard,
   type TrackedCard,
 } from '#/lib/api'
-import { ALERT_GROUP_LABELS, ALERT_GROUPS, snoozeLabel, worstSeverity } from '#/lib/alerts'
+import { ALERT_GROUPS, worstSeverity } from '#/lib/alerts'
+import { alertGroupLabel, snoozeLabel } from '#/lib/alertText'
 import { CLEANUP_DELETE_JOB, countsOf, deleteResults, keptItems } from '#/lib/cleanupResults'
+import { formatNumber } from '#/lib/format'
 import { currentProjectId, useProjects } from '#/lib/project'
 
 /**
@@ -50,6 +54,7 @@ const SEEN_AFTER_MS = 1000
 const GROUPED_FROM = 5
 
 export function NotificationCenter() {
+  const { t } = useTranslation()
   const projectId = useWatchedProject()
 
   const feedKey = ['notifications', projectId ?? null] as const
@@ -114,17 +119,28 @@ export function NotificationCenter() {
       if (item.source === 'job' && item.job) {
         const { job } = item
         if (job.state === 'failed')
-          toast.error(`${job.title} failed`, { description: job.reason ?? undefined })
+          toast.error(shared.t('notifications.failed', { title: job.title }), {
+            description: job.reason ?? undefined,
+          })
         else {
           // The card's own line: a cleanup delete says what it did in counts, not the raw result.
           const summary = summaryOf(job)
-          toast.success(`${job.title} finished${summary ? ` · ${summary}` : ''}`)
+          toast.success(
+            summary
+              ? shared.t('notifications.finishedWith', { title: job.title, summary })
+              : shared.t('notifications.finished', { title: job.title }),
+          )
         }
       } else if (item.card?.kind === 'tracked') {
         const { card } = item
         if (card.state === 'failed')
-          toast.error(`${card.title} failed`, { description: card.reason ?? undefined })
-        else toast.success(`${card.title} finished`, { description: card.result ?? undefined })
+          toast.error(shared.t('notifications.failed', { title: card.title }), {
+            description: card.reason ?? undefined,
+          })
+        else
+          toast.success(shared.t('notifications.finished', { title: card.title }), {
+            description: card.result ?? undefined,
+          })
       }
     }
   }, [data, projectId])
@@ -163,7 +179,7 @@ export function NotificationCenter() {
     mutationFn: (item: FeedItem) =>
       put(`/api/projects/${projectId}/alert-mutes/${item.type}`).then(() => item),
     onSuccess: (item) => {
-      toast.success(`Muted "${item.typeLabel ?? item.type}" in this project`)
+      toast.success(shared.t('notifications.muted', { name: item.typeLabel ?? item.type }))
       void queryClient.invalidateQueries({ queryKey: ['alert-types', projectId] })
       refresh()
     },
@@ -254,7 +270,7 @@ export function NotificationCenter() {
     <Popover open={open} onOpenChange={changeOpen}>
       <PopoverTrigger
         render={<Button variant="ghost" size="icon" className="relative shrink-0" />}
-        aria-label="Notifications"
+        aria-label={t('notifications.title')}
       >
         <Bell />
         {badge > 0 && (
@@ -268,7 +284,7 @@ export function NotificationCenter() {
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 max-w-[calc(100vw-2rem)] gap-0 p-0">
         <div className="flex items-center gap-2 border-b px-3 py-2">
-          <PopoverTitle className="text-sm font-medium">Notifications</PopoverTitle>
+          <PopoverTitle className="text-sm font-medium">{t('notifications.title')}</PopoverTitle>
           {finished.length > 0 && (
             <Button
               variant="ghost"
@@ -277,12 +293,12 @@ export function NotificationCenter() {
               disabled={clear.isPending}
               onClick={() => clear.mutate()}
             >
-              Clear finished
+              {t('notifications.clearFinished')}
             </Button>
           )}
         </div>
         {items.length === 0 ? (
-          <p className="px-3 py-6 text-center text-sm text-muted-foreground">Nothing running</p>
+          <p className="px-3 py-6 text-center text-sm text-muted-foreground">{t('notifications.empty')}</p>
         ) : (
           <ul className="max-h-[min(70vh,32rem)] divide-y overflow-y-auto">
             {plain.map(view)}
@@ -296,7 +312,7 @@ export function NotificationCenter() {
                     role="presentation"
                     className="bg-muted/50 px-3 py-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
                   >
-                    {ALERT_GROUP_LABELS[group]}
+                    {alertGroupLabel(group)}
                   </li>,
                   ...inGroup.map(view),
                 ]
@@ -358,12 +374,13 @@ function CardTitle({ card }: { card: { title: string; href: string | null } }) {
 }
 
 function Dismiss({ label, onDismiss }: { label: string; onDismiss: () => void }) {
+  const { t } = useTranslation()
   return (
     <Button
       variant="ghost"
       size="icon"
       className="-my-1 size-6 shrink-0"
-      aria-label={`Dismiss ${label}`}
+      aria-label={t('notifications.dismiss', { label })}
       onClick={onDismiss}
     >
       <X className="size-3.5" />
@@ -384,6 +401,7 @@ function JobCard({
   onRetry: (items: DeleteItem[]) => void
   retrying: boolean
 }) {
+  const { t } = useTranslation()
   // A cleanup delete that kept something offers the same retry as the page: only those items again.
   const kept =
     job.kind === CLEANUP_DELETE_JOB && job.state === 'succeeded'
@@ -408,16 +426,16 @@ function JobCard({
       <Progress
         value={job.done}
         max={Math.max(1, job.total)}
-        getAriaValueText={(formatted) => `${formatted} of ${job.total}`}
+        getAriaValueText={(formatted) => t('notifications.of', { done: formatted, total: job.total })}
         className="gap-1.5"
       >
         <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-          {job.done} of {job.total}
+          {t('notifications.of', { done: job.done, total: job.total })}
         </span>
       </Progress>
       {job.state === 'running' ? (
         <p className="text-xs text-muted-foreground" aria-live="polite">
-          {job.step ?? 'Starting…'}
+          {job.step ?? t('notifications.starting')}
         </p>
       ) : (
         <p
@@ -429,8 +447,12 @@ function JobCard({
           }
         >
           {job.state === 'failed'
-            ? `Failed · ${elapsed(job)} · ${job.reason ?? 'no reason given'}`
-            : `Succeeded · ${elapsed(job)}${summaryOf(job) ? ` · ${summaryOf(job)}` : ''}`}
+            ? t('notifications.failedLine', {
+                elapsed: elapsed(job),
+                reason: job.reason ?? t('notifications.noReason'),
+              })
+            : t('notifications.succeededLine', { elapsed: elapsed(job) }) +
+              (summaryOf(job) ? ` · ${summaryOf(job)}` : '')}
         </p>
       )}
       {kept.length > 0 && (
@@ -441,7 +463,7 @@ function JobCard({
           disabled={retrying}
           onClick={() => onRetry(kept)}
         >
-          Retry kept items
+          {t('notifications.retryKept')}
         </Button>
       )}
     </li>
@@ -458,6 +480,7 @@ function TrackedCardView({
   severity: AlertSeverity
   onDismiss: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <li className="flex flex-col gap-1.5 p-3">
       <div className="flex items-start gap-1">
@@ -466,28 +489,28 @@ function TrackedCardView({
         <Dismiss label={card.title} onDismiss={onDismiss} />
       </div>
       <p className="text-xs text-muted-foreground">
-        {card.actor} · You asked: {card.request}
+        {t('notifications.youAsked', { actor: card.actor, request: card.request })}
       </p>
       {card.total > 0 && (
         <Progress
           value={card.done}
           max={card.total}
-          getAriaValueText={(formatted) => `${formatted} of ${card.total}`}
+          getAriaValueText={(formatted) => t('notifications.of', { done: formatted, total: card.total })}
           className="gap-1.5"
         >
           <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-            {card.done} of {card.total}
+            {t('notifications.of', { done: card.done, total: card.total })}
           </span>
         </Progress>
       )}
       {card.state === 'running' ? (
         <>
           <p className="text-xs text-muted-foreground" aria-live="polite">
-            {card.step ?? 'Starting…'}
+            {card.step ?? t('notifications.starting')}
           </p>
           {card.stale && (
             <p className="text-xs text-amber-700 dark:text-amber-400">
-              No update for {since(card.updatedAt)} · it may have stopped
+              {t('notifications.stale', { since: since(card.updatedAt) })}
             </p>
           )}
         </>
@@ -501,8 +524,8 @@ function TrackedCardView({
           }
         >
           {card.state === 'failed'
-            ? `Failed · ${card.reason ?? 'no reason given'}`
-            : `Succeeded${card.result ? ` · ${card.result}` : ''}`}
+            ? t('notifications.trackedFailed', { reason: card.reason ?? t('notifications.noReason') })
+            : t('notifications.succeeded') + (card.result ? ` · ${card.result}` : '')}
         </p>
       )}
     </li>
@@ -519,12 +542,13 @@ function NoticeCardView({
   severity: AlertSeverity
   onDismiss: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <li className="flex flex-col gap-1.5 p-3">
       <div className="flex items-start gap-1">
         <SeverityMark severity={severity} />
         <span className="mt-0.5 shrink-0 rounded-full bg-amber-100 px-1.5 text-[10px] leading-4 font-medium tracking-wide text-amber-900 uppercase dark:bg-amber-950 dark:text-amber-200">
-          Notice
+          {t('notifications.notice')}
         </span>
         <CardTitle card={card} />
         <Dismiss label={card.title} onDismiss={onDismiss} />
@@ -532,21 +556,30 @@ function NoticeCardView({
       <p className="text-xs text-muted-foreground">
         {card.actor} · {card.body}
       </p>
-      <p className="text-xs text-muted-foreground">Cannot wait: {card.reason}</p>
+      <p className="text-xs text-muted-foreground">
+        {t('notifications.cannotWait', { reason: card.reason })}
+      </p>
     </li>
   )
 }
 
-const MARK: Record<AlertSeverity, { Icon: typeof Info; label: string; className: string }> = {
-  info: { Icon: Info, label: 'Info', className: 'text-sky-700 dark:text-sky-400' },
-  warning: { Icon: TriangleAlert, label: 'Warning', className: 'text-amber-700 dark:text-amber-400' },
-  problem: { Icon: CircleAlert, label: 'Problem', className: 'text-red-700 dark:text-red-400' },
+const MARK: Record<AlertSeverity, { Icon: typeof Info; className: string }> = {
+  info: { Icon: Info, className: 'text-sky-700 dark:text-sky-400' },
+  warning: { Icon: TriangleAlert, className: 'text-amber-700 dark:text-amber-400' },
+  problem: { Icon: CircleAlert, className: 'text-red-700 dark:text-red-400' },
 }
 
 /** The severity of an item: an icon whose shape, not only its colour, tells the three apart. */
 function SeverityMark({ severity }: { severity: AlertSeverity }) {
-  const { Icon, label, className } = MARK[severity]
-  return <Icon role="img" aria-label={label} className={`mt-0.5 size-3.5 shrink-0 ${className}`} />
+  const { t } = useTranslation()
+  const { Icon, className } = MARK[severity]
+  return (
+    <Icon
+      role="img"
+      aria-label={t(`notifications.severity.${severity}`)}
+      className={`mt-0.5 size-3.5 shrink-0 ${className}`}
+    />
+  )
 }
 
 /** An alert: its severity, a New dot until seen, its words, its buttons, and snooze, dismiss and mute. */
@@ -565,6 +598,7 @@ function AlertCardView({
   onMute: () => void
   onAction: (button: AlertButton) => void
 }) {
+  const { t } = useTranslation()
   const [snoozing, setSnoozing] = useState(false)
   return (
     <li data-severity={item.severity} className="flex flex-col gap-1.5 p-3">
@@ -575,7 +609,7 @@ function AlertCardView({
             data-testid="new-dot"
             className="mt-1.5 size-2 shrink-0 rounded-full bg-sky-600 dark:bg-sky-400"
           >
-            <span className="sr-only">New</span>
+            <span className="sr-only">{t('notifications.new')}</span>
           </span>
         )}
         <span className="min-w-0 flex-1 text-sm font-medium">{item.title}</span>
@@ -607,7 +641,7 @@ function AlertCardView({
             aria-expanded={snoozing}
             onClick={() => setSnoozing(!snoozing)}
           >
-            Snooze
+            {t('notifications.snooze')}
           </Button>
         )}
         {item.mutable && (
@@ -617,12 +651,12 @@ function AlertCardView({
             className="h-6 px-1.5 text-xs text-muted-foreground"
             onClick={onMute}
           >
-            Mute this kind in this project
+            {t('notifications.mute')}
           </Button>
         )}
       </div>
       {snoozing && (
-        <div role="group" aria-label="Snooze for" className="flex flex-wrap gap-1.5">
+        <div role="group" aria-label={t('notifications.snoozeFor')} className="flex flex-wrap gap-1.5">
           {item.snoozeOptions.map((ms) => (
             <Button
               key={ms}
@@ -649,6 +683,7 @@ function AlertButtonView({
   busy: boolean
   onAction: (button: AlertButton) => void
 }) {
+  const { t } = useTranslation()
   if (button.kind === 'link') {
     const className = buttonVariants({ variant: 'outline', size: 'sm' })
     // A board path stays inside the board's router; an absolute URL opens outside it.
@@ -669,8 +704,8 @@ function AlertButtonView({
         size="sm"
         onClick={() =>
           navigator.clipboard.writeText(button.text).then(
-            () => toast.success('Copied'),
-            () => toast.error('Could not copy: select the text instead'),
+            () => toast.success(t('notifications.copied')),
+            () => toast.error(t('notifications.copyFailed')),
           )
         }
       >
@@ -723,13 +758,14 @@ function since(at: string): string {
 
 function duration(ms: number): string {
   const seconds = Math.max(0, ms) / 1000
-  if (seconds < 10) return `${seconds.toFixed(1)} s`
-  if (seconds < 60) return `${Math.round(seconds)} s`
+  const one = { minimumFractionDigits: 1, maximumFractionDigits: 1 }
+  if (seconds < 10) return shared.t('notifications.unit.s', { value: formatNumber(seconds, one) })
+  if (seconds < 60) return shared.t('notifications.unit.s', { value: Math.round(seconds) })
   const minutes = seconds / 60
-  if (minutes < 10) return `${minutes.toFixed(1)} min`
-  if (minutes < 60) return `${Math.round(minutes)} min`
+  if (minutes < 10) return shared.t('notifications.unit.min', { value: formatNumber(minutes, one) })
+  if (minutes < 60) return shared.t('notifications.unit.min', { value: Math.round(minutes) })
   const hours = minutes / 60
-  if (hours < 10) return `${hours.toFixed(1)} h`
-  if (hours < 24) return `${Math.round(hours)} h`
-  return `${Math.round(hours / 24)} d`
+  if (hours < 10) return shared.t('notifications.unit.h', { value: formatNumber(hours, one) })
+  if (hours < 24) return shared.t('notifications.unit.h', { value: Math.round(hours) })
+  return shared.t('notifications.unit.d', { value: Math.round(hours / 24) })
 }

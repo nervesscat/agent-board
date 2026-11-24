@@ -1,0 +1,38 @@
+// The desktop app's own texts in ta (see ../strings.mjs). Every key of en.mjs, the same {{placeholders}} and <tags>.
+export default {
+  open: 'திற',
+  openInBrowser: 'உலாவியில் திற',
+  retryNow: 'இப்போது மீண்டும் முயல்',
+  startAtLogin: 'உள்நுழைவில் தொடங்கு',
+  quit: 'வெளியேறு',
+  openSettings: 'அமைப்புகள் கோப்பைத் திற',
+  openLogs: 'பதிவுக் கோப்புறையைத் திற',
+  openHome: 'ஆப் கோப்புறையைத் திற',
+  startAtLoginFailed: 'உள்நுழைவில் தொடங்கும் அமைப்பை மாற்ற இயலவில்லை.',
+  cannotStart: 'பலகையைத் தொடங்க இயலவில்லை.',
+  settingsInvalid: 'பலகையின் அமைப்புகள் செல்லுபடியாகவில்லை.',
+  homeUnusable:
+    'ஆப் கோப்புறை {{home}}-ஐப் பயன்படுத்த இயலவில்லை: {{error}}\n\nAGENT_BOARD_HOME-ஐ எழுதக்கூடிய கோப்புறைக்கு அமைக்கவும், அல்லது இயல்புநிலைக்கு அதை நீக்கவும்.',
+  homeLine: '{{error}}\n\nஆப் கோப்புறை: {{home}}',
+  dataFolderUnusable:
+    'அதன் தரவுக் கோப்புறை {{dir}}-ஐப் பயன்படுத்த இயலவில்லை: {{error}}\n\n{{file}} கோப்பில், அல்லது சூழலில், வேறு DATA_DIR அமைத்து ஆப்பை மீண்டும் தொடங்கவும்.',
+  logsLine: '{{detail}}\n\nபதிவுகள்: {{logs}}',
+  stopped: 'பலகை நின்றது.',
+  restartedTimes_one: ' இது {{count}} முறை மீண்டும் தொடங்கப்பட்டது.',
+  restartedTimes_other: ' இது {{count}} முறை மீண்டும் தொடங்கப்பட்டது.',
+  noOutput: '(வெளியீடு இல்லை)',
+  exitedSignal: '{{time}}-க்கு {{signal}} மூலம் நிறுத்தப்பட்டது.',
+  exitedCode: '{{time}}-க்கு குறியீடு {{code}}-உடன் முடிந்தது.',
+  exited: '{{time}}-க்கு முடிந்தது.',
+  reasonCode: 'வெளியேற்றக் குறியீடு {{code}}',
+  reasonSignal: 'signal {{signal}}',
+  reasonNone: 'வெளியேற்றக் குறியீடு இல்லை',
+  tipRestarting: '{{name}}: பலகையை மீண்டும் தொடங்குகிறது ({{reason}})',
+  tipRestarted: '{{name}}: {{url}} ({{reason}} காரணமாக {{time}}-க்கு மீண்டும் தொடங்கியது)',
+  notifyRestarted: 'பலகை மீண்டும் தொடங்கியது ({{reason}}).',
+  didNotStart: 'பலகை தொடங்கவில்லை.',
+  didNotAnswer: '{{url}}-இல் ஒரு நிமிடத்துக்குள் அது பதிலளிக்கவில்லை.',
+  unreachableHeading: '<code>{{address}}</code>-இல் உள்ள பலகையை அணுக இயலவில்லை.',
+  unreachableBody:
+    'பலகை வேறொரு கணினியில் இயங்குகிறது: இந்தக் கணினி இணையத்தில் உள்ளதா, அங்கே பலகை இயங்குகிறதா என்று பார்க்கவும். ஆப் தானே மீண்டும் முயலும்; {{retry}} உடனே முயலும்.',
+}

@@ -1,0 +1,38 @@
+// The desktop app's own texts in es (see ../strings.mjs). Every key of en.mjs, the same {{placeholders}} and <tags>.
+export default {
+  open: 'Abrir',
+  openInBrowser: 'Abrir en el navegador',
+  retryNow: 'Reintentar ahora',
+  startAtLogin: 'Iniciar con el sistema',
+  quit: 'Salir',
+  openSettings: 'Abrir el archivo de ajustes',
+  openLogs: 'Abrir la carpeta de registros',
+  openHome: 'Abrir la carpeta de la app',
+  startAtLoginFailed: 'No se pudo cambiar el inicio con el sistema.',
+  cannotStart: 'El tablero no puede iniciarse.',
+  settingsInvalid: 'Los ajustes del tablero no son válidos.',
+  homeUnusable:
+    'La carpeta de la app {{home}} no se puede usar: {{error}}\n\nEstablece AGENT_BOARD_HOME en una carpeta donde se pueda escribir, o quítalo para usar la predeterminada.',
+  homeLine: '{{error}}\n\nLa carpeta de la app: {{home}}',
+  dataFolderUnusable:
+    'Su carpeta de datos {{dir}} no se puede usar: {{error}}\n\nEstablece otro DATA_DIR en {{file}}, o en el entorno, y vuelve a iniciar la app.',
+  logsLine: '{{detail}}\n\nRegistros: {{logs}}',
+  stopped: 'El tablero se detuvo.',
+  restartedTimes_one: ' Se inició de nuevo {{count}} vez.',
+  restartedTimes_other: ' Se inició de nuevo {{count}} veces.',
+  noOutput: '(sin salida)',
+  exitedSignal: 'Lo terminó la señal {{signal}} a las {{time}}.',
+  exitedCode: 'Terminó con el código {{code}} a las {{time}}.',
+  exited: 'Terminó a las {{time}}.',
+  reasonCode: 'código de salida {{code}}',
+  reasonSignal: 'señal {{signal}}',
+  reasonNone: 'sin código de salida',
+  tipRestarting: '{{name}}: reiniciando el tablero ({{reason}})',
+  tipRestarted: '{{name}}: {{url}} (reiniciado a las {{time}} tras {{reason}})',
+  notifyRestarted: 'El tablero se reinició ({{reason}}).',
+  didNotStart: 'El tablero no se inició.',
+  didNotAnswer: 'No respondió en {{url}} en un minuto.',
+  unreachableHeading: 'No se puede llegar al tablero en <code>{{address}}</code>.',
+  unreachableBody:
+    'El tablero se ejecuta en otra máquina: comprueba que esta tenga conexión y que el tablero esté en marcha allí. La app lo reintenta sola, y {{retry}} lo intenta al instante.',
+}

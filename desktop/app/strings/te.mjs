@@ -1,0 +1,38 @@
+// The desktop app's own texts in te (see ../strings.mjs). Every key of en.mjs, the same {{placeholders}} and <tags>.
+export default {
+  open: 'తెరువు',
+  openInBrowser: 'బ్రౌజర్‌లో తెరువు',
+  retryNow: 'ఇప్పుడే మళ్లీ ప్రయత్నించు',
+  startAtLogin: 'లాగిన్ వద్ద ప్రారంభించు',
+  quit: 'నిష్క్రమించు',
+  openSettings: 'సెట్టింగ్‌ల ఫైల్‌ను తెరువు',
+  openLogs: 'లాగ్‌ల ఫోల్డర్‌ను తెరువు',
+  openHome: 'యాప్ ఫోల్డర్‌ను తెరువు',
+  startAtLoginFailed: 'లాగిన్ వద్ద ప్రారంభించడాన్ని మార్చలేకపోయాం.',
+  cannotStart: 'బోర్డ్ ప్రారంభం కాలేదు.',
+  settingsInvalid: 'బోర్డ్ సెట్టింగ్‌లు చెల్లవు.',
+  homeUnusable:
+    'యాప్ ఫోల్డర్ {{home}} వాడలేము: {{error}}\n\nAGENT_BOARD_HOMEను రాయగలిగే ఫోల్డర్‌కు సెట్ చేయండి, లేదా డిఫాల్ట్ వాడటానికి దాన్ని తీసివేయండి.',
+  homeLine: '{{error}}\n\nయాప్ ఫోల్డర్: {{home}}',
+  dataFolderUnusable:
+    'దాని డేటా ఫోల్డర్ {{dir}} వాడలేము: {{error}}\n\n{{file}}లో, లేదా ఎన్విరాన్‌మెంట్‌లో మరో DATA_DIR సెట్ చేసి, యాప్‌ను మళ్లీ ప్రారంభించండి.',
+  logsLine: '{{detail}}\n\nలాగ్‌లు: {{logs}}',
+  stopped: 'బోర్డ్ ఆగింది.',
+  restartedTimes_one: ' ఇది {{count}} సారి మళ్లీ ప్రారంభమైంది.',
+  restartedTimes_other: ' ఇది {{count}} సార్లు మళ్లీ ప్రారంభమైంది.',
+  noOutput: '(అవుట్‌పుట్ లేదు)',
+  exitedSignal: '{{time}}కి దీన్ని {{signal}} ఆపేసింది.',
+  exitedCode: '{{time}}కి ఇది {{code}} కోడ్‌తో ముగిసింది.',
+  exited: '{{time}}కి ఇది ముగిసింది.',
+  reasonCode: 'ఎగ్జిట్ కోడ్ {{code}}',
+  reasonSignal: 'సిగ్నల్ {{signal}}',
+  reasonNone: 'ఎగ్జిట్ కోడ్ లేదు',
+  tipRestarting: '{{name}}: బోర్డ్ రీస్టార్ట్ అవుతోంది ({{reason}})',
+  tipRestarted: '{{name}}: {{url}} ({{reason}} తర్వాత {{time}}కి రీస్టార్ట్ అయింది)',
+  notifyRestarted: 'బోర్డ్ రీస్టార్ట్ అయింది ({{reason}}).',
+  didNotStart: 'బోర్డ్ ప్రారంభం కాలేదు.',
+  didNotAnswer: 'ఇది ఒక నిమిషంలో {{url}}పై స్పందించలేదు.',
+  unreachableHeading: '<code>{{address}}</code> వద్ద బోర్డ్‌ను చేరుకోలేము.',
+  unreachableBody:
+    'బోర్డ్ వేరే మెషీన్‌లో నడుస్తుంది: ఈ మెషీన్ ఆన్‌లైన్‌లో ఉందో, అక్కడ బోర్డ్ నడుస్తోందో చూడండి. యాప్ తనే మళ్లీ ప్రయత్నిస్తుంది, {{retry}} వెంటనే ప్రయత్నిస్తుంది.',
+}

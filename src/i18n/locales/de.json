@@ -1,0 +1,3043 @@
+{
+  "common": {
+    "saved": "Gespeichert",
+    "close": "Schließen"
+  },
+  "loading": {
+    "ticket": "Lade Ticket…",
+    "tickets": "Lade Tickets…",
+    "agents": "Lade Agents…",
+    "branches": "Lade Branches…",
+    "recentTickets": "Lade letzte Tickets…",
+    "folders": "Lade Ordner…",
+    "projectPhases": "Lade die Phasen des Projekts…",
+    "stages": "Lade Stufen…",
+    "preview": "Lade Preview…",
+    "file": "Lade Datei…",
+    "files": "Lade Dateien…",
+    "instructionsHistory": "Lade Anweisungsverlauf…",
+    "instructions": "Lade Anweisungen…",
+    "notes": "Lade Notizen…",
+    "reviewResult": "Lade Review-Ergebnis…",
+    "changes": "Lade Änderungen…",
+    "replies": "Lade Antworten…",
+    "timeline": "Lade Verlauf…",
+    "activity": "Lade Aktivität…",
+    "pushedToday": "Lade heute Gepushtes…",
+    "calendar": "Lade Kalender…",
+    "report": "Lade Bericht…",
+    "reportSettings": "Lade Berichtseinstellungen…",
+    "shift": "Lade Schicht…",
+    "cleanup": "Lade Aufräumen…",
+    "runs": "Lade Runs…",
+    "branchState": "Lade Branch-Stand…",
+    "tags": "Lade Tags…",
+    "previews": "Lade Previews…",
+    "repositories": "Lade Repositories…",
+    "roadmap": "Lade Roadmap…",
+    "earlierVersions": "Lade frühere Versionen…",
+    "workspaces": "Lade Workspaces…"
+  },
+  "shell": {
+    "home": "Start",
+    "pages": "Seiten",
+    "connect": "Verbinden",
+    "settings": "Einstellungen",
+    "testMode": "Testmodus",
+    "authOff": "Auth aus",
+    "authOffTip": "BOARD_ENV={{env}}, Anmeldung aus: angemeldet als {{actor}}. Nicht das Live-Board.",
+    "connectAgent": "Agent verbinden"
+  },
+  "time": {
+    "never": "—",
+    "justNow": "gerade eben",
+    "minutesAgo": "vor {{count}} Min.",
+    "hoursAgo": "vor {{count}} Std.",
+    "daysAgo": "vor {{count}} T.",
+    "minutesAgoLong_one": "vor {{count}} Minute",
+    "minutesAgoLong_other": "vor {{count}} Minuten",
+    "hoursAgoLong_one": "vor {{count}} Stunde",
+    "hoursAgoLong_other": "vor {{count}} Stunden",
+    "yesterday": "gestern",
+    "daysAgoLong_one": "vor {{count}} Tag",
+    "daysAgoLong_other": "vor {{count}} Tagen",
+    "weeksAgoLong_one": "vor {{count}} Woche",
+    "weeksAgoLong_other": "vor {{count}} Wochen"
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "tabs": {
+      "label": "Einstellungen",
+      "board": "Board",
+      "projectLabel": "Dieses Projekt: {{name}}",
+      "project": "Dieses Projekt:"
+    },
+    "board": {
+      "defaultAgent": {
+        "title": "Standard-Agent-CLI",
+        "text": "Die CLI, mit der <goto>Agent verbinden</goto> startet und von der nur die Befehle zeigt."
+      },
+      "previews": {
+        "title": "Previews",
+        "text": "Wie viele Previews das Board gleichzeitig baut und startet, in allen Projekten (1 bis 32). Jede ist ein vollständiges Board mit eigener Datenkopie; ein Start über dem Limit wird abgelehnt. Die Previews-Seite eines Projekts zeigt, wie viele belegt sind."
+      },
+      "theme": {
+        "title": "Design",
+        "text": "Folgt standardmäßig dem System. Die Wahl wird in diesem Browser gespeichert, nicht im Board.",
+        "system": "System",
+        "light": "Hell",
+        "dark": "Dunkel"
+      },
+      "language": {
+        "title": "Sprache",
+        "text": "Die Sprache der gesamten Oberfläche, einschließlich Datums- und Zahlenformaten. Sie wird im Board gespeichert und folgt dir auf jedes Gerät, auf dem du dich anmeldest. Was Menschen und Agents schreiben, bleibt unverändert.",
+        "search": "Sprachen suchen",
+        "none": "Keine passende Sprache",
+        "failed": "Diese Sprache konnte nicht geladen werden. Lade die Seite neu und versuch es erneut."
+      }
+    }
+  },
+  "connect": {
+    "copied": "Kopiert",
+    "couldNotCopy": "Kopieren fehlgeschlagen",
+    "browserNoCopy": "Der Browser hat das Kopieren nicht erlaubt; markiere den Text stattdessen",
+    "copy": "Kopieren",
+    "save": "Speichern",
+    "revoke": "Widerrufen",
+    "keep": "Behalten",
+    "turnOff": "Ausschalten",
+    "checkAgain": "Erneut prüfen",
+    "title": "Agent verbinden",
+    "intro": "Verbinde eine CLI: <strong>Befehle erzeugen</strong> erstellt ihren MCP-Token, und der Skill wird per Button auf diesem Rechner installiert (auf einem anderen per Zeile). Die Standard-CLI legst du in den <goto>Einstellungen</goto> fest.",
+    "step1": {
+      "title": "1. MCP-Server verbinden",
+      "command": "Einmal im Terminal ausführen; registriert den Server für alle Repos.",
+      "config": "Zu <code>{{file}}</code> hinzufügen.",
+      "configOpencode": "Zu <code>{{file}}</code> hinzufügen (den Board-Eintrag in „mcp“ einfügen, falls die Datei schon einen hat)."
+    },
+    "step2": {
+      "title": "2. Skill installieren",
+      "text": "Lädt den aktuellen Skill des Boards nach <code>{{path}}</code>, wo {{agent}} ihn in jedem Repo findet.",
+      "textCodex": "Lädt den aktuellen Skill des Boards nach <code>{{path}}</code>, wo {{agent}} ihn in jedem Repo findet. OpenCode liest diesen Ordner ebenfalls.",
+      "textOpencode": "Lädt den aktuellen Skill des Boards nach <code>{{path}}</code>, wo {{agent}} ihn in jedem Repo findet. OpenCode liest auch ~/.claude/skills: überspringe das, wenn Claude Code ihn schon hat.",
+      "tokenNote": "Die Installationszeilen enthalten einen Download-Token, der <time>{{at}}</time> abläuft: nach etwa zehn Minuten. Kopiere danach eine Zeile erneut, um einen neuen zu bekommen.",
+      "skillCopied": "SKILL.md kopiert",
+      "copySkill": "SKILL.md kopieren",
+      "previewSkill": "SKILL.md ansehen",
+      "session": "Installiert auch <code>/session</code>, den Skill, der eine Sitzung mit dem Board eröffnet: Er gibt dir ein kurzes Briefing, delegiert jedes genannte Ticket und hält eine feste Nachrichtenform mit dem, was dich braucht."
+    },
+    "step3": {
+      "title": "3. Review-Skills installieren (Claude Code)"
+    },
+    "opencode": {
+      "section": "Mehrstufige Delegation in OpenCode",
+      "checkAria": "OpenCode-Konfiguration erneut prüfen",
+      "readFailed": "OpenCode-Konfiguration nicht lesbar",
+      "readFailedText": "Repariere die Datei und prüfe dann erneut. Die mehrstufige Delegation bleibt aus, bis die Konfiguration lesbar ist.",
+      "on": "Mehrstufige Delegation an (Tiefe {{depth}})",
+      "readFrom": "Gelesen aus <code>{{source}}</code>. Die systemweite Konfiguration hat Vorrang vor globalen und Projektdateien.",
+      "off": "Mehrstufige Delegation ist aus: Subagents können keine Subagents starten",
+      "offText": "Füge das zu <code>{{source}}</code> hinzu (in den <code>experimental</code>-Block, falls vorhanden) und starte OpenCode neu. Die letzte Konfigurationsdatei, die einen <code>experimental</code>-Block definiert, entscheidet; die systemweite Konfiguration hat Vorrang vor globalen und Projektdateien, daher kann eine spätere eine frühere Tiefe überschreiben. Das Board liest Dateien nur.",
+      "copySnippet": "Snippet kopieren",
+      "deprecated": "Das <code>subagent_depth</code> auf oberster Ebene in <code>{{source}}</code> liest OpenCode nicht mehr; nur <code>experimental.subagent_depth</code> zählt."
+    },
+    "generate": {
+      "agentName": "Agent-Name",
+      "button": "Befehle erzeugen",
+      "newOrchestrator": "Die Befehle unten enthalten einen neuen Orchestrator-Token für <strong>{{name}}</strong>, gültig bis {{until}}. Er wird nur dieses eine Mal gezeigt: Kopiere jetzt, was du brauchst. Verlässt du die Seite, ist er weg; erneutes Drücken erzeugt einen weiteren.",
+      "newWorker": "Die Befehle unten enthalten einen neuen Worker-Token für <strong>{{name}}</strong>, gültig bis {{until}}. Er wird nur dieses eine Mal gezeigt: Kopiere jetzt, was du brauchst. Verlässt du die Seite, ist er weg; erneutes Drücken erzeugt einen weiteren.",
+      "intro": "Erstellt einen Token für diesen Agent und trägt ihn in jeden Befehl auf dieser Seite ein. Standardmäßig ist er ein <strong>Orchestrator</strong> und kann damit auch die Anweisungen der Projekte ändern; mache ihn in den Einstellungen unter Agent-Tokens zum Worker. Der Name ist der Name des Agents im Board. Ein Token meldet 1 Jahr lang an, sofern nicht widerrufen, und wird nur einmal gezeigt."
+    }
+  },
+  "tokens": {
+    "title": "Agent-Tokens",
+    "listText": "Die Tokens, die die obigen Befehle enthalten, jeweils mit ihrer Rolle: Orchestrator, der auch die Anweisungen der Projekte ändert, oder Worker (beides in den Einstellungen unter Agent-Tokens; ein neuer ist ein Orchestrator). Widerrufst du einen, wird der Agent, der ihn nutzt, bei seiner nächsten Anfrage abgemeldet.",
+    "none": "Noch keine.",
+    "meta": "erstellt {{made}} · {{used}} · läuft ab {{at}}",
+    "metaExpired": "erstellt {{made}} · {{used}} · abgelaufen {{at}}",
+    "lastUsed": "zuletzt genutzt {{when}}",
+    "neverUsed": "nie genutzt",
+    "revokeAria": "{{name}} widerrufen, erstellt {{when}}",
+    "revokeTitle": "Token von {{name}} widerrufen?",
+    "revokeText": "Der Agent, der ihn nutzt, wird ab seiner nächsten Anfrage abgewiesen. Erzeuge die Befehle erneut, um ihn mit einem neuen zu verbinden.",
+    "identities": {
+      "text": "Wer ist wer: Jeder Agent-Token ist eine Identität im Board, ein Orchestrator, solange du ihn nicht zum Worker machst. Seine Subagents, die sich unter ihm melden, stehen bei ihm, immer als Worker; eine lange Liste ist anfangs eingeklappt, mit einem Augen-Button für den Rest.",
+      "empty": "Noch keine Agent-Tokens: „Agent verbinden“ erstellt sie.",
+      "agentAria": "Agent {{name}}",
+      "orchestratorTip": "Ein Orchestrator ändert auch die Anweisungen der Projekte; jede Änderung wartet unter „Braucht dich“, bis du sie prüfst oder zurücknimmst. Seine Subagents, die sich zu erkennen geben (<token>/<name>), bleiben Worker.",
+      "orchestrator": "Orchestrator",
+      "orchestratorAria": "{{name}}: Orchestrator",
+      "nowOrchestrator": "{{name}} ist ein Orchestrator",
+      "nowWorker": "{{name}} ist ein Worker",
+      "revokeAria": "{{name}} widerrufen",
+      "revokeText": "Der Agent, der ihn nutzt, und jeder Subagent unter ihm werden ab der nächsten Anfrage abgewiesen. Erzeuge die Befehle erneut unter „Agent verbinden“, um ihn mit einem neuen zu verbinden.",
+      "hide": "Agents ausblenden",
+      "show_one": "{{count}} Agent anzeigen",
+      "show_other": "{{count}} Agents anzeigen",
+      "workingUnder": "Arbeitet unter {{token}}",
+      "seen": "gesehen {{when}}"
+    }
+  },
+  "devices": {
+    "thisMachine": "dieser Rechner",
+    "title": "Geräte",
+    "add": "Gerät hinzufügen",
+    "signOut": "Abmelden",
+    "text": "Die Passkeys, die am Board anmelden. Ein Passkey gilt für die Adresse, auf der er erstellt wurde: dieser Rechner (localhost) oder der Tailnet-Name des Boards für deine anderen Geräte.",
+    "link": "Öffne diesen Link auf dem neuen Gerät und erstelle dort einen Passkey. Er funktioniert einmal, bis {{until}}.",
+    "copyLinkAria": "Link für {{where}} kopieren",
+    "passkeys": "Passkeys",
+    "passkeyMeta": "{{where}} · hinzugefügt {{added}} · zuletzt genutzt {{used}}",
+    "passkeyMetaSessions_one": "{{where}} · hinzugefügt {{added}} · zuletzt genutzt {{used}} · {{count}} Sitzung",
+    "passkeyMetaSessions_other": "{{where}} · hinzugefügt {{added}} · zuletzt genutzt {{used}} · {{count}} Sitzungen",
+    "lastLocal": "zuletzt auf diesem Rechner",
+    "revokeAria": "{{name}} widerrufen",
+    "revokeTitle": "{{name}} widerrufen?",
+    "revokeText": "Der Passkey meldet nicht mehr an, und die damit angemeldeten Browser werden abgemeldet.",
+    "signedIn": "Angemeldet",
+    "sessions": "Sitzungen",
+    "thisBrowser": "dieser Browser",
+    "sessionMeta": "{{where}} · angemeldet {{signedIn}} · gesehen {{seen}} · bis {{until}}",
+    "signOutAria": "{{name}} abmelden, angemeldet {{when}}"
+  },
+  "tailnet": {
+    "title": "Weitere Geräte (Tailnet)",
+    "text": "Öffne das Board von deinen anderen Geräten und Cloud-Agents über dein Tailnet, mit HTTPS. Schalte es hier ein; keine Datei zu bearbeiten. Deine Geräte melden sich dann mit eigenen Passkeys an (Geräte, unten).",
+    "signInOff": "Die Anmeldung ist in diesem Board aus (BOARD_ENV={{env}}): Es antwortet nur auf diesem Rechner, nie über das Tailnet, daher lässt sich der Zugang hier nicht speichern.",
+    "fromEnv": "Gesetzt in config.env (oder .env): <code>PUBLIC_ORIGIN={{origin}}</code>. Das hat Vorrang vor dieser Einstellung, daher ist der Zugang hier schreibgeschützt. Entferne die Zeile dort, um ihn in den Einstellungen zu setzen.",
+    "funnel": "Tailscale Funnel ist an: Es stellt das Board ins Internet, was das Board ablehnt. Schalte es aus (<code>tailscale funnel off</code> oder <code>tailscale serve reset</code>); bis dahin wird das Speichern abgelehnt.",
+    "unserved": "Der gespeicherte Zugang wird nicht bedient: {{reason}}.",
+    "tailscale": "Tailscale",
+    "version": "Version {{version}}",
+    "installed": "installiert",
+    "notInstalled": "nicht installiert",
+    "signedIn": "Angemeldet",
+    "yes": "ja",
+    "no": "nein ({{state}})",
+    "notRunning": "läuft nicht",
+    "thisMachine": "Dieser Rechner",
+    "noName": "kein Tailnet-Name",
+    "https": "HTTPS",
+    "certsOn": "Zertifikate an",
+    "certsOff": "Zertifikate aus",
+    "serve": "Serve auf 443",
+    "serveBoard": "das Board ({{target}})",
+    "serveNothing": "nichts",
+    "funnelLabel": "Funnel",
+    "funnelUnknown": "Funnel nicht lesbar",
+    "funnelOn": "an (abgelehnt)",
+    "funnelOff": "aus",
+    "said": "Tailscale meldet: {{error}}",
+    "entrance": "Zugang",
+    "use": "https://{{name}} verwenden",
+    "turnOffTitle": "Tailnet-Zugang ausschalten?",
+    "turnOffText": "Das Board antwortet nicht mehr auf {{origin}}. Über diesen Namen angemeldete Browser werden abgemeldet (ihre Passkeys bleiben aufgelistet).",
+    "hint": "Nur https, ein Hostname, kein Port und kein Pfad. Wird in der Datenbank des Boards gespeichert und sofort ohne Neustart angewendet.",
+    "servedConfig": "Aktuell bedient: {{origin}} (gesetzt in config.env).",
+    "servedSetting": "Aktuell bedient: {{origin}} (aus dieser Einstellung).",
+    "servedNone": "Aktuell bedient: nichts; das Board antwortet nur auf diesem Rechner.",
+    "entranceOff": "Der Zugang ist aus",
+    "test": "Zugang testen",
+    "works": "Funktioniert.",
+    "notYet": "Noch nicht.",
+    "next": {
+      "notInstalled": "Tailscale ist auf diesem Rechner nicht installiert: Installiere es und melde dich an, dann prüfe erneut (README: Using it from other devices).",
+      "notSignedIn": "Tailscale ist auf diesem Rechner {{state}}: Führe tailscale up aus und melde dich an, dann prüfe erneut.",
+      "noName": "Dieser Rechner hat keinen Tailnet-Namen: Schalte MagicDNS in der Tailscale-Admin-Konsole ein, dann prüfe erneut.",
+      "httpsOff": "HTTPS-Zertifikate sind für {{name}} aus: Schalte sie in der Tailscale-Admin-Konsole ein, dann prüfe erneut.",
+      "ready": "Bereit: Dieser Rechner ist {{name}} in deinem Tailnet, und Serve leitet ihn zum Board."
+    },
+    "serveOther": "Port 443 dieses Rechners bedient jetzt {{target}}. Um stattdessen https://{{name}} zum Board zu leiten, führe das hier aus:",
+    "serveNotSet": "Serve ist noch nicht eingerichtet. Um das Board unter https://{{name}} zu öffnen, führe das hier aus:",
+    "copyServe": "Serve-Befehl kopieren",
+    "neverRuns": "Das Board führt ihn nie aus. Prüfe danach erneut. Zum Beenden: <code>tailscale serve --https=443 off</code>."
+  },
+  "updates": {
+    "badgeTip": "CrossBoard {{version}} ist verfügbar ({{installed}} installiert)",
+    "badgeAria": "Update verfügbar",
+    "badge": "Update",
+    "title": "Updates",
+    "checkout": "Dieses Board läuft aus einem Checkout, der keinen Updater hat. Zum Aktualisieren führe in diesem Checkout <code>git pull</code> auf <code>main</code> aus, dann <code>pnpm start</code> (README: „Running it“). Nur die Desktop-App sucht von hier aus nach neuen Versionen und installiert sie.",
+    "installed": "Installiert",
+    "installedValue": "CrossBoard {{version}}",
+    "newestRelease": "Neuester Release",
+    "unsupported": "Diese Kopie der App kann sich nicht selbst aktualisieren: Sie läuft aus einem entpackten Ordner, nicht aus ihrem Installer oder einem Paket. Installiere einen Release von GitHub, um hier Updates zu erhalten.",
+    "checking": "Prüfe…",
+    "checkNow": "Jetzt prüfen",
+    "install": "Laden und installieren",
+    "downloadAria": "Herunterladen",
+    "downloading": "Lade {{version}}… {{percent}} %",
+    "installing": "Installiere {{version}}: Das Board hält kurz an, und die App startet als neue Version neu.",
+    "whatsNew": "Neu in {{version}}",
+    "autoCheck": "Beim Start und alle sechs Stunden nach Updates suchen",
+    "prereleases": "Vorabversionen einbeziehen (0.3.0-beta.1 und ähnliche)",
+    "note": "Nichts wird geladen oder installiert, bis du „Laden und installieren“ drückst. Jeder Download wird vorher gegen die sha512 in den Metadaten des Releases geprüft.",
+    "notChecked": "Noch nicht geprüft",
+    "none": "Nichts Neueres (geprüft {{when}})",
+    "unknown": "Unbekannt (geprüft {{when}})",
+    "skipped": "{{version}} übersprungen: Die Update-Karte erscheint dafür nicht mehr.",
+    "undo": "Rückgängig",
+    "manual": "Führe das in einem Terminal aus, um zu installieren, und starte dann die App neu:",
+    "copyCommand": "Befehl kopieren",
+    "card": {
+      "artwork": "Release-Grafik",
+      "available": "CrossBoard {{version}} ist verfügbar",
+      "skip": "Diese Version überspringen",
+      "installNow": "Jetzt installieren"
+    }
+  },
+  "skills": {
+    "install": "Skill installieren",
+    "update": "Skill aktualisieren",
+    "installedBoard": "Board-Skill installiert um <time>{{at}}</time>",
+    "installedReview": "Review-Skills installiert um <time>{{at}}</time>",
+    "installedBoardAria": "Board-Skill installiert",
+    "installedReviewAria": "Review-Skills installiert",
+    "installedFiles": "Installierte Dateien",
+    "failedBoard": "Board-Skill konnte nicht installiert werden (HTTP {{status}})",
+    "failedReview": "Review-Skills konnten nicht installiert werden (HTTP {{status}})",
+    "failedBoardAria": "Board-Skill konnte nicht installiert werden",
+    "failedReviewAria": "Review-Skills konnten nicht installiert werden",
+    "failedHint": "Prüfe, ob der Ordner dem Benutzer gehört, unter dem das Board läuft, und beschreibbar ist.",
+    "retry": "Wiederholen",
+    "action": {
+      "created": "erstellt",
+      "updated": "aktualisiert",
+      "unchanged": "unverändert"
+    },
+    "fileStatus": {
+      "current": "aktuell",
+      "outdated": "veraltet",
+      "missing": "fehlt"
+    },
+    "intro": "<code>/todo-review</code> arbeitet die To-do-Tickets bis zur Übergabe ab und <code>/review-queue</code> prüft die PR-Warteschlange, beide delegieren an diese Agents. <code>/feature-review</code> ist das Review, das sie für jede Änderung ausführen. Eine Zeile installiert alle drei samt ihren Agents nach <code>~/.claude</code> (Claude Code; OpenCode liest seine Skills ebenfalls) und ersetzt gleichnamige Dateien.",
+    "placeholderNote": "Sie enthält <code>{{placeholder}}</code>, bis eine Zeile kopiert wird: Das Board erzeugt dann für jede Installationszeile auf dieser Seite einen Download-Token, gültig etwa zehn Minuten.",
+    "filesInstalled_one": "{{count}} Datei, die er installiert",
+    "filesInstalled_other": "{{count}} Dateien, die er installiert",
+    "track": "Verfolgen",
+    "global": "Global",
+    "byRepo": "Pro Repo",
+    "repoStatus": {
+      "current": "Aktuell",
+      "outdated": "Veraltet",
+      "none": "Nicht im Repo installiert",
+      "unreachable": "Checkout nicht lesbar"
+    },
+    "globalStatus": {
+      "current": "Aktuell",
+      "outdated": "Veraltet",
+      "none": "Nicht installiert",
+      "unreachable": "Ordner nicht lesbar"
+    },
+    "onMachine": "Auf diesem Rechner",
+    "globalText": "Die Kopie in <code>~/.claude</code> auf dem Rechner, auf dem das Board läuft; Claude Code nutzt sie in jedem Repo ohne eigene Kopie. Die Zeile oben bringt sie auf den neuesten Stand.",
+    "globalHomeText": "Die Kopie in dem Ordner, den <code>CLAUDE_HOME</code> nennt, auf dem Rechner, auf dem das Board läuft, anstelle von <code>~/.claude</code>. Die Zeile oben installiert nach <code>~/.claude</code>: Diese Kopie hat eine eigene Zeile, die die Dateien in diesen Ordner installiert.",
+    "claudeOnMachine": "~/.claude auf diesem Rechner",
+    "noneGlobal": "Keine dieser Dateien ist schon da: Die Zeile oben installiert sie.",
+    "noneHome": "Keine dieser Dateien ist schon da: Diese Zeile installiert sie.",
+    "inRepos": "In deinen Repos",
+    "reposText": "Ein Repo kann eine eigene Kopie in seinem Ordner <code>.claude</code> haben, die Claude Code dort statt der aus <code>~/.claude</code> nutzt. Eine veraltete Kopie hat eine Zeile, die diese Dateien in das <code>.claude</code> des Repos installiert, gleichnamige Dateien ersetzt und den Rest behält.",
+    "noReposProject": "Noch keine Repos in diesem Projekt.",
+    "noReposBoard": "Noch keine Repos im Board.",
+    "repoLabel": "{{repo}} in {{project}}",
+    "usesGlobal": "Nutzt die Installation in <code>~/.claude</code>.",
+    "differ_one": "{{count}} von {{total}} Dateien weicht ab oder fehlt",
+    "differ_other": "{{count}} von {{total}} Dateien weichen ab oder fehlen",
+    "notUpToDate": "Dateien nicht aktuell"
+  },
+  "skillDiff": {
+    "description": "Was die Installationszeile ändern würde: Mit - markierte Zeilen stehen in der installierten Kopie und fallen weg, mit + markierte kommen aus der Kopie, die das Board bereitstellt. Zeilenenden ausgenommen.",
+    "unreadable": "Die installierte Kopie lässt sich nicht als Text lesen ({{reason}}): <code>{{path}}</code>",
+    "noChanges": "Keine Änderungen: Die installierte Kopie entspricht der des Boards.",
+    "changes": "Änderungen"
+  },
+  "hostTools": {
+    "section": "Fehlende Tools",
+    "line": "<strong>{{problem}}</strong>: {{breaks}} funktioniert nicht. Lösung: {{fix}}.",
+    "dismissTip": "Ausblenden, bis die nächste Prüfung {{name}} weiterhin als fehlend findet",
+    "dismissAria": "Warnung zu {{name}} schließen",
+    "recheckTip": "Erneut nach git, gh, claude, node und pnpm im PATH des Boards suchen",
+    "recheckAria": "Tools erneut prüfen",
+    "text": {
+      "breaks": {
+        "git": "Ticket-Branch- und Commit-Status, Merge-Prüfungen und Aufräumen",
+        "gh": "die PR-Warteschlange, der CI-Status und PR-Tickets",
+        "claude": "die Berichtserstellung des Boards (Berichte → Erzeugen)",
+        "node": "verwaltete Previews",
+        "pnpm": "verwaltete Previews",
+        "ghTooOld": "die Prüfung des Boards, ob gh angemeldet ist"
+      },
+      "problem": {
+        "notFound": "{{name}} wurde im PATH des Boards nicht gefunden",
+        "claudeNotFound": "claude wurde nicht gefunden: CLAUDE_BIN ist {{bin}}",
+        "tooOld": "{{gh}} ist für diese Prüfung zu alt: Es kennt --active nicht",
+        "noConfigWhere": "gh findet seine Konfiguration nicht: kein {{needs}}, daher suchte es {{file}}",
+        "noConfig": "gh findet seine Konfiguration nicht: weder HOME noch GH_CONFIG_DIR",
+        "signedOut": "gh ist nicht angemeldet"
+      },
+      "fix": {
+        "then": "dann Erneut prüfen (starte das Board neu, falls sein Ordner noch nicht im PATH war)",
+        "installGit": "installiere git (https://git-scm.com/downloads), {{after}}",
+        "installGh": "installiere die GitHub CLI (https://cli.github.com) und führe gh auth login aus, {{after}}",
+        "installClaude": "installiere Claude Code (https://docs.claude.com/en/docs/claude-code/setup) oder setze CLAUDE_BIN in .env (config.env bei der Desktop-App) auf den vollständigen Pfad, dann starte das Board neu",
+        "installNode": "installiere Node.js (https://nodejs.org), {{after}}",
+        "installPnpm": "führe corepack enable pnpm aus (oder installiere es: https://pnpm.io/installation), {{after}}",
+        "upgradeGh": "aktualisiere die GitHub CLI (https://cli.github.com; unter Debian oder Ubuntu: sudo apt install --only-upgrade gh, unter macOS: brew upgrade gh), dann Erneut prüfen",
+        "noConfig": "starte das Board mit HOME auf dem Home, mit dem gh angemeldet wurde (oder GH_CONFIG_DIR auf den Ordner mit hosts.yml), dann Erneut prüfen",
+        "signedOut": "führe auf diesem Rechner gh auth login aus, dann Erneut prüfen"
+      }
+    }
+  },
+  "previewLimit": {
+    "label": "Preview-Limit",
+    "saving": "Speichere…"
+  },
+  "projectSettings": {
+    "intro": "Wie dieses Projekt arbeitet: womit neue Tickets starten, welche Tags es anbietet, wann ein Ticket als stockend gilt, welche Hinweise es zeigt, seine Stufen, seine Runs und was seine Seiten zeigen. Die Anweisungen für seine Agents haben eine eigene Seite.",
+    "save": "Speichern",
+    "saving": "Speichere…",
+    "unsaved": "Ungespeicherte Änderungen.",
+    "noChanges": "Keine Änderungen.",
+    "kinds": {
+      "title": "Arten",
+      "description": "Wofür das Projekt da ist. Ein Projekt ohne Software-Art blendet seine Repositories, PRs, CI, Previews und das Aufräumen aus; seine Repos und PRs bleiben gespeichert."
+    },
+    "phases": {
+      "title": "Standardphasen",
+      "description": "Die Aufgaben der obersten Ebene, mit denen jedes neue Ticket beginnt, in Reihenfolge. Die beim Erstellen angegebenen Aufgaben kommen unter die erste; eine Lane startet ohne sie. Agents haken jede ab, wenn sie fertig ist, und entfernen oder ändern die, die nicht passen. Lass es leer, damit Tickets ohne Aufgaben starten.",
+      "empty": "Keine Phasen: Neue Tickets starten ohne Aufgaben.",
+      "new": "Neue Phase",
+      "list": "Standardphasen",
+      "placeholder": "Phase hinzufügen",
+      "add": "Phase hinzufügen",
+      "useBuiltIn": "Eingebaute Liste verwenden"
+    },
+    "tags": {
+      "title": "Tag-Vorschläge",
+      "description": "Die Tags, die als Chips unter den Tags eines Tickets angeboten werden, gefolgt von den Tags, die seine Tickets schon tragen. Agents lesen sie in <code>get_project</code> und verwenden sie wieder. Lass es leer, um nur die verwendeten Tags anzubieten.",
+      "empty": "Keine Vorschläge: Nur die verwendeten Tags werden angeboten.",
+      "new": "Neuer Tag",
+      "placeholder": "Tag hinzufügen",
+      "add": "Tag hinzufügen",
+      "useDefaults": "Standard verwenden"
+    },
+    "stall": {
+      "title": "Stockende Tickets",
+      "description": "Zwei Uhren bestimmen, wie ein Ticket erscheint. Die Lease hält der Heartbeat oder Beitrag eines Agents am Leben: Sie dauert zehn Minuten, und läuft sie mit einem noch offenen Span ab, erscheint das Ticket als <lost>Kontakt verloren</lost> — der Agent ist weg und wartet nicht auf dich. Ein Ticket ohne offenen Span erscheint als <stalled>Stockt</stalled>, sobald so lange weder ein Wort eines Agents (Heartbeat, Span, Warten, Übergabe) noch etwas, das das Board davon gesehen hat (ein Push, sein PR, seine Preview), eingegangen ist. Dieser Regler legt diese Stille-Schwelle fest und entscheidet zuerst: Eine Schwelle unter zehn Minuten markiert ein stilles Ticket, bevor die Lease abläuft. Die zehn Minuten der Lease bleiben fest.",
+      "label": "Stockt nach (Minuten)",
+      "invalid": "Eine ganze Zahl von {{min}} bis {{max}}."
+    }
+  },
+  "kinds": {
+    "legend": "Wofür das Projekt da ist",
+    "hint": "Software fügt die Repositories, Branches, PRs, CI, Previews und das Aufräumen hinzu. Andere Arten halten ihre Arbeit aus git heraus: Das Board zeigt, was sie nutzen.",
+    "label": {
+      "software": "Software",
+      "music": "Musik",
+      "art": "Kunst",
+      "writing": "Schreiben",
+      "video": "Video",
+      "research": "Forschung",
+      "lawyer": "Recht",
+      "accountant": "Buchhaltung",
+      "cybersecurity": "Cybersicherheit",
+      "life": "Leben"
+    }
+  },
+  "lists": {
+    "tasks": "Aufgaben",
+    "addTask": "Aufgabe hinzufügen",
+    "addTaskLabel": "Aufgabe hinzufügen",
+    "moveUp": "Nach oben",
+    "moveDown": "Nach unten",
+    "moveItemUp": "{{item}} nach oben",
+    "moveItemDown": "{{item}} nach unten",
+    "remove": "Entfernen",
+    "removeItem": "{{item}} entfernen"
+  },
+  "tagsInput": {
+    "tooLong": "Mehr als {{max}} Zeichen",
+    "remove": "Entfernen",
+    "removeTag": "{{tag}} entfernen",
+    "suggested": "Vorgeschlagene Tags",
+    "addTag": "Tag {{tag}} hinzufügen",
+    "tooMany": "Höchstens {{max}} Tags.",
+    "tooLongTag": "Ein Tag darf höchstens {{max}} Zeichen haben."
+  },
+  "stagesEditor": {
+    "title": "Stufen",
+    "description": "Die Spalten des Feature-Boards, von links nach rechts. Die Art ist das, wonach sich die Regeln des Boards richten (Übernehmen, Ablehnen, Lane-Fortschritt); Agents sehen Schlüssel, Name und Art jeder Stufe. Beim Umbenennen bleibt der Schlüssel.",
+    "moveEarlier": "{{name}} nach vorn",
+    "moveLater": "{{name}} nach hinten",
+    "tickets_one": "{{count}} Ticket",
+    "tickets_other": "{{count}} Tickets",
+    "newPlaceholder": "Neue Stufe, z. B. QA",
+    "add": "Stufe hinzufügen",
+    "moveAnyway": "Trotzdem verschieben",
+    "kind": {
+      "open": "Offen",
+      "active": "Aktiv",
+      "blocked": "Blockiert",
+      "review": "Review",
+      "done": "Erledigt",
+      "cancelled": "Abgebrochen",
+      "approved": "Genehmigt"
+    },
+    "hint": {
+      "open": "wartet auf Übernahme; beim Übernehmen wandert es in die Stufe, in der die Arbeit beginnt",
+      "active": "in Arbeit",
+      "blocked": "wartet auf dich",
+      "review": "zum Review übergeben",
+      "done": "abgeschlossen; kann nicht übernommen werden",
+      "cancelled": "verworfen; Ablehnen verschiebt ein Ticket hierher, und seine Aufgaben zählen nicht mehr zum Fortschritt",
+      "approved": "dein Okay zum Mergen; kein Agent verschiebt ein Ticket hierher"
+    },
+    "color": {
+      "gray": "Grau",
+      "slate": "Schiefer",
+      "sky": "Himmel",
+      "blue": "Blau",
+      "teal": "Petrol",
+      "emerald": "Smaragd",
+      "lime": "Limette",
+      "amber": "Bernstein",
+      "orange": "Orange",
+      "rose": "Rosé",
+      "pink": "Pink",
+      "violet": "Violett"
+    },
+    "colour": "Farbe",
+    "stageName": "Name der Stufe",
+    "firstActive": "Erste aktive Stufe ({{name}})",
+    "firstActiveNone": "Erste aktive Stufe (keine)",
+    "workStarts": "Arbeit beginnt in",
+    "workStartsHint": "Wohin ein Ticket beim Übernehmen kommt; ein Status „in Arbeit“ oder „aktiv“ meint ebenfalls diese Stufe.",
+    "delete": "{{name}} löschen",
+    "deleteTitle": "Stufe {{name}} löschen?",
+    "holds_one": "Sie enthält {{count}} Ticket (Lanes eingeschlossen). Wähle die Stufe, in die es wandert.",
+    "holds_other": "Sie enthält {{count}} Tickets (Lanes eingeschlossen). Wähle die Stufe, in die sie wandern.",
+    "holdsNone": "Kein Ticket ist darin.",
+    "moveTo": "Verschieben nach…",
+    "cancel": "Abbrechen",
+    "deleteConfirm": "Löschen"
+  },
+  "runsSettings": {
+    "title": "Runs",
+    "description": "Was das Board aus dem Worktree eines Tickets in jedem Repo startet, über die Runs-Karte des Tickets oder auf Anfrage eines Agents: Eine <strong>Preview</strong> antwortet auf einem Port und bekommt einen Link zum Öffnen, ein <strong>Job</strong> ist ein Hintergrundprozess ohne Link. Jeder führt im Worktree seine Installation (nur wenn sich die Lockfile geändert hat), seinen Build und dann seinen Startbefehl aus. Agents starten und stoppen sie und können sie auch hinzufügen, ändern und löschen: Jede Änderung erscheint in der Aktivität des Projekts unter dem Namen des Agents.",
+    "noRepos": "Das Projekt hat noch keine Repos.",
+    "removed": "Entfernt",
+    "groupLabel": "Runs von {{name}}",
+    "add": "Run hinzufügen",
+    "none": "Keine Runs: Für Tickets dieses Repos gibt es nichts zu starten.",
+    "typePreview": "Preview",
+    "typeJob": "Job",
+    "portHealth": "Port {{port}} · Health {{path}}",
+    "portAuto": "auto",
+    "moveUp": "Nach oben",
+    "moveDown": "Nach unten",
+    "edit": "Bearbeiten",
+    "editRun": "{{name}} bearbeiten",
+    "delete": "Löschen",
+    "deleteRun": "{{name}} löschen",
+    "deleteTitle": "Run {{name}} löschen?",
+    "deleteDescription": "Wo er gerade läuft, wird er gestoppt, und Tickets von {{repo}} bieten ihn nicht mehr an.",
+    "cancel": "Abbrechen",
+    "newRun": "Neuer Run",
+    "portProblem": "Port: auto oder ein Port von {{from}} bis {{to}}",
+    "name": "Name",
+    "type": "Typ",
+    "typePreviewLong": "Preview (Port und Link)",
+    "typeJobLong": "Job (Hintergrundprozess)",
+    "install": "Installation",
+    "installPlaceholder": "pnpm install --frozen-lockfile (leer: keine)",
+    "build": "Build",
+    "buildPlaceholder": "pnpm build (leer: keiner)",
+    "start": "Start",
+    "startPreviewPlaceholder": "node server.js (liest PORT)",
+    "port": "Port",
+    "healthPath": "Health-Pfad",
+    "envPreview": "Umgebung für den Startbefehl: {port} in einem Wert ist sein Port; PORT und HOST sind gesetzt",
+    "env": "Umgebung für den Startbefehl",
+    "varName": "Name der Variable {{n}}",
+    "varValue": "Wert der Variable {{n}}",
+    "valuePlaceholder": "Wert",
+    "removeVar": "Variable {{n}} entfernen",
+    "addVar": "Variable hinzufügen",
+    "copyData": "Daten des Live-Boards zuerst nach data/preview kopieren (als DATA_DIR)",
+    "save": "Speichern",
+    "saving": "Speichere…"
+  },
+  "layoutEditor": {
+    "title": "Layout",
+    "description": "Was in diesem Projekt wo erscheint: die Seiten seines Menüs, die Karten seiner Übersicht (und seines Blocks auf dem Start) und die Abschnitte der Ticket-Seite. Schalte eine Kachel aus, um sie zu verbergen, ziehe sie oder nutze ihre Pfeile zum Verschieben, und verschiebe einen Ticket-Abschnitt in die andere Spalte. Eine verborgene Seite öffnet sich weiterhin über ihren Link. <lock/> Gesperrte lassen sich verschieben, werden aber immer angezeigt.",
+    "area": {
+      "nav": "Projektmenü",
+      "overview": "Karten der Übersicht",
+      "ticketMain": "Ticket-Seite, Hauptspalte",
+      "ticketSide": "Ticket-Seite, Seitenspalte"
+    },
+    "where": {
+      "nav": "im Menü",
+      "overview": "in der Übersicht",
+      "ticket": "auf der Ticket-Seite"
+    },
+    "menu": "Menü",
+    "overview": "Übersicht",
+    "ticketPage": "Ticket-Seite",
+    "mainColumn": "Hauptspalte",
+    "sideColumn": "Seitenspalte",
+    "hiddenCount_one": "{{count}} verborgen.",
+    "hiddenCount_other": "{{count}} verborgen.",
+    "reset": "Auf Standard zurücksetzen",
+    "shown": "{{shown}} von {{total}} sichtbar",
+    "dropHere": "Hier ablegen",
+    "empty": "Leer: Abschnitte hierher ziehen",
+    "moveUp": "Nach oben",
+    "moveDown": "Nach unten",
+    "moveUpIn": "{{name}} {{where}} nach oben",
+    "moveDownIn": "{{name}} {{where}} nach unten",
+    "toSideTip": "In die Seitenspalte verschieben",
+    "toMainTip": "In die Hauptspalte verschieben",
+    "toSide": "{{name}} in die Seitenspalte verschieben",
+    "toMain": "{{name}} in die Hauptspalte verschieben",
+    "alwaysShown": "Immer sichtbar: {{reason}}",
+    "show": "Anzeigen",
+    "hide": "Verbergen",
+    "showIn": "{{name}} {{where}} anzeigen",
+    "element": {
+      "nav": {
+        "overview": "Übersicht",
+        "prs": "PR-Warteschlange",
+        "features": "Laufende Features",
+        "roadmap": "Roadmap",
+        "previews": "Previews",
+        "gallery": "Galerie",
+        "agents": "Team",
+        "daily": "Daily",
+        "cleanup": "Aufräumen",
+        "repositories": "Repositories",
+        "instructions": "Anweisungen",
+        "workflow": "Workflow"
+      },
+      "overview": {
+        "needsYou": "Braucht dich",
+        "inProgress": "In Arbeit",
+        "doneToday": "Heute erledigt",
+        "carryingOver": "Übertrag",
+        "notes": "Notizen",
+        "agents": "Agents bei der Arbeit",
+        "lostContact": "Kontakt verloren"
+      },
+      "ticket": {
+        "instructions": "Anweisungen",
+        "tasks": "Aufgaben",
+        "timeline": "Verlauf",
+        "lanes": "Lanes",
+        "activity": "Aktivität",
+        "runs": "Runs",
+        "details": "Details",
+        "branch": "Branch",
+        "workspaces": "Workspaces",
+        "resume": "Fortsetzen"
+      }
+    },
+    "locked": {
+      "nav": {
+        "overview": "Die Startseite des Projekts",
+        "features": "Das Board des Projekts"
+      },
+      "ticket": {
+        "instructions": "Der eigene Text des Tickets",
+        "tasks": "Wohin Links blockierter Aufgaben führen",
+        "activity": "Hier stehen Entscheidungen und Threads, die auf dich warten"
+      }
+    }
+  },
+  "repoDialog": {
+    "newProject": "Neues Projekt…",
+    "editTitle": "{{name}} bearbeiten",
+    "newTitle": "Neues Repository",
+    "description": "Ein lokaler git-Checkout. Das Board liest ihn mit git und gh; es schreibt nie hinein.",
+    "project": "Projekt",
+    "projectName": "Projektname",
+    "moves": "Seine PRs, Tickets und Review-Ergebnisse ziehen mit um.",
+    "path": "Repository-Pfad",
+    "pathPlaceholder": "/home/du/code/… oder C:\\code\\…",
+    "browse": "Durchsuchen…",
+    "name": "Name",
+    "namePlaceholder": "von GitHub oder dem Ordner",
+    "baseBranch": "Basis-Branch",
+    "removeRepo": "Repo entfernen",
+    "removeTitle": "{{name}} entfernen?",
+    "removeDescription": "Seine Einträge in der PR-Warteschlange gehen mit. Tickets und Review-Ergebnisse bleiben im Projekt, aber seine PR-Tickets gehen mit. Der Checkout auf der Platte bleibt unberührt.",
+    "keep": "Behalten",
+    "remove": "Entfernen",
+    "saving": "Speichere…",
+    "save": "Speichern",
+    "add": "Repository hinzufügen"
+  },
+  "folderPicker": {
+    "title": "Checkout wählen",
+    "description": "Ordner auf dem Rechner, auf dem das Board läuft. <repo/> markiert einen git-Checkout.",
+    "up": "Eine Ebene höher",
+    "home": "Home",
+    "path": "Ordnerpfad",
+    "folders": "Ordner",
+    "none": "Hier sind keine Ordner.",
+    "git": "git",
+    "isRepo": "Dieser Ordner ist ein git-Checkout.",
+    "notRepo": "Kein git-Checkout.",
+    "use": "Diesen Ordner verwenden"
+  },
+  "instructions": {
+    "state": {
+      "pending": "wartet auf dich",
+      "accepted": "geprüft",
+      "reverted": "zurückgenommen"
+    },
+    "markedReviewed": "Als geprüft markiert",
+    "reverted": "Projektanweisungen zurückgenommen",
+    "historyTitle": "Verlauf der Anweisungen",
+    "historyDescription": "Jede Änderung, von dir oder einem Orchestrator, mit dem Text davor. Die Änderung eines Orchestrators gilt sofort und wartet auf dein Review.",
+    "noChanges": "Noch keine Änderungen.",
+    "changeBy": "Änderung von {{name}}",
+    "aRevert": "eine Rücknahme",
+    "revertedBy": "zurückgenommen von {{name}} {{when}}",
+    "reviewedBy": "geprüft von {{name}} {{when}}",
+    "hideChange": "Änderung ausblenden",
+    "showChange": "Änderung anzeigen",
+    "reviewed": "Geprüft",
+    "revertTip": "Die Anweisungen auf den Stand vor dieser Änderung zurücksetzen",
+    "revertBlocked": "Die Anweisungen wurden seitdem erneut geändert: Nimm zuerst die spätere Änderung zurück",
+    "revert": "Zurücknehmen",
+    "diffLabel": "Was sich an den Anweisungen geändert hat",
+    "pageTitle": "Anweisungen",
+    "pageDescription": "Was jeder Agent liest, bevor er hier arbeitet. Jede Änderung bleibt unten erhalten.",
+    "reposLine": "Repos: <goto>Seite Repositories</goto>. Projekt umbenennen oder löschen: Projektmenü → Projekte verwalten.",
+    "sectionLabel": "Projektanweisungen",
+    "edit": "bearbeiten",
+    "placeholder": "Wie die Repos laufen, welche Konventionen gelten, was nie getan werden darf.",
+    "unsavedHint": "Ungespeicherte Änderungen. Strg/⌘+Enter speichert.",
+    "noChangesHint": "Keine Änderungen.",
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "saving": "Speichere…",
+    "clickToEdit": "Zum Bearbeiten klicken",
+    "empty": "Noch keine Anweisungen. Klicke, um sie zu schreiben.",
+    "discardTitle": "Änderungen verwerfen?",
+    "discardDescription": "Die Projektanweisungen haben ungespeicherte Änderungen. Agents lesen weiter die gespeicherten.",
+    "keepEditing": "Weiter bearbeiten",
+    "discard": "Verwerfen"
+  },
+  "repositories": {
+    "title": "Repositories",
+    "description": "Checkouts, die dieses Projekt liest.",
+    "new": "Neues Repository",
+    "baseLine": "Basis {{branch}} · <path>{{path}}</path>",
+    "empty": "Noch keine Repositories in diesem Projekt. Füge eins hinzu: den Pfad eines lokalen git-Checkouts."
+  },
+  "reports": {
+    "status": {
+      "done": "erledigt",
+      "missing": "fehlt",
+      "upcoming": "anstehend",
+      "off": "aus"
+    },
+    "weekday": {
+      "1": "Montag",
+      "2": "Dienstag",
+      "3": "Mittwoch",
+      "4": "Donnerstag",
+      "5": "Freitag",
+      "6": "Samstag",
+      "7": "Sonntag"
+    },
+    "weekdayShort": {
+      "1": "Mo",
+      "2": "Di",
+      "3": "Mi",
+      "4": "Do",
+      "5": "Fr",
+      "6": "Sa",
+      "7": "So"
+    },
+    "weekOf": "Woche ab {{date}}",
+    "scheduleOff": "aus",
+    "scheduleDaily": "täglich bis {{end}}, {{format}}",
+    "scheduleWeekly": "wöchentlich am {{day}} bis {{end}}, {{format}}",
+    "formatFile": "Datei",
+    "formatText": "Text"
+  },
+  "daily": {
+    "title": "Daily",
+    "subtitle": "Der Bericht der Periode und was Stunde für Stunde erledigt wurde.",
+    "previousDay": "Voriger Tag",
+    "nextDay": "Nächster Tag",
+    "opening": "Öffne Daily…"
+  },
+  "reportDue": {
+    "region": "Fällige Berichte",
+    "notifyTitleDue": "{{project}}: Bericht fällig",
+    "notifyTitleMissing": "{{project}}: Bericht fehlt",
+    "notifyBodyDaily": "Der Tagesbericht für {{label}} ist um {{time}} fällig.",
+    "notifyBodyWeekly": "Der Wochenbericht für {{label}} ist um {{time}} fällig.",
+    "missing": ": Bericht fehlt, die Schicht endete um {{time}}",
+    "due": ": Bericht fällig in {{left}}, um {{time}}",
+    "leftMinutes": "{{count}} Min.",
+    "leftHours": "{{hours}} Std.",
+    "leftHoursMinutes": "{{hours}} Std. {{minutes}} Min.",
+    "notificationsOn": "Benachrichtigungen in diesem Browser an",
+    "notificationsBlocked": "Benachrichtigungen in diesem Browser blockiert",
+    "notifyTip": "Eine Browser-Benachrichtigung, wenn ein Bericht fällig ist (solange ein Board-Tab offen ist)",
+    "notifyMe": "Benachrichtigen"
+  },
+  "activityLog": {
+    "region": "Aktivität",
+    "empty": "Am {{date}} ist nichts passiert.",
+    "actions_one": "{{count}} Aktion",
+    "actions_other": "{{count}} Aktionen",
+    "contributors_one": "von {{count}} Beteiligtem",
+    "contributors_other": "von {{count}} Beteiligten",
+    "contributorsTitle": "Beteiligte",
+    "by": "von {{names}}",
+    "openAll": "Alle öffnen",
+    "closeAll": "Alle schließen",
+    "openReview": "Review-Ergebnis öffnen",
+    "kind": {
+      "ticket_one": "{{count}} Ticket",
+      "ticket_other": "{{count}} Tickets",
+      "task_one": "{{count}} Aufgabe",
+      "task_other": "{{count}} Aufgaben",
+      "update_one": "{{count}} Beitrag",
+      "update_other": "{{count}} Beiträge",
+      "comment_one": "{{count}} Kommentar",
+      "comment_other": "{{count}} Kommentare",
+      "pr_one": "{{count}} PR",
+      "pr_other": "{{count}} PRs",
+      "review_one": "{{count}} Review",
+      "review_other": "{{count}} Reviews",
+      "workspace_one": "{{count}} Workspace",
+      "workspace_other": "{{count}} Workspaces",
+      "agent_one": "{{count}} Agent",
+      "agent_other": "{{count}} Agents",
+      "project_one": "{{count}} Projekt",
+      "project_other": "{{count}} Projekte",
+      "summary_one": "{{count}} Zusammenfassung",
+      "summary_other": "{{count}} Zusammenfassungen",
+      "report_one": "{{count}} Bericht",
+      "report_other": "{{count}} Berichte",
+      "handoff_one": "{{count}} Übergabe",
+      "handoff_other": "{{count}} Übergaben"
+    }
+  },
+  "generateReport": {
+    "wrote": "claude hat den Bericht geschrieben",
+    "loading": "Lade…",
+    "off": "Berichte sind aus: Lege zuerst in den Berichtseinstellungen einen Rhythmus fest",
+    "file": "Die Berichte dieses Projekts sind Dateien: claude schreibt nur Textberichte",
+    "none": "Für diesen Tag wird kein Bericht verlangt",
+    "fix": "{{problem}}. Lösung: {{fix}}.",
+    "tip": "claude schreibt den Bericht aus Prompt, Vorlage und Aktivität",
+    "writing": "claude schreibt…",
+    "generate": "Mit claude erzeugen",
+    "failed": "claude konnte ihn nicht schreiben: {{message}}"
+  },
+  "pushedToday": {
+    "commits_one": "{{count}} Commit",
+    "commits_other": "{{count}} Commits",
+    "label": "Heute gepusht: {{commits}}, {{added}} Zeilen hinzugefügt, {{removed}} entfernt",
+    "labelNone": "Heute gepusht: nichts",
+    "nothing": "Heute nichts gepusht",
+    "title": "Heute gepusht",
+    "checked": "origin geprüft {{ago}}",
+    "notFetched": "origin noch nicht geholt",
+    "byRepo": "Heute gepusht pro Repo",
+    "emptyRepos": "Heute ist in den Repos dieses Projekts nichts auf origin gelandet.",
+    "hint": "Commits, die heute einen Branch auf origin erreicht haben, jeder einmal, ohne Merges."
+  },
+  "reportCalendar": {
+    "region": "Berichtskalender",
+    "counts": "{{done}} erledigt · {{missing}} fehlen",
+    "openMissing": "{{period}} öffnen, den nächsten fehlenden Bericht",
+    "nothingMissing": "Nichts fehlt",
+    "nextMissing": "Nächster fehlender",
+    "dayLabel": "{{day}}: {{status}}"
+  },
+  "reportCard": {
+    "region": "Bericht",
+    "title": "Bericht",
+    "off": "Berichte sind für dieses Projekt aus: Lege in den Berichtseinstellungen fest, wie oft einer fällig ist.",
+    "notAsked": "Am {{date}} wird kein Bericht verlangt.",
+    "due": "fällig {{date}}",
+    "replace": "ersetzen",
+    "post": "Bericht posten",
+    "versions_one": "{{count}} Version",
+    "versions_other": "{{count}} Versionen",
+    "version": "Version {{n}}",
+    "none": "Noch kein Bericht für {{label}}.",
+    "history": "Verlauf ({{count}})",
+    "earlier": "Frühere Versionen",
+    "forLabel": "Bericht für {{label}}",
+    "placeholderFile": "Hänge die Berichtsdatei an; eine Zeile dazu ist optional.",
+    "placeholderText": "Der Bericht, wie der Prompt ihn verlangt. Füge Dateien ein oder ziehe sie hierher, um sie anzuhängen.",
+    "attach": "anhängen",
+    "cancel": "Abbrechen",
+    "attachFirst": "Hänge zuerst die Berichtsdatei an",
+    "posting": "Poste…",
+    "replaceButton": "Ersetzen",
+    "postButton": "Posten"
+  },
+  "reportSettings": {
+    "region": "Berichtseinstellungen",
+    "title": "Berichtseinstellungen",
+    "field": {
+      "prompt": "Prompt",
+      "template": "Vorlage"
+    },
+    "formatText": "Text",
+    "formatFile": "Eine Datei (z. B. PDF)",
+    "prompt": "Prompt",
+    "promptKindFile": "Datei",
+    "promptKindText": "Text",
+    "edit": "bearbeiten",
+    "clickToEdit": "Zum Bearbeiten klicken",
+    "noPrompt": "Noch kein Berichts-Prompt. Klicke, um festzulegen, was der Bericht enthalten muss und wie, und ob er ein kurzer Text oder eine Datei ist.",
+    "promptLabel": "Berichts-Prompt",
+    "promptPlaceholder": "Was der Bericht sagen muss und wie: wer ihn liest, der Ton, was betont wird, ein kurzer Text oder ein PDF.",
+    "as": "Als",
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "saving": "Speichere…",
+    "sections": "Ein erzeugter Bericht hat diese Abschnitte in dieser Reihenfolge: {{headings}}.",
+    "noHeadings": "Keine Überschriften: Ein erzeugter Bericht wird nicht dagegen geprüft.",
+    "template": "Vorlage",
+    "theDefault": "der Standard",
+    "templateLabel": "Berichtsvorlage",
+    "useDefault": "Standard verwenden",
+    "diffGroup": "Was sich an {{field}} des Berichts geändert hat",
+    "bothEmpty": "Beide sind leer.",
+    "state": {
+      "pending": "wartet auf dich",
+      "accepted": "behalten",
+      "reverted": "zurückgenommen"
+    },
+    "dialogTitle": "Änderung an {{field}} des Berichts",
+    "dialogTitleGeneric": "Änderung der Berichtseinstellungen",
+    "loading": "Lade…",
+    "byAgent": "von <who>{{name}}</who> (ein Agent)",
+    "by": "von <who>{{name}}</who>",
+    "keptBy": "behalten von {{name}}",
+    "revertedBy": "zurückgenommen von {{name}}",
+    "showChange": "Änderung anzeigen",
+    "noticesRegion": "Änderungen von Agents zur Prüfung",
+    "keptToast": "Neue {{field}} des Berichts behalten",
+    "revertedToast": "{{field}} des Berichts zurückgenommen",
+    "noticeLabel": "{{field}} des Berichts geändert von {{name}}",
+    "noticeText": "{{field}} des Berichts wurde von <who>{{name}}</who> geändert, zurücknehmen?",
+    "hideChange": "Änderung ausblenden",
+    "showTheChange": "Änderung anzeigen",
+    "accept": "Annehmen",
+    "revert": "Zurücknehmen",
+    "laterChange": "{{field}} wurde seitdem erneut geändert: Nimm zuerst diese Änderung zurück"
+  },
+  "shift": {
+    "notWorkday": "kein Arbeitstag",
+    "before": "vor der Schicht",
+    "on": "in der Schicht",
+    "after": "nach der Schicht",
+    "tip": "Schicht heute {{span}}; jetzt {{now}}, {{where}}. Der Bericht ist an ihrem Ende fällig.",
+    "label": "Schicht {{span}}, jetzt {{now}}: {{where}}",
+    "cadence": {
+      "off": "Aus",
+      "daily": "Täglich",
+      "weekly": "Wöchentlich"
+    },
+    "badOrder": "Die Schicht muss nach ihrem Beginn enden.",
+    "noWorkday": "Wähle mindestens einen Arbeitstag.",
+    "badAlert": "Erinnere zwischen 0 und 720 Minuten vor dem Ende.",
+    "schedule": "Rhythmus",
+    "due": "Fällig",
+    "hintDaily": "Die Schicht: Der Bericht ist fällig, wenn sie endet.",
+    "hintWeekly": "Die Schicht: Der Bericht ist fällig, wenn sie endet, am Tag oben.",
+    "start": "Schichtbeginn",
+    "end": "Schichtende",
+    "workdays": "Arbeitstage",
+    "workdaysHint": "Ein Tagesbericht wird an diesen Tagen verlangt; die anderen sind frei und fehlen nie.",
+    "remind": "Erinnern ab (Minuten vor dem Ende)",
+    "save": "Speichern",
+    "saving": "Speichere…",
+    "weekdayLabel": "Am"
+  },
+  "cleanup": {
+    "counts": {
+      "deleted_one": "{{count}} gelöscht",
+      "deleted_other": "{{count}} gelöscht",
+      "kept_one": "{{count}} behalten",
+      "kept_other": "{{count}} behalten",
+      "gone_one": "{{count}} schon weg",
+      "gone_other": "{{count}} schon weg"
+    },
+    "actions": {
+      "local": {
+        "row": "Branch löschen",
+        "all": "Alle geeigneten lokalen Branches löschen",
+        "title_one": "{{count}} lokalen Branch löschen?",
+        "title_other": "{{count}} lokale Branches löschen?",
+        "confirm_one": "{{count}} lokalen Branch löschen",
+        "confirm_other": "{{count}} lokale Branches löschen",
+        "what": "Jeder Branch verschwindet aus dem Checkout. Origin behält seine Kopie."
+      },
+      "remote": {
+        "row": "Auf origin löschen",
+        "all": "Alle geeigneten Branches auf origin löschen",
+        "title_one": "{{count}} Branch auf origin löschen?",
+        "title_other": "{{count}} Branches auf origin löschen?",
+        "confirm_one": "{{count}} Branch auf origin löschen",
+        "confirm_other": "{{count}} Branches auf origin löschen",
+        "what": "Jeder Branch verschwindet von origin, für alle, die damit arbeiten. Lokale Branches bleiben."
+      },
+      "worktrees": {
+        "row": "Worktree + Branch entfernen",
+        "all": "Alle geeigneten Worktrees samt Branch entfernen",
+        "title_one": "Worktree von {{count}} Branch und den Branch entfernen?",
+        "title_other": "Worktrees von {{count}} Branches und die Branches entfernen?",
+        "confirm_one": "Worktrees entfernen und {{count}} Branch löschen",
+        "confirm_other": "Worktrees entfernen und {{count}} Branches löschen",
+        "what": "Jeder Worktree-Ordner verschwindet (ignorierte Dateien wie node_modules mit), dann der lokale Branch. Ein Link darin verschwindet als Link: Ein Ordner außerhalb des Worktrees, auf den er zeigt, bleibt. Origin behält seine Kopie."
+      }
+    },
+    "previewState": {
+      "running": "läuft auf :{{port}}",
+      "building": "wird gebaut",
+      "starting": "startet"
+    },
+    "copied": "Kopiert",
+    "sweep": {
+      "partial_one": "{{count}} Datei gelöscht; {{failed}} ließen sich nicht löschen und bleiben für den nächsten Lauf",
+      "partial_other": "{{count}} Dateien gelöscht; {{failed}} ließen sich nicht löschen und bleiben für den nächsten Lauf",
+      "done_one": "{{count}} Datei gelöscht ({{size}})",
+      "done_other": "{{count}} Dateien gelöscht ({{size}})"
+    },
+    "toast": {
+      "keptSee": "{{counts}}: Gründe siehe unten",
+      "jobFailed": "{{title}} fehlgeschlagen: {{reason}}"
+    },
+    "noReasonGiven": "kein Grund angegeben",
+    "title": "Aufräumen",
+    "intro": "Abgeschlossene Arbeit zum Aufräumen, gegen ihre Basis geprüft.",
+    "refresh": "Aktualisieren",
+    "agentsNote": "Agents dürfen gelandete lokale Branches löschen (<tool>cleanup_delete</tool>); Worktrees entfernen und Branches auf origin löschen bleibt deine Sache, auf dieser Seite.",
+    "deleteOff": "Löschen ist aus: {{reason}}.",
+    "repoError": "{{name}}: {{error}}. Seine Branches und Worktrees sind unbekannt, daher lässt sich darin nichts löschen.",
+    "progress": {
+      "label": "Löschfortschritt",
+      "of": "{{done}} von {{total}}",
+      "starting": "Starte…",
+      "failed": "Fehlgeschlagen · {{reason}}",
+      "succeeded": "Erfolgreich · {{counts}}"
+    },
+    "empty": "Nichts zurückgeblieben. Jedes geschlossene Ticket ist aufgeräumt.",
+    "group": {
+      "safe": {
+        "title": "Sicher löschbar",
+        "hint": "Jeder Commit oder dieselben Patches sind in der Basis."
+      },
+      "edited": {
+        "title": "Geändert, aber enthalten",
+        "hint": "Die Commits wurden beim Übernehmen geändert, aber ein Merge des Branches würde nichts hinzufügen."
+      },
+      "unique": {
+        "title": "Hat noch eigene Arbeit",
+        "hint": "Der Branch hat Änderungen, die seinen Basen fehlen. Behalte ihn oder prüfe, wohin die Arbeit ging."
+      },
+      "kept": {
+        "title": "Behalten",
+        "hint": "In Benutzung durch ein Ticket in Arbeit oder einen offenen PR, eine Basis, den Basis-Branch des Repos, den Branch des Haupt-Checkouts oder den Standard-Branch von origin: wird von hier nie gelöscht."
+      },
+      "other": {
+        "title": "Nichts zu vergleichen",
+        "hint": "Workspaces, die noch ohne Branch registriert sind, oder ein Branch ohne Basis zum Vergleichen."
+      }
+    },
+    "workspacesRegistered_one": "{{count}} Workspace registriert",
+    "workspacesRegistered_other": "{{count}} Workspaces registriert",
+    "previewStop": "Preview {{state}}: am Ticket stoppen",
+    "notLocal": "nicht lokal",
+    "worktreeKept": "{{path}}: behalten, {{reason}}",
+    "mainCheckout": "Haupt-Checkout",
+    "originSha": "origin {{sha}}",
+    "copyRestore": "Wiederherstellungsbefehl kopieren: {{command}}",
+    "col": {
+      "ticket": "Ticket",
+      "branch": "Branch",
+      "reach": "Stand",
+      "worktree": "Worktree",
+      "origin": "Origin",
+      "branchOnOrigin": "Branch auf origin"
+    },
+    "remote": {
+      "title": "Auf origin verbliebene Branches",
+      "intro": "Stand des letzten Fetch; das Board holt origin erneut, bevor es einen löscht. Jeder wird an seinen eigenen Commits gegen die Kopien der Basen auf origin beurteilt oder an einem gemergten PR, dessen Head genau dieser Commit ist."
+    },
+    "prMerged": "PR #{{number}} an diesem Commit gemergt",
+    "prWasMerged": "PR #{{number}} wurde an diesem Commit gemergt",
+    "untracked": {
+      "title": "Nicht erfasste Worktrees",
+      "intro": "Worktrees, die kein Ticket und kein Workspace erklärt. Registriere sie an ihrem Ticket oder entferne sie."
+    },
+    "detached": "detached {{sha}}",
+    "uploads": {
+      "title": "Nicht zugeordnete Uploads",
+      "intro": "Vor mehr als einem Tag hochgeladene Dateien, die nichts im Board nutzt: ein geschlossenes Fenster „Neues Ticket“ ohne Erstellen, eine vor dem Senden aus einem Beitrag entfernte Datei. Das Board löscht sie stündlich; Dateien, die jünger als ein Tag sind, bleiben unberührt.",
+      "introRecent": "Vor mehr als einem Tag hochgeladene Dateien, die nichts im Board nutzt: ein geschlossenes Fenster „Neues Ticket“ ohne Erstellen, eine vor dem Senden aus einem Beitrag entfernte Datei. Das Board löscht sie stündlich; Dateien, die jünger als ein Tag sind, bleiben unberührt (jetzt {{recent}}).",
+      "summary_one": "{{count}} Datei, {{size}}",
+      "summary_other": "{{count}} Dateien, {{size}}",
+      "deleteNow": "Jetzt löschen",
+      "confirmTitle": "Nicht zugeordnete Uploads löschen?",
+      "confirmText_one": "{{count}} Datei ({{size}}), die kein Beitrag, keine Antwort, kein Ticket und kein Agent-Bild nutzt, vor mehr als einem Tag hochgeladen. Das lässt sich nicht rückgängig machen.",
+      "confirmText_other": "{{count}} Dateien ({{size}}), die kein Beitrag, keine Antwort, kein Ticket und kein Agent-Bild nutzt, vor mehr als einem Tag hochgeladen. Das lässt sich nicht rückgängig machen."
+    },
+    "keep": "Behalten",
+    "delete": "Löschen",
+    "keptReason": "Behalten: {{reason}}",
+    "noLocalBranch": "kein lokaler Branch",
+    "kind": {
+      "remote": "auf origin",
+      "local": "lokal",
+      "worktrees": "mit seinen Worktrees"
+    },
+    "worktreePath": "Worktree {{path}}",
+    "stopsPreview": "stoppt seine Preview ({{state}})",
+    "stopsServer": "stoppt den Server auf :{{port}}, falls er aus diesem Worktree läuft",
+    "confirmChecked": "Jeder wird direkt vor dem Entfernen erneut geprüft und behalten, wenn sich etwas geändert hat; nichts wird erzwungen. Die Wiederherstellungsbefehle werden danach gezeigt.",
+    "toDelete": "Zu löschen",
+    "toDeleteEdited": "Zu löschen, geändert",
+    "editedOnTheWay": "Beim Übernehmen geändert: Diese Commits weichen von der Basis ab, aber ein Merge würde nichts hinzufügen",
+    "outcome": {
+      "deleted": "Gelöscht",
+      "refused": "Behalten",
+      "failed": "Fehlgeschlagen",
+      "gone": "Schon weg"
+    },
+    "advice": {
+      "changes": "Committe oder stashe sie im Worktree, dann aktualisiere.",
+      "prune": "Führe git worktree prune aus, dann aktualisiere.",
+      "moved": "Aktualisiere, dann bestätige erneut auf dem neuen Commit.",
+      "checkedOut": "Checke dort zuerst einen anderen Branch aus."
+    },
+    "removed": "{{path}} entfernt",
+    "removedLink": "Link {{path}} auf {{target}} entfernt; das Ziel bleibt",
+    "copyCommand": "Kopieren: {{command}}",
+    "results": {
+      "label": "Löschergebnisse",
+      "title": "Letztes Löschen",
+      "retry": "Behaltene wiederholen",
+      "dismiss": "Schließen"
+    }
+  },
+  "gallery": {
+    "kind": {
+      "image": "Bilder",
+      "video": "Videos",
+      "pdf": "PDFs",
+      "docs": "Dokumente und Text",
+      "other": "Sonstige"
+    },
+    "sort": {
+      "newest": "Neueste zuerst",
+      "oldest": "Älteste zuerst",
+      "name": "Name A bis Z",
+      "name-desc": "Name Z bis A",
+      "largest": "Größte zuerst",
+      "smallest": "Kleinste zuerst",
+      "type": "Nach Typ"
+    },
+    "page": {
+      "title": "Galerie",
+      "intro": "Jede Datei an den Tickets des Projekts.",
+      "filters": "Filter",
+      "fileType": "Dateityp",
+      "from": "Von",
+      "to": "Bis",
+      "sortTip": "Sortierung: {{sort}}",
+      "sort": "Sortieren",
+      "archivedTip": "Auch die Dateien archivierter Tickets",
+      "includeArchived": "Archivierte einbeziehen",
+      "clearFilters": "Filter zurücksetzen",
+      "loadError": "Dateien konnten nicht geladen werden: {{error}}",
+      "noMatch": "Keine Dateien passen zu diesen Filtern.",
+      "none": "Noch keine Dateien in diesem Projekt.",
+      "loadingMore": "Lade weitere Dateien…"
+    }
+  },
+  "files": {
+    "copyImage": {
+      "unsupported": "Dieser Browser kann keine Bilder in die Zwischenablage kopieren",
+      "failedNamed": "{{name}} konnte nicht kopiert werden",
+      "copied": "Kopiert",
+      "failed": "Kopieren fehlgeschlagen",
+      "copy": "Bild kopieren"
+    },
+    "attachments": {
+      "notesOn": "Notizen zu {{name}}",
+      "sizeKb": "{{kb}} KB"
+    },
+    "grid": {
+      "open": "{{name}} öffnen",
+      "inLaneTip": "In Lane {{lane}}",
+      "inLane": "in Lane {{lane}}",
+      "openTicket": "Ticket öffnen",
+      "replyTip": "Die Antwort, mit der sie kam",
+      "postTip": "Der Beitrag, mit dem sie kam",
+      "openThread": "Thread öffnen"
+    },
+    "pending": {
+      "preview": "{{name}} ansehen",
+      "uploading": "lädt hoch",
+      "remove": "Entfernen",
+      "removeNamed": "{{name}} entfernen"
+    },
+    "viewer": {
+      "openInNewTab": "In neuem Tab öffnen",
+      "download": "Herunterladen",
+      "close": "Schließen (Esc)",
+      "notes": "Notizen zum Bild",
+      "previous": "Zurück",
+      "next": "Weiter",
+      "noPreview": "Keine Vorschau für diesen Dateityp.",
+      "zoomOut": "Verkleinern (-)",
+      "fit": "Einpassen (0)",
+      "zoomIn": "Vergrößern (+)",
+      "loadFailed": "Diese Datei konnte nicht geladen werden.",
+      "empty": "(leere Datei)",
+      "cut": "Die ersten {{limit}} Zeichen werden gezeigt. Lade die Datei herunter für den Rest."
+    }
+  },
+  "annotate": {
+    "cannotDraw": "dieser Browser kann das Bild nicht zeichnen",
+    "couldNotSave": "das Bild konnte nicht gespeichert werden",
+    "title": "Bild annotieren",
+    "description": "{{name}}: Zeichne darauf und schreibe, was jede Markierung bedeutet. Das Bild wird so angehängt, wie es hier aussieht, und die Notizen gehen mit.",
+    "toolbar": "Zeichenwerkzeuge",
+    "tool": {
+      "select": {
+        "label": "Auswählen",
+        "hint": "Markierungen wählen, um sie zu verschieben, zu drehen oder zu löschen"
+      },
+      "pen": {
+        "label": "Stift",
+        "hint": "Freihand zeichnen"
+      },
+      "rect": {
+        "label": "Rahmen",
+        "hint": "Einen Rahmen um etwas ziehen"
+      },
+      "arrow": {
+        "label": "Pfeil",
+        "hint": "Auf etwas zeigen"
+      },
+      "ellipse": {
+        "label": "Ellipse",
+        "hint": "Etwas einkreisen"
+      },
+      "text": {
+        "label": "Text",
+        "hint": "Auf das Bild schreiben"
+      },
+      "note": {
+        "label": "Notiz",
+        "hint": "Klicke eine Markierung, um ihre Notiz zu schreiben"
+      },
+      "line": {
+        "label": "Linie",
+        "hint": "Eine gerade Linie ziehen"
+      }
+    },
+    "colour": "Farbe",
+    "strokeWidth": "Strichstärke",
+    "fill": "Füllung",
+    "textToPlace": "Zu platzierender Text",
+    "undo": "Rückgängig",
+    "redo": "Wiederholen",
+    "clear": "Leeren",
+    "notePlaceholder": "Was bedeutet diese Markierung?",
+    "notePlaceholderEmpty": "Zeichne eine Markierung oder wähle Notiz und klicke eine an",
+    "canvas": "Zu annotierendes Bild",
+    "cannotOpen": "Dieses Bild lässt sich nicht in der Zeichenfläche öffnen.",
+    "opening": "Öffne das Bild…",
+    "notes": "Notizen",
+    "locked": "Die Markierungen sind gesperrt, bis das Bild angehängt ist.",
+    "attachOriginal": "Original anhängen",
+    "attaching": "Hänge an…",
+    "attach": "Anhängen"
+  },
+  "reach": {
+    "merged": {
+      "label": "gemergt",
+      "title": "Jeder Commit ist unverändert in der Basis. Sicher löschbar."
+    },
+    "rebased": {
+      "label": "rebased",
+      "title": "Die Commits wurden rebased oder cherry-gepickt; dieselben Patches sind in der Basis. Sicher löschbar."
+    },
+    "edited": {
+      "label": "geändert enthalten",
+      "title": "Die Patches weichen ab, aber ein Merge des Branches würde in der Basis nichts ändern. Sicher löschbar."
+    },
+    "unique": {
+      "label": "eigene Arbeit",
+      "title": "Der Branch hat noch Änderungen, die der Basis fehlen. Behalte ihn."
+    }
+  },
+  "runsCard": {
+    "step": {
+      "install": "installiere Abhängigkeiten",
+      "build": "baue",
+      "copy": "kopiere die Live-Daten",
+      "server": "starte"
+    },
+    "status": {
+      "stopped": "Gestoppt",
+      "building": "Baut",
+      "buildingStep": "Baut · {{step}}",
+      "running": "Läuft",
+      "failed": "Fehlgeschlagen"
+    },
+    "notStarted_one": "{{count}} nicht gestartet: {{list}}",
+    "notStarted_other": "{{count}} nicht gestartet: {{list}}",
+    "nothingRunning": "Nichts lief",
+    "startAllTip": "Jeden Run der Repos des Tickets starten, der noch nicht läuft",
+    "startAll": "Alle starten",
+    "stopAllTip": "Jeden Run des Tickets stoppen, der baut oder läuft",
+    "stopAll": "Alle stoppen",
+    "inUse": "{{inUse}} von {{limit}} Runs laufen im Board",
+    "primary": "primär",
+    "workspaceTip": "Workspace {{name}} in {{path}}",
+    "workspaceTipNoPath": "Workspace {{name}}",
+    "noRuns": "Keine Runs: Der Mensch legt sie in den Einstellungen des Projekts an.",
+    "orphaned": "Nicht mehr an diesem Ticket",
+    "orphanedHint": "er lässt sich stoppen, aber von hier nicht neu starten",
+    "alsoRunning": "Läuft auch",
+    "alsoRunningHint": "er lässt sich hier stoppen; seine Zeile startet den, den sie zeigt",
+    "links": "Links",
+    "openTip": "Die Preview in CrossBoard über der Seite zeigen: Das Board bleibt, wie es war",
+    "open": "Öffnen",
+    "openBrowser": "Im Browser öffnen",
+    "throughBoard": "Über das Board",
+    "startTipPreview": "Aus dem Worktree des Tickets bauen und auf einem freien Port starten",
+    "startTipJob": "Aus dem Worktree des Tickets bauen und im Hintergrund starten",
+    "start": "Starten",
+    "stop": "Stoppen",
+    "restartTip": "Stoppen, neu bauen und starten",
+    "restart": "Neu starten",
+    "cannotStart": "Start nicht möglich: {{reason}}",
+    "onPort": "Auf :{{port}}",
+    "runningPlain": "Läuft",
+    "since": ", seit {{time}}",
+    "buildLog": "Build-Log",
+    "runLog": "Run-Log",
+    "logAria": "Log von {{name}}"
+  },
+  "previews": {
+    "step": {
+      "install": "installiere Abhängigkeiten",
+      "build": "baue",
+      "copy": "kopiere die Live-Daten",
+      "server": "starte den Server"
+    },
+    "group": {
+      "running": "Läuft",
+      "runningHint": "Vom Board gebaut und gestartet oder ein Link auf diesem Rechner, der antwortet.",
+      "stopped": "Läuft nicht",
+      "stoppedHint": "Gestoppt, fehlgeschlagen, ein Link, der nicht antwortet, oder einer außerhalb dieses Rechners, den das Board nicht prüft."
+    },
+    "subtitle": "Jede Preview, laufend oder nicht.",
+    "empty": "Noch keine Previews. Eine erscheint hier, sobald ein Agent einen Preview-Link am Workspace eines Tickets registriert oder das Board eine aus seinem Worktree startet.",
+    "noneIn": "Keine Previews in {{name}}.",
+    "showAll": "Alle Stufen zeigen",
+    "allStages": "Alle Stufen",
+    "stage": "Stufe",
+    "stageTip": "Zeigt die Previews der Tickets in dieser Stufe",
+    "nothingToStop": "Nichts zu stoppen",
+    "couldNotStop_one": "{{count}} konnte nicht gestoppt werden: {{list}}",
+    "couldNotStop_other": "{{count}} konnten nicht gestoppt werden: {{list}}",
+    "stoppedCount_one": "{{count}} gestoppt",
+    "stoppedCount_other": "{{count}} gestoppt",
+    "barTip": "Previews, die das Board baut oder startet, in allen Projekten, und wie viele es höchstens gleichzeitig startet",
+    "bar": "Vom Board gestartete Previews: <strong>{{inUse}} von {{limit}} belegt</strong> <muted>(boardweit)</muted>",
+    "stopAllTitle": "Alle laufenden Previews dieses Projekts stoppen?",
+    "stopAllDescription": "Die Previews, die das Board startet, stoppen und geben ihre Ports frei. Links stoppen, wenn das Board erkennen kann, dass ihr Server aus dem Worktree des Workspaces läuft; die anderen laufen weiter, und der Toast nennt den Grund. Die Links bleiben auf der Seite.",
+    "keepThem": "Behalten",
+    "uncheckedLink": "Das Board prüft nur Links auf diesem Rechner",
+    "throughBoard": "Über das Board:",
+    "openThrough": "Über das Board öffnen",
+    "linkNotStopped": "Das Board stoppt ihn nicht: {{reason}}",
+    "stoppedStillListening": "Gestoppt, aber auf :{{port}} lauscht noch etwas",
+    "stopLinkTip": "Den Server hinter diesem Link stoppen (er läuft aus dem Worktree des Workspaces) und seinen Port freigeben",
+    "startTip": "Diesen Worktree bauen und auf einem freien Port starten, mit frischer Kopie der Live-Daten",
+    "stopTip": "Die Preview stoppen und ihren Port freigeben",
+    "restartTip": "Stoppen, neu bauen und mit frischer Datenkopie starten",
+    "answered": "Antwortete mit HTTP {{status}} um {{time}}",
+    "notRunning": "Läuft nicht",
+    "noAnswer": "Keine Antwort um {{time}}",
+    "notChecked": "Nicht geprüft",
+    "checking": "Prüfe…",
+    "checkingTitle": "Prüfe, ob sie antwortet",
+    "fullLog": "ganzes Log",
+    "log": "Log",
+    "serverLog": "Server-Log",
+    "building": "Baut…",
+    "buildingStep": "Baut… {{step}}",
+    "startingOn": "Startet auf :{{port}}…",
+    "startingOnStep": "Startet auf :{{port}}… {{step}}",
+    "runBy": "Vom Board auf :{{port}} gestartet",
+    "runBySince": "Vom Board auf :{{port}} gestartet, seit {{time}}",
+    "failed": "Fehlgeschlagen: {{reason}}",
+    "stoppedReason": "Gestoppt: {{reason}}",
+    "stopAllRuns": "Alle stoppen"
+  },
+  "previewWindow": {
+    "building": "Baut… sie erscheint hier, sobald sie läuft.",
+    "failed": "Die Preview ist fehlgeschlagen. Siehe ihr Log am Ticket.",
+    "failedReason": "Die Preview ist fehlgeschlagen: {{reason}}. Siehe ihr Log am Ticket.",
+    "blocked": "Diese Preview wird nicht im Board gezeigt: Sie verweigert das Einbetten.",
+    "blockedReason": "Diese Preview wird nicht im Board gezeigt: {{reason}}.",
+    "stoppedThrough": "Diese Preview ist gestoppt. Starte sie über die Runs-Karte des Tickets oder die Previews-Seite.",
+    "stoppedDirect": "Die Preview antwortet auf diesem Rechner nicht. Starte ihren Server dort neu, wo er läuft.",
+    "frameTitle": "Preview von {{title}}",
+    "copied": "Link kopiert",
+    "couldNotCopy": "Der Link konnte nicht kopiert werden",
+    "window": "Preview-Fenster",
+    "openPreviews": "Previews öffnen",
+    "reloadTip": "Die Preview neu laden",
+    "reload": "Preview neu laden",
+    "restoreTip": "Zurück zum schwebenden Fenster",
+    "maximizeTip": "Ganzen Bildschirm nutzen",
+    "restore": "Preview-Fenster wiederherstellen",
+    "maximize": "Preview-Fenster maximieren",
+    "closeTip": "Die Preview schließen (der Run läuft weiter)",
+    "close": "Preview-Fenster schließen",
+    "url": "Preview-URL",
+    "copyTip": "Den Link der Preview kopieren",
+    "copy": "Preview-Link kopieren"
+  },
+  "roleLabels": {
+    "human": "Mensch",
+    "orchestrator": "Orchestrator",
+    "worker": "Agent",
+    "board": "Board"
+  },
+  "runReport": {
+    "section": {
+      "brief": "Das Briefing, und ob es reichte",
+      "readRan": "Was gelesen und ausgeführt wurde",
+      "problems": "Probleme unterwegs",
+      "gaps": "Was nicht geprüft werden konnte, und die Annahmen",
+      "moreTime": "Was mit mehr Zeit geschehen würde",
+      "improvements": "Was den Run besser gemacht hätte",
+      "intent": "Woher die Absicht kam",
+      "inferences": "Was erschlossen werden musste",
+      "questions": "Fragen, die das Ticket nicht beantworten konnte",
+      "approach": "Der Ansatz, und verworfene Alternativen",
+      "alternatives": "Erwogene und verworfene Alternativen",
+      "selfTests": "Was selbst getestet wurde, und wie",
+      "fixPass": "Was der Fix-Durchgang änderte, und warum der erste es übersah",
+      "scheduling": "Wie die ausgeführten Phasen geplant wurden",
+      "judging": "Wie bewertet wurde, was die Phasen zurückgaben",
+      "provisioning": "Wie die Laufzeit bereitgestellt wurde, und was scheiterte",
+      "freshness": "Wie die Aktualität belegt wurde",
+      "evidence": "Wie jedes Akzeptanzkriterium geprüft wurde",
+      "unexercised": "Kriterien, die nicht geprüft werden konnten",
+      "techniques": "Techniken zur Fehlersuche",
+      "surfaces": "Abgedeckte und nicht abgedeckte Flächen",
+      "candidates": "Wie Kandidaten entstanden, und was verworfen wurde",
+      "disproof": "Wie jeder Befund zu widerlegen versucht wurde",
+      "unsettled": "Befunde, die sich nicht klären ließen, und warum",
+      "asked": "Was der Mensch verlangte, in seinen Worten",
+      "compared": "Wie jede Forderung mit dem Ergebnis verglichen wurde",
+      "conflicts": "Der Merge, seine Konflikte, und wie sie gelesen wurden"
+    },
+    "label": "{{agent}} Runde {{round}}",
+    "notReported": "nicht angegeben",
+    "effort": "Aufwand {{effort}}",
+    "briefedBy": "gebrieft von <actor />",
+    "duration": "Dauer",
+    "durationMeasured": "Dauer (gemessen)",
+    "durationSelf": "Dauer (selbst angegeben)",
+    "ownEstimate": "Eigene Schätzung",
+    "difficulty": "Schwierigkeit",
+    "confidence": "Sicherheit",
+    "started": "Gestartet",
+    "ended": "Beendet",
+    "time": {
+      "readingMs": "Lesen",
+      "runningMs": "Ausführen",
+      "waitingMs": "Warten",
+      "writingMs": "Schreiben",
+      "otherMs": "Sonstiges"
+    },
+    "steps": "Schritte",
+    "dialogTitle": "Run-Bericht: {{label}}",
+    "dialogTitleEmpty": "Run-Bericht",
+    "round": "Runde {{round}}",
+    "difficultyShort": "Schwierigkeit {{n}}/5",
+    "confidenceShort": "Sicherheit {{n}}/5"
+  },
+  "projectAgents": {
+    "title": "Team",
+    "text": "Die Rollen, in denen Agents arbeiten. Weise ein Ticket zu, um es für einen zu reservieren.",
+    "new": "Neuer Agent",
+    "empty": "Noch keine Agents. Jedes Ticket teilen sich die verbundenen Agents.",
+    "added": "{{names}} hinzugefügt",
+    "defaults": {
+      "title": "Standard-Agents",
+      "files": "Der Maker erstellt die Dateien der Arbeit im Ordner des Projekts und hängt sie ans Ticket an; der Mensch genehmigt sie oder schickt das Ticket zurück. Bearbeite ihn danach. Ein Agent, der an diesem Projekt arbeitet, verbindet sich mit <code>{{path}}</code> unter der Adresse des Boards (derselbe MCP wie auf der Seite „Agent verbinden“, mit Text und Tools dieses Projekts).",
+      "software": "Der Build-und-Review-Zyklus: <strong>spec</strong> schreibt die Akzeptanzkriterien, <strong>builder</strong> den Code, <strong>runner</strong> prüft ihn, und die Phasen des Reviews (<strong>env</strong>, <strong>verify</strong>, <strong>hunt</strong>, <strong>refute</strong>, <strong>merge</strong>) versuchen, ihn zu brechen; Befunde gehen zurück an den Builder. <strong>intent</strong> prüft dann das Ergebnis an den eigenen Worten des Menschen. Jeder kommt mit seinen Anweisungen und den Notizen, nach denen der Orchestrator delegiert. Bearbeite sie danach.",
+      "addAll": "Standard-Agents hinzufügen",
+      "addNames": "{{names}} hinzufügen",
+      "allAdded": "Alle hinzugefügt",
+      "skills": "Die Skills, die diesen Zyklus ausführen, und die MCP-Verbindung des Agents installierst du unter <goto>Agent verbinden</goto>."
+    },
+    "noReserved": "keine Tickets für ihn reserviert",
+    "remove": "{{name}} entfernen",
+    "removeTitle": "{{name}} entfernen?",
+    "removeReserved_one": "Sein {{count}} reserviertes Ticket wird geteilt und nicht zugewiesen.",
+    "removeReserved_other": "Seine {{count}} reservierten Tickets werden geteilt und nicht zugewiesen.",
+    "removeKept": "Was er schon gepostet hat, behält seinen Namen.",
+    "keep": "Behalten",
+    "removeAction": "Entfernen",
+    "instructions": "Anweisungen",
+    "instructionsHint": "wonach der Agent arbeitet",
+    "delegate": "Wann delegieren",
+    "delegateHint": "wonach der Orchestrator entscheidet",
+    "delegateEmpty": "Noch keine Delegationsnotizen: Der Orchestrator weiß nicht, wann er ihn rufen soll.",
+    "report": "Run-Bericht",
+    "reportHint": "die Vorlage, die jeder Run vor der Rückgabe ausfüllt",
+    "nothingYet": "Noch nichts.",
+    "lines_one": "{{count}} Zeile",
+    "lines_other": "{{count}} Zeilen",
+    "picture": "Bild",
+    "choosePicture": "Bild wählen",
+    "removePicture": "Bild entfernen",
+    "namePlaceholder": "reviewer, frontend, qa…",
+    "nameRule": "Buchstaben, Ziffern, - und _, damit @name in Threads funktioniert",
+    "instructionsText": "Wonach der Agent arbeitet: wer er ist, wie er arbeitet, was er nie tut. Der Orchestrator briefet einen Subagent damit.",
+    "instructionsPlaceholder": "Du bist der Tester. Du prüfst jedes Akzeptanzkriterium an der laufenden Preview…",
+    "delegateText": "Wonach der Orchestrator entscheidet: wann er diesem Agent Arbeit übergibt, was er ihm gibt, was er zurückgibt und was danach kommt.",
+    "delegatePlaceholder": "Nachdem der Builder einen Schritt beendet hat, mit dem Preview-Link und den Akzeptanzkriterien. Gibt PASS / FAIL je Kriterium zurück. Alle PASS: als Nächstes der Breaker; ein FAIL: zurück an den Builder.",
+    "templateLabel": "Vorlage für den Run-Bericht",
+    "templateText": "Was ein Run dieses Agents vor der Rückgabe ausfüllt, ein Bericht pro Run. Sie beginnt mit dem gemeinsamen Teil jedes Berichts (Identität, Zeit, Briefing, Schritte, Bewertungen, Probleme, Lücken); ergänze, was dieser Agent tut. Das Board hält sie beim Agent.",
+    "templatePlaceholder": "## Die Regel …",
+    "add": "Agent hinzufügen"
+  },
+  "gettingStarted": {
+    "agentEmpty": "Noch keine Projekte. Der Mensch erstellt das erste unter „Erste Schritte“ auf dem Start.",
+    "title": "Erste Schritte · {{done}} von {{total}}",
+    "intro": "Vier Schritte, bevor ein Agent an diesem Board arbeitet. Jeder hakt sich selbst ab, sobald er erledigt ist.",
+    "entryTip": "Die Schritte, um mit diesem Board zu arbeiten",
+    "entryAria": "Erste Schritte, {{done}} von {{total}} erledigt",
+    "entryShort": "Erste Schritte ·",
+    "popoverIntro": "Jeder Schritt hakt sich selbst ab, sobald er erledigt ist.",
+    "dismissTip": "„Erste Schritte“ dauerhaft ausblenden",
+    "dismissAria": "„Erste Schritte“ ausblenden",
+    "menuItem": "Erste Schritte · {{done}}/{{total}}",
+    "stepsAria": "Schritte der Ersten Schritte",
+    "stepAria": "{{title}}: {{state}}",
+    "titles": {
+      "tools": "Tools auf diesem Rechner",
+      "project": "Projekt erstellen und erstes Repository hinzufügen",
+      "agent": "Agent verbinden",
+      "ticket": "Erstes Ticket schreiben und dem Agent geben"
+    },
+    "state": {
+      "done": "Erledigt",
+      "checking": "Prüfe…",
+      "notDone": "Offen"
+    },
+    "couldNotCheck": "Dieser Schritt ließ sich nicht prüfen: {{error}}",
+    "tools": {
+      "hint": "Das Board führt <code>git</code> und <code>gh</code> (angemeldet) aus seinem PATH aus; <code>claude</code> ist optional, nur für die eigenen Berichte des Boards (Berichte → Erzeugen); <code>node</code> und <code>pnpm</code> nur für Previews.",
+      "missing": "<problem>{{problem}}</problem>. Lösung: {{fix}}."
+    },
+    "project": {
+      "hint": "Ein Projekt gruppiert die Checkouts, in denen Agents arbeiten. Sein erstes Repository nimmt den Ordner des Checkouts, sein GitHub-Repo und seinen Basis-Branch.",
+      "addRepo": "Repository zu {{name}} hinzufügen",
+      "new": "Neues Projekt"
+    },
+    "agent": {
+      "hint": "Unter „Agent verbinden“ erzeugt „Befehle erzeugen“ den Token des Agents und die Befehle für dein Terminal: den MCP-Server des Boards verbinden und den Board-Skill installieren."
+    },
+    "ticket": {
+      "hint": "Schreibe, was zu tun ist, als Ticket auf der Features-Seite des Projekts. Führe dann in deinem Repo <code>claude</code> aus und sage <code>/board pick up the next ticket</code>.",
+      "write": "Ticket schreiben",
+      "createFirst": "Erstelle zuerst ein Projekt (Schritt 2)."
+    },
+    "checkAgain": "Erneut prüfen"
+  },
+  "projectSwitcher": {
+    "project": "Projekt",
+    "select": "Projekt wählen",
+    "projects": "Projekte",
+    "repos_one": "{{count}} Repo",
+    "repos_other": "{{count}} Repos",
+    "tickets_one": "{{count}} Ticket",
+    "tickets_other": "{{count}} Tickets",
+    "openPrs_one": "{{count}} offener PR",
+    "openPrs_other": "{{count}} offene PRs",
+    "newProject": "Neues Projekt…",
+    "manage": "Projekte verwalten…",
+    "newTitle": "Neues Projekt",
+    "newDescription": "Ein Projekt gruppiert Repositories. Füge seine Repos auf seiner Seite Repositories hinzu.",
+    "name": "Name",
+    "create": "Erstellen",
+    "manageDescription": "Projekt umbenennen oder löschen. Repos hinzufügen, verschieben oder entfernen auf seiner Seite Repositories.",
+    "renamed": "Umbenannt in {{name}}",
+    "nameOf": "Name von {{name}}",
+    "rename": "Umbenennen",
+    "deleteName": "{{name}} löschen",
+    "deleteTitle": "{{name}} löschen?",
+    "deleteText": "Es gehen mit: {{repos}}, {{tickets}}, {{openPrs}} sowie seine Reviews und sein Tageslog. Die Checkouts auf der Platte bleiben unberührt. Um ein Repo zu behalten, verschiebe es zuerst in ein anderes Projekt.",
+    "keep": "Behalten",
+    "delete": "Löschen",
+    "noRepos": "keine Repos",
+    "counts": "{{tickets}} · {{openPrs}}"
+  },
+  "newTicket": {
+    "newTicket": "Neues Ticket",
+    "newLane": "Neue Lane",
+    "description": "Schreibe es, wie du eine Kollegin oder einen Kollegen briefen würdest: Agents lesen das, bevor sie anfangen.",
+    "laneDescription": "Ein paralleler Teil von <parent>{{title}}</parent>, mit eigenem Branch, Bearbeiter, eigenen Aufgaben und Beiträgen.",
+    "title": "Titel",
+    "instructions": "Anweisungen",
+    "instructionsPlaceholder": "Was zu tun ist, woran man erkennt, dass es fertig ist, was nie geschehen darf. Füge Dateien ein oder ziehe sie hierher, um sie anzuhängen.",
+    "initialTasks": "Erste Aufgaben",
+    "phases": "Es beginnt mit den Phasen des Projekts: {{phases}}. Die hier getippten Aufgaben kommen unter {{first}}.",
+    "stage": "Stufe",
+    "complexity": "Komplexität",
+    "repository": "Repository",
+    "assignee": "Bearbeiter (optional)",
+    "tags": "Tags (optional)",
+    "tagsPlaceholder": "Hoch, Formulare",
+    "branchesOff": "Zweigt von <branch>{{branch}}</branch> ab, wenn im selben Repo.",
+    "uploading": "Lade hoch…",
+    "create": "Erstellen",
+    "workflow": "Workflow"
+  },
+  "notes": {
+    "title": "Notizen",
+    "manageAll": "Alle verwalten ({{count}})",
+    "add": "Notiz hinzufügen",
+    "dialogTitle": "Notizen ({{count}})",
+    "dialogDescription": "Je ein kurzer Fakt, Angepinntes zuerst. Der Autor einer Notiz, ein Orchestrator oder der Mensch kann sie ändern.",
+    "empty": "Eine Notiz ist ein kurzer Fakt, den die nächste Sitzung nicht neu entdecken soll — ein Befehl, ein Pfad, eine Regel, eine Erinnerung. Halte jede auf einen Fakt, nie ein Dokument.",
+    "exampleLabel": "Release-Befehl",
+    "exampleLabel2": "Preview-Ports",
+    "exampleBody2": "47101 aufwärts, einer pro Run",
+    "unpinTip": "Diese Notiz lösen",
+    "pinTip": "Diese Notiz über den anderen anpinnen",
+    "unpin": "{{label}} lösen",
+    "pin": "{{label}} anpinnen",
+    "editTip": "Diese Notiz bearbeiten",
+    "edit": "{{label}} bearbeiten",
+    "deleteTip": "Diese Notiz löschen",
+    "delete": "{{label}} löschen",
+    "labelAria": "Titel der Notiz",
+    "bodyAria": "Text der Notiz",
+    "save": "Notiz speichern",
+    "cancel": "Abbrechen"
+  },
+  "actor": {
+    "howBoard": "das Board, automatisch erfasst",
+    "howHuman": "du, mit einem Passkey angemeldet",
+    "howOrchestrator": "ein Agent, angemeldet mit einem Token, den der Mensch zum Orchestrator gemacht hat: Er ändert auch die Anweisungen der Projekte",
+    "howWorkerUnder": "ein Agent, ein Worker unter {{parent}}",
+    "howAgent": "ein Agent, angemeldet mit einem Token",
+    "projectAgent": "{{name}} (einer der Agents des Projekts)",
+    "projectAgentVia": "{{name}} (einer der Agents des Projekts, gepostet über {{chain}})",
+    "via": "über {{via}}",
+    "tip": "{{chain}}: {{how}}",
+    "under": "unter {{parent}}",
+    "by": "von <actor/>"
+  },
+  "postTools": {
+    "editText": "Text bearbeiten",
+    "cancel": "Abbrechen",
+    "saving": "Speichere…",
+    "save": "Speichern",
+    "edited": "bearbeitet",
+    "editedAt": "bearbeitet {{when}}",
+    "editLabel": "bearbeiten",
+    "edit": "Bearbeiten",
+    "deleteLabel": "löschen",
+    "delete": "Löschen",
+    "deletePostTitle": "Diesen Beitrag löschen?",
+    "deleteReplyTitle": "Diese Antwort löschen?",
+    "deleteText": "Seine Antworten und Dateien gehen mit. Das lässt sich nicht rückgängig machen.",
+    "keep": "Behalten"
+  },
+  "pickers": {
+    "unassigned": "Nicht zugewiesen",
+    "reserved": "{{name}} (reserviert)",
+    "projectAgents": "Projekt-Agents: nur sie bearbeiten es",
+    "connectedAgents": "Verbundene Agents: geteilt",
+    "noBranchYet": "— noch keiner —",
+    "clear": "{{what}} zurücksetzen"
+  },
+  "prState": {
+    "merge": {
+      "clean": {
+        "label": "mergebar",
+        "title": "Keine Konflikte mit der Basis."
+      },
+      "conflicts": {
+        "label": "Konflikte",
+        "title": "Konflikte mit dem Basis-Branch: Er braucht einen Rebase oder Merge, bevor er landen kann."
+      },
+      "behind": {
+        "label": "hinter Basis",
+        "title": "Die Basis ist weitergezogen, und der Branch-Schutz will den Branch zuerst aktuell haben."
+      },
+      "blocked": {
+        "label": "blockiert",
+        "title": "Branch-Schutz: Ein erforderliches Review oder ein Check fehlt noch."
+      },
+      "checking": {
+        "label": "prüft",
+        "title": "GitHub ermittelt noch, ob er sich mergen lässt (meist direkt nach einem Push). Aktualisiere gleich."
+      }
+    },
+    "ci": {
+      "passing": "CI grün",
+      "failing": "CI rot",
+      "pending": "CI läuft",
+      "none": "keine CI"
+    },
+    "review": {
+      "APPROVED": "genehmigt",
+      "CHANGES_REQUESTED": "Änderungen angefordert",
+      "REVIEW_REQUIRED": "Review nötig"
+    },
+    "checkedLocal": "{{title}} Hier gegen origin/{{base}} geprüft.",
+    "checkedLocalAt": "{{title}} Hier gegen origin/{{base}} geprüft, {{when}}.",
+    "outdated": "origin/{{base}} ist nach der Angabe von GitHub weitergezogen: Warte, bis GitHub neu nachsieht.",
+    "outdatedAt": "origin/{{base}} ist nach der Angabe von GitHub vom {{when}} weitergezogen: Warte, bis GitHub neu nachsieht.",
+    "githubAt": "{{title}} Angabe von GitHub, Stand {{when}}.",
+    "githubLast": "{{title}} Angabe von GitHub, Stand der letzten Aktualisierung.",
+    "checks": "{{pass}} bestanden · {{failed}} fehlgeschlagen · {{pending}} laufen · {{skipped}} übersprungen",
+    "noChecks": "Keine Checks am Head-Commit.",
+    "draft": "Entwurf",
+    "failed": "fehlgeschlagen:",
+    "mergeConflicts": "Merge-Konflikte"
+  },
+  "pushDot": {
+    "pushed": "gepusht",
+    "pushedBehind": "gepusht, {{count}} dahinter",
+    "pushedBehindTitle_one": "gepusht; origin hat {{count}} Commit mehr",
+    "pushedBehindTitle_other": "gepusht; origin hat {{count}} Commits mehr",
+    "ahead": "{{count}} nicht gepusht",
+    "aheadTitle_one": "nicht gepusht: {{count}} Commit nur hier",
+    "aheadTitle_other": "nicht gepusht: {{count}} Commits nur hier",
+    "aheadBehindTitle_one": "nicht gepusht: {{count}} Commit nur hier; origin hat außerdem {{behind}}, die diesem Branch fehlen",
+    "aheadBehindTitle_other": "nicht gepusht: {{count}} Commits nur hier; origin hat außerdem {{behind}}, die diesem Branch fehlen",
+    "localOnly": "nicht auf origin",
+    "localOnlyTitle": "nicht gepusht: kein solcher Branch auf origin",
+    "localOnlyAheadTitle_one": "nicht gepusht: kein solcher Branch auf origin, {{count}} Commit nur hier",
+    "localOnlyAheadTitle_other": "nicht gepusht: kein solcher Branch auf origin, {{count}} Commits nur hier",
+    "itsBase": "seine Basis",
+    "merged": "in {{into}} gemergt",
+    "mergedTitle": "in {{into}} gemergt; der Branch ist von origin verschwunden",
+    "remoteOnly": "nur auf origin",
+    "remoteOnlyTitle": "nur auf origin: kein lokaler Branch",
+    "none": "nicht gefunden",
+    "noneTitle": "kein solcher Branch hier oder auf origin",
+    "checked": "geprüft {{ago}}",
+    "notFetched": "origin noch nicht geholt",
+    "fetchNow": "Origin jetzt fetchen"
+  },
+  "clock": {
+    "typeTime": "{{label}} (Zeit eintippen)",
+    "amPm": "{{label}}: AM oder PM",
+    "setHourOrMinute": "{{label}}: Stunde oder Minute einstellen",
+    "hour": "Stunde",
+    "minute": "Minute"
+  },
+  "markdown": {
+    "agentChip": "{{name}}, einer der Agents des Projekts",
+    "pages_one": "{{count}} Seite",
+    "pages_other": "{{count}} Seiten"
+  },
+  "editor": {
+    "text": "Text",
+    "bold": "Fett",
+    "italic": "Kursiv",
+    "strikethrough": "Durchgestrichen",
+    "inlineCode": "Inline-Code",
+    "heading": "Überschrift",
+    "bulletList": "Aufzählung",
+    "numberedList": "Nummerierte Liste",
+    "checklist": "Checkliste",
+    "quote": "Zitat",
+    "codeBlock": "Codeblock",
+    "link": "Link",
+    "linkTo": "Link auf",
+    "attaching": "Hänge Dateien an…",
+    "attach": "Dateien anhängen",
+    "formatting": "Formatierung"
+  },
+  "projectNav": {
+    "homeText": "Alle Projekte auf einen Blick: was auf dich wartet, was in Arbeit ist, was heute erledigt wurde und was als Nächstes kommt.",
+    "overviewText": "Was dich braucht, was sich bewegt, was als Nächstes kommt.",
+    "page": "Projektseite",
+    "toggle": {
+      "expanded": "Seitenleiste verkleinern",
+      "shrunk": "Seitenleiste ausblenden",
+      "hidden": "Seitenleiste zeigen"
+    }
+  },
+  "palette": {
+    "page": {
+      "overview": {
+        "title": "Übersicht",
+        "subtitle": "Die Zusammenfassung des Projekts",
+        "keywords": "start, projekt, zusammenfassung, braucht dich, home, summary"
+      },
+      "board": {
+        "title": "Board",
+        "subtitle": "Laufende Features",
+        "keywords": "tickets, features, kanban, stufen, in arbeit, stages"
+      },
+      "roadmap": {
+        "title": "Roadmap",
+        "subtitle": "Die Zeitleiste der Arbeit",
+        "keywords": "zeitleiste, arbeit, plan, timeline, schedule"
+      },
+      "prs": {
+        "title": "PR-Warteschlange",
+        "subtitle": "Pull Requests zum Prüfen und solche, die auf andere warten",
+        "keywords": "prs, pull requests, reviews, merge"
+      },
+      "reviews": {
+        "title": "Reviews",
+        "subtitle": "Review-Ergebnisse, in der PR-Warteschlange",
+        "keywords": "urteil, befunde, review-ergebnisse, prs, verdict, findings"
+      },
+      "previews": {
+        "title": "Previews",
+        "subtitle": "Die Previews, die das Board startet",
+        "keywords": "runs, server, ports"
+      },
+      "gallery": {
+        "title": "Galerie",
+        "subtitle": "Dateien und Screenshots",
+        "keywords": "dateien, bilder, uploads, files, images"
+      },
+      "team": {
+        "title": "Team",
+        "subtitle": "Die Agents, mit denen das Projekt arbeitet",
+        "keywords": "agents, personas, reservierungen"
+      },
+      "daily": {
+        "title": "Daily",
+        "subtitle": "Der Tag des Projekts",
+        "keywords": "aktivität, heute, bericht, activity, report"
+      },
+      "cleanup": {
+        "title": "Aufräumen",
+        "subtitle": "Zurückgebliebene Branches und Worktrees",
+        "keywords": "cleanup, branches, worktrees, löschen, reste"
+      },
+      "repositories": {
+        "title": "Repositories",
+        "subtitle": "Checkouts, die dieses Projekt liest",
+        "keywords": "repos, git, checkouts"
+      },
+      "instructions": {
+        "title": "Anweisungen",
+        "subtitle": "Einstellungen: was jeder Agent liest",
+        "keywords": "einstellungen, projekteinstellungen, regeln, layout, phasen, stufen, runs, settings"
+      },
+      "home": {
+        "title": "Start",
+        "subtitle": "Alle Projekte auf einen Blick",
+        "keywords": "home, projekte, zusammenfassung, board"
+      },
+      "dailyGlobal": {
+        "title": "Daily",
+        "subtitle": "Was jedes Projekt getan hat",
+        "keywords": "aktivität, berichte, heute, activity, reports"
+      },
+      "connect": {
+        "title": "Verbinden",
+        "subtitle": "Agent verbinden und Skill installieren",
+        "keywords": "agents, mcp, tokens, einrichtung, installieren, setup, install"
+      },
+      "settingsGlobal": {
+        "title": "Einstellungen",
+        "subtitle": "Einstellungen für das ganze Board",
+        "keywords": "präferenzen, design, previews, geräte, preferences, theme, devices"
+      },
+      "workflow": {
+        "title": "Workflow",
+        "subtitle": "Die Schritte, denen Agents bei einem Ticket folgen, als Baum",
+        "keywords": "schritte, presets, review-runden, übergabe, delegation, reihenfolge, steps, hand-off"
+      }
+    },
+    "setting": {
+      "theme": {
+        "title": "Design",
+        "subtitle": "System, hell oder dunkel",
+        "keywords": "aussehen, farbe, dunkel, hell, system, theme, dark, light"
+      },
+      "defaultAgent": {
+        "title": "Standard-Agent-CLI",
+        "subtitle": "Die CLI, mit der Verbinden startet",
+        "keywords": "agent, claude, codex, opencode, verbinden, connect"
+      },
+      "previewsLimit": {
+        "title": "Preview-Limit",
+        "subtitle": "Wie viele Previews gleichzeitig laufen",
+        "keywords": "previews, runs, limit, ports"
+      },
+      "updates": {
+        "title": "Updates",
+        "subtitle": "Die Updates der Board-App",
+        "keywords": "version, release, upgrade, aktualisieren"
+      },
+      "agentRoles": {
+        "title": "Agent-Rollen",
+        "subtitle": "Worker oder Orchestrator",
+        "keywords": "agents, tokens, orchestrator, worker, berechtigungen, permissions"
+      },
+      "tailnet": {
+        "title": "Tailnet-Zugang",
+        "subtitle": "Das Board von einem anderen Gerät erreichen",
+        "keywords": "tailscale, netzwerk, remote, öffentlich, network, public"
+      },
+      "devices": {
+        "title": "Geräte und Passkeys",
+        "subtitle": "Die Geräte, die sich anmelden",
+        "keywords": "passkeys, sitzungen, anmelden, sicherheit, sessions, security"
+      },
+      "instructions": {
+        "title": "Projektanweisungen",
+        "subtitle": "Was jeder Agent liest",
+        "keywords": "regeln, agents, prompt, rules"
+      },
+      "instructionsHistory": {
+        "title": "Verlauf der Anweisungen",
+        "subtitle": "Jede Änderung der Anweisungen",
+        "keywords": "versionen, verlauf, änderungen, versions, history, changes"
+      },
+      "defaultPhases": {
+        "title": "Standardphasen",
+        "subtitle": "Die Aufgaben, mit denen jedes neue Ticket beginnt",
+        "keywords": "aufgaben, phasen, neues ticket, tasks, phases"
+      },
+      "tagSuggestions": {
+        "title": "Tag-Vorschläge",
+        "subtitle": "Die Tags, die an Tickets angeboten werden",
+        "keywords": "tags, labels, schlagwörter"
+      },
+      "stalledTickets": {
+        "title": "Stockende Tickets",
+        "subtitle": "Wann ein Ticket als stockend gilt",
+        "keywords": "stall, stockt, minuten, untätig, minutes, idle"
+      },
+      "notifications": {
+        "title": "Benachrichtigungen",
+        "subtitle": "Welche Hinweise dieses Projekt zeigt",
+        "keywords": "hinweise, stumm, glocke, erinnerungen, alerts, mute, bell, reminders"
+      },
+      "stages": {
+        "title": "Stufen",
+        "subtitle": "Die Board-Spalten und ihre Bedeutung",
+        "keywords": "spalten, workflow, status, arbeitsstufe, columns, stages"
+      },
+      "runs": {
+        "title": "Runs",
+        "subtitle": "Previews und Jobs, die das Board startet",
+        "keywords": "previews, jobs, befehle, build, commands"
+      },
+      "layout": {
+        "title": "Layout",
+        "subtitle": "Die Seiten, Karten und Ticket-Abschnitte",
+        "keywords": "anordnen, menü, seitenleiste, arrange, menu, sidebar"
+      },
+      "agentTokens": {
+        "title": "Agent-Tokens",
+        "subtitle": "Die Tokens, mit denen sich Agents anmelden",
+        "keywords": "tokens, agents, schlüssel, widerrufen, rollen, keys, revoke, roles"
+      },
+      "skills": {
+        "title": "Review-Skills",
+        "subtitle": "Die Review-Skills installieren (Claude Code)",
+        "keywords": "skills, review, installieren, install"
+      }
+    },
+    "kinds": {
+      "ticket": "Tickets",
+      "page": "Seiten",
+      "setting": "Einstellungen",
+      "action": "Aktionen"
+    },
+    "keywords": {
+      "newTicket": "erstellen, hinzufügen, ticket, lane, neu, create, add, new",
+      "copyLink": "url, teilen, zwischenablage, share, clipboard",
+      "startPreview": "run, preview, starten, server, start",
+      "stopPreview": "run, preview, stoppen, server, stop",
+      "switchProject": "projekt, wechseln, öffnen, project, switch, open"
+    },
+    "recent": "Zuletzt",
+    "notStarted_one": "{{count}} nicht gestartet: {{details}}",
+    "notStarted_other": "{{count}} nicht gestartet: {{details}}",
+    "notStopped_one": "{{count}} nicht gestoppt: {{details}}",
+    "notStopped_other": "{{count}} nicht gestoppt: {{details}}",
+    "nothingRunning": "Nichts lief",
+    "createIn": "Ticket in {{name}} erstellen",
+    "createInThis": "Ticket in diesem Projekt erstellen",
+    "copyLink": "Ticket-Link kopieren",
+    "copyLinkText": "Die Adresse dieses Tickets in die Zwischenablage legen",
+    "linkCopied": "Ticket-Link kopiert",
+    "startPreview": "Preview starten",
+    "startPreviewText": "Die Previews und Jobs des Tickets starten",
+    "stopPreview": "Preview stoppen",
+    "stopPreviewText": "Die Previews und Jobs des Tickets stoppen",
+    "switchTo": "Zu {{name}} wechseln",
+    "currentProject": "Aktuelles Projekt",
+    "openOverview": "Seine Übersicht öffnen",
+    "searchTip": "Das Board durchsuchen (Strg+F)",
+    "search": "Das Board durchsuchen",
+    "description": "Suche Tickets, Seiten, Einstellungen und Aktionen. Mit den Pfeiltasten bewegst du dich, mit Enter führst du eins aus, mit Escape schließt du.",
+    "placeholder": "Tickets, Seiten, Einstellungen und Aktionen suchen…",
+    "close": "Suche schließen",
+    "results": "Suchergebnisse",
+    "searching": "Suche…",
+    "noMatches": "Keine Treffer für „{{query}}“.",
+    "type": "Tippe, um das Board zu durchsuchen.",
+    "toMove": "bewegen",
+    "toOpen": "öffnen",
+    "toClose": "schließen",
+    "anywhere": "überall"
+  },
+  "signIn": {
+    "finishTitle": "Einrichtung auf dem Host abschließen",
+    "finishBody": "Dieses Board hat noch kein Konto. Es wird auf dem Rechner angelegt, auf dem das Board läuft: Öffne dort {{url}}. Komm dann hierher zurück, um dieses Gerät mit einem Link vom Board hinzuzufügen.",
+    "setupTitle": "Einrichten",
+    "setupHeading": "CrossBoard einrichten",
+    "setupIntro": "Erstelle das Konto des Boards und seinen ersten Passkey, auf diesem Rechner. Weitere Geräte kommen später über die Einstellungen mit einem Einmal-Link hinzu.",
+    "nameLabel": "Dein Name im Board",
+    "deviceLabel": "Dieses Gerät",
+    "deviceDefault": "Dieser Rechner",
+    "devicePlaceholder": "Handy, Laptop…",
+    "createPasskey": "Passkey erstellen",
+    "loginTitle": "Anmelden",
+    "loginHeading": "Anmelden",
+    "loginWelcomeMachine": "Willkommen zurück, {{name}}. Melde dich mit einem Passkey dieses Rechners an.",
+    "loginWelcomeDevice": "Willkommen zurück, {{name}}. Melde dich mit einem Passkey dieses Geräts an.",
+    "loginButton": "Mit Passkey anmelden",
+    "enrollTitle": "Gerät hinzufügen",
+    "enrollNeedsLinkHeading": "Gerät hinzufügen",
+    "enrollNeedsLink": "Diese Seite braucht einen Link vom Board: Öffne auf einem angemeldeten Gerät Einstellungen, Geräte und drücke „Gerät hinzufügen“.",
+    "enrollHeading": "Dieses Gerät hinzufügen",
+    "enrollIntro": "Erstelle auf diesem Gerät einen Passkey für {{name}}. Der Link funktioniert einmal, 15 Minuten lang.",
+    "noPasskeys": "Dieser Browser kann hier keine Passkeys nutzen.",
+    "promptClosed": "Die Passkey-Abfrage wurde geschlossen oder ist abgelaufen. Versuche es erneut."
+  },
+  "ticketBoard": {
+    "stage": "Stufe",
+    "archiveTip_one": "Das {{count}} Ticket in {{stage}} archivieren",
+    "archiveTip_other": "Die {{count}} Tickets in {{stage}} archivieren",
+    "archiveAll": "Alle archivieren",
+    "archiveTitle_one": "{{count}} Ticket archivieren?",
+    "archiveTitle_other": "{{count}} Tickets archivieren?",
+    "archiveDescription": "Jedes Ticket in {{stage}} verschwindet mit seinen Lanes vom Board. Sie bleiben unter „Archiviert“, wo sich jedes wiederherstellen lässt, und ihre Seiten öffnen sich weiterhin.",
+    "cancel": "Abbrechen",
+    "archive": "Archivieren",
+    "decisions_one": "Entscheidung nötig",
+    "decisions_other": "{{count}} Entscheidungen nötig",
+    "tasksBlocked_one": "{{count}} Aufgabe blockiert",
+    "tasksBlocked_other": "{{count}} Aufgaben blockiert",
+    "previousStage": "Vorherige Stufe",
+    "nextStage": "Nächste Stufe",
+    "lanes_one": "{{count}} Lane",
+    "lanes_other": "{{count}} Lanes",
+    "laneStage": "{{count}} {{stage}}",
+    "hitInstructions": "Anweisungen",
+    "hitPost": "Beitrag",
+    "hitReply": "Antwort",
+    "noTickets": "Keine Tickets.",
+    "nothingArchived": "Nichts archiviert.",
+    "archived": "archiviert {{when}}",
+    "archivedBy": "archiviert {{when}} von <actor/>",
+    "restore": "Wiederherstellen"
+  },
+  "ticketList": {
+    "archivedToast_one": "{{count}} Ticket archiviert",
+    "archivedToast_other": "{{count}} Tickets archiviert",
+    "restoredToast": "#{{id}} im Board wiederhergestellt",
+    "title": "Laufende Features",
+    "board": "Board",
+    "list": "Liste",
+    "archived": "Archiviert",
+    "noMatch": "Keine Tickets passen zu „{{query}}“.",
+    "clearSearch": "Suche zurücksetzen",
+    "state": "Status",
+    "clearState": "Statusfilter zurücksetzen",
+    "allTags": "Alle Tags",
+    "filterByTag": "Nach Tag filtern",
+    "tags": "Tags",
+    "searchTags": "Tags suchen",
+    "noTagsMatch": "Keine passenden Tags",
+    "tickets_one": "{{count}} Ticket",
+    "tickets_other": "{{count}} Tickets",
+    "showEveryTag": "Alle Tags zeigen",
+    "clearTag": "Tag-Filter zurücksetzen",
+    "loadingTags": "Lade Tags…",
+    "couldNotLoadTags": "Tags konnten nicht geladen werden.",
+    "retry": "Wiederholen",
+    "searchTickets": "Tickets suchen",
+    "searchPlaceholder": "Nach Name oder Thread suchen",
+    "clearSearchAria": "Suche zurücksetzen"
+  },
+  "needs": {
+    "titleIn": "#{{id}} {{title}}: {{branch}} ist in {{into}}",
+    "titleNotIn": "#{{id}} {{title}}: {{branch}} nicht in {{into}} gemergt",
+    "titleDone": "#{{id}} {{title}}: erledigt",
+    "titleNotDone": "#{{id}} {{title}}: nicht erledigt, kein Branch",
+    "markDoneAnyway": "Trotzdem als erledigt markieren",
+    "mergeFirst": "Zuerst mergen:\n{{list}}",
+    "badge": "braucht {{list}}",
+    "statusMerged": "Braucht #{{id}} · gemergt",
+    "statusNotMerged": "Braucht #{{id}} · noch nicht gemergt",
+    "removeNeed": "Abhängigkeit von #{{id}} entfernen",
+    "addPlaceholder": "Ticket hinzufügen…",
+    "noOthers": "Keine anderen Tickets",
+    "includes": "Enthält nicht gemergte Arbeit aus <goto>{{ref}}</goto>",
+    "addAsNeed": "Als Abhängigkeit hinzufügen",
+    "autoTitle": "Vom Board hinzugefügt: Der Branch dieses Tickets enthält die nicht gemergten Commits jenes Tickets. Die Abhängigkeit verschwindet, sobald der Branch sie nicht mehr enthält, und wenn du sie hier entfernst, bleibt sie weg (für dieselben Commits wird sie nicht erneut hinzugefügt).",
+    "addedByBoard": "Vom Board hinzugefügt",
+    "cannotBeDoneUnsure": "Das Board kann nicht sicher sagen, wem diese Commits gehören, und hat deshalb keine Abhängigkeit hinzugefügt. #{{id}} kann nicht erledigt werden, bis der Branch von #{{need}} in seine Basis gemergt ist."
+  },
+  "verdict": {
+    "approve": "Genehmigen",
+    "disapprove": "Ablehnen",
+    "approved": "Genehmigt",
+    "disapproved": "Abgelehnt",
+    "disapproveTip": "Ablehnen: bricht diese Lane ab",
+    "approvedBy": "Genehmigt von {{who}} {{when}}. Klicke, um es zurückzunehmen.",
+    "disapprovedBy": "Abgelehnt von {{who}} {{when}}. Klicke, um es zurückzunehmen (öffnet sie wieder)."
+  },
+  "reviewResult": {
+    "pr": "PR #{{number}}",
+    "counts": "{{confirmed}} bestätigt · {{plausible}} plausibel · {{unverified}} ungeprüft",
+    "title": "Review-Ergebnis"
+  },
+  "thread": {
+    "replyActions": "Antwortaktionen",
+    "replyLabel": "Antwort",
+    "reply": "Antworten",
+    "ask": " · @{{name}} fragt diesen Agent",
+    "empty": "Noch keine Kommentare.",
+    "replyingTo": "Antwort an {{name}}",
+    "cancel": "abbrechen",
+    "placeholderCompact": "Antworten…{{ask}}",
+    "placeholder": "Antwort schreiben{{ask}}",
+    "sending": "Sende…"
+  },
+  "prQueue": {
+    "title": "PR-Warteschlange",
+    "subtitle": "PRs zum Prüfen und deine eigenen, nach Review-Status.",
+    "filters": {
+      "me": {
+        "label": "Zu prüfen",
+        "title": "PRs anderer, die du prüfst: wartend auf deine Genehmigung, von dir genehmigt oder wegen deiner Kommentare pausiert"
+      },
+      "others": {
+        "label": "Warten auf andere",
+        "title": "Deine PRs (auch die der Agents): ausstehende Genehmigungen, von allen Reviewern genehmigt oder wegen ihrer Kommentare pausiert"
+      },
+      "all": {
+        "label": "Alle PRs",
+        "title": "Jeder offene PR der Repositories, egal wer ihn geschrieben hat und ob er dich betrifft"
+      }
+    },
+    "reviewers": {
+      "mine": "Nur ich als Reviewer",
+      "involving": "Mit mir"
+    },
+    "tabs": {
+      "pending": "Ausstehend",
+      "reviewed": "Geprüft",
+      "on_hold": "Pausiert",
+      "done": "Erledigt"
+    },
+    "empty": {
+      "me": "Keine PRs zu prüfen ({{stage}}).",
+      "others": "Keine PRs warten auf andere ({{stage}}).",
+      "all": "Keine offenen PRs ({{stage}})."
+    },
+    "refresh": "Aktualisieren",
+    "mergeAfterTip": "Sein Ticket braucht diese zuerst gemergt:\n{{list}}",
+    "mergeAfterItem": "PR #{{number}} (von #{{ticketId}} {{title}})",
+    "mergeAfter": "mergen nach <refs/>",
+    "updated": "aktualisiert {{when}}",
+    "merged": "gemergt {{when}}",
+    "myReview": "mein Review: {{state}}",
+    "myReviewState": {
+      "approved": "genehmigt",
+      "changes_requested": "Änderungen angefordert",
+      "commented": "kommentiert",
+      "dismissed": "verworfen",
+      "pending": "ausstehend"
+    },
+    "forYourReview": "zu deinem Review",
+    "yourPr": "dein PR",
+    "fromTicket": "von #{{id}} {{title}}",
+    "reviewFresh": "an diesem SHA geprüft",
+    "reviewStale": "Review gilt für einen älteren SHA",
+    "openTicket": "Ticket öffnen",
+    "release": "freigeben",
+    "hold": "pausieren",
+    "holdTitle": "#{{number}} pausieren",
+    "holdText": "Eine Notiz für dich und die Agents. GitHub bleibt unberührt.",
+    "holdPlaceholder": "Warum es wartet…",
+    "holdConfirm": "Pausieren",
+    "notInvolvingYou": "ohne dich"
+  },
+  "workStatus": {
+    "state": {
+      "waiting": "Wartet auf dich",
+      "yourTurn": "Du bist dran",
+      "lost": "Kontakt verloren",
+      "noWord": "Kein Lebenszeichen",
+      "quiet": "Ruhig",
+      "working": "Arbeitet gerade",
+      "nothing": "Nichts offen"
+    },
+    "line": {
+      "yourTurn": "Du bist dran · wartet seit {{duration}}",
+      "lost": "Kontakt verloren · {{duration}}",
+      "noWord": "Kein Lebenszeichen seit {{duration}}",
+      "quiet": "Ruhig seit {{duration}}",
+      "working": "Arbeitet gerade · letztes Lebenszeichen vor {{duration}}"
+    },
+    "unit": {
+      "m": "{{count}} Min.",
+      "h": "{{count}} Std.",
+      "d": "{{count}} T."
+    },
+    "since": "seit {{time}}",
+    "minutes": "{{count}} Min.",
+    "lastWord": "letztes Lebenszeichen vor {{count}} Min.",
+    "noWordYet": "noch kein Lebenszeichen",
+    "why": {
+      "inStage": "in {{stage}}, seit {{time}} kein Agent gemeldet",
+      "waitingOn": "wartet auf {{on}}, seit {{time}} niemand gemeldet",
+      "nothingOpen": "nichts offen seit {{time}}",
+      "work": "Arbeit",
+      "ended": "nichts offen, seit {{phase}} um {{time}} endete",
+      "endedQuote": "nichts offen, seit {{phase}} um {{time}} endete („{{quote}}“)",
+      "noProgress": "kein Fortschrittsbeitrag seit {{time}}"
+    },
+    "verb": {
+      "spec": "Spezifiziert",
+      "build": "Baut",
+      "review": "Prüft",
+      "verify": "Verifiziert",
+      "pr": "Öffnet PR",
+      "preview": "Previewt",
+      "merge": "Mergt",
+      "work": "Arbeitet"
+    },
+    "nobodyHeard": "Noch nichts gehört",
+    "lastHeard": "Zuletzt gehört {{time}}",
+    "worked": "Gearbeitet",
+    "waited": "Gewartet",
+    "onYou": "Bei dir",
+    "defs": {
+      "worked": "Gearbeitet: Zeit, in der ein Agent Arbeit offen hatte und auf keine Person wartete.",
+      "waited": "Gewartet: Zeit, in der sich am Ticket nichts bewegte und auf keine Person gewartet wurde.",
+      "onYou": "Bei dir: Zeit, in der auf eine Person gewartet wurde (ein menschliches Warten oder eine blockierte Stufe)."
+    }
+  },
+  "workTimeline": {
+    "noWork": "Noch keine Arbeit erfasst.",
+    "now": "jetzt",
+    "board": "Board",
+    "unnamed": "unbenannt",
+    "work": "Arbeit",
+    "theHuman": "der Mensch",
+    "running": "läuft",
+    "neverClosed": "nie geschlossen",
+    "phaseRound": "{{phase}} Runde {{round}}",
+    "phaseRoundShort": "{{phase}} R{{round}}",
+    "delegatedTo": "delegiert an {{on}}",
+    "subAgentOf": "{{name}}, Subagent von {{parent}}",
+    "created": "{{count}} Min. vor der Arbeit erstellt",
+    "notToScaleNote": "Diese Zeit ist als kurzer Block gezeigt, nicht in ihrer echten Länge.",
+    "alsoThenItem": "{{name}}, {{time}}",
+    "duration": {
+      "seconds": "{{count}} s",
+      "minutes": "{{count}} Min.",
+      "hours": "{{count}} Std.",
+      "hoursMinutes": "{{h}} Std. {{m}} Min."
+    },
+    "spoken": {
+      "underMinute": "unter einer Minute",
+      "days": "{{count}} T.",
+      "minutes": "{{count}} Min.",
+      "hours": "{{count}} Std.",
+      "hoursMinutes": "{{h}} Std. {{m}} Min."
+    },
+    "mark": {
+      "push": "Push",
+      "pr": "Pull Request",
+      "preview": "Preview",
+      "merge": "Merge",
+      "other": "Board-Ereignis"
+    },
+    "label": {
+      "via": " (über {{by}})",
+      "open": ", offen",
+      "span": "{{phase}} von {{agent}}{{via}}, {{from}} bis {{to}}, {{duration}}{{open}}",
+      "wait": "Warten: {{reason}} ({{agent}}), {{from}} bis {{to}}, {{duration}}{{open}}{{note}}",
+      "delegation": "delegiert an {{on}} von {{agent}}, {{from}} bis {{to}}, {{duration}}{{open}}{{note}}",
+      "handoff": "{{from}} gab die Arbeit an {{to}} weiter, {{time}}{{note}}",
+      "mark": "{{name}}{{note}}, {{time}}",
+      "collapsed": "{{label}}, {{from}} bis {{to}}, {{duration}}, nicht maßstabsgetreu"
+    },
+    "fact": {
+      "delegatedTo": "Delegiert an",
+      "by": "Von",
+      "started": "Gestartet",
+      "ended": "Beendet",
+      "note": "Notiz",
+      "waiting": "Wartet",
+      "waitingFor": "Wartet auf",
+      "on": "Auf",
+      "duration": "Dauer",
+      "who": "Wer",
+      "work": "Arbeit",
+      "from": "Von",
+      "to": "An",
+      "at": "Um",
+      "event": "Ereignis",
+      "notToScale": "Nicht maßstabsgetreu",
+      "alsoThen": "Außerdem"
+    },
+    "summary": {
+      "noAgentWork": "Keine Agent-Arbeit erfasst.",
+      "worked": "arbeitete {{duration}}",
+      "waited": "wartete {{duration}} auf {{target}}",
+      "delegated": "{{on}}, delegiert",
+      "clause": "{{agent}} {{parts}}",
+      "workBy_one": "Arbeit von {{count}} Agent über {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "workBy_other": "Arbeit von {{count}} Agents über {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_one": "Aktivität von {{count}} Agent über {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_other": "Aktivität von {{count}} Agents über {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "stillGoing": " Läuft noch.",
+      "notToScale": " Nicht maßstabsgetreu: {{skipped}}."
+    },
+    "card": {
+      "title": "Verlauf",
+      "showMore": "Mehr zeigen",
+      "showLess": "Weniger zeigen",
+      "story": "Verlaufsgeschichte"
+    },
+    "story": {
+      "waitingFor": "wartet auf {{who}} · {{duration}}",
+      "waitedFor": "wartete auf {{who}} · {{duration}}{{note}}",
+      "started": "startete {{phase}}{{note}}",
+      "ended": "beendete {{phase}}{{note}}",
+      "handoff": "gab die Arbeit{{from}} an {{to}} weiter{{note}}",
+      "handoffFrom": " von {{name}}",
+      "someone": "jemand",
+      "waiting": "wartet auf {{who}}",
+      "stoppedWaiting": "wartet nicht mehr auf {{who}}{{note}}",
+      "movedTo": "nach {{stage}} verschoben",
+      "createdIn": "in {{stage}} erstellt",
+      "pushed": "gepusht",
+      "openedPr": "öffnete den PR{{note}}",
+      "merged": "gemergt",
+      "preview": "Preview {{note}}",
+      "somethingElse": "etwas anderes",
+      "lockNote": "die Sperre ({{note}})",
+      "lock": "die Sperre",
+      "you": "du",
+      "mcp": "der MCP-Server",
+      "seconds": "{{count}} s",
+      "minutes": "{{count}} Min.",
+      "minutesSeconds": "{{m}} Min. {{s}} s",
+      "hours": "{{count}} Std.",
+      "hoursMinutes": "{{h}} Std. {{m}} Min."
+    },
+    "stretch": {
+      "start": "Wartet auf den Start",
+      "blocked": "Blockiert",
+      "human": "Wartet auf den Menschen",
+      "review": "Im Review",
+      "merge": "Wartet aufs Mergen",
+      "decision": "Wartet auf eine Entscheidung"
+    },
+    "skipped": {
+      "start": "wartete {{duration}} auf den Start",
+      "blocked": "{{duration}} blockiert",
+      "human": "wartete {{duration}} auf den Menschen",
+      "review": "{{duration}} im Review",
+      "merge": "wartete {{duration}} aufs Mergen"
+    },
+    "openReport": "Bericht von {{agent}} öffnen: {{label}}",
+    "openReportRound": "Bericht von {{agent}} öffnen, Runde {{round}}: {{label}}",
+    "reportDescription": "Der Bericht zu diesem Run",
+    "factsDescription": "Die Fakten dieses Runs",
+    "loadingReport": "Lade Run-Bericht…",
+    "reportsFailed": "Die Berichte konnten nicht geladen werden.",
+    "noReport": "Kein Bericht zu diesem Run.",
+    "noReportYet": "Noch kein Bericht zu diesem Run."
+  },
+  "roadmap": {
+    "title": "Roadmap",
+    "subtitle": "Jedes Ticket in Bewegung: erledigt, jetzt, als Nächstes.",
+    "filter": {
+      "all": "Alle",
+      "blocked": "Blockiert",
+      "review": "Braucht Review"
+    },
+    "timeAxis": "Zeitachse, jede Zeile:",
+    "window": {
+      "today": "Heute",
+      "24h": "24 Std.",
+      "7d": "7 T.",
+      "fit": "Alle Zeilen einpassen"
+    },
+    "range": "{{start}} bis jetzt",
+    "stat": {
+      "tickets_one": "Ticket",
+      "tickets_other": "Tickets",
+      "lanes_one": "Lane",
+      "lanes_other": "Lanes",
+      "workingNow": "arbeiten gerade",
+      "blocked": "blockiert",
+      "inReview": "im Review",
+      "noWord": "kein Lebenszeichen"
+    },
+    "projectWork": "Projektarbeit, jedes Ticket und jede Lane:",
+    "empty": {
+      "all": "Kein Ticket ist in Arbeit, blockiert oder im Review.",
+      "blocked": "Nichts ist blockiert.",
+      "review": "Kein Ticket wartet auf Review."
+    },
+    "lanes_one": "{{count}} Lane",
+    "lanes_other": "{{count}} Lanes",
+    "unassigned": "Nicht zugewiesen",
+    "progress": "{{done}} von {{total}} erledigt",
+    "workTimeline": "Arbeitsverlauf",
+    "noTasks": "Noch keine Aufgaben.",
+    "tasks": "Aufgaben",
+    "step": {
+      "done": "erledigt",
+      "now": "jetzt",
+      "next": "als Nächstes",
+      "later": "später",
+      "blocked": "blockiert"
+    }
+  },
+  "overview": {
+    "loadError": "Die Zusammenfassung konnte nicht geladen werden: {{error}}",
+    "projectOverview": "{{name}}: Übersicht",
+    "headline": {
+      "waiting": "{{count}} warten auf dich",
+      "inProgress": "{{count}} in Arbeit",
+      "doneToday": "{{count}} heute erledigt"
+    },
+    "allHidden": "Jede Karte dieser Übersicht ist verborgen. <goto>Zeige sie wieder in den Layout-Einstellungen</goto>.",
+    "showFewer": "Weniger zeigen",
+    "viewAll": "Alle {{count}} ansehen",
+    "unassigned": "nicht zugewiesen",
+    "projectAgent": "{{name}} (einer der Agents des Projekts)",
+    "sinceDate": "seit {{date}}",
+    "laneOf": "Lane von #{{id}}",
+    "draft": "Entwurf",
+    "pr": "PR #{{number}}",
+    "prTitle": "PR #{{number}} {{title}}",
+    "openOnGithub": "Auf GitHub öffnen",
+    "option_one": "{{count}} Option",
+    "option_other": "{{count}} Optionen",
+    "lane_one": "{{count}} Lane",
+    "lane_other": "{{count}} Lanes",
+    "previewOf": "Preview von {{workspace}}",
+    "preview": "Preview",
+    "needsYou": {
+      "title": "Braucht dich",
+      "empty": "Nichts wartet auf dich.",
+      "decide": "Entscheide: {{question}}",
+      "asked": "{{options}} · gefragt von {{author}} {{ago}}",
+      "waitingOnYou": "Wartet auf dich seit {{since}} · {{agent}}",
+      "reviewPr": "PR #{{number}} {{title}} prüfen",
+      "prBy": "von {{author}} · aktualisiert {{ago}}",
+      "newReplies": "{{count}} neu · ",
+      "blocked": "blockiert",
+      "instructionsChanged": "Projektanweisungen geändert",
+      "changedBy": "von <actor/>",
+      "reviewed": "Geprüft",
+      "revertTip": "Die Anweisungen auf den Stand vor dieser Änderung zurücksetzen",
+      "revertBlockedTip": "Die Anweisungen wurden seitdem erneut geändert: Nimm zuerst die spätere Änderung zurück",
+      "revert": "Zurücknehmen",
+      "last": "letzte"
+    },
+    "lost": {
+      "title": "Kontakt verloren",
+      "empty": "Kein Kontakt verloren.",
+      "lastHeardTip": "Letztes Lebenszeichen {{when}}",
+      "lastHeard": "letztes Lebenszeichen vor {{duration}}"
+    },
+    "inProgress": {
+      "title": "In Arbeit",
+      "empty": "Nichts in Arbeit."
+    },
+    "doneToday": {
+      "title": "Heute erledigt",
+      "empty": "Heute noch nichts fertig.",
+      "closedTip": "Gemergt oder geschlossen: Es hat die Review-Warteschlange verlassen",
+      "closed": "geschlossen {{time}}",
+      "activity_one": "{{count}} Ereignis heute: Daily",
+      "activity_other": "{{count}} Ereignisse heute: Daily"
+    },
+    "carryingOver": {
+      "title": "Übertrag",
+      "startedTip": "Die Arbeit daran begann {{when}}",
+      "days_one": "{{count}} Tag in Arbeit",
+      "days_other": "{{count}} Tage in Arbeit",
+      "emptyShown": "Nichts blockiert oder im Review aus der Zeit vor heute."
+    }
+  },
+  "notifications": {
+    "title": "Benachrichtigungen",
+    "clearFinished": "Fertige entfernen",
+    "empty": "Nichts läuft",
+    "dismiss": "{{label}} schließen",
+    "of": "{{done}} von {{total}}",
+    "starting": "Starte…",
+    "noReason": "kein Grund angegeben",
+    "failed": "{{title}} fehlgeschlagen",
+    "finished": "{{title}} abgeschlossen",
+    "finishedWith": "{{title}} abgeschlossen · {{summary}}",
+    "failedLine": "Fehlgeschlagen · {{elapsed}} · {{reason}}",
+    "succeededLine": "Erfolgreich · {{elapsed}}",
+    "retryKept": "Behaltene wiederholen",
+    "youAsked": "{{actor}} · Du hast gefragt: {{request}}",
+    "stale": "Seit {{since}} kein Update · möglicherweise gestoppt",
+    "trackedFailed": "Fehlgeschlagen · {{reason}}",
+    "succeeded": "Erfolgreich",
+    "notice": "Hinweis",
+    "cannotWait": "Warten nicht möglich: {{reason}}",
+    "muted": "„{{name}}“ in diesem Projekt stummgeschaltet",
+    "new": "Neu",
+    "snooze": "Später erinnern",
+    "snoozeFor": "Erinnern in",
+    "mute": "Diese Art in diesem Projekt stummschalten",
+    "copied": "Kopiert",
+    "copyFailed": "Kopieren fehlgeschlagen: markiere den Text stattdessen",
+    "unit": {
+      "s": "{{value}} s",
+      "min": "{{value}} Min.",
+      "h": "{{value}} Std.",
+      "d": "{{value}} T."
+    },
+    "severity": {
+      "info": "Info",
+      "warning": "Warnung",
+      "problem": "Problem"
+    }
+  },
+  "ticketPage": {
+    "archivedToast": "Archiviert: vom Board entfernt, unter „Archiviert“",
+    "restoredToast": "Im Board wiederhergestellt",
+    "disapprovedToast": "#{{id}} abgelehnt und abgebrochen",
+    "undo": "„Rückgängig“ nimmt die Ablehnung zurück und setzt es nach {{stage}} zurück.",
+    "undoAction": "Rückgängig",
+    "summary": "Zusammenfassung",
+    "updated": "aktualisiert {{when}}",
+    "archivedBy": "Archiviert von {{name}} {{when}}",
+    "archivedByLane": "Archiviert von {{name}} {{when}}, mit dem Ticket, dessen Lane es ist",
+    "someone": "jemand",
+    "archivedBadge": "Archiviert",
+    "decisionNeeded": "Entscheidung nötig",
+    "archiveTip": "Mit seinen Lanes vom Board nehmen; „Archiviert“ auf der Features-Seite holt es zurück",
+    "deleteTitle": "Dieses Ticket löschen?",
+    "deleteBody": "Aufgaben, Beiträge, Anhänge und der Thread gehen mit.",
+    "deleteLanes_one": "Es hat {{count}} Lane: Lösche sie mit oder behalte sie und hebe sie eine Ebene höher.",
+    "deleteLanes_other": "Es hat {{count}} Lanes: Lösche sie mit oder behalte sie und hebe sie eine Ebene höher.",
+    "deleteKeepLanes": "Löschen, Lanes behalten",
+    "deleteWithLanes": "Mit Lanes löschen",
+    "title": "Titel",
+    "clickToRename": "Zum Umbenennen klicken",
+    "tagsAria": "Tags, durch Komma getrennt",
+    "tagsPlaceholder": "Hoch, Formulare",
+    "editTagsTip": "Klicke, um die Tags zu bearbeiten",
+    "addTags": "+ Tags",
+    "instructions": "Anweisungen",
+    "attaching": "hänge an…",
+    "attach": "anhängen",
+    "edit": "bearbeiten",
+    "instructionsPlaceholder": "Was zu tun ist, woran man erkennt, dass es fertig ist, was nie geschehen darf. Füge Dateien ein oder ziehe sie hierher, um sie anzuhängen.",
+    "showLess": "Weniger zeigen",
+    "showFull": "Alle Anweisungen zeigen",
+    "removeNamed": "{{name}} entfernen",
+    "otherReposTip": "Die Arbeit des Tickets in anderen Repos des Projekts, je auf eigenem Branch: Sie erscheinen unter Branch und Runs",
+    "otherRepos": "Weitere Repositories",
+    "repositoryNamed": "Repository {{name}}",
+    "takeOffTip": "{{name}} vom Ticket nehmen (seine Runs für das Ticket stoppen)",
+    "addRepo": "Repository hinzufügen",
+    "addRepoPlaceholder": "Repository hinzufügen…",
+    "details": "Details",
+    "assignee": "Bearbeiter",
+    "reservedTip": "Für diesen Projekt-Agent reserviert: Andere Agents können es nicht übernehmen, nur du kannst es neu zuweisen",
+    "reserved": "reserviert",
+    "repository": "Repository",
+    "branch": "Branch",
+    "baseBranch": "Basis-Branch",
+    "needsTip": "Tickets, deren Branches in die Basis dieses Tickets gemergt sein müssen, bevor es erledigt sein kann",
+    "needs": "Braucht",
+    "neededBy": "gebraucht von",
+    "autoTip": {
+      "Pushed": "Vom Board aus git abgehakt (der Branch ist mit jedem lokalen Commit auf origin)",
+      "PR": "Vom Board aus GitHub abgehakt (ein offener oder gemergter PR für das Ticket)",
+      "CI": "Vom Board aus GitHub abgehakt (die Checks des PR sind grün, oder ein Kommentar „CI run locally: green“ am Head-SHA)",
+      "Preview": "Vom Board aus den Previews abgehakt (einer der Workspaces des Tickets betreibt eine Preview, oder sein Preview-Link antwortet)",
+      "Summary": "Vom Board aus den Beiträgen des Tickets abgehakt (ein Agent schrieb oder aktualisierte seine Zusammenfassung nach dem letzten Commit des Branches)",
+      "Merged": "Vom Board aus GitHub und git abgehakt (der PR gemergt oder der Branch in seine Basis gemergt)"
+    },
+    "tickedAuto": "Automatisch abgehakt",
+    "blocked": "blockiert",
+    "subtasksBlocked_one": "{{count}} Teilaufgabe blockiert",
+    "subtasksBlocked_other": "{{count}} Teilaufgaben blockiert",
+    "unblock": "{{name}} freigeben",
+    "markBlockedNamed": "{{name}} als blockiert markieren",
+    "addSubtask": "Teilaufgabe hinzufügen",
+    "addSubtaskTo": "Teilaufgabe zu {{name}} hinzufügen",
+    "removeTask": "entfernen",
+    "removeTaskSubtasks": "entfernen, mit ihren Teilaufgaben",
+    "blockedPlaceholder": "Was der Mensch tun muss (optional)",
+    "whyBlocked": "Warum {{name}} blockiert ist",
+    "markBlocked": "Als blockiert markieren",
+    "tasks": "Aufgaben",
+    "noTasks": "Noch keine Aufgaben. Füge die Phasen hinzu, mit denen ein neues Ticket beginnt: Implementation, dann die der Übergabe (Pushed, PR, CI, Preview, Summary, Merged). Die konkreten Schritte kommen als Teilaufgaben unter Implementation. Das Board hakt Pushed, PR, CI, Preview, Summary und Merged selbst ab.",
+    "subtasksOf": "Teilaufgaben von {{name}}",
+    "newSubtaskOf": "Neue Teilaufgabe von {{name}}",
+    "add": "Hinzufügen",
+    "addPhase": "Phase hinzufügen: Implementation, Pushed, PR…",
+    "all": "Alle",
+    "nounLane": "Lane",
+    "laneOf": "Lane {{n}} von {{count}}",
+    "filtered": "(gefiltert)",
+    "nounTicketIn": "Ticket in {{stage}}",
+    "stageOf": "{{n}} von {{count}} in {{stage}}",
+    "previousNoun": "Zurück: {{noun}}",
+    "nextNoun": "Weiter: {{noun}}",
+    "stepKeysTip": "[ und ] gehen zurück und vor",
+    "lanesCancelled": "{{count}} abgebrochen",
+    "allTasks": "alle Aufgaben {{done}}/{{total}}",
+    "noLanes": "Keine Lanes. Teile dieses Ticket in Lanes, wenn Teile parallel laufen: Jede Lane bekommt eigenen Branch, Bearbeiter, eigene Aufgaben und Beiträge.",
+    "filterStage": "Stufe",
+    "filterTags": "Tags",
+    "showing": "zeige {{shown}} von {{total}}",
+    "clearFilters": "Filter zurücksetzen",
+    "activity": "Aktivität",
+    "feed": "Feed",
+    "mainTip": "Für dich: deine Beiträge mit den Antworten darunter, Entscheidungen und Fragen",
+    "main": "Haupt",
+    "agentsTip": "Das Arbeitsprotokoll der Agents: Fortschritt, Review-Phasen, Builder-Notizen",
+    "agents": "Agents",
+    "includeLanePosts": "Lane-Beiträge einbeziehen",
+    "newCount_one": "{{count}} neu",
+    "newCount_other": "{{count}} neu",
+    "newPost": "Neuer Beitrag",
+    "postPlaceholder": "Schreibe einen Beitrag: eine Frage, eine Antwort, Fortschritt. Füge Screenshots und Aufnahmen ein oder ziehe sie hierher.",
+    "agentsPlaceholder": "Schreibe ins Protokoll der Agents: eine Notiz für den, der daran arbeitet. Füge Dateien ein oder ziehe sie hierher.",
+    "posting": "Poste…",
+    "post": "Posten",
+    "postInAgents": "In Agents posten",
+    "noPosts": "Noch keine Beiträge.",
+    "noPostsHere": "Hier noch keine Beiträge.",
+    "noAgentPosts": "Noch keine Agent-Beiträge.",
+    "sections": "Ticket-Abschnitte",
+    "summaryPosted": "gepostet {{when}}",
+    "summaryUpdated": "aktualisiert {{when}}",
+    "summaryWritten": "geschrieben {{when}}",
+    "history": "Verlauf ({{count}})",
+    "noSummary": "Noch keine Zusammenfassung: Der letzte Fortschrittsbeitrag vertritt sie, bis ein Agent eine schreibt.",
+    "earlierVersions": "Frühere Versionen",
+    "firstVersion": "die erste Version",
+    "replies_one": "{{count}} Antwort",
+    "replies_other": "{{count}} Antworten",
+    "summaryActions": "Aktionen der Zusammenfassung",
+    "hideRepliesLabel": "Antworten ausblenden",
+    "replyLabel": "Antwort",
+    "hideReplies": "Antworten ausblenden",
+    "showReplies": "{{replies}} zeigen",
+    "replySummary": "Auf die Zusammenfassung antworten",
+    "laneSummaryTip": "Die Zusammenfassung der Lane: wo ihre Arbeit steht, wie ihre Agents sie führen",
+    "summaryChip": "Zusammenfassung",
+    "progress": "Fortschritt",
+    "postActions": "Beitragsaktionen",
+    "notProgressLabel": "kein Fortschritt",
+    "markProgressLabel": "als Fortschritt markieren",
+    "notProgressTip": "Kein Fortschritt: zu einem normalen Beitrag machen",
+    "markProgressTip": "Als Fortschritt markieren",
+    "decisionArchived": "{{ids}} archiviert: vom Board entfernt, unter „Archiviert“",
+    "notArchived": "Nicht archiviert: {{why}}",
+    "decision": "Entscheidung",
+    "decidedInChat": "Im Chat von dir entschieden ·",
+    "relayedTip": "Der Orchestrator hat deine Antwort aus dem Chat erfasst. Auf der Karte wurde nichts geklickt.",
+    "relayed": "weitergegeben",
+    "relayedBy": "von <actor/> {{when}} ·",
+    "decidedBy": "entschieden von <actor/> {{when}} ·",
+    "change": "ändern",
+    "decisionNeededHere": "Deine Entscheidung ist nötig",
+    "recommended": "empfohlen",
+    "saidInChat": "Was du im Chat gesagt hast:",
+    "agentNotePlaceholder": "Eine Notiz für den Agent (optional)",
+    "agentNote": "Notiz für den Agent",
+    "decide": "Entscheiden",
+    "vsBase": "+{{ahead}} / −{{behind}} ggü. Basis ·",
+    "branchNotInCheckout": "Branch noch nicht im Checkout",
+    "reviewOlder": "Review gilt für einen älteren SHA",
+    "latestReview": "letztes Review",
+    "branchIn": "Branch in {{name}}",
+    "base": "Basis {{name}}",
+    "noBranch": "Noch kein Branch: Wähle oben einen, oder der Agent setzt ihn.",
+    "workspaces": "Workspaces",
+    "workspacesDesc": "Worktrees, Sub-Branches und Subagent-Sandboxes, die die Agents für dieses Ticket geöffnet haben.",
+    "workspacesDescLanes": "Worktrees, Sub-Branches und Subagent-Sandboxes, die die Agents für dieses Ticket und seine Lanes geöffnet haben.",
+    "noneYet": "Noch keine.",
+    "breadcrumb": "Pfad",
+    "scrollSideUp": "Seitenspalte nach oben scrollen",
+    "scrollSideDown": "Seitenspalte nach unten scrollen",
+    "workflow": "Workflow",
+    "workflowOwn": "Folgt dem Workflow {{workflow}}, festgelegt an diesem Ticket.",
+    "workflowProject": "Folgt dem Workflow des Projekts ({{workflow}}).",
+    "workflowSteps": "Schritte ansehen",
+    "lanesProgress": "{{done}}/{{total}} erledigt"
+  },
+  "complexity": {
+    "label": {
+      "low": "Niedrig",
+      "mid": "Mittel",
+      "high": "Hoch",
+      "max": "Max"
+    },
+    "workflowHint": "Niedrig: keine Spec und kein Review im Workflow Standard. Mittel, Hoch und Max: die Review-Runden, die der Workflow des Projekts festlegt (Standard: eine, drei, bis zu zehn). Max ist für Arbeit, die von Grund auf entsteht; ein Feature in einer bestehenden Codebasis ist nie Max, egal wie schwierig.",
+    "levelHint": {
+      "low": "Niedrig: die Review-Runden, die der Workflow des Projekts festlegt (Standard: keine). Der Builder prüft es selbst.",
+      "mid": "Mittel: die Review-Runden, die der Workflow des Projekts festlegt (Standard: eine).",
+      "high": "Hoch: die Review-Runden, die der Workflow des Projekts festlegt (Standard: bis zu drei).",
+      "max": "Max: die Review-Runden, die der Workflow des Projekts festlegt (Standard: bis zu zehn), für eine ganze Website oder App von Grund auf, ein neues Produkt oder einen eigenständigen Dienst; es endet bei der ersten Runde, die besteht. Ein Feature in einer bestehenden Codebasis ist höchstens Hoch, egal wie schwierig."
+    }
+  },
+  "agentsAtWork": {
+    "title": "Agents bei der Arbeit",
+    "error": "Wer arbeitet, ließ sich nicht lesen.",
+    "empty": "Keine Agents bei der Arbeit",
+    "more_one": "+{{count}} weiterer",
+    "more_other": "+{{count}} weitere",
+    "round": "{{phase}} Runde {{round}}",
+    "waiting": "Wartet: {{what}}",
+    "blocked": "Blockiert",
+    "quiet": "ruhig",
+    "lastHeard": "zuletzt gehört {{time}}",
+    "label": "#{{id}} {{title}} — {{phase}}, {{since}}, {{state}}",
+    "labelAgent": "#{{id}} {{title}} — Agent {{agent}}, {{phase}}, {{since}}, {{state}}",
+    "state": {
+      "working": "arbeitet",
+      "waiting": "wartet",
+      "asleep": "schläft"
+    }
+  },
+  "notificationSettings": {
+    "title": "Benachrichtigungen",
+    "intro": "Die Hinweise, die die Glocke für dieses Projekt zeigen kann. Schalte einen aus, um ihn hier nicht mehr zu sehen; das Board beobachtet ihn weiterhin, und andere Projekte behalten ihre eigene Auswahl.",
+    "none": "Noch keine Hinweise",
+    "show": "{{label}} anzeigen"
+  },
+  "alerts": {
+    "group": {
+      "setup": "Einrichtung und Versionen",
+      "work": "Arbeit",
+      "machine": "Dieser Rechner",
+      "housekeeping": "Aufräumen"
+    },
+    "snooze": {
+      "minutes_one": "{{count}} Minute",
+      "minutes_other": "{{count}} Minuten",
+      "hours_one": "{{count}} Stunde",
+      "hours_other": "{{count}} Stunden",
+      "days_one": "{{count}} Tag",
+      "days_other": "{{count}} Tage"
+    }
+  },
+  "workflowChips": {
+    "selfTip": "Das erledigt der Ticket-Agent selbst",
+    "agentTip": {
+      "picked": "Der dafür gewählte Team-Agent. Seine Anweisungen stehen auf der Team-Seite. Die Rolle ({{agent}}) benennt Spans und Run-Berichte.",
+      "role": "Der Team-Agent, der wie seine Rolle heißt ({{agent}}). Seine Anweisungen stehen auf der Team-Seite. Die Rolle ({{agent}}) benennt Spans und Run-Berichte.",
+      "default": "Kein Team-Agent heißt {{agent}}: Der Schritt läuft als eingebaute Rolle {{agent}}. Die Anweisungen stehen auf der Team-Seite. Die Rolle ({{agent}}) benennt Spans und Run-Berichte."
+    },
+    "agentMissing": "Agent fehlt",
+    "missingTip": "{{picked}} wurde dafür gewählt, aber das Team hat jetzt keinen Agent dieses Namens: Der Schritt läuft als {{name}}, bis der Agent zurück ist oder ein anderer gewählt wird.",
+    "locked": "Fest",
+    "lockedAboveLow": "Fest über Niedrig",
+    "skippedOnLow": "Bei Niedrig übersprungen",
+    "changed": "geändert",
+    "changedTip": "Gegenüber dem Preset geändert: {{what}}"
+  },
+  "workflowGraph": {
+    "label": "Workflow {{label}} für ein Ticket mit Komplexität {{complexity}}",
+    "complexity": {
+      "low": "niedrig",
+      "mid": "mittel",
+      "high": "hoch",
+      "max": "max"
+    },
+    "roundSurvives": "Runde besteht",
+    "roundFails": "Runde scheitert",
+    "inParallel": "Parallel",
+    "reviewRound": "Review-Runde",
+    "noRoundsOn": "Keine Review-Runden bei {{complexity}}"
+  },
+  "workflowPanel": {
+    "idle": "Wähle im Diagramm einen Schritt, um zu sehen, was er tut, und um zu ändern, wer ihn ausführt, mit welchem Aufwand, ob er läuft und an welcher Stelle der Reihenfolge.",
+    "runnerAgents": "Der Ticket-Agent führt /feature-review selbst aus. Seine Phasen laufen mit eigenen Team-Agents, die an den Phasenknoten gewählt werden.",
+    "selfAgent": "Das erledigt der Ticket-Agent selbst: Es gibt keinen Team-Agent zu wählen.",
+    "whatItDoes": "Was der Schritt tut",
+    "handoffTo": "Übergabe an {{next}}",
+    "result": "Ergebnis",
+    "team": {
+      "title": "Team-Agent",
+      "default": "Standard ({{name}})",
+      "notInTeam": "{{name}} (nicht im Team)",
+      "missing": "{{picked}} wurde dafür gewählt, aber das Team hat jetzt keinen Agent dieses Namens. Der Schritt läuft als {{name}}, bis der Agent zurück ist oder ein anderer gewählt wird. Wähle Standard, um die Wahl zu löschen.",
+      "runsAs": "Läuft als {{name}}. Die Anweisungen stehen auf der Team-Seite; die Rolle ({{role}}) benennt Spans und Run-Berichte.",
+      "runsAsDefault": "Läuft als {{name}} (der eingebaute Agent: Das Team hat keinen dieses Namens). Die Anweisungen stehen auf der Team-Seite; die Rolle ({{role}}) benennt Spans und Run-Berichte."
+    },
+    "placeInOrder": "Platz in der Reihenfolge",
+    "moveUp": "Nach oben",
+    "moveDown": "Nach unten",
+    "moveUpTip": "Nach oben: {{step}} läuft früher",
+    "moveDownTip": "Nach unten: {{step}} läuft später",
+    "runs": "Läuft",
+    "run": "{{step}} ausführen",
+    "alsoRunOnLow": "{{step}} auch bei Niedrig ausführen",
+    "aboveLowNote": "Dieser Schalter entscheidet nur, ob er auch bei Niedrig läuft.",
+    "effort": "Aufwand",
+    "effortHint": "Wird als Aufwand des Agent-Tools weitergegeben. {{hint}}.",
+    "reviewRuns": "Führt je Runde {{total}} getrennte /feature-review-Runs aus: {{runs}}, jeden unter eigenem Agent-Namen und ohne die Befunde des anderen zu sehen.",
+    "survival": "<strong>Eine Runde besteht, wenn</strong> {{survival}}."
+  },
+  "workflowPage": {
+    "title": "Workflow",
+    "intro": "Wie ein Ticket von „To do“ bis zur Übergabe kommt: die Schritte, die sein Agent der Reihe nach ausführt, wer jeden ausführt und was jeder an den nächsten übergibt. Das Projekt folgt einem Workflow; ein Ticket kann auf seiner Seite einen anderen nennen. Die Agents lesen ihn vom Board, eine Änderung hier gilt also ab ihrem nächsten Run.",
+    "graphShows": "Das Diagramm zeigt ein Ticket mit Komplexität {{complexity}}.",
+    "projectFollows": "Das Projekt folgt diesem Workflow",
+    "use": "Diesen Workflow verwenden",
+    "resetThis": "Diesen Workflow zurücksetzen",
+    "resetTitle": "Workflow {{label}} zurücksetzen?",
+    "resetBody": "Reihenfolge, Schalter, Aufwände, Team-Agents und Review-Runden gehen zurück auf das, womit das Preset {{label}} kommt. Die anderen Presets behalten ihre Änderungen.",
+    "cancel": "Abbrechen",
+    "reset": "Zurücksetzen",
+    "sectionLabel": "Workflow {{label}}",
+    "projects": "der des Projekts",
+    "summary_one": "{{count}} Schritt für Komplexität {{complexity}} · Review: {{rounds}}",
+    "summary_other": "{{count}} Schritte für Komplexität {{complexity}} · Review: {{rounds}}"
+  },
+  "workflowPresets": {
+    "group": "Workflow-Presets",
+    "active": "Aktiv",
+    "tweaked": "Angepasst",
+    "complexity": "Komplexität",
+    "stats_one": "{{count}} Schritt · Review-Runden {{rounds}}",
+    "stats_other": "{{count}} Schritte · Review-Runden {{rounds}}",
+    "light": {
+      "label": "Leicht",
+      "description": "Build, Gate, ein Reviewer, die Absichtsprüfung und die Übergabe: kein Spec-Agent, keine Umgebung, keine getrennten Hunts."
+    },
+    "standard": {
+      "label": "Standard",
+      "description": "Der volle Zyklus: Spec, Build, Gate, Review-Runden mit Spec, Umgebung, Verify, zwei unabhängigen Hunts, Refute und einem Merge-Check, danach die Absichtsprüfung, PR, CI, Preview und Übergabe."
+    },
+    "thorough": {
+      "label": "Gründlich",
+      "description": "Standard plus ein eigener Durchgang zum Schreiben von Tests, ein dritter Hunt mit der Sicherheits-Checkliste, die Absichtsprüfung am Ende jeder Review-Runde und eine Review-Runde mehr auf jeder Stufe über Niedrig."
+    },
+    "maximum": {
+      "label": "Maximal",
+      "description": "Gründlich plus eine zweite, unabhängige Spec, ein zweites volles Review jeder Runde durch einen anderen Agent, der das erste nie sieht, und hoher Aufwand bei jedem Agent."
+    }
+  },
+  "workflowReview": {
+    "legend": "Review-Runden je Komplexität",
+    "changed": "geändert",
+    "notSaved": "Nicht gespeichert: {{reason}}",
+    "default": "Standard {{value}}"
+  },
+  "workflowReads": {
+    "title": "Was Agents lesen",
+    "hint": "der Text, den get_workflow für diesen Workflow liefert",
+    "textLabel": "Workflow-Text"
+  },
+  "workflowSelect": {
+    "project": "Workflow des Projekts ({{label}})",
+    "hint": "Der Workflow, dem sein Agent folgt: der des Projekts oder eines der vier Presets nur für dieses Ticket. Eine Änderung am Workflow des Projekts betrifft kein Ticket, das einen eigenen nennt."
+  },
+  "workflowView": {
+    "noRounds": "keine Review-Runden",
+    "rounds_one": "{{count}} Runde",
+    "rounds_other": "{{count}} Runden",
+    "complexity": {
+      "low": "Niedrig",
+      "mid": "Mittel",
+      "high": "Hoch",
+      "max": "Max"
+    },
+    "effort": {
+      "auto": "Auto",
+      "low": "Niedrig",
+      "medium": "Mittel",
+      "high": "Hoch"
+    },
+    "effortLevel": {
+      "low": "niedrig",
+      "medium": "mittel",
+      "high": "hoch"
+    },
+    "autoLevel": "Auto: {{level}}",
+    "autoEffortHint": "Auto richtet sich nach dem Ticket: niedrig bei Niedrig, mittel bei Mittel und Hoch, hoch bei Max",
+    "separator": ", ",
+    "you": "du",
+    "skippedNoRounds": "Keine Review-Runden",
+    "skippedOff": "Aus",
+    "changed": {
+      "moved": "sein Platz in der Reihenfolge",
+      "off": "ausgeschaltet",
+      "effort": "sein Aufwand",
+      "agent": "sein Team-Agent"
+    },
+    "name": {
+      "agent": "Agent {{name}}",
+      "locked": "fest",
+      "skipsOnLow": "bei Tickets mit niedriger Komplexität übersprungen"
+    },
+    "lockReason": {
+      "claim": "Fest: Nichts kann beginnen, bevor das Ticket gelesen und übernommen ist.",
+      "build": "Fest: Nichts wird geliefert, ohne dass die Änderung gebaut wurde.",
+      "gate": "Fest: Keine Änderung geht ungeprüft weiter.",
+      "intent": "Fest über Niedrig: Jedes Ticket über Niedrig wird vor der Übergabe an den eigenen Worten des Menschen geprüft.",
+      "always": "Fest: Ohne diesen Schritt kann das Ticket nicht übergeben werden."
+    },
+    "survival": {
+      "light": "der Reviewer keinen Befund reproduzieren konnte und die Belege des Builders jedes Akzeptanzkriterium abdecken",
+      "standard": "das Urteil SHIP lautet, die Funktionsprüfung YES ergibt, die Basisprüfung NO ergibt und jedes Akzeptanzkriterium durch Ausführung PASS ist (UNVERIFIED nur aus einem Grund, den die Eskalationsregeln nennen und der nicht zu überwinden war)",
+      "thoroughIntent": "das Urteil SHIP lautet, die Funktionsprüfung YES ergibt, die Basisprüfung NO ergibt und jedes Akzeptanzkriterium durch Ausführung PASS ist (UNVERIFIED nur aus einem Grund, den die Eskalationsregeln nennen und der nicht zu überwinden war) und die Absichtsprüfung am Ende der Runde übereinstimmt",
+      "maximum": "beide Reviews bestehen ({{standard}}) und der Abgleich keinen Befund offen lässt",
+      "maximumIntent": "beide Reviews bestehen ({{standard}}), der Abgleich keinen Befund offen lässt und die Absichtsprüfung am Ende der Runde übereinstimmt"
+    },
+    "move": {
+      "after": "{{step}} muss nach {{other}} kommen",
+      "stayFirst": "{{step}} muss an erster Stelle bleiben",
+      "stayLast": "{{step}} muss an letzter Stelle bleiben",
+      "alreadyFirst": "{{step}} steht schon an erster Stelle",
+      "alreadyLast": "{{step}} steht schon an letzter Stelle"
+    }
+  },
+  "backToModule": {
+    "back": "Zurück zu {{label}}",
+    "home": "Start"
+  },
+  "ticketLine": {
+    "openedBy": "Eröffnet von {{name}} ({{role}}) am {{when}}",
+    "updated": "Aktualisiert am {{when}}",
+    "opened": "Eröffnet am {{when}}"
+  },
+  "resumeSettings": {
+    "title": "Fortsetzen",
+    "intro": "Ein Agent, der eine Frage stellt, beendet seinen Zug. Mit einem Befehl hier setzt das Board die Arbeit selbst fort, wenn du eine Entscheidungskarte im Board beantwortest oder ein Ticket aus einer blockierten oder Review-Stufe zurück in eine aktive verschiebst: Es führt den Befehl auf diesem Rechner im Worktree des Tickets aus, mit der Frage und deiner Antwort (oder deinen letzten Worten) auf der Standardeingabe und in der Datei, die <code>BOARD_RESUME_PROMPT_FILE</code> nennt; <code>BOARD_URL</code>, <code>BOARD_PROJECT_ID</code>, <code>BOARD_TICKET_ID</code> und <code>BOARD_AGENT_NAME</code> sind gesetzt. Für ein Ticket mit einem aktiven Agent oder eines, das schon fortgesetzt wird, startet nichts. Der Befehl läuft mit den Rechten des Board-Benutzers, und nur du kannst ihn festlegen. Leer heißt aus.",
+    "presets": "Presets",
+    "found": "gefunden",
+    "notFound": "nicht gefunden",
+    "command": "Befehl zum Fortsetzen",
+    "commandPlaceholder": "claude -p (leer: aus)",
+    "timeout": "Beenden nach (Minuten)",
+    "save": "Speichern",
+    "saving": "Speichere…",
+    "timeoutProblem": "Eine ganze Zahl von {{min}} bis {{max}}.",
+    "unsaved": "Ungespeicherte Änderungen.",
+    "noChanges": "Keine Änderungen.",
+    "off": "Fortsetzen ist aus."
+  },
+  "resumeCard": {
+    "title": "Fortsetzen",
+    "resume": "Fortsetzen",
+    "retry": "Wiederholen",
+    "started": "Das Board hat die Arbeit wieder gestartet",
+    "empty": "Noch hat nichts dieses Ticket fortgesetzt.",
+    "setInSettings": "Der Mensch legt es in den Projekteinstellungen fest.",
+    "failed": "Das Board konnte nicht fortsetzen: {{reason}}",
+    "log": "Log",
+    "state": {
+      "queued": "Startet",
+      "running": "Läuft",
+      "succeeded": "Beendet",
+      "failed": "Fehlgeschlagen",
+      "skipped": "Nicht gestartet"
+    }
+  },
+  "runReportsWindow": {
+    "reports": "Berichte",
+    "reportsCount": "Berichte ({{n}})",
+    "title": "Run-Berichte",
+    "description": "Die Run-Berichte dieses Tickets, mit Filtern und Sortierung. Ein Klick zeigt einen vollständig.",
+    "back": "Zurück zu den Berichten",
+    "none": "Noch keine Run-Berichte.",
+    "noMatch": "Kein Bericht passt zu diesen Filtern.",
+    "count_one": "{{shown}} von {{count}} Bericht",
+    "count_other": "{{shown}} von {{count}} Berichten",
+    "clearFilters": "Filter zurücksetzen",
+    "filter": {
+      "agent": "Agent",
+      "round": "Runde",
+      "time": "Zeit",
+      "difficulty": "Schwierigkeit",
+      "confidence": "Sicherheit",
+      "duration": "Dauer",
+      "sortBy": "Sortieren nach"
+    },
+    "items": {
+      "allAgents": "Alle Agents",
+      "allRounds": "Alle Runden",
+      "round": "Runde {{n}}",
+      "noRound": "Keine Runde"
+    },
+    "time": {
+      "any": "Jederzeit",
+      "hour": "Letzte Stunde",
+      "today": "Heute",
+      "week": "Letzte 7 Tage"
+    },
+    "duration": {
+      "any": "Beliebig",
+      "reported": "Angegeben",
+      "unreported": "Nicht angegeben"
+    },
+    "rating": {
+      "any": "Beliebig",
+      "unrated": "Nicht bewertet"
+    },
+    "sort": {
+      "newest": "Neueste",
+      "oldest": "Älteste",
+      "longest": "Längste",
+      "difficulty": "Höchste Schwierigkeit",
+      "confidence": "Höchste Sicherheit"
+    }
+  }
+}

@@ -1,12 +1,11 @@
+import { useTranslation } from 'react-i18next'
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
-import { WORKFLOW_PRESET_LIST, workflowPreset, type WorkflowPresetId } from '#/lib/workflow'
+import { WORKFLOW_PRESET_LIST, type WorkflowPresetId } from '#/lib/workflow'
 
 /** The value that follows the project's workflow: a ticket that names no preset of its own. */
 const PROJECT = 'project'
-
-const HINT =
-  "The workflow its agent follows: the project's own, or one of the four presets for this ticket alone. Changing the project's workflow does not move a ticket that names one."
 
 /**
  * A ticket's workflow, picked: the project's own first (named with the preset it is now), then the four presets.
@@ -28,9 +27,10 @@ export function WorkflowSelect({
   size?: 'sm' | 'default'
   className?: string
 }) {
+  const { t } = useTranslation()
   const items: Record<string, string> = {
-    [PROJECT]: `Project's workflow (${workflowPreset(projectPreset).label})`,
-    ...Object.fromEntries(WORKFLOW_PRESET_LIST.map((p) => [p.id, p.label])),
+    [PROJECT]: t('workflowSelect.project', { label: t(`workflowPresets.${projectPreset}.label`) }),
+    ...Object.fromEntries(WORKFLOW_PRESET_LIST.map((p) => [p.id, t(`workflowPresets.${p.id}.label`)])),
   }
   return (
     <Select
@@ -38,7 +38,7 @@ export function WorkflowSelect({
       onValueChange={(v) => v && onChange(v === PROJECT ? null : (v as WorkflowPresetId))}
       items={items}
     >
-      <Tip content={HINT}>
+      <Tip content={t('workflowSelect.hint')}>
         <SelectTrigger id={id} size={size} className={className}>
           <SelectValue />
         </SelectTrigger>

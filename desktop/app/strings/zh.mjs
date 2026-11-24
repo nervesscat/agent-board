@@ -1,0 +1,37 @@
+// The desktop app's own texts in zh (see ../strings.mjs). Every key of en.mjs, the same {{placeholders}} and <tags>.
+export default {
+  open: '打开',
+  openInBrowser: '在浏览器中打开',
+  retryNow: '立即重试',
+  startAtLogin: '登录时启动',
+  quit: '退出',
+  openSettings: '打开设置文件',
+  openLogs: '打开日志文件夹',
+  openHome: '打开应用文件夹',
+  startAtLoginFailed: '无法更改“登录时启动”。',
+  cannotStart: '看板无法启动。',
+  settingsInvalid: '看板的设置无效。',
+  homeUnusable:
+    '应用文件夹 {{home}} 无法使用：{{error}}\n\n请把 AGENT_BOARD_HOME 设为可写入的文件夹，或删除它以使用默认文件夹。',
+  homeLine: '{{error}}\n\n应用文件夹：{{home}}',
+  dataFolderUnusable:
+    '它的数据文件夹 {{dir}} 无法使用：{{error}}\n\n请在 {{file}} 或环境变量中设置另一个 DATA_DIR，然后重新启动应用。',
+  logsLine: '{{detail}}\n\n日志：{{logs}}',
+  stopped: '看板已停止。',
+  restartedTimes_other: '它已重新启动 {{count}} 次。',
+  noOutput: '（无输出）',
+  exitedSignal: '它在 {{time}} 被 {{signal}} 终止。',
+  exitedCode: '它在 {{time}} 退出，退出码为 {{code}}。',
+  exited: '它在 {{time}} 退出。',
+  reasonCode: '退出码 {{code}}',
+  reasonSignal: '信号 {{signal}}',
+  reasonNone: '无退出码',
+  tipRestarting: '{{name}}：正在重启看板（{{reason}}）',
+  tipRestarted: '{{name}}：{{url}}（在 {{time}} 因{{reason}}重启）',
+  notifyRestarted: '看板已重启（{{reason}}）。',
+  didNotStart: '看板没有启动。',
+  didNotAnswer: '它在一分钟内没有在 {{url}} 上响应。',
+  unreachableHeading: '无法连接到 <code>{{address}}</code> 上的看板。',
+  unreachableBody:
+    '看板运行在另一台设备上：请确认这台设备已联网，且看板正在那里运行。应用会自动重试，点击“{{retry}}”可立即重试。',
+}

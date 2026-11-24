@@ -1,3 +1,7 @@
+import type { TFunction } from 'i18next'
+
+import { shared } from '#/i18n'
+
 import { LEASE_TTL_MINUTES, type EventKind, type StageKind } from './constants'
 import { isBoardRecord } from './roles'
 
@@ -554,12 +558,14 @@ export const sumTotals = (all: WorkTotals[]): WorkTotals =>
   )
 
 /** A duration for people: `3h 10m`, `25m`, `40s` under a minute, `0m` for none. */
-export function formatDuration(ms: number): string {
-  if (ms <= 0) return '0m'
-  if (ms < 60_000) return `${Math.max(1, Math.round(ms / 1000))}s`
+export function formatDuration(ms: number, tr: TFunction = shared.t): string {
+  if (ms <= 0) return tr('workTimeline.duration.minutes', { count: 0 })
+  if (ms < 60_000) return tr('workTimeline.duration.seconds', { count: Math.max(1, Math.round(ms / 1000)) })
   const minutes = Math.round(ms / 60_000)
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
-  if (!h) return `${m}m`
-  return m ? `${h}h ${m}m` : `${h}h`
+  if (!h) return tr('workTimeline.duration.minutes', { count: m })
+  return m
+    ? tr('workTimeline.duration.hoursMinutes', { h, m })
+    : tr('workTimeline.duration.hours', { count: h })
 }

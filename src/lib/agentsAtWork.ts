@@ -1,5 +1,6 @@
+import { shared } from '#/i18n'
 import type { LiveWorkPayload } from '#/lib/api'
-import { GERUND } from '#/lib/workStatus'
+import { gerund } from '#/lib/workStatus'
 
 /**
  * The Overview's Agents at work card, as data: one character per agent on a ticket, from the live
@@ -50,24 +51,20 @@ type Live = LiveWorkPayload['liveNow'][number] | LiveWorkPayload['recentlyActive
 const cut = (title: string) =>
   title.length > TITLE_LIMIT ? `${title.slice(0, TITLE_LIMIT - 1).trimEnd()}…` : title
 
-/** "just now", "3 min", "2 h", "4 d": the time from `iso` to `now`. */
-export function elapsed(iso: string, now: number): string {
+/** "just now", "3 min ago", "2 h ago", "4 d ago": the time from `iso` to `now`, in the language shown. */
+export function heardAgo(iso: string, now: number): string {
   const m = Math.max(0, Math.floor((now - Date.parse(iso)) / 60_000))
-  if (m < 1) return 'just now'
-  if (m < 60) return `${m} min`
-  if (m < 60 * 24) return `${Math.floor(m / 60)} h`
-  return `${Math.floor(m / 1440)} d`
-}
-const text = (iso: string, now: number) => {
-  const e = elapsed(iso, now)
-  return e === 'just now' ? e : `${e} ago`
+  if (m < 1) return shared.t('time.justNow')
+  if (m < 60) return shared.t('time.minutesAgo', { count: m })
+  if (m < 60 * 24) return shared.t('time.hoursAgo', { count: Math.floor(m / 60) })
+  return shared.t('time.daysAgo', { count: Math.floor(m / 1440) })
 }
 
 /** "Building", "Reviewing round 2", "CI": the open span's phase; the raw phase when it is none of those. */
 export function phaseLabel(phase: string | null, round: number | null): string {
   if (!phase) return ''
-  const base = phase === 'ci' ? 'CI' : Object.hasOwn(GERUND, phase) ? GERUND[phase] : phase
-  return round ? `${base} round ${round}` : base
+  const base = phase === 'ci' ? 'CI' : gerund(phase, shared.t, false) || phase
+  return round ? shared.t('agentsAtWork.round', { phase: base, round }) : base
 }
 
 /** The stages whose tickets show no agent: Done, Cancelled and Approved (the human's go-ahead to merge). */
@@ -89,15 +86,14 @@ export function petsOf(
     if (hiddenStage(e.stage)) return
     const phase =
       state === 'waiting' && 'waitingFor' in e && e.waitingFor
-        ? `Waiting: ${e.waitingFor.note || e.waitingFor.reason}`
+        ? shared.t('agentsAtWork.waiting', { what: e.waitingFor.note || e.waitingFor.reason })
         : state === 'waiting'
-          ? 'Blocked'
+          ? shared.t('agentsAtWork.blocked')
           : state === 'asleep'
-            ? [phaseLabel(e.phase, e.round), 'quiet'].filter(Boolean).join(', ')
-            : phaseLabel(e.phase, e.round) || 'Working'
+            ? [phaseLabel(e.phase, e.round), shared.t('agentsAtWork.quiet')].filter(Boolean).join(', ')
+            : phaseLabel(e.phase, e.round) || shared.t('workStatus.verb.work')
     for (const agent of e.agents.length ? e.agents : [null]) {
-      const heard = text(e.lastHeardAt, now)
-      const since = `last heard ${heard}`
+      const since = shared.t('agentsAtWork.lastHeard', { time: heardAgo(e.lastHeardAt, now) })
       add({
         key: `${e.ticketId}:${agent ?? ''}`,
         ticketId: e.ticketId,
@@ -109,7 +105,14 @@ export function petsOf(
         phase,
         at: e.lastHeardAt,
         since,
-        label: `#${e.ticketId} ${e.title} — ${agent ? `agent ${agent}, ` : ''}${phase}, ${since}, ${state}`,
+        label: shared.t(agent ? 'agentsAtWork.labelAgent' : 'agentsAtWork.label', {
+          id: e.ticketId,
+          title: e.title,
+          agent,
+          phase,
+          since,
+          state: shared.t(`agentsAtWork.state.${state}`),
+        }),
       })
     }
   }
