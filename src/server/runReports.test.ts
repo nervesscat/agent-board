@@ -707,6 +707,22 @@ describe('the review phases flag', () => {
     expect(missingReviewPhases(t.id)).toEqual([])
   })
 
+  it('does not read the move from review to Approved as a send-back', async () => {
+    const pid = newProject()
+    const t = ticketOf(pid, 'high')
+    for (const round of [1, 2, 3])
+      spans(pid, t.id, round, ['spec', 'env', 'verify', 'hunt', 'hunt', 'refute', 'merge'])
+    await toReview(t.id)
+    await needs.changeTicket(t.id, { status: 'approved' }, HUMAN, { agent: false })
+    dbm.db
+      .update(dbm.schema.ticketEvents)
+      .set({ at: ago(300) })
+      .where(and(eq(dbm.schema.ticketEvents.ticketId, t.id), eq(dbm.schema.ticketEvents.kind, 'stage')))
+      .run()
+    // The old rounds still count: with a send-back the count would restart and every phase read missing.
+    expect(missingReviewPhases(t.id)).toEqual([])
+  })
+
   describe('after a send-back', () => {
     const full = ['spec', 'env', 'verify', 'hunt', 'hunt', 'refute', 'merge']
     const sendBack = async (id: number) => {
@@ -937,5 +953,253 @@ describe('a project agent’s own template', () => {
     const rows = projectAgents.listAgents(pid)
     expect(rows).toHaveLength(AGENTS.length)
     for (const a of rows) expect(a.reportTemplate).toBe(projectAgents.commonRunReportTemplate)
+  })
+})
+
+describe('the review phases flag follows the ticket’s workflow', () => {
+  const ticketOf = (pid: number, complexity: 'low' | 'mid' | 'high' | 'max' = 'mid', extra = {}) =>
+    features.createTicket(pid, { title: 'work', status: 'in_progress', complexity, ...extra }, HUMAN)
+  const spans = (pid: number, id: number, round: number, phases: string[]) =>
+    phases.forEach((phase, i) => closedSpan(pid, id, phase, round, 600 - i * 10))
+  const preset = (pid: number, id: string) => call('PUT', `/api/projects/${pid}/workflow`, { preset: id })
+  const STANDARD = ['spec', 'env', 'verify', 'hunt', 'hunt', 'refute', 'merge']
+
+  it('under Light expects one hunt and never asks for the other phases (H2)', async () => {
+    const pid = newProject()
+    await preset(pid, 'light')
+    const t = ticketOf(pid)
+    spans(pid, t.id, 1, ['hunt'])
+    expect(missingReviewPhases(t.id)).toEqual([])
+    // A round of only a spec ran: the hunt is what is missing, and nothing else is asked for.
+    const none = ticketOf(pid)
+    work.handoff(pid, none.id, { to: 'builder' }, AGENT)
+    expect(missingReviewPhases(none.id)).toEqual([{ round: 1, phase: 'hunt', expected: 1, found: 0 }])
+    const toReview = await needs.changeTicket(none.id, { status: 'review' }, HUMAN, { agent: false })
+    expect(toReview.missingReviewPhases).toEqual([{ round: 1, phase: 'hunt', expected: 1, found: 0 }])
+  })
+
+  it('under Thorough expects three hunts (H3)', async () => {
+    const pid = newProject()
+    await preset(pid, 'thorough')
+    const t = ticketOf(pid)
+    spans(pid, t.id, 1, STANDARD)
+    expect(missingReviewPhases(t.id)).toEqual([{ round: 1, phase: 'hunt', expected: 3, found: 2 }])
+    closedSpan(pid, t.id, 'hunt-3', 1, 300)
+    expect(missingReviewPhases(t.id)).toEqual([])
+  })
+
+  it('counts a hunt named after its checklist and Light’s reviewer, and no other near name', async () => {
+    const thorough = newProject()
+    await preset(thorough, 'thorough')
+    const t = ticketOf(thorough)
+    spans(thorough, t.id, 1, [
+      'spec',
+      'env',
+      'verify',
+      'hunt-1',
+      'hunt-2',
+      'hunt-security',
+      'refute',
+      'merge',
+    ])
+    expect(missingReviewPhases(t.id)).toEqual([])
+    // A numbered word, and a sub-identity's last segment, count the same way.
+    const other = ticketOf(thorough)
+    spans(thorough, other.id, 1, [
+      'spec',
+      'env',
+      'verify',
+      'hunt-1',
+      'orch/hunt-security-2',
+      'hunt',
+      'refute',
+      'merge',
+    ])
+    expect(missingReviewPhases(other.id)).toEqual([])
+    // Not a hunt: a name that only starts with the word, or has nothing after the dash.
+    const near = ticketOf(thorough)
+    spans(thorough, near.id, 1, [
+      'spec',
+      'env',
+      'verify',
+      'hunt-1',
+      'hunt-2',
+      'huntress',
+      'hunt-',
+      'refute',
+      'merge',
+    ])
+    expect(missingReviewPhases(near.id)).toEqual([{ round: 1, phase: 'hunt', expected: 3, found: 2 }])
+
+    const light = newProject()
+    await preset(light, 'light')
+    const l = ticketOf(light)
+    spans(light, l.id, 1, ['reviewer'])
+    expect(missingReviewPhases(l.id)).toEqual([])
+    // A reviewer is a hunt only as the board names it: another word is not.
+    const reviewers = ticketOf(light)
+    spans(light, reviewers.id, 1, ['reviewers', 'code-reviewer'])
+    expect(missingReviewPhases(reviewers.id)).toEqual([{ round: 1, phase: 'hunt', expected: 1, found: 0 }])
+  })
+
+  it('counts a span or report named reviewer as a hunt even when the project has an agent of that name', async () => {
+    const pid = newProject()
+    defaultAgents.addDefaultAgents(pid, HUMAN)
+    projectAgents.createAgent(pid, { name: 'reviewer' }, HUMAN)
+    await preset(pid, 'light')
+    const flags = async (id: number) => {
+      const moved = await needs.changeTicket(id, { status: 'review' }, HUMAN, { agent: false })
+      await needs.changeTicket(id, { status: 'in_progress' }, HUMAN, { agent: false })
+      return [moved.missingReviewPhases, moved.missingRunReports]
+    }
+    // Spans and reports named after the one reviewer, and after the hunt, in every pairing: neither flag.
+    for (const [spanName, reportName] of [
+      ['reviewer', 'reviewer'],
+      ['hunt', 'hunt'],
+      ['reviewer', 'hunt'],
+      ['hunt', 'reviewer'],
+    ] as const) {
+      const t = ticketOf(pid)
+      closedSpan(pid, t.id, spanName, 1, 60)
+      await tool('write_run_report', { projectId: pid, ticketId: t.id, agent: reportName, round: 1 })
+      expect(await flags(t.id), `${spanName} span, ${reportName} report`).toEqual([[], []])
+    }
+    // Without the report the run is flagged, as a hunt.
+    const bare = ticketOf(pid)
+    closedSpan(pid, bare.id, 'reviewer', 1, 60)
+    const [phases, reports] = await flags(bare.id)
+    expect(phases).toEqual([])
+    expect(reports).toEqual([expect.objectContaining({ agent: 'hunt', round: 1, runs: 1, reports: 0 })])
+  })
+
+  it('under Maximum doubles each phase (H3)', async () => {
+    const pid = newProject()
+    await preset(pid, 'maximum')
+    const t = ticketOf(pid)
+    spans(pid, t.id, 1, [...STANDARD, 'hunt', ...STANDARD])
+    expect(missingReviewPhases(t.id)).toEqual([{ round: 1, phase: 'hunt', expected: 6, found: 5 }])
+    closedSpan(pid, t.id, 'hunt', 1, 200)
+    expect(missingReviewPhases(t.id)).toEqual([])
+    const bare = ticketOf(pid)
+    spans(pid, bare.id, 1, ['spec', 'env'])
+    expect(missingReviewPhases(bare.id).map((m) => `${m.phase}:${m.expected}`)).toEqual([
+      'spec:2',
+      'env:2',
+      'verify:2',
+      'hunt:6',
+      'refute:2',
+      'merge:2',
+    ])
+  })
+
+  it('changes with a ticket’s own preset, and with the project’s tweaks (H3)', async () => {
+    const pid = newProject()
+    const t = ticketOf(pid, 'mid', { workflowPreset: 'light' })
+    spans(pid, t.id, 1, ['hunt'])
+    // The project is Standard; the ticket is Light.
+    expect(missingReviewPhases(t.id)).toEqual([])
+    const plain = ticketOf(pid)
+    spans(pid, plain.id, 1, ['hunt'])
+    expect(missingReviewPhases(plain.id).map((m) => m.phase)).toEqual([
+      'spec',
+      'env',
+      'verify',
+      'hunt',
+      'refute',
+      'merge',
+    ])
+    await call('PATCH', `/api/tickets/${t.id}`, { workflowPreset: null })
+    expect(missingReviewPhases(t.id).map((m) => m.phase)).toContain('spec')
+    // A project whose Standard has no review for mid expects nothing.
+    await call('PUT', `/api/projects/${pid}/workflow/standard`, { rounds: { mid: 0 } })
+    expect(missingReviewPhases(t.id)).toEqual([])
+    await call('PUT', `/api/projects/${pid}/workflow/standard`, { steps: { review: { enabled: false } } })
+    expect(missingReviewPhases(plain.id)).toEqual([])
+  })
+
+  it("counts by the step's role whichever Team agent a node names, and a missing pick changes nothing (B11)", async () => {
+    const pid = newProject()
+    projectAgents.createAgent(pid, { name: 'sec-hunter', instructions: 'Look for holes.' }, HUMAN)
+    projectAgents.createAgent(pid, { name: 'acme-dev', instructions: 'Build.' }, HUMAN)
+    const picked = await call('PUT', `/api/projects/${pid}/workflow/thorough`, {
+      agents: {
+        'review.hunt-a': 'sec-hunter',
+        'review.hunt-b': 'sec-hunter',
+        'review.hunt-security': 'acme-dev',
+        build: 'acme-dev',
+      },
+    })
+    expect(picked.status).toBe(200)
+    await preset(pid, 'thorough')
+    const t = ticketOf(pid)
+    // The ticket agent names every phase by its role, as the served text says; the three hunts are hunts.
+    spans(pid, t.id, 1, ['spec', 'env', 'verify', 'hunt', 'hunt', 'hunt-security', 'refute', 'merge'])
+    expect(missingReviewPhases(t.id)).toEqual([])
+    // A span named after the Team agent is no phase of the round: the board counts by role.
+    const wrong = ticketOf(pid)
+    spans(pid, wrong.id, 1, [
+      'spec',
+      'env',
+      'verify',
+      'sec-hunter',
+      'sec-hunter',
+      'acme-dev',
+      'refute',
+      'merge',
+    ])
+    expect(missingReviewPhases(wrong.id)).toEqual([{ round: 1, phase: 'hunt', expected: 3, found: 0 }])
+    // What a round needs is the same with no pick, with picks, and with picks whose agents left the Team.
+    const { ticketWorkflow } = await import('./workflow')
+    const { reviewPhaseRuns } = await import('#/lib/workflow')
+    const needed = () => reviewPhaseRuns(ticketWorkflow({ id: t.id, projectId: pid, complexity: 'mid' }))
+    const withPicks = needed()
+    for (const name of ['sec-hunter', 'acme-dev'])
+      projectAgents.deleteAgent(projectAgents.findAgent(pid, name)!.id, HUMAN)
+    expect(needed()).toEqual(withPicks)
+    expect(missingReviewPhases(t.id)).toEqual([])
+    await call('DELETE', `/api/projects/${pid}/workflow/thorough`)
+    expect(needed()).toEqual(withPicks)
+    expect(withPicks).toEqual([
+      { phase: 'spec', expected: 1 },
+      { phase: 'env', expected: 1 },
+      { phase: 'verify', expected: 1 },
+      { phase: 'hunt', expected: 3 },
+      { phase: 'refute', expected: 1 },
+      { phase: 'merge', expected: 1 },
+    ])
+  })
+
+  it('reads run kinds the same with or without a Team agent bound to a hunt (B11)', async () => {
+    const pid = newProject()
+    projectAgents.createAgent(pid, { name: 'sec-hunter' }, HUMAN)
+    await call('PUT', `/api/projects/${pid}/workflow/standard`, { agents: { 'review.hunt-a': 'sec-hunter' } })
+    const t = ticketOf(pid)
+    spans(pid, t.id, 1, ['spec', 'env', 'verify', 'hunt-1', 'orch/hunt-2', 'refute', 'merge'])
+    expect(missingReviewPhases(t.id)).toEqual([])
+    const reports = await tool('write_run_report', {
+      projectId: pid,
+      ticketId: t.id,
+      agent: 'hunt',
+      round: 1,
+    })
+    expect(reports.agent).toBe('hunt')
+  })
+
+  it('stays empty for a low ticket, whatever the preset, and for a project with no software kind (H3)', async () => {
+    const pid = newProject()
+    for (const id of ['light', 'standard', 'thorough', 'maximum']) {
+      await preset(pid, id)
+      const low = ticketOf(pid, 'low')
+      spans(pid, low.id, 1, ['spec'])
+      expect(missingReviewPhases(low.id), id).toEqual([])
+    }
+    const music = dbm.db
+      .insert(dbm.schema.projects)
+      .values({ name: 'songs2', kinds: ['music'] })
+      .returning()
+      .get().id
+    const song = features.createTicket(music, { title: 'song', status: 'in_progress' }, HUMAN)
+    spans(music, song.id, 1, ['spec'])
+    expect(missingReviewPhases(song.id)).toEqual([])
   })
 })

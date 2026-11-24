@@ -1,3 +1,7 @@
+import type { TFunction } from 'i18next'
+
+import { shared } from '#/i18n'
+
 import { LEASE_TTL_MINUTES, type EventKind, type StageKind } from './constants'
 import { isBoardRecord } from './roles'
 
@@ -207,7 +211,7 @@ export type TimelineOptions = {
 }
 
 /** The kinds of stage a ticket is live in: its open spans and waits run to now there. */
-const LIVE_KINDS: readonly StageKind[] = ['active', 'blocked', 'review']
+const LIVE_KINDS: readonly StageKind[] = ['active', 'blocked', 'review', 'approved']
 
 export type Interval = [start: number, end: number]
 
@@ -357,8 +361,11 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
       return b > Date.parse(e.at) ? [{ start: e.at, end: iso(b), name: nameOfKey(e.toStage) }] : []
     })
   const blockedStretches = stretchesIn('blocked').map(({ start, end }) => ({ start, end }))
-  // Each stay in a review-kind stage is its own stretch, named by the stage (In review, Approved, Release).
-  const reviewStretches = stretchesIn('review')
+  // Each stay in a review or approved stage is its own stretch, named by the stage (In review, Approved),
+  // so the review time is the same as when Approved was a review stage.
+  const reviewStretches = [...stretchesIn('review'), ...stretchesIn('approved')].sort((a, b) =>
+    a.start.localeCompare(b.start),
+  )
   // The human's turn outside the stages: waits on the human and decision cards, overlaps made one.
   const humanStretches = union(
     [
@@ -551,12 +558,14 @@ export const sumTotals = (all: WorkTotals[]): WorkTotals =>
   )
 
 /** A duration for people: `3h 10m`, `25m`, `40s` under a minute, `0m` for none. */
-export function formatDuration(ms: number): string {
-  if (ms <= 0) return '0m'
-  if (ms < 60_000) return `${Math.max(1, Math.round(ms / 1000))}s`
+export function formatDuration(ms: number, tr: TFunction = shared.t): string {
+  if (ms <= 0) return tr('workTimeline.duration.minutes', { count: 0 })
+  if (ms < 60_000) return tr('workTimeline.duration.seconds', { count: Math.max(1, Math.round(ms / 1000)) })
   const minutes = Math.round(ms / 60_000)
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
-  if (!h) return `${m}m`
-  return m ? `${h}h ${m}m` : `${h}h`
+  if (!h) return tr('workTimeline.duration.minutes', { count: m })
+  return m
+    ? tr('workTimeline.duration.hoursMinutes', { h, m })
+    : tr('workTimeline.duration.hours', { count: h })
 }

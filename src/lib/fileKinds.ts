@@ -1,3 +1,7 @@
+import type { TFunction } from 'i18next'
+
+import { shared } from '#/i18n'
+
 /**
  * What kind of file an upload is, from its type and its name: how the lightbox shows it
  * (`viewKind`), and which of the project gallery's filters it falls under (`fileKind`). The server
@@ -56,13 +60,8 @@ export const DOCUMENT_EXTENSIONS = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
 export const FILE_KINDS = ['image', 'video', 'pdf', 'docs', 'other'] as const
 export type FileKind = (typeof FILE_KINDS)[number]
 
-export const FILE_KIND_LABEL: Record<FileKind, string> = {
-  image: 'Images',
-  video: 'Videos',
-  pdf: 'PDFs',
-  docs: 'Documents and text',
-  other: 'Other',
-}
+/** A filter's name in the language shown (pass the `t` of `useTranslation()` when drawing it in a component). */
+export const fileKindLabel = (kind: FileKind, t: TFunction = shared.t): string => t(`gallery.kind.${kind}`)
 
 /**
  * The gallery's orders, in the order they are offered; newest first by default. Name orders ignore
@@ -71,15 +70,9 @@ export const FILE_KIND_LABEL: Record<FileKind, string> = {
 export const GALLERY_SORTS = ['newest', 'oldest', 'name', 'name-desc', 'largest', 'smallest', 'type'] as const
 export type GallerySort = (typeof GALLERY_SORTS)[number]
 
-export const GALLERY_SORT_LABEL: Record<GallerySort, string> = {
-  newest: 'Newest first',
-  oldest: 'Oldest first',
-  name: 'Name A to Z',
-  'name-desc': 'Name Z to A',
-  largest: 'Largest first',
-  smallest: 'Smallest first',
-  type: 'By type',
-}
+/** An order's name in the language shown. */
+export const gallerySortLabel = (sort: GallerySort, t: TFunction = shared.t): string =>
+  t(`gallery.sort.${sort}`)
 
 export interface FileLike {
   mime: string

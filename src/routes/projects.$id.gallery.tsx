@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
 
 import { ChipToggles } from '#/components/Chips'
@@ -28,10 +29,10 @@ import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, type Gallery } from '#/lib/api'
 import {
   FILE_KINDS,
-  FILE_KIND_LABEL,
+  fileKindLabel,
   type FileKind,
   GALLERY_SORTS,
-  GALLERY_SORT_LABEL,
+  gallerySortLabel,
   type GallerySort,
   parseKinds,
 } from '#/lib/fileKinds'
@@ -66,20 +67,22 @@ const SORT_ICON: Record<GallerySort, LucideIcon> = {
   smallest: ArrowDownNarrowWide,
   type: Shapes,
 }
-const SORTS = GALLERY_SORTS.map((value) => ({ value, label: GALLERY_SORT_LABEL[value] }))
-const KIND_CHIPS = FILE_KINDS.map((key) => ({ key, label: FILE_KIND_LABEL[key] }))
 
 function SortLabel({ sort }: { sort: GallerySort }) {
+  const { t } = useTranslation()
   const Icon = SORT_ICON[sort]
   return (
     <>
       <Icon aria-hidden />
-      {GALLERY_SORT_LABEL[sort]}
+      {gallerySortLabel(sort, t)}
     </>
   )
 }
 
 function GalleryPage() {
+  const { t } = useTranslation()
+  const SORTS = GALLERY_SORTS.map((value) => ({ value, label: gallerySortLabel(value, t) }))
+  const KIND_CHIPS = FILE_KINDS.map((key) => ({ key, label: fileKindLabel(key, t) }))
   const { id } = Route.useParams()
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
@@ -120,16 +123,20 @@ function GalleryPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Gallery</h1>
-        <p className="text-sm text-muted-foreground">Every file on the project's tickets.</p>
+        <h1 className="text-xl font-semibold tracking-tight">{t('gallery.page.title')}</h1>
+        <p className="text-sm text-muted-foreground">{t('gallery.page.intro')}</p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-3" role="group" aria-label="Filters">
+      <div
+        className="flex flex-wrap items-center gap-x-4 gap-y-3"
+        role="group"
+        aria-label={t('gallery.page.filters')}
+      >
         <ChipToggles
           chips={KIND_CHIPS}
           value={kinds}
           onToggle={toggleKind}
-          label="File type"
+          label={t('gallery.page.fileType')}
           // Five chips do not fit one row on a phone: there they wrap, and the page never scrolls sideways.
           className="max-w-full flex-nowrap justify-start overflow-x-auto"
         />
@@ -137,13 +144,13 @@ function GalleryPage() {
           <DatePicker
             value={search.from}
             onChange={(day?: string) => set({ from: day })}
-            placeholder="From"
+            placeholder={t('gallery.page.from')}
             max={search.to}
           />
           <DatePicker
             value={search.to}
             onChange={(day?: string) => set({ to: day })}
-            placeholder="To"
+            placeholder={t('gallery.page.to')}
             min={search.from}
           />
         </div>
@@ -152,8 +159,8 @@ function GalleryPage() {
           onValueChange={(v) => set({ sort: v && v !== 'newest' ? (v as GallerySort) : undefined })}
           items={SORTS}
         >
-          <Tip content={`Sort: ${GALLERY_SORT_LABEL[sort]}`}>
-            <SelectTrigger size="sm" aria-label="Sort" className="min-w-36">
+          <Tip content={t('gallery.page.sortTip', { sort: gallerySortLabel(sort, t) })}>
+            <SelectTrigger size="sm" aria-label={t('gallery.page.sort')} className="min-w-36">
               <SelectValue>{(v: GallerySort) => <SortLabel sort={v} />}</SelectValue>
             </SelectTrigger>
           </Tip>
@@ -165,14 +172,14 @@ function GalleryPage() {
             ))}
           </SelectContent>
         </Select>
-        <Tip content="Also the files of archived tickets">
+        <Tip content={t('gallery.page.archivedTip')}>
           <label className="inline-flex items-center gap-2 text-sm">
             <Switch
               size="sm"
               checked={search.archived === 'include'}
               onCheckedChange={(on) => set({ archived: on ? 'include' : undefined })}
             />
-            Include archived
+            {t('gallery.page.includeArchived')}
           </label>
         </Tip>
         {filtered && (
@@ -181,15 +188,15 @@ function GalleryPage() {
             size="sm"
             onClick={() => set({ type: undefined, from: undefined, to: undefined })}
           >
-            <X data-icon="inline-start" /> Clear filters
+            <X data-icon="inline-start" /> {t('gallery.page.clearFilters')}
           </Button>
         )}
       </div>
 
       {error ? (
-        <Empty>Could not load the files: {errorMessage(error)}</Empty>
+        <Empty>{t('gallery.page.loadError', { error: errorMessage(error) })}</Empty>
       ) : isPending || (isPlaceholderData && !files.length) ? (
-        <DelayedLoading label="Loading files…">
+        <DelayedLoading label={t('loading.files')}>
           <div aria-hidden className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {Array.from({ length: 10 }, (_, i) => (
               <div key={i} className="overflow-hidden rounded-lg border bg-card">
@@ -217,7 +224,7 @@ function GalleryPage() {
           )}
         </div>
       ) : (
-        <Empty>{filtered ? 'No files match these filters.' : 'No files on this project yet.'}</Empty>
+        <Empty>{filtered ? t('gallery.page.noMatch') : t('gallery.page.none')}</Empty>
       )}
     </div>
   )
@@ -229,6 +236,7 @@ function GalleryPage() {
  * after each page, so a page too short to push it off the screen brings the one after it too.
  */
 function MoreFiles({ loading, onNear }: { loading: boolean; onNear: () => void }) {
+  const { t } = useTranslation()
   const ref = useRef<HTMLDivElement>(null)
   const near = useRef(onNear)
   useEffect(() => {
@@ -247,7 +255,7 @@ function MoreFiles({ loading, onNear }: { loading: boolean; onNear: () => void }
     <div ref={ref} data-slot="more-files" className="flex min-h-8 justify-center" role="status">
       {loading && (
         <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" /> Loading more files…
+          <Loader2 className="size-4 animate-spin" /> {t('gallery.page.loadingMore')}
         </span>
       )}
     </div>

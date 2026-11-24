@@ -1,0 +1,38 @@
+// The desktop app's own texts in pt (see ../strings.mjs). Every key of en.mjs, the same {{placeholders}} and <tags>.
+export default {
+  open: 'Abrir',
+  openInBrowser: 'Abrir no navegador',
+  retryNow: 'Tentar agora',
+  startAtLogin: 'Iniciar com o sistema',
+  quit: 'Sair',
+  openSettings: 'Abrir o arquivo de configurações',
+  openLogs: 'Abrir a pasta de logs',
+  openHome: 'Abrir a pasta do app',
+  startAtLoginFailed: 'Não foi possível alterar o início com o sistema.',
+  cannotStart: 'O quadro não consegue iniciar.',
+  settingsInvalid: 'As configurações do quadro não são válidas.',
+  homeUnusable:
+    'A pasta do app {{home}} não pode ser usada: {{error}}\n\nDefina AGENT_BOARD_HOME como uma pasta com permissão de escrita, ou remova-a para usar a padrão.',
+  homeLine: '{{error}}\n\nA pasta do app: {{home}}',
+  dataFolderUnusable:
+    'A pasta de dados {{dir}} não pode ser usada: {{error}}\n\nDefina outro DATA_DIR em {{file}}, ou no ambiente, e inicie o app de novo.',
+  logsLine: '{{detail}}\n\nLogs: {{logs}}',
+  stopped: 'O quadro parou.',
+  restartedTimes_one: ' Foi iniciado de novo {{count}} vez.',
+  restartedTimes_other: ' Foi iniciado de novo {{count}} vezes.',
+  noOutput: '(sem saída)',
+  exitedSignal: 'Foi encerrado por {{signal}} às {{time}}.',
+  exitedCode: 'Terminou com o código {{code}} às {{time}}.',
+  exited: 'Terminou às {{time}}.',
+  reasonCode: 'código de saída {{code}}',
+  reasonSignal: 'sinal {{signal}}',
+  reasonNone: 'sem código de saída',
+  tipRestarting: '{{name}}: reiniciando o quadro ({{reason}})',
+  tipRestarted: '{{name}}: {{url}} (reiniciado às {{time}} após {{reason}})',
+  notifyRestarted: 'O quadro foi reiniciado ({{reason}}).',
+  didNotStart: 'O quadro não iniciou.',
+  didNotAnswer: 'Ele não respondeu em {{url}} em um minuto.',
+  unreachableHeading: 'Não foi possível acessar o quadro em <code>{{address}}</code>.',
+  unreachableBody:
+    'O quadro roda em outra máquina: verifique se esta está online e se o quadro está em execução lá. O app tenta de novo sozinho, e {{retry}} tenta na hora.',
+}

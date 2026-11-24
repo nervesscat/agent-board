@@ -1,0 +1,2959 @@
+{
+  "common": {
+    "saved": "Đã lưu",
+    "close": "Đóng"
+  },
+  "loading": {
+    "ticket": "Đang tải ticket…",
+    "tickets": "Đang tải ticket…",
+    "agents": "Đang tải agent…",
+    "branches": "Đang tải branch…",
+    "recentTickets": "Đang tải ticket gần đây…",
+    "folders": "Đang tải thư mục…",
+    "projectPhases": "Đang tải giai đoạn của dự án…",
+    "stages": "Đang tải cột…",
+    "preview": "Đang tải preview…",
+    "file": "Đang tải tệp…",
+    "files": "Đang tải tệp…",
+    "instructionsHistory": "Đang tải lịch sử hướng dẫn…",
+    "instructions": "Đang tải hướng dẫn…",
+    "notes": "Đang tải ghi chú…",
+    "reviewResult": "Đang tải kết quả review…",
+    "changes": "Đang tải thay đổi…",
+    "replies": "Đang tải phản hồi…",
+    "timeline": "Đang tải dòng thời gian…",
+    "activity": "Đang tải hoạt động…",
+    "pushedToday": "Đang tải đã push hôm nay…",
+    "calendar": "Đang tải lịch…",
+    "report": "Đang tải báo cáo…",
+    "reportSettings": "Đang tải cài đặt báo cáo…",
+    "shift": "Đang tải ca làm việc…",
+    "cleanup": "Đang tải dọn dẹp…",
+    "runs": "Đang tải lượt chạy…",
+    "branchState": "Đang tải trạng thái branch…",
+    "tags": "Đang tải tag…",
+    "previews": "Đang tải preview…",
+    "repositories": "Đang tải repo…",
+    "roadmap": "Đang tải lộ trình…",
+    "earlierVersions": "Đang tải phiên bản cũ hơn…",
+    "workspaces": "Đang tải workspace…"
+  },
+  "shell": {
+    "home": "Trang chủ",
+    "pages": "Trang",
+    "connect": "Kết nối",
+    "settings": "Cài đặt",
+    "testMode": "chế độ test",
+    "authOff": "tắt auth",
+    "authOffTip": "BOARD_ENV={{env}}, tắt đăng nhập: đang đăng nhập với tư cách {{actor}}. Không phải board thật.",
+    "connectAgent": "Kết nối agent"
+  },
+  "time": {
+    "never": "—",
+    "justNow": "vừa xong",
+    "minutesAgo": "{{count}} phút trước",
+    "hoursAgo": "{{count}} giờ trước",
+    "daysAgo": "{{count}} ngày trước",
+    "minutesAgoLong_other": "{{count}} phút trước",
+    "hoursAgoLong_other": "{{count}} giờ trước",
+    "yesterday": "hôm qua",
+    "daysAgoLong_other": "{{count}} ngày trước",
+    "weeksAgoLong_other": "{{count}} tuần trước"
+  },
+  "settings": {
+    "title": "Cài đặt",
+    "tabs": {
+      "label": "Cài đặt",
+      "board": "Board",
+      "projectLabel": "Dự án này: {{name}}",
+      "project": "Dự án này:"
+    },
+    "board": {
+      "defaultAgent": {
+        "title": "CLI agent mặc định",
+        "text": "CLI mà <goto>Kết nối agent</goto> mở sẵn, chỉ hiện các lệnh của nó."
+      },
+      "previews": {
+        "title": "Preview",
+        "text": "Số preview board build và chạy cùng lúc, trong mọi dự án (1 đến 32). Mỗi preview là một board đầy đủ với bản sao dữ liệu riêng; bắt đầu thêm khi đã đạt giới hạn sẽ bị từ chối. Trang Preview của dự án cho biết đang dùng bao nhiêu."
+      },
+      "theme": {
+        "title": "Giao diện",
+        "text": "Mặc định theo hệ thống. Lựa chọn được lưu trong trình duyệt này, không lưu trên board.",
+        "system": "Hệ thống",
+        "light": "Sáng",
+        "dark": "Tối"
+      },
+      "language": {
+        "title": "Ngôn ngữ",
+        "text": "Ngôn ngữ của toàn bộ giao diện, gồm cả ngày tháng và số. Lựa chọn được lưu trên board nên đi theo bạn trên mọi thiết bị đăng nhập. Nội dung do người và agent viết giữ nguyên như đã viết.",
+        "search": "Tìm ngôn ngữ",
+        "none": "Không có ngôn ngữ nào khớp",
+        "failed": "Không thể tải ngôn ngữ đó. Hãy tải lại trang rồi thử lại."
+      }
+    }
+  },
+  "connect": {
+    "copied": "Đã sao chép",
+    "couldNotCopy": "Không sao chép được",
+    "browserNoCopy": "Trình duyệt không cho phép sao chép; hãy chọn văn bản rồi sao chép thủ công",
+    "copy": "Sao chép",
+    "save": "Lưu",
+    "revoke": "Thu hồi",
+    "keep": "Giữ",
+    "turnOff": "Tắt",
+    "checkAgain": "Kiểm tra lại",
+    "title": "Kết nối agent",
+    "intro": "Kết nối một CLI: <strong>Tạo lệnh</strong> sẽ tạo token MCP cho nó, còn skill được cài trên máy này bằng một nút (hoặc bằng dòng lệnh, trên máy khác). CLI mặc định đặt trong <goto>Cài đặt</goto>.",
+    "step1": {
+      "title": "1. Kết nối máy chủ MCP",
+      "command": "Chạy một lần trong terminal; lệnh đăng ký máy chủ cho mọi repo.",
+      "config": "Thêm vào <code>{{file}}</code>.",
+      "configOpencode": "Thêm vào <code>{{file}}</code> (gộp mục board vào \"mcp\" nếu tệp đã có)."
+    },
+    "step2": {
+      "title": "2. Cài skill",
+      "text": "Tải skill hiện tại của board về <code>{{path}}</code>, nơi {{agent}} tìm thấy ở mọi repo.",
+      "textCodex": "Tải skill hiện tại của board về <code>{{path}}</code>, nơi {{agent}} tìm thấy ở mọi repo. OpenCode cũng đọc thư mục này.",
+      "textOpencode": "Tải skill hiện tại của board về <code>{{path}}</code>, nơi {{agent}} tìm thấy ở mọi repo. OpenCode cũng đọc ~/.claude/skills: bỏ qua bước này nếu Claude Code đã có.",
+      "tokenNote": "Các dòng cài đặt kèm một token tải xuống hết hạn lúc <time>{{at}}</time>: khoảng mười phút. Sau đó hãy sao chép lại dòng lệnh để lấy token mới.",
+      "skillCopied": "Đã sao chép SKILL.md",
+      "copySkill": "Sao chép SKILL.md",
+      "previewSkill": "Xem trước SKILL.md",
+      "session": "Cũng cài <code>/session</code>, skill mở một phiên làm việc với board: đưa cho bạn bản tóm lược ngắn, giao từng ticket bạn nêu tên, và giữ một khuôn thông điệp duy nhất với những việc cần bạn."
+    },
+    "step3": {
+      "title": "3. Cài các skill review (Claude Code)"
+    },
+    "opencode": {
+      "section": "Ủy quyền nhiều cấp của OpenCode",
+      "checkAria": "Kiểm tra lại cấu hình OpenCode",
+      "readFailed": "Không đọc được cấu hình OpenCode",
+      "readFailedText": "Hãy sửa tệp đó rồi kiểm tra lại. Ủy quyền nhiều cấp vẫn tắt cho đến khi đọc được cấu hình.",
+      "on": "Ủy quyền nhiều cấp đang bật (độ sâu {{depth}})",
+      "readFrom": "Đọc từ <code>{{source}}</code>. Cấu hình toàn hệ thống có ưu tiên cao hơn tệp global và tệp của dự án.",
+      "off": "Ủy quyền nhiều cấp đang tắt: subagent không thể khởi chạy subagent",
+      "offText": "Thêm đoạn này vào <code>{{source}}</code> (bên trong khối <code>experimental</code> nếu đã có), rồi khởi động lại OpenCode. Tệp cấu hình cuối cùng định nghĩa khối <code>experimental</code> sẽ quyết định; cấu hình toàn hệ thống có ưu tiên cao hơn tệp global và tệp của dự án, nên tệp sau có thể ghi đè độ sâu của tệp trước. Board chỉ đọc tệp.",
+      "copySnippet": "Sao chép đoạn mã",
+      "deprecated": "<code>subagent_depth</code> ở cấp cao nhất trong <code>{{source}}</code> không còn được OpenCode đọc; chỉ <code>experimental.subagent_depth</code> có tác dụng."
+    },
+    "generate": {
+      "agentName": "Tên agent",
+      "button": "Tạo lệnh",
+      "newOrchestrator": "Các lệnh bên dưới mang token orchestrator mới cho <strong>{{name}}</strong>, có hiệu lực đến {{until}}. Token chỉ hiện một lần này: hãy sao chép những gì cần ngay bây giờ. Rời trang là mất; bấm lại sẽ tạo token khác.",
+      "newWorker": "Các lệnh bên dưới mang token worker mới cho <strong>{{name}}</strong>, có hiệu lực đến {{until}}. Token chỉ hiện một lần này: hãy sao chép những gì cần ngay bây giờ. Rời trang là mất; bấm lại sẽ tạo token khác.",
+      "intro": "Tạo token cho agent này và điền vào mọi lệnh trên trang. Mặc định nó là <strong>orchestrator</strong>, nên cũng có thể đổi hướng dẫn của dự án; hãy đặt thành worker trong Cài đặt, Token agent. Tên là tên của agent trên board. Token cho phép đăng nhập trong 1 năm, trừ khi bị thu hồi, và chỉ hiện một lần."
+    }
+  },
+  "tokens": {
+    "title": "Token agent",
+    "listText": "Các token mà những lệnh phía trên mang theo, mỗi token kèm vai trò: orchestrator, cũng đổi được hướng dẫn của dự án, hoặc worker (cả hai đặt trong Cài đặt, Token agent; token mới là orchestrator). Thu hồi một token thì agent đang dùng nó bị đăng xuất ở yêu cầu kế tiếp.",
+    "none": "Chưa có.",
+    "meta": "tạo {{made}} · {{used}} · hết hạn {{at}}",
+    "metaExpired": "tạo {{made}} · {{used}} · đã hết hạn {{at}}",
+    "lastUsed": "dùng lần cuối {{when}}",
+    "neverUsed": "chưa dùng",
+    "revokeAria": "Thu hồi {{name}}, tạo {{when}}",
+    "revokeTitle": "Thu hồi token của {{name}}?",
+    "revokeText": "Agent đang dùng nó sẽ bị từ chối từ yêu cầu kế tiếp. Hãy tạo lệnh lại để kết nối bằng token mới.",
+    "identities": {
+      "text": "Ai là ai: mỗi token agent là một danh tính trên board, là orchestrator trừ khi bạn đặt thành worker. Các subagent tự xưng danh dưới nó được liệt kê cùng, luôn là worker; danh sách dài sẽ được thu gọn, với nút hình con mắt để xem phần còn lại.",
+      "empty": "Chưa có token agent: Kết nối agent sẽ tạo chúng.",
+      "agentAria": "Agent {{name}}",
+      "orchestratorTip": "Orchestrator cũng đổi được hướng dẫn của dự án; mỗi thay đổi nằm trong Cần bạn cho đến khi bạn xem hoặc hoàn tác. Các subagent nói rõ danh tính (<token>/<name>) vẫn là worker.",
+      "orchestrator": "Orchestrator",
+      "orchestratorAria": "{{name}}: orchestrator",
+      "nowOrchestrator": "{{name}} là orchestrator",
+      "nowWorker": "{{name}} là worker",
+      "revokeAria": "Thu hồi {{name}}",
+      "revokeText": "Agent đang dùng nó, cùng mọi subagent làm việc dưới nó, bị từ chối từ yêu cầu kế tiếp. Hãy tạo lệnh lại ở Kết nối agent để kết nối bằng token mới.",
+      "hide": "Ẩn các agent",
+      "show_other": "Hiện {{count}} agent",
+      "workingUnder": "Làm việc dưới {{token}}",
+      "seen": "thấy {{when}}"
+    }
+  },
+  "devices": {
+    "thisMachine": "máy này",
+    "title": "Thiết bị",
+    "add": "Thêm thiết bị",
+    "signOut": "Đăng xuất",
+    "text": "Các passkey dùng để đăng nhập board. Passkey chỉ hoạt động trên địa chỉ nó được tạo: máy này (localhost), hoặc tên tailnet của board cho các thiết bị khác của bạn.",
+    "link": "Mở liên kết này trên thiết bị mới và tạo passkey ở đó. Chỉ dùng được một lần, đến {{until}}.",
+    "copyLinkAria": "Sao chép liên kết {{where}}",
+    "passkeys": "Passkey",
+    "passkeyMeta": "{{where}} · thêm {{added}} · dùng lần cuối {{used}}",
+    "passkeyMetaSessions_other": "{{where}} · thêm {{added}} · dùng lần cuối {{used}} · {{count}} phiên",
+    "lastLocal": "lần cuối trên máy này",
+    "revokeAria": "Thu hồi {{name}}",
+    "revokeTitle": "Thu hồi {{name}}?",
+    "revokeText": "Passkey không còn đăng nhập được, và các trình duyệt đã đăng nhập bằng nó sẽ bị đăng xuất.",
+    "signedIn": "Đã đăng nhập",
+    "sessions": "Phiên",
+    "thisBrowser": "trình duyệt này",
+    "sessionMeta": "{{where}} · đăng nhập {{signedIn}} · thấy {{seen}} · đến {{until}}",
+    "signOutAria": "Đăng xuất {{name}}, đăng nhập {{when}}"
+  },
+  "tailnet": {
+    "title": "Thiết bị khác (tailnet)",
+    "text": "Mở board từ các thiết bị khác và agent trên đám mây qua tailnet, bằng HTTPS. Bật ở đây; không cần sửa tệp. Khi đó các thiết bị của bạn đăng nhập bằng passkey riêng (Thiết bị, bên dưới).",
+    "signInOff": "Đăng nhập đang tắt trên board này (BOARD_ENV={{env}}): board chỉ trả lời trên máy này, không bao giờ qua tailnet, nên không thể lưu lối vào ở đây.",
+    "fromEnv": "Đặt trong config.env (hoặc .env): <code>PUBLIC_ORIGIN={{origin}}</code>. Giá trị này thắng cài đặt, nên lối vào chỉ đọc ở đây. Hãy xóa dòng đó để đặt trong Cài đặt.",
+    "funnel": "Tailscale Funnel đang bật: nó đưa board lên internet, điều board từ chối. Hãy tắt (<code>tailscale funnel off</code>, hoặc <code>tailscale serve reset</code>); chưa tắt thì chưa lưu được.",
+    "unserved": "Lối vào đã lưu chưa được phục vụ: {{reason}}.",
+    "tailscale": "Tailscale",
+    "version": "phiên bản {{version}}",
+    "installed": "đã cài",
+    "notInstalled": "chưa cài",
+    "signedIn": "Đã đăng nhập",
+    "yes": "có",
+    "no": "không ({{state}})",
+    "notRunning": "không chạy",
+    "thisMachine": "Máy này",
+    "noName": "chưa có tên tailnet",
+    "https": "HTTPS",
+    "certsOn": "chứng chỉ bật",
+    "certsOff": "chứng chỉ tắt",
+    "serve": "Serve ở cổng 443",
+    "serveBoard": "board ({{target}})",
+    "serveNothing": "không có gì",
+    "funnelLabel": "Funnel",
+    "funnelUnknown": "không đọc được Funnel",
+    "funnelOn": "bật (bị từ chối)",
+    "funnelOff": "tắt",
+    "said": "Tailscale báo: {{error}}",
+    "entrance": "Lối vào",
+    "use": "Dùng https://{{name}}",
+    "turnOffTitle": "Tắt lối vào tailnet?",
+    "turnOffText": "Board ngừng trả lời trên {{origin}}. Các trình duyệt đã đăng nhập qua tên đó bị đăng xuất (passkey của chúng vẫn còn trong danh sách).",
+    "hint": "Chỉ https, một tên máy chủ, không có cổng và không có đường dẫn. Lưu trong cơ sở dữ liệu của board và áp dụng ngay, không cần khởi động lại.",
+    "servedConfig": "Đang phục vụ: {{origin}} (đặt trong config.env).",
+    "servedSetting": "Đang phục vụ: {{origin}} (từ cài đặt này).",
+    "servedNone": "Đang phục vụ: không có; board chỉ trả lời trên máy này.",
+    "entranceOff": "Lối vào đang tắt",
+    "test": "Kiểm tra lối vào",
+    "works": "Hoạt động.",
+    "notYet": "Chưa.",
+    "next": {
+      "notInstalled": "Tailscale chưa được cài trên máy này: hãy cài và đăng nhập, rồi kiểm tra lại (README: Using it from other devices).",
+      "notSignedIn": "Tailscale đang ở trạng thái {{state}} trên máy này: hãy chạy tailscale up và đăng nhập, rồi kiểm tra lại.",
+      "noName": "Máy này chưa có tên tailnet: hãy bật MagicDNS trong bảng quản trị Tailscale, rồi kiểm tra lại.",
+      "httpsOff": "Chứng chỉ HTTPS đang tắt cho {{name}}: hãy bật trong bảng quản trị Tailscale, rồi kiểm tra lại.",
+      "ready": "Sẵn sàng: máy này là {{name}} trên tailnet của bạn, và serve chuyển nó tới board."
+    },
+    "serveOther": "Cổng 443 của máy này đang phục vụ {{target}}. Để chuyển https://{{name}} tới board, hãy chạy lệnh này tại đây:",
+    "serveNotSet": "Serve chưa được thiết lập. Để mở board tại https://{{name}}, hãy chạy lệnh này tại đây:",
+    "copyServe": "Sao chép lệnh serve",
+    "neverRuns": "Board không bao giờ tự chạy lệnh này. Sau đó hãy kiểm tra lại. Để dừng: <code>tailscale serve --https=443 off</code>."
+  },
+  "updates": {
+    "badgeTip": "CrossBoard {{version}} đã có (đang cài {{installed}})",
+    "badgeAria": "Có bản cập nhật",
+    "badge": "Cập nhật",
+    "title": "Cập nhật",
+    "checkout": "Board này chạy từ một checkout, không có trình cập nhật. Để cập nhật, hãy chạy <code>git pull</code> trên <code>main</code> trong checkout đó, rồi <code>pnpm start</code> (README: \"Running it\"). Chỉ ứng dụng desktop mới kiểm tra và cài phiên bản mới từ đây.",
+    "installed": "Đã cài",
+    "installedValue": "CrossBoard {{version}}",
+    "newestRelease": "Bản phát hành mới nhất",
+    "unsupported": "Bản ứng dụng này không tự cập nhật được: nó chạy từ thư mục đã giải nén, không phải từ trình cài đặt hay gói. Hãy cài một bản phát hành từ GitHub để nhận cập nhật tại đây.",
+    "checking": "Đang kiểm tra…",
+    "checkNow": "Kiểm tra ngay",
+    "install": "Tải xuống và cài đặt",
+    "downloadAria": "Tải xuống",
+    "downloading": "Đang tải {{version}}… {{percent}}%",
+    "installing": "Đang cài {{version}}: board dừng một lúc và ứng dụng khởi động lại với phiên bản mới.",
+    "whatsNew": "Có gì mới trong {{version}}",
+    "autoCheck": "Kiểm tra cập nhật khi khởi động và mỗi sáu giờ",
+    "prereleases": "Gồm cả bản tiền phát hành (0.3.0-beta.1 và tương tự)",
+    "note": "Không có gì được tải hay cài cho đến khi bạn bấm Tải xuống và cài đặt. Mỗi bản tải xuống được đối chiếu với sha512 trong metadata của bản phát hành trước.",
+    "notChecked": "Chưa kiểm tra",
+    "none": "Không có bản mới hơn (kiểm tra {{when}})",
+    "unknown": "Không rõ (kiểm tra {{when}})",
+    "skipped": "Đã bỏ qua {{version}}: thẻ cập nhật sẽ không hiện lại cho bản này.",
+    "undo": "Hoàn tác",
+    "manual": "Chạy lệnh này trong terminal để cài, rồi khởi động lại ứng dụng:",
+    "copyCommand": "Sao chép lệnh",
+    "card": {
+      "artwork": "Ảnh phát hành",
+      "available": "CrossBoard {{version}} đã có",
+      "skip": "Bỏ qua phiên bản này",
+      "installNow": "Cài ngay"
+    }
+  },
+  "skills": {
+    "install": "Cài skill",
+    "update": "Cập nhật skill",
+    "installedBoard": "Đã cài skill của board lúc <time>{{at}}</time>",
+    "installedReview": "Đã cài các skill review lúc <time>{{at}}</time>",
+    "installedBoardAria": "Đã cài skill của board",
+    "installedReviewAria": "Đã cài các skill review",
+    "installedFiles": "Tệp đã cài",
+    "failedBoard": "Không cài được skill của board (HTTP {{status}})",
+    "failedReview": "Không cài được các skill review (HTTP {{status}})",
+    "failedBoardAria": "Không cài được skill của board",
+    "failedReviewAria": "Không cài được các skill review",
+    "failedHint": "Hãy kiểm tra thư mục thuộc về người dùng chạy board và có thể ghi vào.",
+    "retry": "Thử lại",
+    "action": {
+      "created": "đã tạo",
+      "updated": "đã cập nhật",
+      "unchanged": "không đổi"
+    },
+    "fileStatus": {
+      "current": "mới nhất",
+      "outdated": "cũ",
+      "missing": "thiếu"
+    },
+    "intro": "<code>/todo-review</code> xử lý các ticket To do đến khi bàn giao và <code>/review-queue</code> review hàng đợi PR, cả hai đều giao việc cho các agent này. <code>/feature-review</code> là review chúng chạy trên từng thay đổi. Một dòng lệnh cài cả ba, cùng các agent, vào <code>~/.claude</code> (Claude Code; OpenCode cũng đọc skill của nó), ghi đè tệp cùng tên.",
+    "placeholderNote": "Nó mang <code>{{placeholder}}</code> cho đến khi một dòng được sao chép: khi đó board tạo token tải xuống, dùng được khoảng mười phút, cho mọi dòng cài đặt trên trang này.",
+    "filesInstalled_other": "{{count}} tệp được cài",
+    "track": "Theo dõi",
+    "global": "Global",
+    "byRepo": "Theo repo",
+    "repoStatus": {
+      "current": "Mới nhất",
+      "outdated": "Cũ",
+      "none": "Chưa cài trong repo",
+      "unreachable": "Không đọc được checkout"
+    },
+    "globalStatus": {
+      "current": "Mới nhất",
+      "outdated": "Cũ",
+      "none": "Chưa cài",
+      "unreachable": "Không đọc được thư mục"
+    },
+    "onMachine": "Trên máy này",
+    "globalText": "Bản trong <code>~/.claude</code> trên máy chạy board, mà Claude Code dùng ở mọi repo không có bản riêng. Dòng lệnh ở trên sẽ cập nhật nó.",
+    "globalHomeText": "Bản trong thư mục mà <code>CLAUDE_HOME</code> chỉ tới trên máy chạy board, thay cho <code>~/.claude</code>. Dòng lệnh ở trên cài vào <code>~/.claude</code>: bản này có một dòng lệnh riêng cài các tệp vào thư mục đó.",
+    "claudeOnMachine": "~/.claude trên máy này",
+    "noneGlobal": "Chưa có tệp nào trong số này: dòng lệnh ở trên sẽ cài chúng.",
+    "noneHome": "Chưa có tệp nào trong số này: dòng lệnh này sẽ cài chúng.",
+    "inRepos": "Trong các repo của bạn",
+    "reposText": "Một repo có thể mang bản riêng trong thư mục <code>.claude</code>, mà Claude Code dùng ở đó thay cho bản trong <code>~/.claude</code>. Bản cũ có một dòng lệnh cài các tệp này vào <code>.claude</code> của repo đó, ghi đè tệp cùng tên và giữ phần còn lại.",
+    "noReposProject": "Dự án này chưa có repo nào.",
+    "noReposBoard": "Board chưa có repo nào.",
+    "repoLabel": "{{repo}} trong {{project}}",
+    "usesGlobal": "Dùng bản cài trong <code>~/.claude</code>.",
+    "differ_other": "{{count}} trên {{total}} tệp khác hoặc thiếu",
+    "notUpToDate": "Tệp chưa mới nhất"
+  },
+  "skillDiff": {
+    "description": "Những gì dòng lệnh cài đặt sẽ thay đổi: dòng đánh dấu - có trong bản đã cài và sẽ bị bỏ, dòng đánh dấu + đến từ bản board phục vụ. Không tính kiểu xuống dòng.",
+    "unreadable": "Không đọc được bản đã cài dưới dạng văn bản ({{reason}}): <code>{{path}}</code>",
+    "noChanges": "Không có thay đổi: bản đã cài đã khớp với bản của board.",
+    "changes": "Thay đổi"
+  },
+  "hostTools": {
+    "section": "Công cụ còn thiếu",
+    "line": "<strong>{{problem}}</strong>: {{breaks}} sẽ không hoạt động. Cách sửa: {{fix}}.",
+    "dismissTip": "Ẩn cho đến lần kiểm tra tới nếu {{name}} vẫn thiếu",
+    "dismissAria": "Bỏ qua cảnh báo {{name}}",
+    "recheckTip": "Tìm lại git, gh, claude, node và pnpm trên PATH của board",
+    "recheckAria": "Kiểm tra lại các công cụ",
+    "text": {
+      "breaks": {
+        "git": "trạng thái branch và commit của ticket, kiểm tra merge và cleanup",
+        "gh": "hàng đợi PR, trạng thái CI và các ticket PR",
+        "claude": "việc tạo báo cáo của chính board (Báo cáo → Tạo)",
+        "node": "preview do board quản lý",
+        "pnpm": "preview do board quản lý",
+        "ghTooOld": "việc board kiểm tra gh đã đăng nhập"
+      },
+      "problem": {
+        "notFound": "Không tìm thấy {{name}} trên PATH của board",
+        "claudeNotFound": "không tìm thấy claude: CLAUDE_BIN là {{bin}}",
+        "tooOld": "{{gh}} quá cũ cho lần kiểm tra này: nó không biết --active",
+        "noConfigWhere": "gh không tìm thấy cấu hình: không có {{needs}}, nên nó tìm {{file}}",
+        "noConfig": "gh không tìm thấy cấu hình: không có HOME hoặc GH_CONFIG_DIR",
+        "signedOut": "gh chưa đăng nhập"
+      },
+      "fix": {
+        "then": "rồi Kiểm tra lại (khởi động lại board nếu thư mục của nó chưa có trong PATH)",
+        "installGit": "cài git (https://git-scm.com/downloads), {{after}}",
+        "installGh": "cài GitHub CLI (https://cli.github.com) và chạy gh auth login, {{after}}",
+        "installClaude": "cài Claude Code (https://docs.claude.com/en/docs/claude-code/setup), hoặc đặt CLAUDE_BIN trong .env (config.env cho ứng dụng desktop) thành đường dẫn đầy đủ của nó, rồi khởi động lại board",
+        "installNode": "cài Node.js (https://nodejs.org), {{after}}",
+        "installPnpm": "chạy corepack enable pnpm (hoặc cài: https://pnpm.io/installation), {{after}}",
+        "upgradeGh": "nâng cấp GitHub CLI (https://cli.github.com; trên Debian hoặc Ubuntu: sudo apt install --only-upgrade gh, trên macOS: brew upgrade gh), rồi Kiểm tra lại",
+        "noConfig": "khởi động board với HOME đặt thành thư mục home mà gh đã đăng nhập (hoặc GH_CONFIG_DIR thành thư mục chứa hosts.yml), rồi Kiểm tra lại",
+        "signedOut": "chạy gh auth login trên máy này, rồi Kiểm tra lại"
+      }
+    }
+  },
+  "previewLimit": {
+    "label": "Giới hạn preview",
+    "saving": "Đang lưu…"
+  },
+  "projectSettings": {
+    "intro": "Cách dự án này hoạt động: ticket mới bắt đầu với gì, các tag nó gợi ý, khi nào ticket bị coi là đình trệ, các cảnh báo nó hiển thị, các cột, các lượt chạy và những gì trang của nó hiển thị. Hướng dẫn cho agent của dự án nằm ở trang riêng.",
+    "save": "Lưu",
+    "saving": "Đang lưu…",
+    "unsaved": "Có thay đổi chưa lưu.",
+    "noChanges": "Không có thay đổi.",
+    "kinds": {
+      "title": "Loại",
+      "description": "Dự án dùng để làm gì. Dự án không thuộc loại phần mềm sẽ ẩn repo, PR, CI, preview và Dọn dẹp; repo và PR của nó vẫn được lưu."
+    },
+    "phases": {
+      "title": "Giai đoạn mặc định",
+      "description": "Các tác vụ cấp cao nhất mà mọi ticket mới bắt đầu với, theo thứ tự. Các tác vụ nhập khi tạo nằm dưới tác vụ đầu; lane bắt đầu không có chúng. Agent đánh dấu từng giai đoạn khi xong, và gỡ hoặc sửa lời những giai đoạn không phù hợp. Để trống để ticket bắt đầu không có tác vụ.",
+      "empty": "Không có giai đoạn: ticket mới bắt đầu không có tác vụ.",
+      "new": "Giai đoạn mới",
+      "list": "Giai đoạn mặc định",
+      "placeholder": "Thêm giai đoạn",
+      "add": "Thêm giai đoạn",
+      "useBuiltIn": "Dùng danh sách có sẵn"
+    },
+    "tags": {
+      "title": "Gợi ý tag",
+      "description": "Các tag hiện dạng chip dưới tag của ticket, tiếp theo là các tag mà ticket của dự án đã có. Agent đọc chúng trong <code>get_project</code> và dùng lại. Để trống để chỉ gợi ý các tag đang dùng.",
+      "empty": "Không có gợi ý: chỉ các tag đang dùng được gợi ý.",
+      "new": "Tag mới",
+      "placeholder": "Thêm tag",
+      "add": "Thêm tag",
+      "useDefaults": "Dùng mặc định"
+    },
+    "stall": {
+      "title": "Ticket đình trệ",
+      "description": "Hai đồng hồ quyết định cách một ticket hiển thị. Lease là thứ mà heartbeat hoặc bài đăng của agent giữ sống: kéo dài mười phút, và khi hết mà vẫn còn một span mở thì ticket hiện là <lost>Mất liên lạc</lost> — agent đã biến mất, không phải đang chờ bạn. Ticket không có gì đang mở hiện là <stalled>Đình trệ</stalled> khi suốt chừng này thời gian không có lời nào từ agent (heartbeat, span, chờ, bàn giao) và không có gì board thấy về nó (một lần push, PR, preview của nó). Núm này đặt ngưỡng im lặng đó, và nó quyết định trước: ngưỡng dưới mười phút sẽ đánh dấu ticket im lặng trước khi lease hết. Mười phút của lease giữ cố định.",
+      "label": "Đình trệ sau (phút)",
+      "invalid": "Một số nguyên từ {{min}} đến {{max}}."
+    }
+  },
+  "kinds": {
+    "legend": "Dự án dùng để làm gì",
+    "hint": "Phần mềm thêm repo, branch, PR, CI, preview và Dọn dẹp. Các loại khác giữ công việc ngoài git: board hiển thị những gì chúng dùng.",
+    "label": {
+      "software": "Phần mềm",
+      "music": "Âm nhạc",
+      "art": "Nghệ thuật",
+      "writing": "Viết lách",
+      "video": "Video",
+      "research": "Nghiên cứu",
+      "lawyer": "Luật sư",
+      "accountant": "Kế toán",
+      "cybersecurity": "An ninh mạng",
+      "life": "Đời sống"
+    }
+  },
+  "lists": {
+    "tasks": "Tác vụ",
+    "addTask": "Thêm tác vụ",
+    "addTaskLabel": "Thêm tác vụ",
+    "moveUp": "Chuyển lên",
+    "moveDown": "Chuyển xuống",
+    "moveItemUp": "Chuyển {{item}} lên",
+    "moveItemDown": "Chuyển {{item}} xuống",
+    "remove": "Gỡ",
+    "removeItem": "Gỡ {{item}}"
+  },
+  "tagsInput": {
+    "tooLong": "Quá {{max}} ký tự",
+    "remove": "Gỡ",
+    "removeTag": "Gỡ {{tag}}",
+    "suggested": "Tag gợi ý",
+    "addTag": "Thêm tag {{tag}}",
+    "tooMany": "Tối đa {{max}} tag.",
+    "tooLongTag": "Một tag có tối đa {{max}} ký tự."
+  },
+  "stagesEditor": {
+    "title": "Cột",
+    "description": "Các cột của board tính năng, từ trái sang phải. Loại là thứ các quy tắc của board dựa vào (nhận việc, không duyệt, tiến độ lane); agent thấy key, tên và loại của từng cột. Đổi tên vẫn giữ key.",
+    "moveEarlier": "Chuyển {{name}} lên trước",
+    "moveLater": "Chuyển {{name}} ra sau",
+    "tickets_other": "{{count}} ticket",
+    "newPlaceholder": "Cột mới, ví dụ QA",
+    "add": "Thêm cột",
+    "moveAnyway": "Vẫn chuyển",
+    "kind": {
+      "open": "Mở",
+      "active": "Đang làm",
+      "blocked": "Bị chặn",
+      "review": "Review",
+      "done": "Xong",
+      "cancelled": "Đã hủy",
+      "approved": "Đã duyệt"
+    },
+    "hint": {
+      "open": "chờ được nhận; khi nhận sẽ chuyển sang cột bắt đầu làm việc",
+      "active": "đang được làm",
+      "blocked": "đang chờ bạn",
+      "review": "đã bàn giao để review",
+      "done": "đã xong; không thể nhận",
+      "cancelled": "đã bỏ; không duyệt sẽ chuyển ticket về đây, và các tác vụ của nó rời khỏi tiến độ",
+      "approved": "sự đồng ý của bạn để merge; không agent nào chuyển ticket vào đây"
+    },
+    "color": {
+      "gray": "xám",
+      "slate": "xám đá",
+      "sky": "xanh trời",
+      "blue": "xanh dương",
+      "teal": "xanh ngọc",
+      "emerald": "xanh lục bảo",
+      "lime": "xanh chanh",
+      "amber": "hổ phách",
+      "orange": "cam",
+      "rose": "hồng đậm",
+      "pink": "hồng",
+      "violet": "tím"
+    },
+    "colour": "Màu",
+    "stageName": "Tên cột",
+    "firstActive": "Cột đang làm đầu tiên ({{name}})",
+    "firstActiveNone": "Cột đang làm đầu tiên (không có)",
+    "workStarts": "Bắt đầu làm việc ở",
+    "workStartsHint": "Nơi ticket được đặt khi nhận; trạng thái đang làm hay active cũng chỉ cột này.",
+    "delete": "Xóa {{name}}",
+    "deleteTitle": "Xóa cột {{name}}?",
+    "holds_other": "Cột đang chứa {{count}} ticket (gồm cả lane). Hãy chọn cột để chuyển chúng đến.",
+    "holdsNone": "Không có ticket nào trong cột.",
+    "moveTo": "Chuyển chúng đến…",
+    "cancel": "Hủy",
+    "deleteConfirm": "Xóa"
+  },
+  "runsSettings": {
+    "title": "Lượt chạy",
+    "description": "Những gì board khởi chạy từ worktree của ticket ở mỗi repo, từ thẻ Lượt chạy của ticket hoặc khi agent yêu cầu: <strong>preview</strong> trả lời trên một cổng và có liên kết để mở, <strong>job</strong> là worker nền không có liên kết. Mỗi cái chạy bước cài đặt (chỉ khi lockfile đổi), build, rồi lệnh start, trong worktree. Agent khởi động và dừng chúng, và cũng có thể thêm, sửa, xóa: mỗi thay đổi hiện trong hoạt động của dự án dưới tên agent.",
+    "noRepos": "Dự án chưa có repo nào.",
+    "removed": "Đã gỡ",
+    "groupLabel": "Lượt chạy của {{name}}",
+    "add": "Thêm lượt chạy",
+    "none": "Không có lượt chạy: ticket của repo này không có gì để khởi chạy.",
+    "typePreview": "Preview",
+    "typeJob": "Job",
+    "portHealth": "cổng {{port}} · health {{path}}",
+    "portAuto": "tự động",
+    "moveUp": "Chuyển lên",
+    "moveDown": "Chuyển xuống",
+    "edit": "Sửa",
+    "editRun": "Sửa {{name}}",
+    "delete": "Xóa",
+    "deleteRun": "Xóa {{name}}",
+    "deleteTitle": "Xóa lượt chạy {{name}}?",
+    "deleteDescription": "Chỗ nào nó đang chạy sẽ bị dừng, và ticket của {{repo}} không còn cung cấp nó.",
+    "cancel": "Hủy",
+    "newRun": "Lượt chạy mới",
+    "portProblem": "cổng: tự động, hoặc một cổng từ {{from}} đến {{to}}",
+    "name": "Tên",
+    "type": "Loại",
+    "typePreviewLong": "Preview (một cổng và một liên kết)",
+    "typeJobLong": "Job (worker nền)",
+    "install": "Cài đặt",
+    "installPlaceholder": "pnpm install --frozen-lockfile (để trống: không có)",
+    "build": "Build",
+    "buildPlaceholder": "pnpm build (để trống: không có)",
+    "start": "Start",
+    "startPreviewPlaceholder": "node server.js (đọc PORT)",
+    "port": "Cổng",
+    "healthPath": "Đường dẫn health",
+    "envPreview": "Biến môi trường, cho lệnh start: {port} trong giá trị là cổng của nó; PORT và HOST được đặt sẵn",
+    "env": "Biến môi trường, cho lệnh start",
+    "varName": "Tên biến {{n}}",
+    "varValue": "Giá trị biến {{n}}",
+    "valuePlaceholder": "giá trị",
+    "removeVar": "Gỡ biến {{n}}",
+    "addVar": "Thêm biến",
+    "copyData": "Sao chép dữ liệu của board thật vào data/preview trước (làm DATA_DIR)",
+    "save": "Lưu",
+    "saving": "Đang lưu…"
+  },
+  "layoutEditor": {
+    "title": "Bố cục",
+    "description": "Những gì hiển thị trong dự án này, và ở đâu: các trang của menu, các thẻ của Tổng quan (và của khối trên Trang chủ) và các phần của trang ticket. Tắt một ô để ẩn, kéo hoặc dùng mũi tên để di chuyển, và chuyển một phần của ticket sang cột bên kia. Trang bị ẩn vẫn mở được bằng liên kết. <lock/> Mục bị khóa di chuyển được nhưng luôn hiện.",
+    "area": {
+      "nav": "Menu dự án",
+      "overview": "Thẻ Tổng quan",
+      "ticketMain": "Trang ticket, cột chính",
+      "ticketSide": "Trang ticket, cột bên"
+    },
+    "where": {
+      "nav": "trong menu",
+      "overview": "trong Tổng quan",
+      "ticket": "trên trang ticket"
+    },
+    "menu": "Menu",
+    "overview": "Tổng quan",
+    "ticketPage": "Trang ticket",
+    "mainColumn": "Cột chính",
+    "sideColumn": "Cột bên",
+    "hiddenCount_other": "{{count}} đang ẩn.",
+    "reset": "Về mặc định",
+    "shown": "Hiện {{shown}} trên {{total}}",
+    "dropHere": "Thả vào đây",
+    "empty": "Trống: kéo các phần vào đây",
+    "moveUp": "Chuyển lên",
+    "moveDown": "Chuyển xuống",
+    "moveUpIn": "Chuyển {{name}} lên {{where}}",
+    "moveDownIn": "Chuyển {{name}} xuống {{where}}",
+    "toSideTip": "Chuyển sang cột bên",
+    "toMainTip": "Chuyển sang cột chính",
+    "toSide": "Chuyển {{name}} sang cột bên",
+    "toMain": "Chuyển {{name}} sang cột chính",
+    "alwaysShown": "Luôn hiện: {{reason}}",
+    "show": "Hiện",
+    "hide": "Ẩn",
+    "showIn": "Hiện {{name}} {{where}}",
+    "element": {
+      "nav": {
+        "overview": "Tổng quan",
+        "prs": "Hàng đợi PR",
+        "features": "Tính năng đang làm",
+        "roadmap": "Lộ trình",
+        "previews": "Preview",
+        "gallery": "Thư viện",
+        "agents": "Nhóm",
+        "daily": "Hằng ngày",
+        "cleanup": "Dọn dẹp",
+        "repositories": "Repo",
+        "instructions": "Hướng dẫn",
+        "workflow": "Quy trình"
+      },
+      "overview": {
+        "needsYou": "Cần bạn",
+        "inProgress": "Đang làm",
+        "doneToday": "Xong hôm nay",
+        "carryingOver": "Còn tồn",
+        "notes": "Ghi chú",
+        "agents": "Agent đang làm việc",
+        "lostContact": "Mất liên lạc"
+      },
+      "ticket": {
+        "instructions": "Hướng dẫn",
+        "tasks": "Tác vụ",
+        "timeline": "Dòng thời gian",
+        "lanes": "Lane",
+        "activity": "Hoạt động",
+        "runs": "Lượt chạy",
+        "details": "Chi tiết",
+        "branch": "Branch",
+        "workspaces": "Workspace",
+        "resume": "Tiếp tục"
+      }
+    },
+    "locked": {
+      "nav": {
+        "overview": "Trang đầu của dự án",
+        "features": "Board của dự án"
+      },
+      "ticket": {
+        "instructions": "Nội dung riêng của ticket",
+        "tasks": "Nơi các liên kết tác vụ bị chặn dẫn đến",
+        "activity": "Các quyết định và luồng đang chờ bạn nằm ở đây"
+      }
+    }
+  },
+  "repoDialog": {
+    "newProject": "Dự án mới…",
+    "editTitle": "Sửa {{name}}",
+    "newTitle": "Repo mới",
+    "description": "Một checkout git cục bộ. Board đọc nó bằng git và gh; không bao giờ ghi vào.",
+    "project": "Dự án",
+    "projectName": "Tên dự án",
+    "moves": "PR, ticket và kết quả review của nó chuyển theo.",
+    "path": "Đường dẫn repo",
+    "pathPlaceholder": "/home/you/code/… hoặc C:\\code\\…",
+    "browse": "Duyệt…",
+    "name": "Tên",
+    "namePlaceholder": "từ GitHub hoặc tên thư mục",
+    "baseBranch": "Branch gốc",
+    "removeRepo": "Gỡ repo",
+    "removeTitle": "Gỡ {{name}}?",
+    "removeDescription": "Các mục hàng đợi PR của nó đi theo. Ticket và kết quả review vẫn ở trong dự án, nhưng các ticket PR của nó đi theo. Checkout trên đĩa không bị động đến.",
+    "keep": "Giữ",
+    "remove": "Gỡ",
+    "saving": "Đang lưu…",
+    "save": "Lưu",
+    "add": "Thêm repo"
+  },
+  "folderPicker": {
+    "title": "Chọn checkout",
+    "description": "Các thư mục trên máy chạy board. <repo/> đánh dấu một checkout git.",
+    "up": "Lên một thư mục",
+    "home": "Thư mục home",
+    "path": "Đường dẫn thư mục",
+    "folders": "Thư mục",
+    "none": "Không có thư mục nào ở đây.",
+    "git": "git",
+    "isRepo": "Thư mục này là một checkout git.",
+    "notRepo": "Không phải checkout git.",
+    "use": "Dùng thư mục này"
+  },
+  "instructions": {
+    "state": {
+      "pending": "chờ bạn",
+      "accepted": "đã xem",
+      "reverted": "đã hoàn tác"
+    },
+    "markedReviewed": "Đã đánh dấu là đã xem",
+    "reverted": "Đã hoàn tác hướng dẫn của dự án",
+    "historyTitle": "Lịch sử hướng dẫn",
+    "historyDescription": "Mọi thay đổi, của bạn hoặc của orchestrator, kèm nội dung trước đó. Thay đổi của orchestrator có hiệu lực ngay và chờ bạn xem.",
+    "noChanges": "Chưa có thay đổi.",
+    "changeBy": "Thay đổi bởi {{name}}",
+    "aRevert": "một lần hoàn tác",
+    "revertedBy": "được {{name}} hoàn tác {{when}}",
+    "reviewedBy": "được {{name}} xem {{when}}",
+    "hideChange": "Ẩn thay đổi",
+    "showChange": "Hiện thay đổi",
+    "reviewed": "Đã xem",
+    "revertTip": "Đưa hướng dẫn về như trước thay đổi này",
+    "revertBlocked": "Hướng dẫn đã đổi lại từ đó: hãy hoàn tác thay đổi sau trước",
+    "revert": "Hoàn tác",
+    "diffLabel": "Những gì đã đổi trong hướng dẫn",
+    "pageTitle": "Hướng dẫn",
+    "pageDescription": "Những gì mọi agent đọc trước khi làm việc ở đây. Mọi thay đổi được giữ bên dưới.",
+    "reposLine": "Repo: <goto>trang Repo</goto>. Đổi tên hoặc xóa dự án: menu dự án → Quản lý dự án.",
+    "sectionLabel": "Hướng dẫn của dự án",
+    "edit": "sửa",
+    "placeholder": "Cách chạy các repo, quy ước cần theo, điều không bao giờ được làm.",
+    "unsavedHint": "Có thay đổi chưa lưu. Ctrl/⌘+Enter để lưu.",
+    "noChangesHint": "Không có thay đổi.",
+    "cancel": "Hủy",
+    "save": "Lưu",
+    "saving": "Đang lưu…",
+    "clickToEdit": "Bấm để sửa",
+    "empty": "Chưa có hướng dẫn. Bấm để viết.",
+    "discardTitle": "Bỏ các thay đổi của bạn?",
+    "discardDescription": "Hướng dẫn của dự án có thay đổi chưa lưu. Agent vẫn đọc bản đã lưu.",
+    "keepEditing": "Tiếp tục sửa",
+    "discard": "Bỏ"
+  },
+  "repositories": {
+    "title": "Repo",
+    "description": "Các checkout mà dự án này đọc.",
+    "new": "Repo mới",
+    "baseLine": "gốc {{branch}} · <path>{{path}}</path>",
+    "empty": "Dự án này chưa có repo. Hãy thêm một repo: đường dẫn của một checkout git cục bộ."
+  },
+  "reports": {
+    "status": {
+      "done": "xong",
+      "missing": "thiếu",
+      "upcoming": "sắp tới",
+      "off": "tắt"
+    },
+    "weekday": {
+      "1": "Thứ Hai",
+      "2": "Thứ Ba",
+      "3": "Thứ Tư",
+      "4": "Thứ Năm",
+      "5": "Thứ Sáu",
+      "6": "Thứ Bảy",
+      "7": "Chủ Nhật"
+    },
+    "weekdayShort": {
+      "1": "T2",
+      "2": "T3",
+      "3": "T4",
+      "4": "T5",
+      "5": "T6",
+      "6": "T7",
+      "7": "CN"
+    },
+    "weekOf": "tuần của {{date}}",
+    "scheduleOff": "tắt",
+    "scheduleDaily": "hằng ngày trước {{end}}, {{format}}",
+    "scheduleWeekly": "hằng tuần vào {{day}} trước {{end}}, {{format}}",
+    "formatFile": "tệp",
+    "formatText": "văn bản"
+  },
+  "daily": {
+    "title": "Hằng ngày",
+    "subtitle": "Báo cáo của kỳ, và những gì đã xong theo từng giờ.",
+    "previousDay": "Ngày trước",
+    "nextDay": "Ngày sau",
+    "opening": "Đang mở Hằng ngày…"
+  },
+  "reportDue": {
+    "region": "Báo cáo đến hạn",
+    "notifyTitleDue": "{{project}}: báo cáo đến hạn",
+    "notifyTitleMissing": "{{project}}: thiếu báo cáo",
+    "notifyBodyDaily": "Báo cáo ngày cho {{label}} đến hạn lúc {{time}}.",
+    "notifyBodyWeekly": "Báo cáo tuần cho {{label}} đến hạn lúc {{time}}.",
+    "missing": ": thiếu báo cáo, ca làm việc đã kết thúc lúc {{time}}",
+    "due": ": báo cáo đến hạn sau {{left}}, lúc {{time}}",
+    "leftMinutes": "{{count}} phút",
+    "leftHours": "{{hours}} giờ",
+    "leftHoursMinutes": "{{hours}} giờ {{minutes}} phút",
+    "notificationsOn": "Thông báo đang bật trong trình duyệt này",
+    "notificationsBlocked": "Thông báo bị chặn trong trình duyệt này",
+    "notifyTip": "Thông báo trình duyệt khi báo cáo đến hạn (khi một tab board đang mở)",
+    "notifyMe": "Nhắc tôi"
+  },
+  "activityLog": {
+    "region": "Hoạt động",
+    "empty": "Không có gì xảy ra vào {{date}}.",
+    "actions_other": "{{count}} hành động",
+    "contributors_other": "bởi {{count}} người đóng góp",
+    "contributorsTitle": "Người đóng góp",
+    "by": "bởi {{names}}",
+    "openAll": "Mở tất cả",
+    "closeAll": "Đóng tất cả",
+    "openReview": "Mở kết quả review",
+    "kind": {
+      "ticket_other": "{{count}} ticket",
+      "task_other": "{{count}} tác vụ",
+      "update_other": "{{count}} cập nhật",
+      "comment_other": "{{count}} bình luận",
+      "pr_other": "{{count}} PR",
+      "review_other": "{{count}} review",
+      "workspace_other": "{{count}} workspace",
+      "agent_other": "{{count}} agent",
+      "project_other": "{{count}} dự án",
+      "summary_other": "{{count}} tóm tắt",
+      "report_other": "{{count}} báo cáo",
+      "handoff_other": "{{count}} bàn giao"
+    }
+  },
+  "generateReport": {
+    "wrote": "claude đã viết báo cáo",
+    "loading": "Đang tải…",
+    "off": "Báo cáo đang tắt: hãy đặt tần suất trong cài đặt báo cáo trước",
+    "file": "Báo cáo của dự án này là tệp: claude chỉ viết báo cáo dạng văn bản",
+    "none": "Ngày này không yêu cầu báo cáo",
+    "fix": "{{problem}}. Cách sửa: {{fix}}.",
+    "tip": "claude viết báo cáo từ prompt, mẫu và hoạt động",
+    "writing": "claude đang viết…",
+    "generate": "Tạo bằng claude",
+    "failed": "claude không viết được: {{message}}"
+  },
+  "pushedToday": {
+    "commits_other": "{{count}} commit",
+    "label": "Đã push hôm nay: {{commits}}, thêm {{added}} dòng, xóa {{removed}} dòng",
+    "labelNone": "Đã push hôm nay: không có gì",
+    "nothing": "Hôm nay chưa push gì",
+    "title": "Đã push hôm nay",
+    "checked": "origin kiểm tra {{ago}}",
+    "notFetched": "origin chưa được fetch",
+    "byRepo": "Đã push hôm nay theo repo",
+    "emptyRepos": "Hôm nay chưa có gì lên origin ở các repo của dự án này.",
+    "hint": "Các commit đã lên một branch của origin hôm nay, mỗi commit một lần, không tính merge."
+  },
+  "reportCalendar": {
+    "region": "Lịch báo cáo",
+    "counts": "{{done}} xong · {{missing}} thiếu",
+    "openMissing": "Mở {{period}}, báo cáo thiếu gần nhất",
+    "nothingMissing": "Không thiếu gì",
+    "nextMissing": "Thiếu kế tiếp",
+    "dayLabel": "{{day}}: {{status}}"
+  },
+  "reportCard": {
+    "region": "Báo cáo",
+    "title": "Báo cáo",
+    "off": "Báo cáo đang tắt cho dự án này: hãy chọn tần suất đến hạn trong cài đặt báo cáo.",
+    "notAsked": "Không yêu cầu báo cáo vào {{date}}.",
+    "due": "hạn {{date}}",
+    "replace": "thay thế",
+    "post": "đăng báo cáo",
+    "versions_other": "{{count}} phiên bản",
+    "version": "phiên bản {{n}}",
+    "none": "Chưa có báo cáo cho {{label}}.",
+    "history": "Lịch sử ({{count}})",
+    "earlier": "Các phiên bản trước",
+    "forLabel": "Báo cáo cho {{label}}",
+    "placeholderFile": "Đính kèm tệp báo cáo; thêm một dòng ghi chú là tùy chọn.",
+    "placeholderText": "Báo cáo, theo yêu cầu của prompt. Dán hoặc thả tệp để đính kèm.",
+    "attach": "đính kèm",
+    "cancel": "Hủy",
+    "attachFirst": "Hãy đính kèm tệp báo cáo trước",
+    "posting": "Đang đăng…",
+    "replaceButton": "Thay thế",
+    "postButton": "Đăng"
+  },
+  "reportSettings": {
+    "region": "Cài đặt báo cáo",
+    "title": "Cài đặt báo cáo",
+    "field": {
+      "prompt": "prompt",
+      "template": "mẫu"
+    },
+    "formatText": "Văn bản",
+    "formatFile": "Một tệp (ví dụ PDF)",
+    "prompt": "Prompt",
+    "promptKindFile": "tệp",
+    "promptKindText": "văn bản",
+    "edit": "sửa",
+    "clickToEdit": "Bấm để sửa",
+    "noPrompt": "Chưa có prompt báo cáo. Bấm để nói báo cáo phải chứa gì và thế nào, và là văn bản ngắn hay tệp.",
+    "promptLabel": "Prompt báo cáo",
+    "promptPlaceholder": "Báo cáo phải nói gì và thế nào: ai đọc, giọng điệu, điều cần nhấn mạnh, văn bản ngắn hay PDF.",
+    "as": "Dạng",
+    "cancel": "Hủy",
+    "save": "Lưu",
+    "saving": "Đang lưu…",
+    "sections": "Một báo cáo được tạo có các mục sau, theo thứ tự này: {{headings}}.",
+    "noHeadings": "Không có tiêu đề: báo cáo được tạo không bị kiểm tra theo mẫu.",
+    "template": "Mẫu",
+    "theDefault": "mặc định",
+    "templateLabel": "Mẫu báo cáo",
+    "useDefault": "Dùng mặc định",
+    "diffGroup": "Những gì đã đổi trong {{field}} của báo cáo",
+    "bothEmpty": "Cả hai đều trống.",
+    "state": {
+      "pending": "chờ bạn",
+      "accepted": "đã giữ",
+      "reverted": "đã hoàn tác"
+    },
+    "dialogTitle": "Thay đổi {{field}} của báo cáo",
+    "dialogTitleGeneric": "Thay đổi cài đặt báo cáo",
+    "loading": "Đang tải…",
+    "byAgent": "bởi <who>{{name}}</who> (một agent)",
+    "by": "bởi <who>{{name}}</who>",
+    "keptBy": "được {{name}} giữ",
+    "revertedBy": "được {{name}} hoàn tác",
+    "showChange": "Hiện những gì đã đổi",
+    "noticesRegion": "Thay đổi của agent cần xem",
+    "keptToast": "Đã giữ {{field}} mới của báo cáo",
+    "revertedToast": "Đã hoàn tác {{field}} của báo cáo",
+    "noticeLabel": "{{field}} của báo cáo đã bị {{name}} đổi",
+    "noticeText": "{{field}} của báo cáo đã bị <who>{{name}}</who> đổi, hoàn tác?",
+    "hideChange": "Ẩn thay đổi",
+    "showTheChange": "Hiện thay đổi",
+    "accept": "Chấp nhận",
+    "revert": "Hoàn tác",
+    "laterChange": "{{field}} đã đổi lại từ đó: hãy hoàn tác thay đổi đó trước"
+  },
+  "shift": {
+    "notWorkday": "không phải ngày làm việc",
+    "before": "trước ca",
+    "on": "đang trong ca",
+    "after": "sau ca",
+    "tip": "Ca hôm nay {{span}}; bây giờ {{now}}, {{where}}. Báo cáo đến hạn khi ca kết thúc.",
+    "label": "Ca {{span}}, bây giờ {{now}}: {{where}}",
+    "cadence": {
+      "off": "Tắt",
+      "daily": "Hằng ngày",
+      "weekly": "Hằng tuần"
+    },
+    "badOrder": "Ca phải kết thúc sau khi bắt đầu.",
+    "noWorkday": "Hãy chọn ít nhất một ngày làm việc.",
+    "badAlert": "Nhắc trước giờ kết thúc từ 0 đến 720 phút.",
+    "schedule": "Lịch",
+    "due": "Hạn",
+    "hintDaily": "Ca: báo cáo đến hạn khi ca kết thúc.",
+    "hintWeekly": "Ca: báo cáo đến hạn khi ca kết thúc, vào ngày ở trên.",
+    "start": "Bắt đầu ca",
+    "end": "Kết thúc ca",
+    "workdays": "Ngày làm việc",
+    "workdaysHint": "Báo cáo ngày được yêu cầu vào những ngày này; các ngày khác là tắt, không bao giờ là thiếu.",
+    "remind": "Nhắc từ (số phút trước giờ kết thúc)",
+    "save": "Lưu",
+    "saving": "Đang lưu…",
+    "weekdayLabel": "Vào"
+  },
+  "cleanup": {
+    "counts": {
+      "deleted_other": "đã xóa {{count}}",
+      "kept_other": "giữ {{count}}",
+      "gone_other": "{{count}} đã mất sẵn"
+    },
+    "actions": {
+      "local": {
+        "row": "Xóa branch",
+        "all": "Xóa mọi branch cục bộ đủ điều kiện",
+        "title_other": "Xóa {{count}} branch cục bộ?",
+        "confirm_other": "Xóa {{count}} branch cục bộ",
+        "what": "Mỗi branch bị xóa khỏi checkout. Origin vẫn giữ bản của nó."
+      },
+      "remote": {
+        "row": "Xóa trên origin",
+        "all": "Xóa mọi branch đủ điều kiện trên origin",
+        "title_other": "Xóa {{count}} branch trên origin?",
+        "confirm_other": "Xóa {{count}} branch trên origin",
+        "what": "Mỗi branch bị xóa khỏi origin, với tất cả những ai làm việc với nó. Các branch cục bộ vẫn còn."
+      },
+      "worktrees": {
+        "row": "Gỡ worktree + branch",
+        "all": "Gỡ mọi worktree đủ điều kiện cùng branch của chúng",
+        "title_other": "Gỡ worktree của {{count}} branch, và các branch?",
+        "confirm_other": "Gỡ worktree và xóa {{count}} branch",
+        "what": "Mỗi thư mục worktree bị xóa (kèm các tệp bị bỏ qua như node_modules), rồi đến branch cục bộ. Một liên kết trong đó bị xóa như một liên kết: thư mục nó trỏ tới nằm ngoài worktree vẫn còn. Origin vẫn giữ bản của nó."
+      }
+    },
+    "previewState": {
+      "running": "đang chạy trên :{{port}}",
+      "building": "đang build",
+      "starting": "đang khởi động"
+    },
+    "copied": "Đã sao chép",
+    "sweep": {
+      "partial_other": "Đã xóa {{count}} tệp; {{failed}} tệp không xóa được và còn lại cho lần chạy sau",
+      "done_other": "Đã xóa {{count}} tệp ({{size}})"
+    },
+    "toast": {
+      "keptSee": "{{counts}}: xem lý do bên dưới",
+      "jobFailed": "{{title}} thất bại: {{reason}}"
+    },
+    "noReasonGiven": "không nêu lý do",
+    "title": "Dọn dẹp",
+    "intro": "Công việc đã xong cần dọn, đã đối chiếu với branch gốc.",
+    "refresh": "Làm mới",
+    "agentsNote": "Agent có thể xóa các branch cục bộ đã vào gốc (<tool>cleanup_delete</tool>); gỡ worktree và xóa branch trên origin vẫn là việc của bạn, từ trang này.",
+    "deleteOff": "Xóa đang tắt: {{reason}}.",
+    "repoError": "{{name}}: {{error}}. Không biết các branch và worktree của nó, nên không thể xóa gì trong đó.",
+    "progress": {
+      "label": "Tiến độ xóa",
+      "of": "{{done}} trên {{total}}",
+      "starting": "Đang bắt đầu…",
+      "failed": "Thất bại · {{reason}}",
+      "succeeded": "Thành công · {{counts}}"
+    },
+    "empty": "Không còn gì sót lại. Mọi ticket đã đóng đều được dọn.",
+    "group": {
+      "safe": {
+        "title": "An toàn để xóa",
+        "hint": "Mọi commit, hoặc các patch tương đương, đã có trong branch gốc."
+      },
+      "edited": {
+        "title": "Đã sửa nhưng vẫn có",
+        "hint": "Các commit đã thay đổi khi vào, nhưng merge branch sẽ không thêm gì."
+      },
+      "unique": {
+        "title": "Còn công việc riêng",
+        "hint": "Branch có những thay đổi mà các branch gốc của nó chưa có. Hãy giữ lại, hoặc kiểm tra công việc đã đi đâu."
+      },
+      "kept": {
+        "title": "Được giữ",
+        "hint": "Đang được ticket đang làm hoặc PR đang mở dùng, là branch gốc, branch gốc của repo, branch của checkout chính hoặc branch mặc định của origin: không bao giờ bị xóa từ đây."
+      },
+      "other": {
+        "title": "Không có gì để so sánh",
+        "hint": "Workspace vẫn đăng ký nhưng không có branch, hoặc branch không có branch gốc để đối chiếu."
+      }
+    },
+    "workspacesRegistered_other": "{{count}} workspace đã đăng ký",
+    "previewStop": "preview {{state}}: hãy dừng nó trên ticket",
+    "notLocal": "không phải cục bộ",
+    "worktreeKept": "{{path}}: được giữ, {{reason}}",
+    "mainCheckout": "checkout chính",
+    "originSha": "origin {{sha}}",
+    "copyRestore": "Sao chép lệnh khôi phục: {{command}}",
+    "col": {
+      "ticket": "Ticket",
+      "branch": "Branch",
+      "reach": "Đã vào gốc",
+      "worktree": "Worktree",
+      "origin": "Origin",
+      "branchOnOrigin": "Branch trên origin"
+    },
+    "remote": {
+      "title": "Branch còn lại trên origin",
+      "intro": "Tính đến lần fetch gần nhất; board fetch origin lại trước khi xóa một branch. Mỗi branch được đánh giá theo commit của chính nó so với bản của các branch gốc trên origin, hoặc theo một PR đã merge mà head chính là commit đó."
+    },
+    "prMerged": "PR #{{number}} đã merge tại commit này",
+    "prWasMerged": "PR #{{number}} đã được merge tại commit này",
+    "untracked": {
+      "title": "Worktree không được theo dõi",
+      "intro": "Các worktree không ticket hay workspace nào ghi nhận. Hãy đăng ký chúng vào ticket của chúng, hoặc gỡ đi."
+    },
+    "detached": "detached {{sha}}",
+    "uploads": {
+      "title": "Tệp tải lên chưa gắn",
+      "intro": "Các tệp tải lên hơn một ngày trước mà không có gì trên board dùng: cửa sổ Ticket mới đóng mà không tạo, tệp bị gỡ khỏi bài đăng trước khi gửi. Board xóa chúng mỗi giờ; tệp mới hơn một ngày được để yên.",
+      "introRecent": "Các tệp tải lên hơn một ngày trước mà không có gì trên board dùng: cửa sổ Ticket mới đóng mà không tạo, tệp bị gỡ khỏi bài đăng trước khi gửi. Board xóa chúng mỗi giờ; tệp mới hơn một ngày được để yên (hiện có {{recent}}).",
+      "summary_other": "{{count}} tệp, {{size}}",
+      "deleteNow": "Xóa ngay",
+      "confirmTitle": "Xóa các tệp tải lên chưa gắn?",
+      "confirmText_other": "{{count}} tệp ({{size}}) mà không bài đăng, phản hồi, ticket hay ảnh agent nào dùng, tải lên hơn một ngày trước. Không thể hoàn tác."
+    },
+    "keep": "Giữ",
+    "delete": "Xóa",
+    "keptReason": "Được giữ: {{reason}}",
+    "noLocalBranch": "không có branch cục bộ",
+    "kind": {
+      "remote": "trên origin",
+      "local": "cục bộ",
+      "worktrees": "cùng worktree của chúng"
+    },
+    "worktreePath": "worktree {{path}}",
+    "stopsPreview": "dừng preview của nó ({{state}})",
+    "stopsServer": "dừng máy chủ trên :{{port}} nếu nó chạy từ worktree này",
+    "confirmChecked": "Mỗi mục được kiểm tra lại ngay trước khi xóa, và được giữ nếu có gì thay đổi; không có gì bị ép. Các lệnh khôi phục hiện sau đó.",
+    "toDelete": "Sẽ xóa",
+    "toDeleteEdited": "Sẽ xóa, đã sửa",
+    "editedOnTheWay": "Đã sửa khi vào: các commit này khác với branch gốc, nhưng merge sẽ không thêm gì",
+    "outcome": {
+      "deleted": "Đã xóa",
+      "refused": "Được giữ",
+      "failed": "Thất bại",
+      "gone": "Đã mất sẵn"
+    },
+    "advice": {
+      "changes": "Hãy commit hoặc stash chúng trong worktree, rồi làm mới.",
+      "prune": "Hãy chạy git worktree prune, rồi làm mới.",
+      "moved": "Hãy làm mới, rồi xác nhận lại trên commit mới.",
+      "checkedOut": "Hãy checkout branch khác ở đó trước."
+    },
+    "removed": "đã gỡ {{path}}",
+    "removedLink": "đã gỡ liên kết {{path}} tới {{target}}, nơi này vẫn còn",
+    "copyCommand": "Sao chép: {{command}}",
+    "results": {
+      "label": "Kết quả xóa",
+      "title": "Lần xóa gần nhất",
+      "retry": "Thử lại các mục được giữ",
+      "dismiss": "Đóng"
+    }
+  },
+  "gallery": {
+    "kind": {
+      "image": "Ảnh",
+      "video": "Video",
+      "pdf": "PDF",
+      "docs": "Tài liệu và văn bản",
+      "other": "Khác"
+    },
+    "sort": {
+      "newest": "Mới nhất trước",
+      "oldest": "Cũ nhất trước",
+      "name": "Tên A đến Z",
+      "name-desc": "Tên Z đến A",
+      "largest": "Lớn nhất trước",
+      "smallest": "Nhỏ nhất trước",
+      "type": "Theo loại"
+    },
+    "page": {
+      "title": "Thư viện",
+      "intro": "Mọi tệp trên các ticket của dự án.",
+      "filters": "Bộ lọc",
+      "fileType": "Loại tệp",
+      "from": "Từ",
+      "to": "Đến",
+      "sortTip": "Sắp xếp: {{sort}}",
+      "sort": "Sắp xếp",
+      "archivedTip": "Gồm cả tệp của ticket đã lưu trữ",
+      "includeArchived": "Gồm đã lưu trữ",
+      "clearFilters": "Xóa bộ lọc",
+      "loadError": "Không tải được các tệp: {{error}}",
+      "noMatch": "Không có tệp nào khớp các bộ lọc này.",
+      "none": "Dự án này chưa có tệp.",
+      "loadingMore": "Đang tải thêm tệp…"
+    }
+  },
+  "files": {
+    "copyImage": {
+      "unsupported": "Trình duyệt này không sao chép được ảnh vào bộ nhớ tạm",
+      "failedNamed": "Không sao chép được {{name}}",
+      "copied": "Đã sao chép",
+      "failed": "Không sao chép được",
+      "copy": "Sao chép ảnh"
+    },
+    "attachments": {
+      "notesOn": "Ghi chú trên {{name}}",
+      "sizeKb": "{{kb}} KB"
+    },
+    "grid": {
+      "open": "Mở {{name}}",
+      "inLaneTip": "Trong lane {{lane}}",
+      "inLane": "trong lane {{lane}}",
+      "openTicket": "Mở ticket",
+      "replyTip": "Phản hồi đi kèm nó",
+      "postTip": "Bài đăng đi kèm nó",
+      "openThread": "Mở luồng"
+    },
+    "pending": {
+      "preview": "Xem trước {{name}}",
+      "uploading": "đang tải lên",
+      "remove": "Gỡ",
+      "removeNamed": "Gỡ {{name}}"
+    },
+    "viewer": {
+      "openInNewTab": "Mở trong tab mới",
+      "download": "Tải xuống",
+      "close": "Đóng (Esc)",
+      "notes": "Ghi chú trên ảnh",
+      "previous": "Trước",
+      "next": "Sau",
+      "noPreview": "Không có bản xem trước cho loại tệp này.",
+      "zoomOut": "Thu nhỏ (-)",
+      "fit": "Vừa khung (0)",
+      "zoomIn": "Phóng to (+)",
+      "loadFailed": "Không tải được tệp này.",
+      "empty": "(tệp trống)",
+      "cut": "Đang hiện {{limit}} ký tự đầu. Hãy tải tệp xuống để xem phần còn lại."
+    }
+  },
+  "annotate": {
+    "cannotDraw": "trình duyệt này không vẽ được ảnh",
+    "couldNotSave": "không lưu được ảnh",
+    "title": "Chú thích ảnh",
+    "description": "{{name}}: hãy vẽ lên đó và viết mỗi nét có nghĩa gì. Ảnh được đính kèm đúng như hiện ở đây, kèm các ghi chú.",
+    "toolbar": "Công cụ vẽ",
+    "tool": {
+      "select": {
+        "label": "Chọn",
+        "hint": "Chọn các nét để di chuyển, xoay hoặc xóa"
+      },
+      "pen": {
+        "label": "Bút chì",
+        "hint": "Vẽ tay tự do"
+      },
+      "rect": {
+        "label": "Khung",
+        "hint": "Vẽ khung quanh một vật"
+      },
+      "arrow": {
+        "label": "Mũi tên",
+        "hint": "Chỉ vào một vật"
+      },
+      "ellipse": {
+        "label": "Elip",
+        "hint": "Khoanh tròn một vật"
+      },
+      "text": {
+        "label": "Chữ",
+        "hint": "Viết lên ảnh"
+      },
+      "note": {
+        "label": "Ghi chú",
+        "hint": "Bấm vào một nét để viết ghi chú"
+      },
+      "line": {
+        "label": "Đường thẳng",
+        "hint": "Vẽ một đường thẳng"
+      }
+    },
+    "colour": "Màu",
+    "strokeWidth": "Độ dày nét",
+    "fill": "Tô màu",
+    "textToPlace": "Chữ cần đặt",
+    "undo": "Hoàn tác",
+    "redo": "Làm lại",
+    "clear": "Xóa hết",
+    "notePlaceholder": "Nét này có nghĩa gì?",
+    "notePlaceholderEmpty": "Hãy vẽ một nét, hoặc chọn Ghi chú rồi bấm vào một nét",
+    "canvas": "Ảnh cần chú thích",
+    "cannotOpen": "Không mở được ảnh này trong canvas.",
+    "opening": "Đang mở ảnh…",
+    "notes": "Ghi chú",
+    "locked": "Các nét bị khóa cho đến khi ảnh được đính kèm.",
+    "attachOriginal": "Đính kèm bản gốc",
+    "attaching": "Đang đính kèm…",
+    "attach": "Đính kèm"
+  },
+  "reach": {
+    "merged": {
+      "label": "đã merge",
+      "title": "Mọi commit đều có nguyên trong branch gốc. An toàn để xóa."
+    },
+    "rebased": {
+      "label": "đã rebase",
+      "title": "Các commit đã được rebase hoặc cherry-pick; cùng các patch đã có trong branch gốc. An toàn để xóa."
+    },
+    "edited": {
+      "label": "đã sửa khi vào",
+      "title": "Các patch khác nhau, nhưng merge branch sẽ không đổi gì trong branch gốc. An toàn để xóa."
+    },
+    "unique": {
+      "label": "việc riêng",
+      "title": "Branch vẫn có những thay đổi mà branch gốc chưa có. Hãy giữ lại."
+    }
+  },
+  "runsCard": {
+    "step": {
+      "install": "đang cài phụ thuộc",
+      "build": "đang build",
+      "copy": "đang sao chép dữ liệu thật",
+      "server": "đang khởi động"
+    },
+    "status": {
+      "stopped": "Đã dừng",
+      "building": "Đang build",
+      "buildingStep": "Đang build · {{step}}",
+      "running": "Đang chạy",
+      "failed": "Thất bại"
+    },
+    "notStarted_other": "{{count}} chưa khởi động: {{list}}",
+    "nothingRunning": "Không có gì đang chạy",
+    "startAllTip": "Khởi động mọi lượt chạy của các repo của ticket chưa chạy",
+    "startAll": "Khởi động tất cả",
+    "stopAllTip": "Dừng mọi lượt chạy của ticket đang build hoặc đang chạy",
+    "stopAll": "Dừng tất cả",
+    "inUse": "{{inUse}} trên {{limit}} lượt chạy đang diễn ra trên board",
+    "primary": "chính",
+    "workspaceTip": "workspace {{name}} trong {{path}}",
+    "workspaceTipNoPath": "workspace {{name}}",
+    "noRuns": "Không có lượt chạy: bạn thêm chúng trong cài đặt của dự án.",
+    "orphaned": "Không còn trên ticket này",
+    "orphanedHint": "có thể dừng, không khởi động lại từ đây",
+    "alsoRunning": "Cũng đang chạy",
+    "alsoRunningHint": "có thể dừng ở đây; dòng của nó khởi động cái mà nó hiển thị",
+    "links": "Liên kết",
+    "openTip": "Hiện preview bên trong CrossBoard, phủ lên trang: board giữ nguyên như cũ",
+    "open": "Mở",
+    "openBrowser": "Mở trong trình duyệt",
+    "throughBoard": "Qua board",
+    "startTipPreview": "Build và chạy nó trên một cổng trống, từ worktree của ticket",
+    "startTipJob": "Build và khởi động nó ở chế độ nền, từ worktree của ticket",
+    "start": "Khởi động",
+    "stop": "Dừng",
+    "restartTip": "Dừng, build lại và khởi động",
+    "restart": "Khởi động lại",
+    "cannotStart": "Không khởi động được: {{reason}}",
+    "onPort": "Trên :{{port}}",
+    "runningPlain": "Đang chạy",
+    "since": ", từ {{time}}",
+    "buildLog": "log build",
+    "runLog": "log chạy",
+    "logAria": "Log của {{name}}"
+  },
+  "previews": {
+    "step": {
+      "install": "đang cài phụ thuộc",
+      "build": "đang build",
+      "copy": "đang sao chép dữ liệu thật",
+      "server": "đang khởi động máy chủ"
+    },
+    "group": {
+      "running": "Đang chạy",
+      "runningHint": "Do board build và chạy, hoặc một liên kết trên máy này có trả lời.",
+      "stopped": "Không chạy",
+      "stoppedHint": "Đã dừng, thất bại, một liên kết không trả lời, hoặc một liên kết ngoài máy này mà board không kiểm tra."
+    },
+    "subtitle": "Mọi preview, đang chạy hay không.",
+    "empty": "Chưa có preview. Một preview sẽ hiện ở đây khi agent đăng ký liên kết preview trên workspace của ticket, hoặc board chạy một cái từ worktree của nó.",
+    "noneIn": "Không có preview trong {{name}}.",
+    "showAll": "Hiện mọi cột",
+    "allStages": "Mọi cột",
+    "stage": "Cột",
+    "stageTip": "Hiện các preview của ticket trong cột này",
+    "nothingToStop": "Không có gì để dừng",
+    "couldNotStop_other": "không dừng được {{count}}: {{list}}",
+    "stoppedCount_other": "Đã dừng {{count}}",
+    "barTip": "Các preview board build hoặc chạy, trong mọi dự án, và tối đa bao nhiêu cái chạy cùng lúc",
+    "bar": "Preview do board chạy: <strong>{{inUse}} trên {{limit}} đang dùng</strong> <muted>(toàn board)</muted>",
+    "stopAllTitle": "Dừng mọi preview đang chạy của dự án này?",
+    "stopAllDescription": "Các preview do board chạy sẽ dừng và giải phóng cổng. Liên kết dừng khi board biết máy chủ của chúng chạy từ worktree của workspace; những cái khác vẫn chạy, và thông báo nói lý do. Các liên kết vẫn còn trên trang.",
+    "keepThem": "Giữ chúng",
+    "uncheckedLink": "Board chỉ kiểm tra các liên kết trên máy này",
+    "throughBoard": "Qua board:",
+    "openThrough": "Mở qua board",
+    "linkNotStopped": "Board sẽ không dừng nó: {{reason}}",
+    "stoppedStillListening": "Đã dừng, nhưng vẫn có gì đó lắng nghe trên :{{port}}",
+    "stopLinkTip": "Dừng máy chủ sau liên kết này (nó chạy từ worktree của workspace) và giải phóng cổng",
+    "startTip": "Build worktree này và chạy trên một cổng trống, với bản sao mới của dữ liệu thật",
+    "stopTip": "Dừng preview và giải phóng cổng",
+    "restartTip": "Dừng, build lại và khởi động với bản sao mới của dữ liệu",
+    "answered": "Trả lời bằng HTTP {{status}} lúc {{time}}",
+    "notRunning": "Không chạy",
+    "noAnswer": "Không trả lời lúc {{time}}",
+    "notChecked": "Chưa kiểm tra",
+    "checking": "Đang kiểm tra…",
+    "checkingTitle": "Đang kiểm tra xem nó có trả lời không",
+    "fullLog": "log đầy đủ",
+    "log": "log",
+    "serverLog": "log máy chủ",
+    "building": "Đang build…",
+    "buildingStep": "Đang build… {{step}}",
+    "startingOn": "Đang khởi động trên :{{port}}…",
+    "startingOnStep": "Đang khởi động trên :{{port}}… {{step}}",
+    "runBy": "Board chạy trên :{{port}}",
+    "runBySince": "Board chạy trên :{{port}}, từ {{time}}",
+    "failed": "Thất bại: {{reason}}",
+    "stoppedReason": "Đã dừng: {{reason}}",
+    "stopAllRuns": "Dừng tất cả"
+  },
+  "previewWindow": {
+    "building": "Đang build… sẽ hiện ở đây khi chạy.",
+    "failed": "Preview thất bại. Xem log của nó trên ticket.",
+    "failedReason": "Preview thất bại: {{reason}}. Xem log của nó trên ticket.",
+    "blocked": "Preview này sẽ không hiện bên trong board: nó từ chối bị nhúng khung.",
+    "blockedReason": "Preview này sẽ không hiện bên trong board: {{reason}}.",
+    "stoppedThrough": "Preview này đã dừng. Hãy khởi động từ thẻ Lượt chạy của ticket hoặc trang Preview.",
+    "stoppedDirect": "Preview không trả lời trên máy này. Hãy khởi động lại máy chủ của nó ở nơi nó chạy.",
+    "frameTitle": "Preview của {{title}}",
+    "copied": "Đã sao chép liên kết",
+    "couldNotCopy": "Không sao chép được liên kết",
+    "window": "Cửa sổ preview",
+    "openPreviews": "Mở các preview",
+    "reloadTip": "Tải lại preview",
+    "reload": "Tải lại preview",
+    "restoreTip": "Về cửa sổ nổi",
+    "maximizeTip": "Dùng toàn màn hình",
+    "restore": "Khôi phục cửa sổ preview",
+    "maximize": "Phóng to cửa sổ preview",
+    "closeTip": "Đóng preview (lượt chạy vẫn tiếp tục)",
+    "close": "Đóng cửa sổ preview",
+    "url": "URL preview",
+    "copyTip": "Sao chép liên kết của preview",
+    "copy": "Sao chép liên kết preview"
+  },
+  "roleLabels": {
+    "human": "Con người",
+    "orchestrator": "Orchestrator",
+    "worker": "Agent",
+    "board": "Board"
+  },
+  "runReport": {
+    "section": {
+      "brief": "Bản giao việc, và liệu có đủ không",
+      "readRan": "Những gì đã đọc và đã chạy",
+      "problems": "Vấn đề gặp phải",
+      "gaps": "Những gì không kiểm tra được, và các giả định",
+      "moreTime": "Những gì sẽ làm nếu có thêm thời gian",
+      "improvements": "Điều gì sẽ giúp lượt chạy tốt hơn",
+      "intent": "Ý định đến từ đâu",
+      "inferences": "Những gì phải suy ra",
+      "questions": "Câu hỏi mà ticket không trả lời được",
+      "approach": "Cách tiếp cận, và các phương án đã loại",
+      "alternatives": "Các phương án đã xét và loại",
+      "selfTests": "Những gì tự kiểm thử, và bằng cách nào",
+      "fixPass": "Lượt sửa đã đổi gì, và vì sao lượt đầu bỏ sót",
+      "scheduling": "Cách xếp lịch các giai đoạn đã chạy",
+      "judging": "Cách đánh giá những gì các giai đoạn trả về",
+      "provisioning": "Cách dựng môi trường chạy, và điều gì đã hỏng",
+      "freshness": "Cách chứng minh là mới",
+      "evidence": "Cách kiểm tra từng tiêu chí chấp nhận",
+      "unexercised": "Các tiêu chí không thực thi được",
+      "techniques": "Kỹ thuật dùng để tìm lỗi",
+      "surfaces": "Các bề mặt đã và chưa bao phủ",
+      "candidates": "Cách tạo ứng viên, và những gì đã bị loại",
+      "disproof": "Cách cố bác bỏ từng phát hiện",
+      "unsettled": "Các phát hiện không kết luận được, và vì sao",
+      "asked": "Điều con người yêu cầu, bằng lời của họ",
+      "compared": "Cách so từng yêu cầu với kết quả",
+      "conflicts": "Lần merge, các xung đột, và cách đọc chúng"
+    },
+    "label": "{{agent}} vòng {{round}}",
+    "notReported": "không báo cáo",
+    "effort": "effort {{effort}}",
+    "briefedBy": "được giao việc bởi <actor />",
+    "duration": "Thời lượng",
+    "durationMeasured": "Thời lượng (đo được)",
+    "durationSelf": "Thời lượng (tự báo cáo)",
+    "ownEstimate": "Ước tính của chính nó",
+    "difficulty": "Độ khó",
+    "confidence": "Độ tin cậy",
+    "started": "Bắt đầu",
+    "ended": "Kết thúc",
+    "time": {
+      "readingMs": "đọc",
+      "runningMs": "chạy",
+      "waitingMs": "chờ",
+      "writingMs": "viết",
+      "otherMs": "khác"
+    },
+    "steps": "Bước",
+    "dialogTitle": "Báo cáo lượt chạy: {{label}}",
+    "dialogTitleEmpty": "Báo cáo lượt chạy",
+    "round": "vòng {{round}}",
+    "difficultyShort": "độ khó {{n}}/5",
+    "confidenceShort": "độ tin cậy {{n}}/5"
+  },
+  "projectAgents": {
+    "title": "Nhóm",
+    "text": "Các vai trò mà agent đảm nhận. Giao một ticket để dành riêng nó cho một agent.",
+    "new": "Agent mới",
+    "empty": "Chưa có agent. Mọi ticket được các agent đã kết nối dùng chung.",
+    "added": "Đã thêm {{names}}",
+    "defaults": {
+      "title": "Agent mặc định",
+      "files": "Maker tạo các tệp của công việc trong thư mục của dự án và đính kèm vào ticket; con người duyệt chúng hoặc trả ticket lại. Hãy sửa sau. Agent làm dự án này kết nối tới <code>{{path}}</code> trên địa chỉ của board (cùng MCP với trang Kết nối agent, với nội dung và công cụ của dự án này).",
+      "software": "Chu trình build và review: <strong>spec</strong> viết tiêu chí chấp nhận, <strong>builder</strong> viết code, <strong>runner</strong> review nó, và các giai đoạn của review (<strong>env</strong>, <strong>verify</strong>, <strong>hunt</strong>, <strong>refute</strong>, <strong>merge</strong>) cố làm nó hỏng; các phát hiện quay lại builder. Sau đó <strong>intent</strong> đối chiếu kết quả với chính lời của con người. Mỗi agent đi kèm hướng dẫn và ghi chú để orchestrator giao việc. Hãy sửa bất kỳ cái nào sau đó.",
+      "addAll": "Thêm các agent mặc định",
+      "addNames": "Thêm {{names}}",
+      "allAdded": "Đã thêm tất cả",
+      "skills": "Các skill chạy chu trình này, và kết nối MCP của agent, được cài ở <goto>Kết nối agent</goto>."
+    },
+    "noReserved": "không có ticket dành riêng cho nó",
+    "remove": "Gỡ {{name}}",
+    "removeTitle": "Gỡ {{name}}?",
+    "removeReserved_other": "{{count}} ticket dành riêng cho nó trở thành dùng chung và chưa giao.",
+    "removeKept": "Những gì nó đã đăng vẫn giữ tên của nó.",
+    "keep": "Giữ",
+    "removeAction": "Gỡ",
+    "instructions": "Hướng dẫn",
+    "instructionsHint": "điều agent làm theo",
+    "delegate": "Khi nào giao việc",
+    "delegateHint": "điều orchestrator dựa vào để quyết định",
+    "delegateEmpty": "Chưa có ghi chú giao việc: orchestrator sẽ không biết khi nào gọi nó.",
+    "report": "Báo cáo lượt chạy",
+    "reportHint": "mẫu mà mỗi lượt chạy điền trước khi bàn giao lại",
+    "nothingYet": "Chưa có gì.",
+    "lines_other": "{{count}} dòng",
+    "picture": "Ảnh",
+    "choosePicture": "Chọn ảnh",
+    "removePicture": "Gỡ ảnh",
+    "namePlaceholder": "reviewer, frontend, qa…",
+    "nameRule": "Chữ cái, chữ số, - và _, để @name dùng được trong các luồng",
+    "instructionsText": "Điều agent làm theo: nó là ai, làm việc thế nào, không bao giờ làm gì. Orchestrator giao việc cho subagent bằng nội dung này.",
+    "instructionsPlaceholder": "Bạn là Tester. Bạn kiểm tra từng tiêu chí chấp nhận trên preview đang chạy…",
+    "delegateText": "Điều orchestrator dựa vào để quyết định: khi nào giao việc cho agent này, đưa gì cho nó, nó trả về gì, và bước tiếp theo là gì.",
+    "delegatePlaceholder": "Sau khi Builder xong một bước, kèm liên kết preview và các tiêu chí chấp nhận. Trả về PASS / FAIL cho từng tiêu chí. Tất cả đạt: Breaker tiếp theo; có lỗi: quay lại Builder.",
+    "templateLabel": "Mẫu báo cáo lượt chạy",
+    "templateText": "Điều một lượt chạy của agent này điền trước khi bàn giao lại, mỗi lượt chạy một báo cáo. Nó bắt đầu bằng phần chung mà mọi báo cáo đều có (danh tính, thời gian, bản giao việc, các bước, đánh giá, vấn đề, khoảng trống); hãy thêm điều agent này làm. Board lưu nó cùng agent.",
+    "templatePlaceholder": "## Quy tắc …",
+    "add": "Thêm agent"
+  },
+  "gettingStarted": {
+    "agentEmpty": "Chưa có dự án. Con người tạo dự án đầu tiên từ Bắt đầu trên Trang chủ.",
+    "title": "Bắt đầu · {{done}} trên {{total}}",
+    "intro": "Bốn bước trước khi agent làm việc trên board này. Mỗi bước tự đánh dấu khi xong.",
+    "entryTip": "Các bước để bắt đầu làm việc trên board này",
+    "entryAria": "Bắt đầu, xong {{done}} trên {{total}}",
+    "entryShort": "Bắt đầu ·",
+    "popoverIntro": "Mỗi bước tự đánh dấu khi xong.",
+    "dismissTip": "Ẩn Bắt đầu vĩnh viễn",
+    "dismissAria": "Đóng Bắt đầu",
+    "menuItem": "Bắt đầu · {{done}}/{{total}}",
+    "stepsAria": "Các bước bắt đầu",
+    "stepAria": "{{title}}: {{state}}",
+    "titles": {
+      "tools": "Công cụ trên máy này",
+      "project": "Tạo dự án và thêm repo đầu tiên",
+      "agent": "Kết nối agent",
+      "ticket": "Viết ticket đầu tiên và giao cho agent"
+    },
+    "state": {
+      "done": "Xong",
+      "checking": "Đang kiểm tra…",
+      "notDone": "Chưa xong"
+    },
+    "couldNotCheck": "Không kiểm tra được bước này: {{error}}",
+    "tools": {
+      "hint": "Board chạy <code>git</code> và <code>gh</code> (đã đăng nhập) trên PATH của nó; <code>claude</code> là tùy chọn, chỉ cho báo cáo của chính board (Báo cáo → Tạo); <code>node</code> và <code>pnpm</code> chỉ cho preview.",
+      "missing": "<problem>{{problem}}</problem>. Cách sửa: {{fix}}."
+    },
+    "project": {
+      "hint": "Dự án gom các checkout mà agent làm việc trong đó. Repo đầu tiên lấy thư mục của checkout, repo GitHub và branch gốc của nó.",
+      "addRepo": "Thêm repo vào {{name}}",
+      "new": "Dự án mới"
+    },
+    "agent": {
+      "hint": "Ở Kết nối agent, Tạo lệnh sẽ tạo token của agent và các lệnh để chạy trong terminal: kết nối máy chủ MCP của board và cài skill của board."
+    },
+    "ticket": {
+      "hint": "Viết việc cần làm thành một ticket trên trang Tính năng của dự án. Rồi, trong repo của bạn, chạy <code>claude</code> và nói <code>/board pick up the next ticket</code>.",
+      "write": "Viết ticket",
+      "createFirst": "Hãy tạo dự án trước (bước 2)."
+    },
+    "checkAgain": "Kiểm tra lại"
+  },
+  "projectSwitcher": {
+    "project": "Dự án",
+    "select": "Chọn dự án",
+    "projects": "Dự án",
+    "repos_other": "{{count}} repo",
+    "tickets_other": "{{count}} ticket",
+    "openPrs_other": "{{count}} PR đang mở",
+    "newProject": "Dự án mới…",
+    "manage": "Quản lý dự án…",
+    "newTitle": "Dự án mới",
+    "newDescription": "Dự án gom các repo. Thêm repo của nó từ trang Repo của dự án.",
+    "name": "Tên",
+    "create": "Tạo",
+    "manageDescription": "Đổi tên hoặc xóa dự án. Thêm, chuyển hoặc gỡ repo của nó ở trang Repo của dự án.",
+    "renamed": "Đã đổi tên thành {{name}}",
+    "nameOf": "Tên của {{name}}",
+    "rename": "Đổi tên",
+    "deleteName": "Xóa {{name}}",
+    "deleteTitle": "Xóa {{name}}?",
+    "deleteText": "Đi theo nó: {{repos}}, {{tickets}}, {{openPrs}}, cùng các review và nhật ký hằng ngày. Các checkout trên đĩa không bị động đến. Để giữ một repo, hãy chuyển nó sang dự án khác trước.",
+    "keep": "Giữ",
+    "delete": "Xóa",
+    "noRepos": "không có repo",
+    "counts": "{{tickets}} · {{openPrs}}"
+  },
+  "newTicket": {
+    "newTicket": "Ticket mới",
+    "newLane": "Lane mới",
+    "description": "Hãy viết như giao việc cho đồng nghiệp: agent đọc nội dung này trước khi bắt đầu.",
+    "laneDescription": "Một phần song song của <parent>{{title}}</parent>, với branch, người được giao, tác vụ và cập nhật riêng.",
+    "title": "Tiêu đề",
+    "instructions": "Hướng dẫn",
+    "instructionsPlaceholder": "Việc cần làm, cách biết là xong, điều không bao giờ được làm. Dán hoặc thả tệp để đính kèm.",
+    "initialTasks": "Tác vụ ban đầu",
+    "phases": "Ticket bắt đầu với các giai đoạn của dự án: {{phases}}. Các tác vụ gõ ở đây nằm dưới {{first}}.",
+    "stage": "Cột",
+    "complexity": "Độ phức tạp",
+    "repository": "Repo",
+    "assignee": "Người được giao (tùy chọn)",
+    "tags": "Tag (tùy chọn)",
+    "tagsPlaceholder": "High, Forms",
+    "branchesOff": "Tách từ <branch>{{branch}}</branch> khi cùng repo.",
+    "uploading": "Đang tải lên…",
+    "create": "Tạo",
+    "workflow": "Quy trình"
+  },
+  "notes": {
+    "title": "Ghi chú",
+    "manageAll": "Quản lý tất cả ({{count}})",
+    "add": "Thêm ghi chú",
+    "dialogTitle": "Ghi chú ({{count}})",
+    "dialogDescription": "Mỗi ghi chú một sự việc ngắn, ghim lên đầu. Tác giả của ghi chú, orchestrator hoặc con người có thể sửa nó.",
+    "empty": "Ghi chú là một sự việc ngắn mà phiên sau không được phải khám phá lại — một lệnh, một đường dẫn, một quy tắc, một lời nhắc. Mỗi ghi chú chỉ một sự việc, không bao giờ là một tài liệu.",
+    "exampleLabel": "Lệnh phát hành",
+    "exampleLabel2": "Cổng preview",
+    "exampleBody2": "47101 trở lên, mỗi lượt chạy một cổng",
+    "unpinTip": "Bỏ ghim ghi chú này",
+    "pinTip": "Ghim ghi chú này lên trên các ghi chú khác",
+    "unpin": "Bỏ ghim {{label}}",
+    "pin": "Ghim {{label}}",
+    "editTip": "Sửa ghi chú này",
+    "edit": "Sửa {{label}}",
+    "deleteTip": "Xóa ghi chú này",
+    "delete": "Xóa {{label}}",
+    "labelAria": "Nhãn ghi chú",
+    "bodyAria": "Nội dung ghi chú",
+    "save": "Lưu ghi chú",
+    "cancel": "Hủy"
+  },
+  "actor": {
+    "howBoard": "board, được ghi tự động",
+    "howHuman": "bạn, đăng nhập bằng passkey",
+    "howOrchestrator": "một agent, đăng nhập bằng token mà con người đã đặt làm orchestrator: nó cũng đổi được hướng dẫn của dự án",
+    "howWorkerUnder": "một agent, worker dưới {{parent}}",
+    "howAgent": "một agent, đăng nhập bằng token",
+    "projectAgent": "{{name}} (một agent của dự án)",
+    "projectAgentVia": "{{name}} (một agent của dự án, đăng qua {{chain}})",
+    "via": "qua {{via}}",
+    "tip": "{{chain}}: {{how}}",
+    "under": "dưới {{parent}}",
+    "by": "bởi <actor/>"
+  },
+  "postTools": {
+    "editText": "Sửa nội dung",
+    "cancel": "Hủy",
+    "saving": "Đang lưu…",
+    "save": "Lưu",
+    "edited": "đã sửa",
+    "editedAt": "đã sửa {{when}}",
+    "editLabel": "sửa",
+    "edit": "Sửa",
+    "deleteLabel": "xóa",
+    "delete": "Xóa",
+    "deletePostTitle": "Xóa bài đăng này?",
+    "deleteReplyTitle": "Xóa phản hồi này?",
+    "deleteText": "Các phản hồi và tệp của nó đi theo. Không thể hoàn tác.",
+    "keep": "Giữ"
+  },
+  "pickers": {
+    "unassigned": "Chưa giao",
+    "reserved": "{{name}} (dành riêng)",
+    "projectAgents": "Agent của dự án: chỉ họ làm",
+    "connectedAgents": "Agent đã kết nối: dùng chung",
+    "noBranchYet": "— chưa có —",
+    "clear": "Xóa {{what}}"
+  },
+  "prState": {
+    "merge": {
+      "clean": {
+        "label": "merge được",
+        "title": "Không xung đột với branch gốc."
+      },
+      "conflicts": {
+        "label": "xung đột",
+        "title": "Xung đột với branch gốc: cần rebase hoặc merge trước khi vào được."
+      },
+      "behind": {
+        "label": "sau branch gốc",
+        "title": "Branch gốc đã đi tiếp và branch protection yêu cầu branch được cập nhật trước."
+      },
+      "blocked": {
+        "label": "bị chặn",
+        "title": "Branch protection: vẫn thiếu một review hoặc check bắt buộc."
+      },
+      "checking": {
+        "label": "đang kiểm tra",
+        "title": "GitHub vẫn đang xác định liệu có merge được không (thường ngay sau một lần push). Hãy làm mới sau giây lát."
+      }
+    },
+    "ci": {
+      "passing": "CI đạt",
+      "failing": "CI lỗi",
+      "pending": "CI đang chạy",
+      "none": "không có CI"
+    },
+    "review": {
+      "APPROVED": "đã duyệt",
+      "CHANGES_REQUESTED": "yêu cầu thay đổi",
+      "REVIEW_REQUIRED": "cần review"
+    },
+    "checkedLocal": "{{title}} Đã kiểm tra tại đây so với origin/{{base}}.",
+    "checkedLocalAt": "{{title}} Đã kiểm tra tại đây so với origin/{{base}}, {{when}}.",
+    "outdated": "origin/{{base}} đã đổi sau khi GitHub báo: đang chờ GitHub xem lại.",
+    "outdatedAt": "origin/{{base}} đã đổi sau khi GitHub báo lúc {{when}}: đang chờ GitHub xem lại.",
+    "githubAt": "{{title}} GitHub báo tính đến {{when}}.",
+    "githubLast": "{{title}} GitHub báo tính đến lần làm mới gần nhất.",
+    "checks": "{{pass}} đạt · {{failed}} lỗi · {{pending}} đang chạy · {{skipped}} bỏ qua",
+    "noChecks": "Không có check nào trên commit head.",
+    "draft": "nháp",
+    "failed": "lỗi:",
+    "mergeConflicts": "xung đột merge"
+  },
+  "pushDot": {
+    "pushed": "đã push",
+    "pushedBehind": "đã push, sau {{count}}",
+    "pushedBehindTitle_other": "đã push; origin có thêm {{count}} commit",
+    "ahead": "{{count}} chưa push",
+    "aheadTitle_other": "chưa push: {{count}} commit chỉ có ở đây",
+    "aheadBehindTitle_other": "chưa push: {{count}} commit chỉ có ở đây; origin còn có {{behind}} mà branch này thiếu",
+    "localOnly": "không có trên origin",
+    "localOnlyTitle": "chưa push: không có branch đó trên origin",
+    "localOnlyAheadTitle_other": "chưa push: không có branch đó trên origin, {{count}} commit chỉ có ở đây",
+    "itsBase": "branch gốc của nó",
+    "merged": "đã merge vào {{into}}",
+    "mergedTitle": "đã merge vào {{into}}; branch đã mất khỏi origin",
+    "remoteOnly": "chỉ có trên origin",
+    "remoteOnlyTitle": "chỉ có trên origin: không có branch cục bộ",
+    "none": "không tìm thấy",
+    "noneTitle": "không có branch đó ở đây hay trên origin",
+    "checked": "kiểm tra {{ago}}",
+    "notFetched": "origin chưa được fetch",
+    "fetchNow": "Fetch origin ngay"
+  },
+  "clock": {
+    "typeTime": "{{label}} (nhập giờ)",
+    "amPm": "{{label}}: AM hoặc PM",
+    "setHourOrMinute": "{{label}}: đặt giờ hoặc phút",
+    "hour": "Giờ",
+    "minute": "Phút"
+  },
+  "markdown": {
+    "agentChip": "{{name}}, một agent của dự án",
+    "pages_other": "{{count}} trang"
+  },
+  "editor": {
+    "text": "Văn bản",
+    "bold": "In đậm",
+    "italic": "In nghiêng",
+    "strikethrough": "Gạch ngang",
+    "inlineCode": "Mã nội dòng",
+    "heading": "Tiêu đề",
+    "bulletList": "Danh sách gạch đầu dòng",
+    "numberedList": "Danh sách đánh số",
+    "checklist": "Danh sách việc",
+    "quote": "Trích dẫn",
+    "codeBlock": "Khối mã",
+    "link": "Liên kết",
+    "linkTo": "Liên kết tới",
+    "attaching": "Đang đính kèm tệp…",
+    "attach": "Đính kèm tệp",
+    "formatting": "Định dạng"
+  },
+  "projectNav": {
+    "homeText": "Mọi dự án trong một cái nhìn: việc chờ bạn, việc đang làm, việc đã xong hôm nay và việc tiếp theo.",
+    "overviewText": "Việc cần bạn, việc đang chạy, việc tiếp theo.",
+    "page": "Trang dự án",
+    "toggle": {
+      "expanded": "Thu gọn thanh bên",
+      "shrunk": "Ẩn thanh bên",
+      "hidden": "Hiện thanh bên"
+    }
+  },
+  "palette": {
+    "page": {
+      "overview": {
+        "title": "Tổng quan",
+        "subtitle": "Tóm tắt dự án",
+        "keywords": "trang chủ, dự án, tóm tắt, cần bạn, home"
+      },
+      "board": {
+        "title": "Board",
+        "subtitle": "Tính năng đang làm",
+        "keywords": "ticket, tính năng, kanban, cột, đang làm, stage"
+      },
+      "roadmap": {
+        "title": "Lộ trình",
+        "subtitle": "Dòng thời gian công việc",
+        "keywords": "dòng thời gian, công việc, lịch, timeline"
+      },
+      "prs": {
+        "title": "Hàng đợi PR",
+        "subtitle": "PR cần review và PR đang chờ người khác",
+        "keywords": "pr, pull request, review, merge"
+      },
+      "reviews": {
+        "title": "Review",
+        "subtitle": "Kết quả review, trong hàng đợi PR",
+        "keywords": "kết luận, phát hiện, kết quả review, pr, verdict"
+      },
+      "previews": {
+        "title": "Preview",
+        "subtitle": "Các preview board đang chạy",
+        "keywords": "lượt chạy, máy chủ, cổng, run, server, port"
+      },
+      "gallery": {
+        "title": "Thư viện",
+        "subtitle": "Tệp và ảnh chụp màn hình",
+        "keywords": "tệp, ảnh, tải lên, files, images, upload"
+      },
+      "team": {
+        "title": "Nhóm",
+        "subtitle": "Các agent dự án làm việc cùng",
+        "keywords": "agent, vai trò, dành riêng, team"
+      },
+      "daily": {
+        "title": "Hằng ngày",
+        "subtitle": "Một ngày của dự án",
+        "keywords": "hoạt động, hôm nay, báo cáo, daily"
+      },
+      "cleanup": {
+        "title": "Dọn dẹp",
+        "subtitle": "Branch và worktree còn sót lại",
+        "keywords": "branch, worktree, xóa, còn sót, cleanup"
+      },
+      "repositories": {
+        "title": "Repo",
+        "subtitle": "Các checkout dự án này đọc",
+        "keywords": "repo, git, checkout"
+      },
+      "instructions": {
+        "title": "Hướng dẫn",
+        "subtitle": "Cài đặt: điều mọi agent đọc",
+        "keywords": "cài đặt, cài đặt dự án, quy tắc, bố cục, giai đoạn, cột, lượt chạy, settings"
+      },
+      "home": {
+        "title": "Trang chủ",
+        "subtitle": "Mọi dự án trong một cái nhìn",
+        "keywords": "dự án, tóm tắt, board, home"
+      },
+      "dailyGlobal": {
+        "title": "Hằng ngày",
+        "subtitle": "Những gì mọi dự án đã làm",
+        "keywords": "hoạt động, báo cáo, hôm nay, daily"
+      },
+      "connect": {
+        "title": "Kết nối",
+        "subtitle": "Kết nối agent và cài skill",
+        "keywords": "agent, mcp, token, thiết lập, cài đặt, connect"
+      },
+      "settingsGlobal": {
+        "title": "Cài đặt",
+        "subtitle": "Tùy chọn toàn board",
+        "keywords": "tùy chọn, giao diện, preview, thiết bị, settings"
+      },
+      "workflow": {
+        "title": "Quy trình",
+        "subtitle": "Các bước agent làm theo cho một ticket, dạng cây",
+        "keywords": "bước, preset, vòng review, bàn giao, giao việc, thứ tự, workflow, steps"
+      }
+    },
+    "setting": {
+      "theme": {
+        "title": "Giao diện",
+        "subtitle": "Hệ thống, sáng hoặc tối",
+        "keywords": "hiển thị, màu, tối, sáng, hệ thống, theme, dark, light"
+      },
+      "defaultAgent": {
+        "title": "CLI agent mặc định",
+        "subtitle": "CLI mà Kết nối mở sẵn",
+        "keywords": "agent, claude, codex, opencode, kết nối, connect"
+      },
+      "previewsLimit": {
+        "title": "Giới hạn preview",
+        "subtitle": "Số preview chạy cùng lúc",
+        "keywords": "preview, lượt chạy, giới hạn, cổng, limit"
+      },
+      "updates": {
+        "title": "Cập nhật",
+        "subtitle": "Các bản cập nhật của ứng dụng board",
+        "keywords": "phiên bản, bản phát hành, nâng cấp, version, release"
+      },
+      "agentRoles": {
+        "title": "Vai trò agent",
+        "subtitle": "Worker hoặc orchestrator",
+        "keywords": "agent, token, orchestrator, worker, quyền"
+      },
+      "tailnet": {
+        "title": "Lối vào tailnet",
+        "subtitle": "Truy cập board từ thiết bị khác",
+        "keywords": "tailscale, mạng, từ xa, công khai, network"
+      },
+      "devices": {
+        "title": "Thiết bị và passkey",
+        "subtitle": "Các thiết bị đăng nhập",
+        "keywords": "passkey, phiên, đăng nhập, bảo mật, sessions, security"
+      },
+      "instructions": {
+        "title": "Hướng dẫn dự án",
+        "subtitle": "Điều mọi agent đọc",
+        "keywords": "quy tắc, agent, prompt"
+      },
+      "instructionsHistory": {
+        "title": "Lịch sử hướng dẫn",
+        "subtitle": "Mọi thay đổi của hướng dẫn",
+        "keywords": "phiên bản, lịch sử, thay đổi, history"
+      },
+      "defaultPhases": {
+        "title": "Giai đoạn mặc định",
+        "subtitle": "Các tác vụ mọi ticket mới bắt đầu với",
+        "keywords": "tác vụ, giai đoạn, ticket mới, phases"
+      },
+      "tagSuggestions": {
+        "title": "Gợi ý tag",
+        "subtitle": "Các tag gợi ý trên ticket",
+        "keywords": "tag, nhãn, labels"
+      },
+      "stalledTickets": {
+        "title": "Ticket đình trệ",
+        "subtitle": "Khi nào ticket bị coi là đình trệ",
+        "keywords": "đình trệ, phút, nhàn rỗi, stall, idle"
+      },
+      "notifications": {
+        "title": "Thông báo",
+        "subtitle": "Các cảnh báo dự án này hiển thị",
+        "keywords": "cảnh báo, tắt tiếng, chuông, nhắc nhở, alerts, mute, bell, reminders"
+      },
+      "stages": {
+        "title": "Cột",
+        "subtitle": "Các cột của board và ý nghĩa",
+        "keywords": "cột, quy trình, trạng thái, stage, workflow, status"
+      },
+      "runs": {
+        "title": "Lượt chạy",
+        "subtitle": "Preview và job mà board chạy",
+        "keywords": "preview, job, lệnh, build, runs"
+      },
+      "layout": {
+        "title": "Bố cục",
+        "subtitle": "Các trang, thẻ và phần của ticket",
+        "keywords": "sắp xếp, menu, thanh bên, layout, sidebar"
+      },
+      "agentTokens": {
+        "title": "Token agent",
+        "subtitle": "Các token agent dùng để đăng nhập",
+        "keywords": "token, agent, khóa, thu hồi, vai trò, revoke"
+      },
+      "skills": {
+        "title": "Skill review",
+        "subtitle": "Cài các skill review (Claude Code)",
+        "keywords": "skill, review, cài đặt, install"
+      }
+    },
+    "kinds": {
+      "ticket": "Ticket",
+      "page": "Trang",
+      "setting": "Cài đặt",
+      "action": "Hành động"
+    },
+    "keywords": {
+      "newTicket": "tạo, thêm, ticket, lane, mới, new",
+      "copyLink": "url, chia sẻ, bộ nhớ tạm, link",
+      "startPreview": "chạy, preview, khởi động, máy chủ, start",
+      "stopPreview": "chạy, preview, dừng, máy chủ, stop",
+      "switchProject": "dự án, chuyển, mở, project"
+    },
+    "recent": "Gần đây",
+    "notStarted_other": "{{count}} chưa khởi động: {{details}}",
+    "notStopped_other": "{{count}} chưa dừng: {{details}}",
+    "nothingRunning": "Không có gì đang chạy",
+    "createIn": "Tạo ticket trong {{name}}",
+    "createInThis": "Tạo ticket trong dự án này",
+    "copyLink": "Sao chép liên kết ticket",
+    "copyLinkText": "Đưa địa chỉ của ticket này vào bộ nhớ tạm",
+    "linkCopied": "Đã sao chép liên kết ticket",
+    "startPreview": "Khởi động preview",
+    "startPreviewText": "Khởi động các preview và job của ticket",
+    "stopPreview": "Dừng preview",
+    "stopPreviewText": "Dừng các preview và job của ticket",
+    "switchTo": "Chuyển sang {{name}}",
+    "currentProject": "Dự án hiện tại",
+    "openOverview": "Mở Tổng quan của nó",
+    "searchTip": "Tìm trên board (Ctrl+F)",
+    "search": "Tìm trên board",
+    "description": "Tìm ticket, trang, cài đặt và hành động. Dùng phím lên và xuống để di chuyển, Enter để chạy, và Escape để đóng.",
+    "placeholder": "Tìm ticket, trang, cài đặt và hành động…",
+    "close": "Đóng tìm kiếm",
+    "results": "Kết quả tìm kiếm",
+    "searching": "Đang tìm…",
+    "noMatches": "Không có kết quả cho “{{query}}”.",
+    "type": "Gõ để tìm trên board.",
+    "toMove": "để di chuyển",
+    "toOpen": "để mở",
+    "toClose": "để đóng",
+    "anywhere": "mọi nơi"
+  },
+  "signIn": {
+    "finishTitle": "Hoàn tất thiết lập trên máy chủ",
+    "finishBody": "Board này chưa có tài khoản. Tài khoản được tạo trên máy chạy board: hãy mở {{url}} ở đó. Rồi quay lại đây để thêm thiết bị này bằng một liên kết từ board.",
+    "setupTitle": "Thiết lập",
+    "setupHeading": "Thiết lập CrossBoard",
+    "setupIntro": "Tạo tài khoản của board và passkey đầu tiên, trên máy này. Các thiết bị khác được thêm sau từ Cài đặt, bằng liên kết dùng một lần.",
+    "nameLabel": "Tên của bạn trên board",
+    "deviceLabel": "Thiết bị này",
+    "deviceDefault": "Máy tính này",
+    "devicePlaceholder": "Điện thoại, laptop…",
+    "createPasskey": "Tạo passkey",
+    "loginTitle": "Đăng nhập",
+    "loginHeading": "Đăng nhập",
+    "loginWelcomeMachine": "Chào mừng trở lại, {{name}}. Hãy đăng nhập bằng passkey của máy này.",
+    "loginWelcomeDevice": "Chào mừng trở lại, {{name}}. Hãy đăng nhập bằng passkey của thiết bị này.",
+    "loginButton": "Đăng nhập bằng passkey",
+    "enrollTitle": "Thêm thiết bị",
+    "enrollNeedsLinkHeading": "Thêm thiết bị",
+    "enrollNeedsLink": "Trang này cần một liên kết từ board: trên thiết bị đã đăng nhập, mở Cài đặt, Thiết bị, và bấm Thêm thiết bị.",
+    "enrollHeading": "Thêm thiết bị này",
+    "enrollIntro": "Tạo passkey cho {{name}} trên thiết bị này. Liên kết chỉ dùng được một lần, trong 15 phút.",
+    "noPasskeys": "Trình duyệt này không dùng được passkey ở đây.",
+    "promptClosed": "Hộp thoại passkey đã bị đóng hoặc hết thời gian. Hãy thử lại."
+  },
+  "ticketBoard": {
+    "stage": "Cột",
+    "archiveTip_other": "Lưu trữ {{count}} ticket trong {{stage}}",
+    "archiveAll": "Lưu trữ tất cả",
+    "archiveTitle_other": "Lưu trữ {{count}} ticket?",
+    "archiveDescription": "Mọi ticket trong {{stage}} rời khỏi board, cùng các lane. Chúng ở lại trong Đã lưu trữ, nơi mỗi ticket có thể khôi phục, và các trang của chúng vẫn mở được.",
+    "cancel": "Hủy",
+    "archive": "Lưu trữ",
+    "decisions_other": "cần {{count}} quyết định",
+    "tasksBlocked_other": "{{count}} tác vụ bị chặn",
+    "previousStage": "Cột trước",
+    "nextStage": "Cột sau",
+    "lanes_other": "{{count}} lane",
+    "laneStage": "{{count}} {{stage}}",
+    "hitInstructions": "Hướng dẫn",
+    "hitPost": "Bài đăng",
+    "hitReply": "Phản hồi",
+    "noTickets": "Không có ticket.",
+    "nothingArchived": "Chưa lưu trữ gì.",
+    "archived": "đã lưu trữ {{when}}",
+    "archivedBy": "đã lưu trữ {{when}} bởi <actor/>",
+    "restore": "Khôi phục"
+  },
+  "ticketList": {
+    "archivedToast_other": "Đã lưu trữ {{count}} ticket",
+    "restoredToast": "Đã khôi phục #{{id}} về board",
+    "title": "Tính năng đang làm",
+    "board": "Board",
+    "list": "Danh sách",
+    "archived": "Đã lưu trữ",
+    "noMatch": "Không có ticket nào khớp “{{query}}”.",
+    "clearSearch": "Xóa tìm kiếm",
+    "state": "Trạng thái",
+    "clearState": "Xóa bộ lọc trạng thái",
+    "allTags": "Mọi tag",
+    "filterByTag": "Lọc theo tag",
+    "tags": "Tag",
+    "searchTags": "Tìm tag",
+    "noTagsMatch": "Không có tag nào khớp",
+    "tickets_other": "{{count}} ticket",
+    "showEveryTag": "Hiện mọi tag",
+    "clearTag": "Xóa bộ lọc tag",
+    "loadingTags": "Đang tải tag…",
+    "couldNotLoadTags": "Không tải được tag.",
+    "retry": "Thử lại",
+    "searchTickets": "Tìm ticket",
+    "searchPlaceholder": "Tìm theo tên hoặc luồng",
+    "clearSearchAria": "Xóa tìm kiếm"
+  },
+  "needs": {
+    "titleIn": "#{{id}} {{title}}: {{branch}} đã có trong {{into}}",
+    "titleNotIn": "#{{id}} {{title}}: {{branch}} chưa merge vào {{into}}",
+    "titleDone": "#{{id}} {{title}}: xong",
+    "titleNotDone": "#{{id}} {{title}}: chưa xong, không có branch",
+    "markDoneAnyway": "Vẫn đánh dấu xong",
+    "mergeFirst": "Merge trước:\n{{list}}",
+    "badge": "cần {{list}}",
+    "statusMerged": "Cần #{{id}} · đã merge",
+    "statusNotMerged": "Cần #{{id}} · chưa merge",
+    "removeNeed": "Bỏ yêu cầu #{{id}}",
+    "addPlaceholder": "Thêm ticket cần merge trước…",
+    "noOthers": "Không có ticket khác",
+    "includes": "Gồm công việc chưa merge từ <goto>{{ref}}</goto>",
+    "addAsNeed": "Thêm làm yêu cầu",
+    "autoTitle": "Board tự thêm: branch của ticket này chứa các commit chưa merge của ticket kia. Nó tự mất khi branch không còn như vậy, và gỡ ở đây là dứt hẳn (không thêm lại cho cùng các commit).",
+    "addedByBoard": "Board tự thêm",
+    "cannotBeDoneUnsure": "Board không chắc các commit này là của ai, nên không thêm yêu cầu nào. #{{id}} chưa thể xong cho đến khi branch của #{{need}} được merge vào branch gốc."
+  },
+  "verdict": {
+    "approve": "Duyệt",
+    "disapprove": "Không duyệt",
+    "approved": "Đã duyệt",
+    "disapproved": "Không duyệt",
+    "disapproveTip": "Không duyệt: hủy lane này",
+    "approvedBy": "Được {{who}} duyệt {{when}}. Bấm để thu hồi.",
+    "disapprovedBy": "Bị {{who}} không duyệt {{when}}. Bấm để thu hồi (mở lại nó)."
+  },
+  "reviewResult": {
+    "pr": "PR #{{number}}",
+    "counts": "{{confirmed}} đã xác nhận · {{plausible}} có khả năng · {{unverified}} chưa kiểm chứng",
+    "title": "Kết quả review"
+  },
+  "thread": {
+    "replyActions": "Hành động phản hồi",
+    "replyLabel": "phản hồi",
+    "reply": "Phản hồi",
+    "ask": " · @{{name}} hỏi agent đó",
+    "empty": "Chưa có bình luận.",
+    "replyingTo": "đang phản hồi {{name}}",
+    "cancel": "hủy",
+    "placeholderCompact": "Phản hồi…{{ask}}",
+    "placeholder": "Để lại phản hồi{{ask}}",
+    "sending": "Đang gửi…"
+  },
+  "prQueue": {
+    "title": "Hàng đợi PR",
+    "subtitle": "PR cần review và PR của bạn, theo trạng thái review.",
+    "filters": {
+      "me": {
+        "label": "Cần review",
+        "title": "PR của người khác mà bạn review: chờ bạn duyệt, đã được bạn duyệt, hoặc đang tạm giữ vì bình luận của bạn"
+      },
+      "others": {
+        "label": "Chờ người khác",
+        "title": "PR của bạn (cả của agent): chờ duyệt, đã được mọi reviewer duyệt, hoặc đang tạm giữ vì bình luận của họ"
+      },
+      "all": {
+        "label": "Mọi PR",
+        "title": "Mọi PR đang mở của các repo, ai viết cũng được và có liên quan đến bạn hay không"
+      }
+    },
+    "reviewers": {
+      "mine": "Chỉ tôi là reviewer",
+      "involving": "Liên quan đến tôi"
+    },
+    "tabs": {
+      "pending": "Đang chờ",
+      "reviewed": "Đã review",
+      "on_hold": "Tạm giữ",
+      "done": "Xong"
+    },
+    "empty": {
+      "me": "Không có PR {{stage}} cần review.",
+      "others": "Không có PR {{stage}} đang chờ người khác.",
+      "all": "Không có PR {{stage}} trong các PR đang mở."
+    },
+    "refresh": "Làm mới",
+    "mergeAfterTip": "Ticket của nó cần các PR này được merge trước:\n{{list}}",
+    "mergeAfterItem": "PR #{{number}} (từ #{{ticketId}} {{title}})",
+    "mergeAfter": "merge sau <refs/>",
+    "updated": "cập nhật {{when}}",
+    "merged": "merge {{when}}",
+    "myReview": "review của tôi: {{state}}",
+    "myReviewState": {
+      "approved": "đã duyệt",
+      "changes_requested": "yêu cầu thay đổi",
+      "commented": "đã bình luận",
+      "dismissed": "đã bỏ qua",
+      "pending": "đang chờ"
+    },
+    "forYourReview": "cần bạn review",
+    "yourPr": "PR của bạn",
+    "fromTicket": "từ #{{id}} {{title}}",
+    "reviewFresh": "đã review tại SHA này",
+    "reviewStale": "review là cho SHA cũ hơn",
+    "openTicket": "Mở ticket",
+    "release": "nhả",
+    "hold": "tạm giữ",
+    "holdTitle": "Tạm giữ #{{number}}",
+    "holdText": "Một ghi chú cho bạn và các agent. GitHub không bị động đến.",
+    "holdPlaceholder": "Vì sao phải chờ…",
+    "holdConfirm": "Tạm giữ",
+    "notInvolvingYou": "không liên quan đến bạn"
+  },
+  "workStatus": {
+    "state": {
+      "waiting": "Chờ bạn",
+      "yourTurn": "Đến lượt bạn",
+      "lost": "Mất liên lạc",
+      "noWord": "Không tin tức",
+      "quiet": "Im lặng",
+      "working": "Đang làm",
+      "nothing": "Không có gì mở"
+    },
+    "line": {
+      "yourTurn": "Đến lượt bạn · chờ {{duration}}",
+      "lost": "Mất liên lạc · {{duration}}",
+      "noWord": "Không tin tức {{duration}}",
+      "quiet": "Im lặng {{duration}}",
+      "working": "Đang làm · tin cuối {{duration}}"
+    },
+    "unit": {
+      "m": "{{count}}ph",
+      "h": "{{count}}g",
+      "d": "{{count}}ng"
+    },
+    "since": "từ {{time}}",
+    "minutes": "{{count}} phút",
+    "lastWord": "tin cuối {{count}} phút trước",
+    "noWordYet": "chưa có tin",
+    "why": {
+      "inStage": "trong {{stage}}, không nghe tin từ agent nào kể từ {{time}}",
+      "waitingOn": "đang chờ {{on}}, không nghe tin từ ai kể từ {{time}}",
+      "nothingOpen": "không có gì mở kể từ {{time}}",
+      "work": "công việc",
+      "ended": "không có gì mở kể từ khi {{phase}} kết thúc lúc {{time}}",
+      "endedQuote": "không có gì mở kể từ khi {{phase}} kết thúc lúc {{time}} ('{{quote}}')",
+      "noProgress": "không có bài tiến độ nào kể từ {{time}}"
+    },
+    "verb": {
+      "spec": "Đang viết spec",
+      "build": "Đang build",
+      "review": "Đang review",
+      "verify": "Đang kiểm chứng",
+      "pr": "Đang mở PR",
+      "preview": "Đang preview",
+      "merge": "Đang merge",
+      "work": "Đang làm"
+    },
+    "nobodyHeard": "Chưa nghe tin từ ai",
+    "lastHeard": "Tin cuối {{time}}",
+    "worked": "Đã làm",
+    "waited": "Đã chờ",
+    "onYou": "Ở bạn",
+    "defs": {
+      "worked": "Đã làm: thời gian agent có việc mở, không chờ người.",
+      "waited": "Đã chờ: thời gian ticket không có gì chuyển động và không chờ người nào.",
+      "onYou": "Ở bạn: thời gian chờ một người (chờ con người, hoặc một cột bị chặn)."
+    }
+  },
+  "workTimeline": {
+    "noWork": "Chưa ghi nhận công việc nào.",
+    "now": "bây giờ",
+    "board": "Board",
+    "unnamed": "chưa đặt tên",
+    "work": "công việc",
+    "theHuman": "con người",
+    "running": "đang chạy",
+    "neverClosed": "chưa bao giờ đóng",
+    "phaseRound": "{{phase}} vòng {{round}}",
+    "phaseRoundShort": "{{phase}} v{{round}}",
+    "delegatedTo": "giao cho {{on}}",
+    "subAgentOf": "{{name}}, subagent của {{parent}}",
+    "created": "tạo {{count}} phút trước khi làm",
+    "notToScaleNote": "Khoảng thời gian này được hiển thị bằng một khối ngắn, không theo độ dài thật.",
+    "alsoThenItem": "{{name}}, {{time}}",
+    "duration": {
+      "seconds": "{{count}}s",
+      "minutes": "{{count}}ph",
+      "hours": "{{count}}g",
+      "hoursMinutes": "{{h}}g {{m}}ph"
+    },
+    "spoken": {
+      "underMinute": "dưới một phút",
+      "days": "{{count}} ngày",
+      "minutes": "{{count}} phút",
+      "hours": "{{count}} giờ",
+      "hoursMinutes": "{{h}} giờ {{m}} phút"
+    },
+    "mark": {
+      "push": "push",
+      "pr": "pull request",
+      "preview": "preview",
+      "merge": "merge",
+      "other": "sự kiện board"
+    },
+    "label": {
+      "via": " (qua {{by}})",
+      "open": ", đang mở",
+      "span": "{{phase}} bởi {{agent}}{{via}}, {{from}} đến {{to}}, {{duration}}{{open}}",
+      "wait": "chờ: {{reason}} ({{agent}}), {{from}} đến {{to}}, {{duration}}{{open}}{{note}}",
+      "delegation": "giao cho {{on}} bởi {{agent}}, {{from}} đến {{to}}, {{duration}}{{open}}{{note}}",
+      "handoff": "{{from}} chuyển công việc cho {{to}}, {{time}}{{note}}",
+      "mark": "{{name}}{{note}}, {{time}}",
+      "collapsed": "{{label}}, {{from}} đến {{to}}, {{duration}}, không vẽ theo tỷ lệ"
+    },
+    "fact": {
+      "delegatedTo": "Giao cho",
+      "by": "Bởi",
+      "started": "Bắt đầu",
+      "ended": "Kết thúc",
+      "note": "Ghi chú",
+      "waiting": "Đang chờ",
+      "waitingFor": "Đang chờ",
+      "on": "Ở",
+      "duration": "Thời lượng",
+      "who": "Ai",
+      "work": "Công việc",
+      "from": "Từ",
+      "to": "Đến",
+      "at": "Lúc",
+      "event": "Sự kiện",
+      "notToScale": "Không theo tỷ lệ",
+      "alsoThen": "Cùng lúc"
+    },
+    "summary": {
+      "noAgentWork": "Chưa ghi nhận công việc của agent.",
+      "worked": "đã làm {{duration}}",
+      "waited": "đã chờ {{duration}} {{target}}",
+      "delegated": "{{on}}, đã giao",
+      "clause": "{{agent}} {{parts}}",
+      "workBy_other": "Công việc của {{count}} agent trong {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_other": "Hoạt động của {{count}} agent trong {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "stillGoing": " Vẫn đang tiếp diễn.",
+      "notToScale": " Không theo tỷ lệ: {{skipped}}."
+    },
+    "card": {
+      "title": "Dòng thời gian",
+      "showMore": "Hiện thêm",
+      "showLess": "Hiện ít hơn",
+      "story": "Câu chuyện dòng thời gian"
+    },
+    "story": {
+      "waitingFor": "đang chờ {{who}} · {{duration}}",
+      "waitedFor": "đã chờ {{who}} · {{duration}}{{note}}",
+      "started": "đã bắt đầu {{phase}}{{note}}",
+      "ended": "đã kết thúc {{phase}}{{note}}",
+      "handoff": "đã chuyển công việc{{from}} cho {{to}}{{note}}",
+      "handoffFrom": " từ {{name}}",
+      "someone": "ai đó",
+      "waiting": "đang chờ {{who}}",
+      "stoppedWaiting": "đã ngừng chờ {{who}}{{note}}",
+      "movedTo": "đã chuyển sang {{stage}}",
+      "createdIn": "đã tạo trong {{stage}}",
+      "pushed": "đã push",
+      "openedPr": "đã mở PR{{note}}",
+      "merged": "đã merge",
+      "preview": "preview {{note}}",
+      "somethingElse": "việc khác",
+      "lockNote": "khóa ({{note}})",
+      "lock": "khóa",
+      "you": "bạn",
+      "mcp": "máy chủ MCP",
+      "seconds": "{{count}} giây",
+      "minutes": "{{count}} phút",
+      "minutesSeconds": "{{m}} phút {{s}} giây",
+      "hours": "{{count}} giờ",
+      "hoursMinutes": "{{h}} giờ {{m}} phút"
+    },
+    "stretch": {
+      "start": "Chờ bắt đầu",
+      "blocked": "Bị chặn",
+      "human": "Chờ con người",
+      "review": "Đang review",
+      "merge": "Chờ merge",
+      "decision": "Chờ quyết định"
+    },
+    "skipped": {
+      "start": "chờ bắt đầu {{duration}}",
+      "blocked": "bị chặn {{duration}}",
+      "human": "chờ con người {{duration}}",
+      "review": "đang review {{duration}}",
+      "merge": "chờ merge {{duration}}"
+    },
+    "openReport": "Mở báo cáo của {{agent}}: {{label}}",
+    "openReportRound": "Mở báo cáo của {{agent}}, vòng {{round}}: {{label}}",
+    "reportDescription": "Báo cáo viết cho lượt chạy này",
+    "factsDescription": "Các thông tin của lượt chạy này",
+    "loadingReport": "Đang tải báo cáo lượt chạy…",
+    "reportsFailed": "Không tải được các báo cáo.",
+    "noReport": "Lượt chạy này không có báo cáo.",
+    "noReportYet": "Lượt chạy này chưa có báo cáo."
+  },
+  "roadmap": {
+    "title": "Lộ trình",
+    "subtitle": "Mọi ticket đang diễn ra: xong, đang làm, tiếp theo.",
+    "filter": {
+      "all": "Tất cả",
+      "blocked": "Bị chặn",
+      "review": "Cần review"
+    },
+    "timeAxis": "Trục thời gian, mọi dòng:",
+    "window": {
+      "today": "Hôm nay",
+      "24h": "24 giờ",
+      "7d": "7 ngày",
+      "fit": "Vừa mọi dòng"
+    },
+    "range": "{{start}} đến nay",
+    "stat": {
+      "tickets_other": "ticket",
+      "lanes_other": "lane",
+      "workingNow": "đang làm",
+      "blocked": "bị chặn",
+      "inReview": "đang review",
+      "noWord": "không tin tức"
+    },
+    "projectWork": "Công việc của dự án, mọi ticket và lane:",
+    "empty": {
+      "all": "Không có ticket nào đang làm, bị chặn hoặc đang review.",
+      "blocked": "Không có gì bị chặn.",
+      "review": "Không có ticket nào chờ review."
+    },
+    "lanes_other": "{{count}} lane",
+    "unassigned": "Chưa giao",
+    "progress": "xong {{done}} trên {{total}}",
+    "workTimeline": "Dòng thời gian công việc",
+    "noTasks": "Chưa có tác vụ.",
+    "tasks": "Tác vụ",
+    "step": {
+      "done": "xong",
+      "now": "đang làm",
+      "next": "tiếp theo",
+      "later": "sau",
+      "blocked": "bị chặn"
+    }
+  },
+  "overview": {
+    "loadError": "Không tải được tóm tắt: {{error}}",
+    "projectOverview": "{{name}}: tổng quan",
+    "headline": {
+      "waiting": "{{count}} đang chờ bạn",
+      "inProgress": "{{count}} đang làm",
+      "doneToday": "{{count}} xong hôm nay"
+    },
+    "allHidden": "Mọi thẻ của tổng quan này đều bị ẩn. <goto>Hiện lại trong cài đặt bố cục</goto>.",
+    "showFewer": "Hiện ít hơn",
+    "viewAll": "Xem tất cả {{count}}",
+    "unassigned": "chưa giao",
+    "projectAgent": "{{name}} (một agent của dự án)",
+    "sinceDate": "từ {{date}}",
+    "laneOf": "lane của #{{id}}",
+    "draft": "nháp",
+    "pr": "PR #{{number}}",
+    "prTitle": "PR #{{number}} {{title}}",
+    "openOnGithub": "Mở trên GitHub",
+    "option_other": "{{count}} lựa chọn",
+    "lane_other": "{{count}} lane",
+    "previewOf": "Preview của {{workspace}}",
+    "preview": "Preview",
+    "needsYou": {
+      "title": "Cần bạn",
+      "empty": "Không có gì chờ bạn.",
+      "decide": "Quyết định: {{question}}",
+      "asked": "{{options}} · hỏi bởi {{author}} {{ago}}",
+      "waitingOnYou": "Chờ bạn {{since}} · {{agent}}",
+      "reviewPr": "Review PR #{{number}} {{title}}",
+      "prBy": "bởi {{author}} · cập nhật {{ago}}",
+      "newReplies": "{{count}} mới · ",
+      "blocked": "bị chặn",
+      "instructionsChanged": "Hướng dẫn của dự án đã đổi",
+      "changedBy": "bởi <actor/>",
+      "reviewed": "Đã xem",
+      "revertTip": "Đưa hướng dẫn về như trước thay đổi này",
+      "revertBlockedTip": "Hướng dẫn đã đổi lại từ đó: hãy hoàn tác thay đổi sau trước",
+      "revert": "Hoàn tác",
+      "last": "cuối"
+    },
+    "lost": {
+      "title": "Mất liên lạc",
+      "empty": "Không có ai mất liên lạc.",
+      "lastHeardTip": "Tin cuối {{when}}",
+      "lastHeard": "tin cuối cách đây {{duration}}"
+    },
+    "inProgress": {
+      "title": "Đang làm",
+      "empty": "Không có gì đang làm."
+    },
+    "doneToday": {
+      "title": "Xong hôm nay",
+      "empty": "Hôm nay chưa xong gì.",
+      "closedTip": "Đã merge hoặc đóng: nó đã rời hàng đợi review",
+      "closed": "đóng {{time}}",
+      "activity_other": "Hôm nay có {{count}} việc xảy ra: Hằng ngày"
+    },
+    "carryingOver": {
+      "title": "Còn tồn",
+      "startedTip": "Công việc bắt đầu {{when}}",
+      "days_other": "đang làm {{count}} ngày",
+      "emptyShown": "Không có gì bị chặn hay đang review từ trước hôm nay."
+    }
+  },
+  "notifications": {
+    "title": "Thông báo",
+    "clearFinished": "Xóa mục đã xong",
+    "empty": "Không có gì đang chạy",
+    "dismiss": "Đóng {{label}}",
+    "of": "{{done}} trên {{total}}",
+    "starting": "Đang bắt đầu…",
+    "noReason": "không nêu lý do",
+    "failed": "{{title}} thất bại",
+    "finished": "{{title}} đã xong",
+    "finishedWith": "{{title}} đã xong · {{summary}}",
+    "failedLine": "Thất bại · {{elapsed}} · {{reason}}",
+    "succeededLine": "Thành công · {{elapsed}}",
+    "retryKept": "Thử lại các mục được giữ",
+    "youAsked": "{{actor}} · Bạn đã yêu cầu: {{request}}",
+    "stale": "Không có cập nhật trong {{since}} · có thể đã dừng",
+    "trackedFailed": "Thất bại · {{reason}}",
+    "succeeded": "Thành công",
+    "notice": "Lưu ý",
+    "cannotWait": "Không thể chờ: {{reason}}",
+    "muted": "Đã tắt \"{{name}}\" trong dự án này",
+    "new": "Mới",
+    "snooze": "Hoãn",
+    "snoozeFor": "Hoãn trong",
+    "mute": "Tắt loại này trong dự án này",
+    "copied": "Đã sao chép",
+    "copyFailed": "Không sao chép được: hãy chọn văn bản",
+    "unit": {
+      "s": "{{value}} giây",
+      "min": "{{value}} phút",
+      "h": "{{value}} giờ",
+      "d": "{{value}} ngày"
+    },
+    "severity": {
+      "info": "Thông tin",
+      "warning": "Cảnh báo",
+      "problem": "Sự cố"
+    }
+  },
+  "ticketPage": {
+    "archivedToast": "Đã lưu trữ: rời board, nằm trong Đã lưu trữ",
+    "restoredToast": "Đã khôi phục về board",
+    "disapprovedToast": "#{{id}} bị không duyệt và đã hủy",
+    "undo": "Hoàn tác sẽ thu hồi việc không duyệt và đưa nó về {{stage}}.",
+    "undoAction": "Hoàn tác",
+    "summary": "Tóm tắt",
+    "updated": "cập nhật {{when}}",
+    "archivedBy": "Được {{name}} lưu trữ {{when}}",
+    "archivedByLane": "Được {{name}} lưu trữ {{when}}, cùng ticket mà nó là lane",
+    "someone": "ai đó",
+    "archivedBadge": "Đã lưu trữ",
+    "decisionNeeded": "cần quyết định",
+    "archiveTip": "Đưa nó khỏi board, cùng các lane; Đã lưu trữ trên trang tính năng sẽ đưa nó về",
+    "deleteTitle": "Xóa ticket này?",
+    "deleteBody": "Các tác vụ, cập nhật, tệp đính kèm và luồng đi theo.",
+    "deleteLanes_other": "Nó có {{count}} lane: xóa chúng luôn, hoặc giữ lại và chuyển lên một cấp.",
+    "deleteKeepLanes": "Xóa, giữ lane",
+    "deleteWithLanes": "Xóa cả lane",
+    "title": "Tiêu đề",
+    "clickToRename": "Bấm để đổi tên",
+    "tagsAria": "Tag, phân cách bằng dấu phẩy",
+    "tagsPlaceholder": "High, Forms",
+    "editTagsTip": "Bấm để sửa tag",
+    "addTags": "+ tag",
+    "instructions": "Hướng dẫn",
+    "attaching": "đang đính kèm…",
+    "attach": "đính kèm",
+    "edit": "sửa",
+    "instructionsPlaceholder": "Việc cần làm, cách biết là xong, điều không bao giờ được làm. Dán hoặc thả tệp để đính kèm.",
+    "showLess": "Hiện ít hơn",
+    "showFull": "Hiện đầy đủ hướng dẫn",
+    "removeNamed": "Gỡ {{name}}",
+    "otherReposTip": "Công việc của ticket ở các repo khác của dự án, mỗi repo một branch: hiện trong Branch và Lượt chạy",
+    "otherRepos": "Các repo khác",
+    "repositoryNamed": "Repo {{name}}",
+    "takeOffTip": "Gỡ {{name}} khỏi ticket (các lượt chạy của nó cho ticket sẽ dừng)",
+    "addRepo": "Thêm repo",
+    "addRepoPlaceholder": "Thêm repo…",
+    "details": "Chi tiết",
+    "assignee": "Người được giao",
+    "reservedTip": "Dành riêng cho agent dự án này: agent khác không nhận được, chỉ bạn mới giao lại được",
+    "reserved": "dành riêng",
+    "repository": "Repo",
+    "branch": "Branch",
+    "baseBranch": "Branch gốc",
+    "needsTip": "Các ticket mà branch của chúng phải được merge vào branch gốc của ticket này trước khi nó xong",
+    "needs": "Cần",
+    "neededBy": "được cần bởi",
+    "autoTip": {
+      "Pushed": "Board tự đánh dấu từ git (branch có trên origin với mọi commit cục bộ)",
+      "PR": "Board tự đánh dấu từ GitHub (có PR đang mở hoặc đã merge cho ticket)",
+      "CI": "Board tự đánh dấu từ GitHub (các check của PR xanh, hoặc một bình luận \"CI run locally: green\" trên SHA head)",
+      "Preview": "Board tự đánh dấu từ các preview (một workspace của ticket chạy preview, hoặc liên kết preview của nó trả lời)",
+      "Summary": "Board tự đánh dấu từ các bài đăng của ticket (agent đã viết hoặc cập nhật tóm tắt sau commit cuối của branch)",
+      "Merged": "Board tự đánh dấu từ GitHub và git (PR đã merge, hoặc branch đã merge vào branch gốc)"
+    },
+    "tickedAuto": "Tự động đánh dấu",
+    "blocked": "bị chặn",
+    "subtasksBlocked_other": "{{count}} tác vụ con bị chặn",
+    "unblock": "Bỏ chặn {{name}}",
+    "markBlockedNamed": "Đánh dấu {{name}} bị chặn",
+    "addSubtask": "Thêm tác vụ con",
+    "addSubtaskTo": "Thêm tác vụ con cho {{name}}",
+    "removeTask": "gỡ",
+    "removeTaskSubtasks": "gỡ, cùng các tác vụ con",
+    "blockedPlaceholder": "Con người phải làm gì (tùy chọn)",
+    "whyBlocked": "Vì sao {{name}} bị chặn",
+    "markBlocked": "Đánh dấu bị chặn",
+    "tasks": "Tác vụ",
+    "noTasks": "Chưa có tác vụ. Hãy thêm các giai đoạn mà ticket mới bắt đầu với: Implementation, rồi các bước bàn giao (Pushed, PR, CI, Preview, Summary, Merged). Các bước cụ thể nằm dưới Implementation dưới dạng tác vụ con. Board tự đánh dấu Pushed, PR, CI, Preview, Summary và Merged.",
+    "subtasksOf": "Tác vụ con của {{name}}",
+    "newSubtaskOf": "Tác vụ con mới của {{name}}",
+    "add": "Thêm",
+    "addPhase": "Thêm giai đoạn: Implementation, Pushed, PR…",
+    "all": "Tất cả",
+    "nounLane": "lane",
+    "laneOf": "lane {{n}} trên {{count}}",
+    "filtered": "(đã lọc)",
+    "nounTicketIn": "ticket trong {{stage}}",
+    "stageOf": "{{n}} trên {{count}} trong {{stage}}",
+    "previousNoun": "{{noun}} trước",
+    "nextNoun": "{{noun}} sau",
+    "stepKeysTip": "[ và ] để lùi và tiến",
+    "lanesCancelled": "{{count}} đã hủy",
+    "allTasks": "mọi tác vụ {{done}}/{{total}}",
+    "noLanes": "Không có lane. Hãy tách ticket này thành các lane khi các phần của nó chạy song song: mỗi lane có branch, người được giao, tác vụ và cập nhật riêng.",
+    "filterStage": "Cột",
+    "filterTags": "Tag",
+    "showing": "hiện {{shown}} trên {{total}}",
+    "clearFilters": "xóa bộ lọc",
+    "activity": "Hoạt động",
+    "feed": "Dòng tin",
+    "mainTip": "Cho bạn: các bài đăng của bạn kèm phản hồi bên dưới, quyết định và câu hỏi",
+    "main": "Chính",
+    "agentsTip": "Sổ ghi công việc của agent: tiến độ, các giai đoạn review, ghi chú của builder",
+    "agents": "Agent",
+    "includeLanePosts": "gồm bài đăng của lane",
+    "newCount_other": "{{count}} mới",
+    "newPost": "Bài đăng mới",
+    "postPlaceholder": "Viết bài đăng: một câu hỏi, một câu trả lời, tiến độ. Dán hoặc thả ảnh chụp màn hình và bản ghi.",
+    "agentsPlaceholder": "Viết vào sổ ghi của agent: một ghi chú cho người làm việc này. Dán hoặc thả tệp.",
+    "posting": "Đang đăng…",
+    "post": "Đăng",
+    "postInAgents": "Đăng vào Agent",
+    "noPosts": "Chưa có bài đăng.",
+    "noPostsHere": "Chưa có bài đăng ở đây.",
+    "noAgentPosts": "Chưa có bài đăng của agent.",
+    "sections": "Các phần của ticket",
+    "summaryPosted": "đăng {{when}}",
+    "summaryUpdated": "cập nhật {{when}}",
+    "summaryWritten": "viết {{when}}",
+    "history": "Lịch sử ({{count}})",
+    "noSummary": "Chưa có tóm tắt: bài tiến độ mới nhất thay thế cho đến khi agent viết một bản.",
+    "earlierVersions": "Các phiên bản trước",
+    "firstVersion": "phiên bản đầu tiên",
+    "replies_other": "{{count}} phản hồi",
+    "summaryActions": "Hành động của tóm tắt",
+    "hideRepliesLabel": "ẩn phản hồi",
+    "replyLabel": "phản hồi",
+    "hideReplies": "Ẩn phản hồi",
+    "showReplies": "Hiện {{replies}}",
+    "replySummary": "Phản hồi tóm tắt",
+    "laneSummaryTip": "Tóm tắt của lane: công việc đang ở đâu, do các agent của nó duy trì",
+    "summaryChip": "tóm tắt",
+    "progress": "tiến độ",
+    "postActions": "Hành động của bài đăng",
+    "notProgressLabel": "không phải tiến độ",
+    "markProgressLabel": "đánh dấu tiến độ",
+    "notProgressTip": "Không phải tiến độ: biến thành bài đăng thường",
+    "markProgressTip": "Đánh dấu là tiến độ",
+    "decisionArchived": "Đã lưu trữ {{ids}}: rời board, nằm trong Đã lưu trữ",
+    "notArchived": "Chưa lưu trữ: {{why}}",
+    "decision": "Quyết định",
+    "decidedInChat": "Bạn đã quyết định trong chat ·",
+    "relayedTip": "Orchestrator đã ghi lại câu trả lời của bạn từ chat. Không có gì được bấm trên thẻ.",
+    "relayed": "chuyển tiếp",
+    "relayedBy": "bởi <actor/> {{when}} ·",
+    "decidedBy": "quyết định bởi <actor/> {{when}} ·",
+    "change": "đổi",
+    "decisionNeededHere": "Cần bạn quyết định",
+    "recommended": "đề xuất",
+    "saidInChat": "Điều bạn đã nói trong chat:",
+    "agentNotePlaceholder": "Một ghi chú cho agent (tùy chọn)",
+    "agentNote": "Ghi chú cho agent",
+    "decide": "Quyết định",
+    "vsBase": "+{{ahead}} / −{{behind}} so với branch gốc ·",
+    "branchNotInCheckout": "branch chưa có trong checkout",
+    "reviewOlder": "review là cho SHA cũ hơn",
+    "latestReview": "review mới nhất",
+    "branchIn": "Branch trong {{name}}",
+    "base": "gốc {{name}}",
+    "noBranch": "Chưa có branch: hãy chọn một ở trên, hoặc agent sẽ đặt.",
+    "workspaces": "Workspace",
+    "workspacesDesc": "Các worktree, branch con và sandbox của subagent mà agent đã mở cho ticket này.",
+    "workspacesDescLanes": "Các worktree, branch con và sandbox của subagent mà agent đã mở cho ticket này và các lane của nó.",
+    "noneYet": "Chưa có.",
+    "breadcrumb": "Đường dẫn",
+    "scrollSideUp": "Cuộn cột bên lên",
+    "scrollSideDown": "Cuộn cột bên xuống",
+    "workflow": "Quy trình",
+    "workflowOwn": "Theo quy trình {{workflow}}, đặt riêng cho ticket này.",
+    "workflowProject": "Theo quy trình của dự án ({{workflow}}).",
+    "workflowSteps": "Xem các bước",
+    "lanesProgress": "{{done}}/{{total}} xong"
+  },
+  "complexity": {
+    "label": {
+      "low": "Thấp",
+      "mid": "Vừa",
+      "high": "Cao",
+      "max": "Tối đa"
+    },
+    "workflowHint": "Thấp: không có spec hay review trong quy trình Chuẩn. Vừa, Cao và Tối đa: số vòng review do quy trình của dự án đặt (Chuẩn: một, ba, tối đa mười). Tối đa dành cho công việc xây từ đầu; một tính năng trong codebase có sẵn không bao giờ là tối đa, dù khó đến đâu.",
+    "levelHint": {
+      "low": "Thấp: số vòng review do quy trình của dự án đặt (Chuẩn: không có). Builder tự kiểm chứng.",
+      "mid": "Vừa: số vòng review do quy trình của dự án đặt (Chuẩn: một).",
+      "high": "Cao: số vòng review do quy trình của dự án đặt (Chuẩn: tối đa ba).",
+      "max": "Tối đa: số vòng review do quy trình của dự án đặt (Chuẩn: tối đa mười), cho cả một site hay app xây từ đầu, một sản phẩm mới hoặc một dịch vụ độc lập, và dừng ở vòng đầu tiên đạt. Một tính năng trong codebase có sẵn tối đa là cao, dù khó đến đâu."
+    }
+  },
+  "agentsAtWork": {
+    "title": "Agent đang làm việc",
+    "error": "Không đọc được ai đang làm việc.",
+    "empty": "Không có agent nào đang làm",
+    "more_other": "+{{count}} nữa",
+    "round": "{{phase}} vòng {{round}}",
+    "waiting": "Đang chờ: {{what}}",
+    "blocked": "Bị chặn",
+    "quiet": "im lặng",
+    "lastHeard": "tin cuối {{time}}",
+    "label": "#{{id}} {{title}} — {{phase}}, {{since}}, {{state}}",
+    "labelAgent": "#{{id}} {{title}} — agent {{agent}}, {{phase}}, {{since}}, {{state}}",
+    "state": {
+      "working": "đang làm",
+      "waiting": "đang chờ",
+      "asleep": "đang ngủ"
+    }
+  },
+  "notificationSettings": {
+    "title": "Thông báo",
+    "intro": "Các cảnh báo mà chuông có thể hiển thị cho dự án này. Tắt một mục để không thấy nó ở đây; board vẫn theo dõi, và các dự án khác giữ lựa chọn riêng.",
+    "none": "Chưa có cảnh báo",
+    "show": "Hiện {{label}}"
+  },
+  "alerts": {
+    "group": {
+      "setup": "Thiết lập và phiên bản",
+      "work": "Công việc",
+      "machine": "Máy này",
+      "housekeeping": "Dọn dẹp"
+    },
+    "snooze": {
+      "minutes_other": "{{count}} phút",
+      "hours_other": "{{count}} giờ",
+      "days_other": "{{count}} ngày"
+    }
+  },
+  "workflowChips": {
+    "selfTip": "Agent của ticket tự làm bước này",
+    "agentTip": {
+      "picked": "Agent của Nhóm được chọn cho bước này. Hướng dẫn của nó viết ở trang Nhóm. Vai trò ({{agent}}) đặt tên cho span và báo cáo lượt chạy của nó.",
+      "role": "Agent của Nhóm có tên như vai trò của nó ({{agent}}). Hướng dẫn của nó viết ở trang Nhóm. Vai trò ({{agent}}) đặt tên cho span và báo cáo lượt chạy của nó.",
+      "default": "Không có agent nào của Nhóm tên {{agent}}: nó chạy như vai trò {{agent}} có sẵn. Hướng dẫn của nó viết ở trang Nhóm. Vai trò ({{agent}}) đặt tên cho span và báo cáo lượt chạy của nó."
+    },
+    "agentMissing": "thiếu agent",
+    "missingTip": "{{picked}} được chọn cho bước này nhưng Nhóm hiện không có agent tên đó: nó chạy như {{name}} cho đến khi agent quay lại hoặc có agent khác được chọn.",
+    "locked": "Cố định",
+    "lockedAboveLow": "Cố định từ mức vừa",
+    "skippedOnLow": "Bỏ qua ở mức thấp",
+    "changed": "đã đổi",
+    "changedTip": "Khác với preset: {{what}}"
+  },
+  "workflowGraph": {
+    "label": "Quy trình {{label}} cho ticket mức {{complexity}}",
+    "complexity": {
+      "low": "thấp",
+      "mid": "vừa",
+      "high": "cao",
+      "max": "tối đa"
+    },
+    "roundSurvives": "vòng đạt",
+    "roundFails": "vòng không đạt",
+    "inParallel": "Song song",
+    "reviewRound": "Vòng review",
+    "noRoundsOn": "Không có vòng review ở mức {{complexity}}"
+  },
+  "workflowPanel": {
+    "idle": "Chọn một bước trong biểu đồ để xem nó làm gì và để đổi ai chạy nó, effort, có chạy hay không và vị trí trong thứ tự.",
+    "runnerAgents": "Agent của ticket tự chạy /feature-review. Các giai đoạn của nó chạy các agent của Nhóm riêng, chọn trên các nút giai đoạn.",
+    "selfAgent": "Agent của ticket tự làm bước này: không có agent của Nhóm để chọn.",
+    "whatItDoes": "Nó làm gì",
+    "handoffTo": "Bàn giao cho {{next}}",
+    "result": "Kết quả",
+    "team": {
+      "title": "Agent của Nhóm",
+      "default": "Mặc định ({{name}})",
+      "notInTeam": "{{name}} (không có trong Nhóm)",
+      "missing": "{{picked}} được chọn cho bước này, nhưng Nhóm hiện không có agent tên đó. Nó chạy như {{name}} cho đến khi agent quay lại hoặc có agent khác được chọn. Chọn Mặc định để bỏ lựa chọn.",
+      "runsAs": "Chạy như {{name}}. Hướng dẫn của nó viết ở trang Nhóm; vai trò ({{role}}) đặt tên cho span và báo cáo lượt chạy của nó.",
+      "runsAsDefault": "Chạy như {{name}} (agent có sẵn: Nhóm không có agent tên đó). Hướng dẫn của nó viết ở trang Nhóm; vai trò ({{role}}) đặt tên cho span và báo cáo lượt chạy của nó."
+    },
+    "placeInOrder": "Vị trí trong thứ tự",
+    "moveUp": "Chuyển lên",
+    "moveDown": "Chuyển xuống",
+    "moveUpTip": "Chuyển lên: {{step}} chạy sớm hơn",
+    "moveDownTip": "Chuyển xuống: {{step}} chạy muộn hơn",
+    "runs": "Chạy",
+    "run": "Chạy {{step}}",
+    "alsoRunOnLow": "Chạy {{step}} cả với ticket mức thấp",
+    "aboveLowNote": "Công tắc này chỉ quyết định nó có chạy cả với ticket mức thấp hay không.",
+    "effort": "Effort",
+    "effortHint": "Được truyền đi làm effort của công cụ Agent. {{hint}}.",
+    "reviewRuns": "Chạy {{total}} lượt /feature-review riêng biệt mỗi vòng: {{runs}}, mỗi lượt dưới tên agent riêng và không bao giờ thấy phát hiện của lượt kia.",
+    "survival": "<strong>Một vòng đạt khi</strong> {{survival}}."
+  },
+  "workflowPage": {
+    "title": "Quy trình",
+    "intro": "Cách một ticket đi từ To do đến bàn giao: các bước agent của nó chạy, theo thứ tự, ai chạy từng bước và mỗi bước bàn giao gì cho bước sau. Dự án theo một quy trình; một ticket có thể chọn quy trình khác ở trang của nó. Các agent đọc quy trình từ board, nên thay đổi ở đây được áp dụng từ lượt chạy kế tiếp của chúng.",
+    "graphShows": "Biểu đồ cho thấy một ticket mức {{complexity}}.",
+    "projectFollows": "Dự án theo quy trình này",
+    "use": "Dùng quy trình này",
+    "resetThis": "Đặt lại quy trình này",
+    "resetTitle": "Đặt lại quy trình {{label}}?",
+    "resetBody": "Thứ tự, công tắc, effort, agent của Nhóm và vòng review của nó quay về như preset {{label}} có sẵn. Các preset khác giữ những gì đã đổi trong chúng.",
+    "cancel": "Hủy",
+    "reset": "Đặt lại",
+    "sectionLabel": "Quy trình {{label}}",
+    "projects": "của dự án",
+    "summary_other": "{{count}} bước cho ticket mức {{complexity}} · review: {{rounds}}"
+  },
+  "workflowPresets": {
+    "group": "Preset quy trình",
+    "active": "Đang dùng",
+    "tweaked": "Đã chỉnh",
+    "complexity": "Độ phức tạp",
+    "stats_other": "{{count}} bước · vòng review {{rounds}}",
+    "light": {
+      "label": "Nhẹ",
+      "description": "Build, cổng kiểm tra, một reviewer, kiểm tra intent và bàn giao: không có agent spec, không có môi trường, không tách các lượt săn lỗi."
+    },
+    "standard": {
+      "label": "Chuẩn",
+      "description": "Chu trình đầy đủ: spec, build, cổng kiểm tra, các vòng review với spec, môi trường, verify, hai lượt săn lỗi độc lập, refute và kiểm tra merge, rồi kiểm tra intent, PR, CI, preview và bàn giao."
+    },
+    "thorough": {
+      "label": "Kỹ lưỡng",
+      "description": "Chuẩn cộng thêm một lượt viết test riêng, lượt săn lỗi thứ ba với danh sách kiểm tra bảo mật, kiểm tra intent ở cuối mỗi vòng review, và thêm một vòng review ở mọi mức trên thấp."
+    },
+    "maximum": {
+      "label": "Tối đa",
+      "description": "Kỹ lưỡng cộng thêm một spec thứ hai độc lập, một lượt review đầy đủ thứ hai của mỗi vòng bởi một agent khác không bao giờ thấy lượt đầu, và effort cao cho mọi agent."
+    }
+  },
+  "workflowReview": {
+    "legend": "Vòng review theo độ phức tạp",
+    "changed": "đã đổi",
+    "notSaved": "Chưa lưu: {{reason}}",
+    "default": "mặc định {{value}}"
+  },
+  "workflowReads": {
+    "title": "Những gì agent đọc",
+    "hint": "văn bản get_workflow trả về cho quy trình này",
+    "textLabel": "Văn bản quy trình"
+  },
+  "workflowSelect": {
+    "project": "Quy trình của dự án ({{label}})",
+    "hint": "Quy trình mà agent của nó theo: của riêng dự án, hoặc một trong bốn preset chỉ cho ticket này. Đổi quy trình của dự án không làm đổi ticket đã chọn một quy trình."
+  },
+  "workflowView": {
+    "noRounds": "không có vòng review",
+    "rounds_other": "{{count}} vòng",
+    "complexity": {
+      "low": "Thấp",
+      "mid": "Vừa",
+      "high": "Cao",
+      "max": "Tối đa"
+    },
+    "effort": {
+      "auto": "Tự động",
+      "low": "Thấp",
+      "medium": "Trung bình",
+      "high": "Cao"
+    },
+    "effortLevel": {
+      "low": "thấp",
+      "medium": "trung bình",
+      "high": "cao"
+    },
+    "autoLevel": "Tự động: {{level}}",
+    "autoEffortHint": "Tự động theo ticket: thấp cho ticket mức thấp, trung bình cho mức vừa và cao, cao cho mức tối đa",
+    "separator": ", ",
+    "you": "bạn",
+    "skippedNoRounds": "Không có vòng review",
+    "skippedOff": "Tắt",
+    "changed": {
+      "moved": "vị trí trong thứ tự",
+      "off": "đã tắt",
+      "effort": "effort của nó",
+      "agent": "agent của Nhóm cho nó"
+    },
+    "name": {
+      "agent": "agent {{name}}",
+      "locked": "cố định",
+      "skipsOnLow": "bỏ qua với ticket mức thấp"
+    },
+    "lockReason": {
+      "claim": "Cố định: không gì bắt đầu được trước khi ticket được đọc và nhận.",
+      "build": "Cố định: không có gì được giao nếu thay đổi chưa được build.",
+      "gate": "Cố định: không thay đổi nào đi tiếp mà chưa được kiểm tra.",
+      "intent": "Cố định từ mức vừa: mọi ticket trên mức thấp đều được đối chiếu với lời của chính con người trước khi bàn giao.",
+      "always": "Cố định: không có nó thì ticket không thể bàn giao."
+    },
+    "survival": {
+      "light": "reviewer không tái hiện được phát hiện nào và bằng chứng của builder bao phủ mọi tiêu chí chấp nhận",
+      "standard": "kết luận là SHIP, kiểm tra chạy được là YES, kiểm tra trên base là NO và mọi tiêu chí chấp nhận là PASS bằng thực thi (UNVERIFIED chỉ khi có lý do mà các quy tắc leo thang nêu tên và không thể vượt qua)",
+      "thoroughIntent": "kết luận là SHIP, kiểm tra chạy được là YES, kiểm tra trên base là NO và mọi tiêu chí chấp nhận là PASS bằng thực thi (UNVERIFIED chỉ khi có lý do mà các quy tắc leo thang nêu tên và không thể vượt qua), và kiểm tra intent ở cuối vòng khớp",
+      "maximum": "cả hai lượt review đều đạt ({{standard}}) và bước đối chiếu không để phát hiện nào còn mở",
+      "maximumIntent": "cả hai lượt review đều đạt ({{standard}}), bước đối chiếu không để phát hiện nào còn mở và kiểm tra intent ở cuối vòng khớp"
+    },
+    "move": {
+      "after": "{{step}} phải đứng sau {{other}}",
+      "stayFirst": "{{step}} phải ở đầu",
+      "stayLast": "{{step}} phải ở cuối",
+      "alreadyFirst": "{{step}} đã ở đầu",
+      "alreadyLast": "{{step}} đã ở cuối"
+    }
+  },
+  "backToModule": {
+    "back": "Quay lại {{label}}",
+    "home": "Trang chủ"
+  },
+  "ticketLine": {
+    "openedBy": "Mở bởi {{name}} ({{role}}) vào {{when}}",
+    "updated": "Cập nhật vào {{when}}",
+    "opened": "Mở vào {{when}}"
+  },
+  "resumeSettings": {
+    "title": "Tiếp tục",
+    "intro": "Agent hỏi một câu hỏi thì kết thúc lượt của nó. Với một lệnh ở đây, board tự tiếp tục công việc khi bạn trả lời một thẻ quyết định trên board, hoặc chuyển ticket từ cột bị chặn hay review về lại cột đang làm: nó chạy lệnh trên máy này, trong worktree của ticket, với câu hỏi và câu trả lời của bạn (hoặc những lời gần nhất của bạn) ở đầu vào chuẩn và trong tệp đặt tên bởi <code>BOARD_RESUME_PROMPT_FILE</code>; <code>BOARD_URL</code>, <code>BOARD_PROJECT_ID</code>, <code>BOARD_TICKET_ID</code> và <code>BOARD_AGENT_NAME</code> được đặt sẵn. Không có gì được khởi động cho ticket đang có agent hoạt động hoặc đang được tiếp tục. Lệnh chạy với quyền của người dùng board, và chỉ bạn đặt được. Để trống là tắt.",
+    "presets": "Preset",
+    "found": "tìm thấy",
+    "notFound": "không tìm thấy",
+    "command": "Lệnh tiếp tục",
+    "commandPlaceholder": "claude -p (để trống: tắt)",
+    "timeout": "Dừng sau (phút)",
+    "save": "Lưu",
+    "saving": "Đang lưu…",
+    "timeoutProblem": "Một số nguyên từ {{min}} đến {{max}}.",
+    "unsaved": "Có thay đổi chưa lưu.",
+    "noChanges": "Không có thay đổi.",
+    "off": "Tiếp tục tự động đang tắt."
+  },
+  "resumeCard": {
+    "title": "Tiếp tục",
+    "resume": "Tiếp tục",
+    "retry": "Thử lại",
+    "started": "Board đã bắt đầu lại công việc",
+    "empty": "Chưa có gì tiếp tục ticket này.",
+    "setInSettings": "Con người đặt trong cài đặt của dự án.",
+    "failed": "Board không tiếp tục được: {{reason}}",
+    "log": "Nhật ký",
+    "state": {
+      "queued": "Đang khởi động",
+      "running": "Đang chạy",
+      "succeeded": "Đã xong",
+      "failed": "Thất bại",
+      "skipped": "Không khởi động"
+    }
+  },
+  "runReportsWindow": {
+    "reports": "Báo cáo",
+    "reportsCount": "Báo cáo ({{n}})",
+    "title": "Báo cáo lượt chạy",
+    "description": "Các báo cáo lượt chạy của ticket này, có bộ lọc và sắp xếp. Mở một báo cáo để xem đầy đủ.",
+    "back": "Quay lại báo cáo",
+    "none": "Chưa có báo cáo lượt chạy.",
+    "noMatch": "Không có báo cáo nào khớp các bộ lọc này.",
+    "count_other": "{{shown}} trên {{count}} báo cáo",
+    "clearFilters": "Xóa bộ lọc",
+    "filter": {
+      "agent": "Agent",
+      "round": "Vòng",
+      "time": "Thời gian",
+      "difficulty": "Độ khó",
+      "confidence": "Độ tin cậy",
+      "duration": "Thời lượng",
+      "sortBy": "Sắp xếp theo"
+    },
+    "items": {
+      "allAgents": "Mọi agent",
+      "allRounds": "Mọi vòng",
+      "round": "Vòng {{n}}",
+      "noRound": "Không có vòng"
+    },
+    "time": {
+      "any": "Mọi lúc",
+      "hour": "Giờ qua",
+      "today": "Hôm nay",
+      "week": "7 ngày qua"
+    },
+    "duration": {
+      "any": "Bất kỳ",
+      "reported": "Có báo cáo",
+      "unreported": "Không báo cáo"
+    },
+    "rating": {
+      "any": "Bất kỳ",
+      "unrated": "Chưa đánh giá"
+    },
+    "sort": {
+      "newest": "Mới nhất",
+      "oldest": "Cũ nhất",
+      "longest": "Lâu nhất",
+      "difficulty": "Độ khó cao nhất",
+      "confidence": "Độ tin cậy cao nhất"
+    }
+  }
+}

@@ -1,0 +1,37 @@
+// The desktop app's own texts in vi (see ../strings.mjs). Every key of en.mjs, the same {{placeholders}} and <tags>.
+export default {
+  open: 'Mở',
+  openInBrowser: 'Mở trong trình duyệt',
+  retryNow: 'Thử lại ngay',
+  startAtLogin: 'Khởi động cùng hệ thống',
+  quit: 'Thoát',
+  openSettings: 'Mở tệp cài đặt',
+  openLogs: 'Mở thư mục log',
+  openHome: 'Mở thư mục ứng dụng',
+  startAtLoginFailed: 'Không đổi được tùy chọn khởi động cùng hệ thống.',
+  cannotStart: 'Board không khởi động được.',
+  settingsInvalid: 'Cài đặt của board không hợp lệ.',
+  homeUnusable:
+    'Không dùng được thư mục ứng dụng {{home}}: {{error}}\n\nHãy đặt AGENT_BOARD_HOME thành một thư mục ghi được, hoặc xóa nó để dùng mặc định.',
+  homeLine: '{{error}}\n\nThư mục ứng dụng: {{home}}',
+  dataFolderUnusable:
+    'Không dùng được thư mục dữ liệu {{dir}} của nó: {{error}}\n\nHãy đặt DATA_DIR khác trong {{file}}, hoặc trong môi trường, rồi khởi động lại ứng dụng.',
+  logsLine: '{{detail}}\n\nLog: {{logs}}',
+  stopped: 'Board đã dừng.',
+  restartedTimes_other: ' Nó đã được khởi động lại {{count}} lần.',
+  noOutput: '(không có đầu ra)',
+  exitedSignal: 'Nó bị dừng bởi {{signal}} lúc {{time}}.',
+  exitedCode: 'Nó thoát với mã {{code}} lúc {{time}}.',
+  exited: 'Nó thoát lúc {{time}}.',
+  reasonCode: 'mã thoát {{code}}',
+  reasonSignal: 'tín hiệu {{signal}}',
+  reasonNone: 'không có mã thoát',
+  tipRestarting: '{{name}}: đang khởi động lại board ({{reason}})',
+  tipRestarted: '{{name}}: {{url}} (đã khởi động lại lúc {{time}} sau {{reason}})',
+  notifyRestarted: 'Board đã khởi động lại ({{reason}}).',
+  didNotStart: 'Board không khởi động.',
+  didNotAnswer: 'Nó không trả lời trên {{url}} trong vòng một phút.',
+  unreachableHeading: 'Không kết nối được board tại <code>{{address}}</code>.',
+  unreachableBody:
+    'Board chạy trên máy khác: hãy kiểm tra máy này đã online và board đang chạy ở đó. Ứng dụng tự thử lại, và {{retry}} thử ngay.',
+}

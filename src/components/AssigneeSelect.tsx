@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Bot, Lock } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import { RoleBadge, useWho } from '#/components/Actor'
 import { AgentAvatar } from '#/components/AgentAvatar'
@@ -32,6 +33,7 @@ export function AssigneeSelect({
   value: string
   onChange: (name: string) => void
 }) {
+  const { t } = useTranslation()
   const agents = useProjectAgents()
   const { data: actors = [], isPending } = useQuery({
     queryKey: ['actors'],
@@ -43,8 +45,8 @@ export function AssigneeSelect({
   // Whatever it holds now stays pickable, even a name the board no longer knows.
   if (value && !isAgent(value) && !connected.includes(value)) connected.push(value)
   const items: Record<string, string> = {
-    [NONE]: 'Unassigned',
-    ...Object.fromEntries(agents.map((a) => [a.name, `${a.name} (reserved)`])),
+    [NONE]: t('pickers.unassigned'),
+    ...Object.fromEntries(agents.map((a) => [a.name, t('pickers.reserved', { name: a.name })])),
     ...Object.fromEntries(connected.map((n) => [n, n])),
   }
   const current = agents.find((a) => a.name.toLowerCase() === value.toLowerCase())?.name ?? value
@@ -65,7 +67,7 @@ export function AssigneeSelect({
               current ? (
                 <span className="truncate">{current}</span>
               ) : (
-                <ControlSkeleton label="Loading agents…" />
+                <ControlSkeleton label={t('loading.agents')} />
               )
             ) : isConnected(v) ? (
               <span className="flex min-w-0 items-center gap-1.5">
@@ -79,10 +81,10 @@ export function AssigneeSelect({
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={NONE}>Unassigned</SelectItem>
+        <SelectItem value={NONE}>{t('pickers.unassigned')}</SelectItem>
         {agents.length > 0 && (
           <SelectGroup>
-            <SelectLabel>Project agents: only they work it</SelectLabel>
+            <SelectLabel>{t('pickers.projectAgents')}</SelectLabel>
             {agents.map((a) => (
               <SelectItem key={a.id} value={a.name}>
                 <AgentAvatar agent={a} />
@@ -94,7 +96,7 @@ export function AssigneeSelect({
         )}
         {connected.length > 0 && (
           <SelectGroup>
-            <SelectLabel>Connected agents: shared</SelectLabel>
+            <SelectLabel>{t('pickers.connectedAgents')}</SelectLabel>
             {connected.map((n) => (
               <SelectItem key={n} value={n}>
                 <Bot className="text-muted-foreground" />

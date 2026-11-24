@@ -1,0 +1,38 @@
+// The desktop app's own texts in mr (see ../strings.mjs). Every key of en.mjs, the same {{placeholders}} and <tags>.
+export default {
+  open: 'उघडा',
+  openInBrowser: 'ब्राउझरमध्ये उघडा',
+  retryNow: 'आता पुन्हा प्रयत्न करा',
+  startAtLogin: 'लॉगिनवर सुरू करा',
+  quit: 'बाहेर पडा',
+  openSettings: 'सेटिंग्ज फाइल उघडा',
+  openLogs: 'लॉग फोल्डर उघडा',
+  openHome: 'अॅप फोल्डर उघडा',
+  startAtLoginFailed: 'लॉगिनवर सुरू करणे बदलता आले नाही.',
+  cannotStart: 'बोर्ड सुरू होऊ शकत नाही.',
+  settingsInvalid: 'बोर्डची सेटिंग्ज वैध नाहीत.',
+  homeUnusable:
+    'अॅपचे फोल्डर {{home}} वापरता येत नाही: {{error}}\n\nAGENT_BOARD_HOME ला लिहिता येणारे फोल्डर द्या, किंवा डिफॉल्ट वापरण्यासाठी तो काढा.',
+  homeLine: '{{error}}\n\nअॅपचे फोल्डर: {{home}}',
+  dataFolderUnusable:
+    'त्याचे डेटा फोल्डर {{dir}} वापरता येत नाही: {{error}}\n\n{{file}} मध्ये, किंवा एन्व्हायर्नमेंटमध्ये, दुसरा DATA_DIR द्या आणि अॅप पुन्हा सुरू करा.',
+  logsLine: '{{detail}}\n\nलॉग: {{logs}}',
+  stopped: 'बोर्ड थांबले.',
+  restartedTimes_one: ' ते {{count}} वेळा पुन्हा सुरू केले गेले.',
+  restartedTimes_other: ' ते {{count}} वेळा पुन्हा सुरू केले गेले.',
+  noOutput: '(आउटपुट नाही)',
+  exitedSignal: '{{time}} ला {{signal}} ने ते बंद केले गेले.',
+  exitedCode: '{{time}} ला ते कोड {{code}} सह बाहेर पडले.',
+  exited: '{{time}} ला ते बाहेर पडले.',
+  reasonCode: 'एक्झिट कोड {{code}}',
+  reasonSignal: 'सिग्नल {{signal}}',
+  reasonNone: 'एक्झिट कोड नाही',
+  tipRestarting: '{{name}}: बोर्ड पुन्हा सुरू होत आहे ({{reason}})',
+  tipRestarted: '{{name}}: {{url}} ({{reason}} नंतर {{time}} ला पुन्हा सुरू केले)',
+  notifyRestarted: 'बोर्ड पुन्हा सुरू झाले ({{reason}}).',
+  didNotStart: 'बोर्ड सुरू झाले नाही.',
+  didNotAnswer: 'त्याने {{url}} वर एका मिनिटात उत्तर दिले नाही.',
+  unreachableHeading: '<code>{{address}}</code> वरील बोर्डपर्यंत पोहोचता येत नाही.',
+  unreachableBody:
+    'बोर्ड दुसऱ्या मशीनवर चालते: हे मशीन ऑनलाइन आहे आणि तिथे बोर्ड चालू आहे हे तपासा. अॅप स्वतः पुन्हा प्रयत्न करते, आणि {{retry}} लगेच प्रयत्न करते.',
+}

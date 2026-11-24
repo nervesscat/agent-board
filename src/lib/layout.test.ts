@@ -32,7 +32,7 @@ describe('the catalogue', () => {
     expect(allowedAreas('ticket.lanes')).toEqual(['ticket.main', 'ticket.side'])
     expect(allowedAreas('ticket.details')).toEqual(['ticket.main', 'ticket.side'])
     expect(allowedAreas('nav.gallery')).toEqual(['nav'])
-    expect(allowedAreas('overview.next')).toEqual(['overview'])
+    expect(allowedAreas('overview.lostContact')).toEqual(['overview'])
   })
 
   it('locks the landing page, the board and the deep-link targets of a ticket', () => {
@@ -100,6 +100,7 @@ describe('mergeLayout', () => {
       'nav.roadmap',
       'nav.previews',
       'nav.agents',
+      'nav.workflow',
       'nav.daily',
       'nav.cleanup',
       'nav.repositories',
@@ -134,6 +135,7 @@ describe('mergeLayout', () => {
       'nav.previews',
       'nav.gallery',
       'nav.agents',
+      'nav.workflow',
       'nav.cleanup',
       'nav.repositories',
       'nav.instructions',
@@ -171,7 +173,7 @@ describe('mergeLayout', () => {
       'overview.needsYou',
       'overview.notes',
       'overview.carryingOver',
-      'overview.next',
+      'overview.lostContact',
       'overview.doneToday',
       'overview.inProgress',
       'overview.agents',
@@ -231,7 +233,7 @@ describe('mergeLayout', () => {
         ? { ...it, area: 'overview' }
         : it.id === 'ticket.tasks'
           ? { ...it, area: 'nowhere' }
-          : it.id === 'overview.next'
+          : it.id === 'overview.lostContact'
             ? { ...it, area: 'ticket.side' }
             : it,
     )

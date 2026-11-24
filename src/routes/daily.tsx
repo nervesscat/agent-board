@@ -1,5 +1,6 @@
 import { useNavigate, createFileRoute } from '@tanstack/react-router'
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { currentProjectId, useProjects } from '#/lib/project'
 
@@ -10,6 +11,7 @@ export const Route = createFileRoute('/daily')({ component: CurrentProjectDaily 
  * browser was last in, or Home (where a project is picked) when it does not know one.
  */
 function CurrentProjectDaily() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { data: projects, isPending, isError } = useProjects()
   useEffect(() => {
@@ -24,5 +26,5 @@ function CurrentProjectDaily() {
     if (id) void navigate({ to: '/projects/$id/daily', params: { id }, replace: true })
     else void navigate({ to: '/', replace: true })
   }, [isPending, isError, projects, navigate])
-  return <p className="text-sm text-muted-foreground">Opening Daily…</p>
+  return <p className="text-sm text-muted-foreground">{t('daily.opening')}</p>
 }

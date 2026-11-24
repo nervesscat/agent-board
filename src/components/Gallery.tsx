@@ -10,11 +10,13 @@ import {
   XIcon,
 } from 'lucide-react'
 import { type PointerEvent, type RefObject, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { CopyImageButton } from '#/components/CopyImage'
 import { Loading, SkeletonText } from '#/components/Loading'
 import { Tip } from '#/components/ui/tooltip'
 import { viewKind } from '#/lib/fileKinds'
+import { formatNumber } from '#/lib/format'
 import { useDelayedFlag } from '#/lib/useDelayedFlag'
 
 /**
@@ -61,6 +63,7 @@ function collect(group: string): GalleryItem[] {
 }
 
 export function Gallery() {
+  const { t } = useTranslation()
   const [items, setItems] = useState<GalleryItem[]>([])
   const [index, setIndex] = useState<number | null>(null)
   const swipeFrom = useRef<number | null>(null)
@@ -136,24 +139,29 @@ export function Gallery() {
                       className="sm:size-8 bg-transparent text-white/80 shadow-none hover:bg-white/10 hover:text-white"
                     />
                   )}
-                  <Tip content="Open in new tab">
+                  <Tip content={t('files.viewer.openInNewTab')}>
                     <a
                       href={item.src}
                       target="_blank"
                       rel="noreferrer"
-                      aria-label="Open in new tab"
+                      aria-label={t('files.viewer.openInNewTab')}
                       className={chrome}
                     >
                       <ExternalLinkIcon className="size-4" />
                     </a>
                   </Tip>
-                  <Tip content="Download">
-                    <a href={item.src} download={item.name} aria-label="Download" className={chrome}>
+                  <Tip content={t('files.viewer.download')}>
+                    <a
+                      href={item.src}
+                      download={item.name}
+                      aria-label={t('files.viewer.download')}
+                      className={chrome}
+                    >
                       <DownloadIcon className="size-4" />
                     </a>
                   </Tip>
-                  <Tip content="Close (Esc)">
-                    <DialogPrimitive.Close aria-label="Close (Esc)" className={chrome}>
+                  <Tip content={t('files.viewer.close')}>
+                    <DialogPrimitive.Close aria-label={t('files.viewer.close')} className={chrome}>
                       <XIcon className="size-5" />
                     </DialogPrimitive.Close>
                   </Tip>
@@ -176,7 +184,7 @@ export function Gallery() {
                 <Viewer key={item.src} item={item} zoomKeys={zoomKeys} />
                 {item.notes && item.notes.length > 0 && (
                   <div className="absolute top-4 left-4 max-h-[50%] w-64 overflow-auto rounded-md bg-black/60 p-3 text-xs text-white/90 ring-1 ring-white/15">
-                    <ol aria-label="Notes on the picture" className="space-y-0.5">
+                    <ol aria-label={t('files.viewer.notes')} className="space-y-0.5">
                       {item.notes.map((note, i) => (
                         <li key={i}>
                           <span className="tabular-nums">{i + 1}.</span> {note}
@@ -189,7 +197,7 @@ export function Gallery() {
                   <>
                     <button
                       type="button"
-                      aria-label="Previous"
+                      aria-label={t('files.viewer.previous')}
                       onClick={() => step(-1)}
                       className={`${arrow} left-2 sm:left-4`}
                     >
@@ -197,7 +205,7 @@ export function Gallery() {
                     </button>
                     <button
                       type="button"
-                      aria-label="Next"
+                      aria-label={t('files.viewer.next')}
                       onClick={() => step(1)}
                       className={`${arrow} right-2 sm:right-4`}
                     >
@@ -221,6 +229,7 @@ const arrow =
   'absolute top-1/2 inline-flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white/90 ring-1 ring-white/15 outline-none backdrop-blur hover:bg-black/70 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60'
 
 function Viewer({ item, zoomKeys }: { item: GalleryItem; zoomKeys: RefObject<ZoomKeys | null> }) {
+  const { t } = useTranslation()
   const kind = viewKind(item)
   if (kind === 'image') return <ZoomableImage src={item.src} name={item.name} zoomKeys={zoomKeys} />
   if (kind === 'video') return <video src={item.src} controls autoPlay className="max-h-full max-w-full" />
@@ -231,9 +240,9 @@ function Viewer({ item, zoomKeys }: { item: GalleryItem; zoomKeys: RefObject<Zoo
     <div className="flex flex-col items-center gap-3 rounded-lg bg-white/5 px-10 py-8 text-center ring-1 ring-white/10">
       <FileIcon className="size-10 text-white/60" />
       <div className="font-medium">{item.name}</div>
-      <div className="text-sm text-white/60">No preview for this file type.</div>
+      <div className="text-sm text-white/60">{t('files.viewer.noPreview')}</div>
       <a href={item.src} download={item.name} className="text-sm underline underline-offset-4">
-        Download
+        {t('files.viewer.download')}
       </a>
     </div>
   )
@@ -264,6 +273,7 @@ function ZoomableImage({
   name: string
   zoomKeys: RefObject<ZoomKeys | null>
 }) {
+  const { t } = useTranslation()
   const img = useRef<HTMLImageElement>(null)
   const [view, setView] = useState<View>({ s: 1, x: 0, y: 0 })
   const [smooth, setSmooth] = useState(false)
@@ -403,11 +413,11 @@ function ZoomableImage({
       />
       <div className="absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-full bg-black/60 p-1 text-sm ring-1 ring-white/15 backdrop-blur">
         {/* Zoom out and in are on wrappers: at the end of the range they are disabled, and say so on hover. */}
-        <Tip content="Zoom out (-)">
+        <Tip content={t('files.viewer.zoomOut')}>
           <span className="inline-flex">
             <button
               type="button"
-              aria-label="Zoom out (-)"
+              aria-label={t('files.viewer.zoomOut')}
               disabled={!zoomed}
               onClick={() => zoomTo(view.s / STEP, null, true)}
               className={`${chrome} rounded-full disabled:pointer-events-none disabled:opacity-40`}
@@ -416,7 +426,7 @@ function ZoomableImage({
             </button>
           </span>
         </Tip>
-        <Tip content="Fit (0)">
+        <Tip content={t('files.viewer.fit')}>
           <button
             type="button"
             onClick={() => apply({ s: 1, x: 0, y: 0 }, true)}
@@ -425,11 +435,11 @@ function ZoomableImage({
             {Math.round(view.s * 100)}%
           </button>
         </Tip>
-        <Tip content="Zoom in (+)">
+        <Tip content={t('files.viewer.zoomIn')}>
           <span className="inline-flex">
             <button
               type="button"
-              aria-label="Zoom in (+)"
+              aria-label={t('files.viewer.zoomIn')}
               disabled={view.s >= MAX_ZOOM}
               onClick={() => zoomTo(view.s * STEP, null, true)}
               className={`${chrome} rounded-full disabled:pointer-events-none disabled:opacity-40`}
@@ -446,6 +456,7 @@ function ZoomableImage({
 const TEXT_LIMIT = 1_000_000 // characters; past that the panel only shows the start
 
 function TextViewer({ item }: { item: GalleryItem }) {
+  const { t } = useTranslation()
   const [text, setText] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -462,11 +473,11 @@ function TextViewer({ item }: { item: GalleryItem }) {
   }, [item.src])
 
   const slow = useDelayedFlag(!failed && text === null)
-  if (failed) return <div className="text-sm text-white/60">Could not load this file.</div>
+  if (failed) return <div className="text-sm text-white/60">{t('files.viewer.loadFailed')}</div>
   if (text === null)
     return slow ? (
       <Loading
-        label="Loading file…"
+        label={t('loading.file')}
         className="h-full w-full max-w-5xl rounded-md bg-neutral-900 p-4 ring-1 ring-white/10 [&_[data-slot=skeleton]]:bg-white/10"
       >
         <SkeletonText lines={10} />
@@ -475,10 +486,10 @@ function TextViewer({ item }: { item: GalleryItem }) {
   const cut = text.length > TEXT_LIMIT
   return (
     <pre className="h-full w-full max-w-5xl overflow-auto rounded-md bg-neutral-900 p-4 font-mono text-[13px] leading-relaxed break-words whitespace-pre-wrap text-neutral-100 ring-1 ring-white/10 select-text">
-      {cut ? text.slice(0, TEXT_LIMIT) : text || '(empty file)'}
+      {cut ? text.slice(0, TEXT_LIMIT) : text || t('files.viewer.empty')}
       {cut && (
         <span className="mt-4 block text-white/50">
-          Showing the first {TEXT_LIMIT.toLocaleString()} characters. Download the file for the rest.
+          {t('files.viewer.cut', { limit: formatNumber(TEXT_LIMIT) })}
         </span>
       )}
     </pre>

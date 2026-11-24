@@ -3,17 +3,17 @@
 /**
  * What a stage means to the board's rules, whatever the project calls it: `open` waits to be picked up
  * (claiming moves it to the first `active` stage), `blocked` waits on the human, `review` is handed off,
- * `done` and `cancelled` are closed (a cancelled lane's tasks leave the rolled-up progress, and
+ * `approved` is the human's go-ahead to merge (nothing but the human moves a ticket there), `done` and `cancelled` are closed (a cancelled lane's tasks leave the rolled-up progress, and
  * disapproving moves a ticket to the first `cancelled` stage).
  */
-export const STAGE_KINDS = ['open', 'active', 'blocked', 'review', 'done', 'cancelled'] as const
+export const STAGE_KINDS = ['open', 'active', 'blocked', 'review', 'approved', 'done', 'cancelled'] as const
 export type StageKind = (typeof STAGE_KINDS)[number]
 
 /**
- * How much review a ticket gets: `low` none (the builder verifies itself), `mid` one review round,
- * `high` three, `max` up to ten for work built from scratch (a whole site or app, a new product or
- * service; a feature in an existing codebase is never `max`). Chosen when the ticket is created, and
- * changeable after.
+ * How much review a ticket gets: the review rounds the project's workflow sets for its level (the Standard
+ * workflow: `low` none, the builder verifying itself, `mid` one, `high` three, `max` up to ten for work built
+ * from scratch: a whole site or app, a new product or service; a feature in an existing codebase is never
+ * `max`). Chosen when the ticket is created, and changeable after.
  */
 export const COMPLEXITIES = ['low', 'mid', 'high', 'max'] as const
 export type Complexity = (typeof COMPLEXITIES)[number]
@@ -54,11 +54,11 @@ export const DEFAULT_STAGES: { key: string; name: string; kind: StageKind; color
   { key: 'blocked', name: 'Blocked', kind: 'blocked', color: 'amber' },
   { key: 'review', name: 'In review', kind: 'review', color: 'violet' },
   /**
-   * The human approved it and the merge is left: a second review-kind stage, so nothing moves a ticket
-   * into it by kind (only the human's verdict or a move does), and moving it there is the go-ahead: an
+   * The human approved it and the merge is left: its own kind, so no agent moves a ticket into it
+   * (only the human's verdict or a move does), and moving it there is the go-ahead: an
    * orchestrator merges the PR without asking again.
    */
-  { key: 'approved', name: 'Approved', kind: 'review', color: 'teal' },
+  { key: 'approved', name: 'Approved', kind: 'approved', color: 'teal' },
   { key: 'done', name: 'Done', kind: 'done', color: 'emerald' },
   { key: 'cancelled', name: 'Cancelled', kind: 'cancelled', color: 'slate' },
 ]

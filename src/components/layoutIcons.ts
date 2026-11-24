@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Bot,
   BrushCleaning,
   CalendarDays,
@@ -14,14 +15,15 @@ import {
   Info,
   KanbanSquare,
   Layers,
-  ListTodo,
   MessageSquare,
   Milestone,
   MonitorPlay,
   Play,
+  RotateCw,
   ScrollText,
   SquareCheckBig,
   StickyNote,
+  Workflow,
 } from 'lucide-react'
 
 import type { LayoutId } from '#/lib/layout'
@@ -35,6 +37,7 @@ export const LAYOUT_ICONS: Record<LayoutId, typeof Home> = {
   'nav.previews': MonitorPlay,
   'nav.gallery': Images,
   'nav.agents': Bot,
+  'nav.workflow': Workflow,
   'nav.daily': CalendarDays,
   'nav.cleanup': BrushCleaning,
   'nav.repositories': FolderGit2,
@@ -43,7 +46,7 @@ export const LAYOUT_ICONS: Record<LayoutId, typeof Home> = {
   'overview.agents': Bot,
   'overview.inProgress': Play,
   'overview.doneToday': CheckCircle2,
-  'overview.next': ListTodo,
+  'overview.lostContact': AlertTriangle,
   'overview.carryingOver': Clock,
   'overview.notes': StickyNote,
   'ticket.instructions': ScrollText,
@@ -52,6 +55,7 @@ export const LAYOUT_ICONS: Record<LayoutId, typeof Home> = {
   'ticket.lanes': Layers,
   'ticket.activity': MessageSquare,
   'ticket.runs': MonitorPlay,
+  'ticket.resume': RotateCw,
   'ticket.details': Info,
   'ticket.branch': GitBranch,
   'ticket.workspaces': FolderGit2,

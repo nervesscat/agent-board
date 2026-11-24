@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { KeyRound, Sparkles } from 'lucide-react'
 import { useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import {
@@ -40,6 +41,7 @@ export function GenerateCommands({
   token: NewAgentToken | null
   onToken: (token: NewAgentToken) => void
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [typed, setTyped] = useState<string | null>(null)
   const name = typed ?? defaultName
@@ -52,7 +54,7 @@ export function GenerateCommands({
   })
   return (
     <div className="space-y-2">
-      <Label htmlFor="agent-token-name">Agent name</Label>
+      <Label htmlFor="agent-token-name">{t('connect.generate.agentName')}</Label>
       <form
         className="flex items-center gap-2"
         onSubmit={(e) => {
@@ -73,23 +75,22 @@ export function GenerateCommands({
           aria-invalid={!valid}
         />
         <Button type="submit" disabled={!valid || mint.isPending}>
-          <Sparkles data-icon="inline-start" /> Generate commands
+          <Sparkles data-icon="inline-start" /> {t('connect.generate.button')}
         </Button>
       </form>
       <p className="text-xs text-muted-foreground" role={token ? 'status' : undefined}>
         {token ? (
-          <>
-            The commands below carry a new {token.role === 'orchestrator' ? 'orchestrator' : 'worker'} token
-            for <strong>{token.name}</strong>, valid until {stamp(token.expiresAt)}. It is shown this once:
-            copy what you need now. Leaving the page loses it; pressing again makes another.
-          </>
+          <Trans
+            i18nKey={
+              token.role === 'orchestrator'
+                ? 'connect.generate.newOrchestrator'
+                : 'connect.generate.newWorker'
+            }
+            values={{ name: token.name, until: stamp(token.expiresAt) }}
+            components={{ strong: <strong /> }}
+          />
         ) : (
-          <>
-            Makes a token for this agent and fills it into every command on this page. It is an{' '}
-            <strong>orchestrator</strong> by default, so it can also change the projects&apos; instructions;
-            make it a worker in Settings, Agent tokens. The name is the agent&apos;s name on the board. A
-            token signs in for 1 year, unless revoked, and is shown only once.
-          </>
+          <Trans i18nKey="connect.generate.intro" components={{ strong: <strong /> }} />
         )}
       </p>
     </div>
@@ -98,6 +99,7 @@ export function GenerateCommands({
 
 /** The agent tokens not revoked, with when each was made, last used and expires, and Revoke. */
 export function AgentTokenList() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const tokens = useQuery({ queryKey: TOKENS, queryFn: () => get<AgentTokenRow[]>('/api/agent-tokens') })
   const revoke = useMutation({
@@ -109,30 +111,32 @@ export function AgentTokenList() {
   return (
     <section id="agent-tokens" className="scroll-mt-16 space-y-2" aria-labelledby="agent-tokens-title">
       <h2 id="agent-tokens-title" className="text-sm font-medium">
-        Agent tokens
+        {t('tokens.title')}
       </h2>
-      <p className="text-xs text-muted-foreground">
-        The tokens the commands above carry, each with its role: an orchestrator, which also changes the
-        projects&apos; instructions, or a worker (both set in Settings, Agent tokens; a new one is an
-        orchestrator). Revoke one and the agent using it is signed out at its next request.
-      </p>
+      <p className="text-xs text-muted-foreground">{t('tokens.listText')}</p>
       {tokens.error && <p className="text-xs text-destructive">{errorMessage(tokens.error)}</p>}
-      {tokens.data?.length === 0 && <p className="text-xs text-muted-foreground">None yet.</p>}
+      {tokens.data?.length === 0 && <p className="text-xs text-muted-foreground">{t('tokens.none')}</p>}
       {!!tokens.data?.length && (
-        <ul className="divide-y rounded-md border text-sm" aria-label="Agent tokens">
-          {tokens.data.map((t) => {
-            const expired = Date.parse(t.expiresAt) <= now
+        <ul className="divide-y rounded-md border text-sm" aria-label={t('tokens.title')}>
+          {tokens.data.map((tk) => {
+            const expired = Date.parse(tk.expiresAt) <= now
+            const used = tk.lastUsedAt
+              ? t('tokens.lastUsed', { when: ago(tk.lastUsedAt) })
+              : t('tokens.neverUsed')
             return (
-              <li key={t.id} className="flex items-center gap-3 px-3 py-2">
+              <li key={tk.id} className="flex items-center gap-3 px-3 py-2">
                 <KeyRound className="size-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5 font-medium">
-                    {t.name}
-                    <RoleBadge role={t.role} />
+                    {tk.name}
+                    <RoleBadge role={tk.role} />
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    made {ago(t.createdAt)} · {t.lastUsedAt ? `last used ${ago(t.lastUsedAt)}` : 'never used'}{' '}
-                    · {expired ? 'expired' : 'expires'} {stamp(t.expiresAt)}
+                    {t(expired ? 'tokens.metaExpired' : 'tokens.meta', {
+                      made: ago(tk.createdAt),
+                      used,
+                      at: stamp(tk.expiresAt),
+                    })}
                   </div>
                 </div>
                 <AlertDialog>
@@ -141,23 +145,22 @@ export function AgentTokenList() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        aria-label={`Revoke ${t.name}, made ${ago(t.createdAt)}`}
+                        aria-label={t('tokens.revokeAria', { name: tk.name, when: ago(tk.createdAt) })}
                       />
                     }
                   >
-                    Revoke
+                    {t('connect.revoke')}
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Revoke {t.name}&apos;s token?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        The agent using it is refused from its next request on. Generate commands again to
-                        connect it with a new one.
-                      </AlertDialogDescription>
+                      <AlertDialogTitle>{t('tokens.revokeTitle', { name: tk.name })}</AlertDialogTitle>
+                      <AlertDialogDescription>{t('tokens.revokeText')}</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Keep</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => revoke.mutate(t.id)}>Revoke</AlertDialogAction>
+                      <AlertDialogCancel>{t('connect.keep')}</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => revoke.mutate(tk.id)}>
+                        {t('connect.revoke')}
+                      </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>

@@ -5,6 +5,7 @@
  * after the last recorded work. Real time elsewhere, the agents' work, keeps its scale. The chart's layout (timelineRows.ts) maps
  * every time to its place through `position`, so segments, marks and hand-offs follow the blocks.
  */
+import { shared } from '#/i18n'
 
 const MIN = 60_000
 
@@ -20,13 +21,7 @@ export type PieceKind = StretchKind | 'gap' | 'tail'
 type Ms = { start: number; end: number }
 
 /** A block's label when its stretch names none (a review stage names itself). */
-export const STRETCH_LABEL: Record<StretchKind, string> = {
-  start: 'Waiting to start',
-  blocked: 'Blocked',
-  human: 'Waiting on human',
-  review: 'In review',
-  merge: 'Waiting to merge',
-}
+export const stretchLabel = (kind: StretchKind): string => shared.t(`workTimeline.stretch.${kind}`)
 
 /**
  * A stretch of real time drawn as `virtualMs` of axis. `start`/`end` are the real times, clipped to the
@@ -102,7 +97,7 @@ export function planPieces(input: PlanInput): { pieces: Piece[]; pinned: number 
             end: merge,
             kind: 'merge',
             virtualMs: COLLAPSED_MS,
-            stretch: { start: from, end: merge, label: STRETCH_LABEL.merge },
+            stretch: { start: from, end: merge, label: stretchLabel('merge') },
             skips: 'merge',
           }
         : { start: from, end: merge, kind: 'gap', virtualMs: GAP_MS, stretch: null, skips: null }
@@ -121,7 +116,7 @@ export function planPieces(input: PlanInput): { pieces: Piece[]; pinned: number 
         end: part.end,
         kind: labelled ? s.kind : 'gap',
         virtualMs: labelled ? COLLAPSED_MS : GAP_MS,
-        stretch: labelled ? { start: s.start, end: s.end, label: s.label ?? STRETCH_LABEL[s.kind] } : null,
+        stretch: labelled ? { start: s.start, end: s.end, label: s.label ?? stretchLabel(s.kind) } : null,
         skips: s.kind,
       })
       cursor = part.end

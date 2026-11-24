@@ -3,7 +3,7 @@ import type { Locator } from '@playwright/test'
 import { startedAt, yesterdayNoon } from './db'
 import { expect, ok, section, seedProject, test } from './fixtures'
 
-test('Home and Overview sum up the work: what needs you, in progress, done today, next, carrying over', async ({
+test('Home and Overview sum up the work: what needs you, in progress, done today, lost contact, carrying over', async ({
   page,
   project,
   api,
@@ -68,10 +68,8 @@ test('Home and Overview sum up the work: what needs you, in progress, done today
   await expect(link(doneToday, shipped)).toBeVisible()
   await expect(link(doneToday, today)).toHaveCount(0)
 
-  const nextUp = section(page, 'Next: To do')
-  await expect(link(nextUp, next)).toBeVisible()
-  await expect(link(nextUp, shipped)).toHaveCount(0)
-  await expect(nextUp).toContainText('1 blocked')
+  // Nobody has lost contact here: the card is calm.
+  await expect(section(page, 'Lost contact')).toContainText('No lost contact')
 
   // Only what was already in progress before today carries over, and of that only what is blocked or in
   // review: a ticket that started yesterday and is still being worked stays out.

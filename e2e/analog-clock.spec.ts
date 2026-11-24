@@ -201,7 +201,7 @@ test.describe('on a 12-hour locale', () => {
 })
 
 test.describe('on a 24-hour locale', () => {
-  test.use({ locale: 'de-DE' })
+  test.use({ locale: 'nl-NL' })
 
   test('the clock reads 24 hours without AM/PM, the afternoon on the inner ring', async ({
     page,

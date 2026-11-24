@@ -1,5 +1,7 @@
 import { useId, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 
+import { currentLocale } from '#/i18n'
 import { Input } from '#/components/ui/input'
 import { cn } from '#/lib/utils'
 
@@ -23,6 +25,7 @@ export function AnalogClock({
   step?: number
   className?: string
 }) {
+  const { t } = useTranslation()
   const hour12 = useHour12()
   const [mode, setMode] = useState<'hour' | 'minute'>('hour')
   const [draft, setDraft] = useState<string | null>(null)
@@ -106,7 +109,7 @@ export function AnalogClock({
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         <Input
-          aria-label={`${label} (type a time)`}
+          aria-label={t('clock.typeTime', { label })}
           aria-invalid={invalid || undefined}
           value={draft ?? text}
           inputMode="text"
@@ -125,7 +128,7 @@ export function AnalogClock({
           }}
         />
         {hour12 && (
-          <div className="flex rounded-lg border p-0.5" role="group" aria-label={`${label}: AM or PM`}>
+          <div className="flex rounded-lg border p-0.5" role="group" aria-label={t('clock.amPm', { label })}>
             {(['AM', 'PM'] as const).map((half) => {
               const on = (half === 'PM') === hour >= 12
               return (
@@ -149,7 +152,7 @@ export function AnalogClock({
           </div>
         )}
       </div>
-      <div className="flex gap-1" role="group" aria-label={`${label}: set the hour or the minute`}>
+      <div className="flex gap-1" role="group" aria-label={t('clock.setHourOrMinute', { label })}>
         {(['hour', 'minute'] as const).map((m) => (
           <button
             key={m}
@@ -161,7 +164,7 @@ export function AnalogClock({
               mode === m ? 'bg-muted font-medium text-foreground' : 'hover:bg-muted/60',
             )}
           >
-            {m === 'hour' ? 'Hour' : 'Minute'}
+            {m === 'hour' ? t('clock.hour') : t('clock.minute')}
           </button>
         ))}
       </div>
@@ -286,5 +289,7 @@ export function parseTime(text: string): number | null {
 // the first render in the browser) says 24 hours; the browser's own answer follows straight after.
 const noop = () => () => {}
 const localeHour12 = () =>
-  /h1[12]/.test(new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions().hourCycle ?? '')
+  /h1[12]/.test(
+    new Intl.DateTimeFormat(currentLocale(), { hour: 'numeric' }).resolvedOptions().hourCycle ?? '',
+  )
 export const useHour12 = () => useSyncExternalStore(noop, localeHour12, () => false)

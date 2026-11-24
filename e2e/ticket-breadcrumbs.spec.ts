@@ -51,12 +51,12 @@ test("the floating header shows the breadcrumbs only while the page's own are sc
   const banner = await box(page.getByRole('banner'))
   expect((await box(barCrumbs(page))).y).toBeGreaterThanOrEqual(banner.y + banner.height)
 
-  // They are on a line above the title, and the line under it (who opened it, when, its tags) stays. They
+  // They are on a line above the title, and the line under it (who opened it, when, when it changed, its tags) stays. They
   // take no room of their own: the page and the header are as tall as at rest, so nothing moves.
   const above = await box(barCrumbs(page))
   const name = await box(title(page))
   expect(above.y + above.height).toBeLessThanOrEqual(name.y)
-  await expect(ticketHeader(page).getByText(/^opened by /)).toBeVisible()
+  await expect(ticketHeader(page).locator('[data-fact]').first()).toBeVisible()
   expect(await height()).toBe(rest.page)
   expect((await box(ticketHeader(page))).height).toBe(rest.header)
 

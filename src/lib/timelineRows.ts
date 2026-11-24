@@ -1,3 +1,6 @@
+import type { TFunction } from 'i18next'
+
+import { currentLocale, shared } from '#/i18n'
 import { shortName } from '#/lib/actorName'
 import { clock } from '#/lib/format'
 import {
@@ -122,23 +125,29 @@ export type Chart = {
 }
 
 /** A duration in words for names and tooltips: `38 min`, `2 h 5 min`, `under a minute`. */
-export function spokenDuration(ms: number): string {
+export function spokenDuration(ms: number, tr: TFunction = shared.t): string {
   const minutes = Math.round(ms / MIN)
-  if (minutes < 1) return 'under a minute'
+  if (minutes < 1) return tr('workTimeline.spoken.underMinute')
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
-  if (!h) return `${m} min`
-  return m ? `${h} h ${m} min` : `${h} h`
+  if (!h) return tr('workTimeline.spoken.minutes', { count: m })
+  return m ? tr('workTimeline.spoken.hoursMinutes', { h, m }) : tr('workTimeline.spoken.hours', { count: h })
 }
 
 /** A duration that can run to days, for a collapsed period: `4 d 23 h 30 min`, `2 d 3 h`; hours and minutes as spokenDuration below a day. */
-export function longDuration(ms: number): string {
+export function longDuration(ms: number, tr: TFunction = shared.t): string {
   const minutes = Math.round(ms / MIN)
-  if (minutes < 24 * 60) return spokenDuration(ms)
+  if (minutes < 24 * 60) return spokenDuration(ms, tr)
   const d = Math.floor(minutes / (24 * 60))
   const h = Math.floor((minutes % (24 * 60)) / 60)
   const m = minutes % 60
-  return [`${d} d`, h ? `${h} h` : '', m ? `${m} min` : ''].filter(Boolean).join(' ')
+  return [
+    tr('workTimeline.spoken.days', { count: d }),
+    h ? tr('workTimeline.spoken.hours', { count: h }) : '',
+    m ? tr('workTimeline.spoken.minutes', { count: m }) : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 }
 
 /** A row's label: the name's leaf, shortened at a word boundary when long (`builder-832` for `opencode/builder-832`). */
@@ -184,9 +193,9 @@ export function ticksFor(
       at,
       label:
         step >= DAY
-          ? day.toLocaleDateString([], { month: 'short', day: 'numeric' })
+          ? day.toLocaleDateString(currentLocale(), { month: 'short', day: 'numeric' })
           : newDay
-            ? `${day.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${clock(day.toISOString())}`
+            ? `${day.toLocaleDateString(currentLocale(), { month: 'short', day: 'numeric' })} ${clock(day.toISOString())}`
             : clock(day.toISOString()),
     })
   }
@@ -263,7 +272,9 @@ function stretchesOf(t: WorkTimeline, now: number): Stretch[] {
   const around = (list: Stretch[], by: Ms[]) =>
     list.flatMap((s) => without(s, by).map((m) => ({ ...s, start: m.start, end: m.end })))
   const human = around(
-    (t.humanStretches ?? []).map(make('human', (b) => (b.card ? 'Waiting for a decision' : undefined))),
+    (t.humanStretches ?? []).map(
+      make('human', (b) => (b.card ? shared.t('workTimeline.stretch.decision') : undefined)),
+    ),
     taken(stages),
   )
   // From the ticket's creation to its first worker step: it was waiting to be started.
@@ -416,47 +427,56 @@ export function agentTree(t: WorkTimeline): { agent: string; parent: string | nu
   return out
 }
 
-/** What each kind of skipped time is called in the summary. */
-const SKIPPED: Record<StretchKind, string> = {
-  start: 'waiting to start',
-  blocked: 'blocked',
-  human: 'waiting on the human',
-  review: 'in review',
-  merge: 'waiting to merge',
+/** The kinds of skipped time the summary names (their words are `workTimeline.skipped.<kind>`). */
+const SKIPPED: Record<StretchKind, true> = {
+  start: true,
+  blocked: true,
+  human: true,
+  review: true,
+  merge: true,
 }
 
 /** The chart's one-sentence summary for screen readers. */
-export function summarize(t: WorkTimeline, rows: AgentRow[], axis: Axis): string {
-  if (!t.start) return 'No work recorded yet.'
+export function summarize(t: WorkTimeline, rows: AgentRow[], axis: Axis, tr: TFunction = shared.t): string {
+  if (!t.start) return tr('workTimeline.noWork')
   const working = rows.filter((r) => r.items.length > 0)
-  if (!working.length) return 'No agent work recorded.'
+  if (!working.length) return tr('workTimeline.summary.noAgentWork')
   const clauses = working.map((r) => {
     const parts: string[] = []
     const spans = r.items.flatMap((i) => (i.kind === 'span' ? [[i.ms.start, i.ms.end] as Interval] : []))
-    if (spans.length) parts.push(`worked ${spokenDuration(unionMs(spans))}`)
+    if (spans.length)
+      parts.push(tr('workTimeline.summary.worked', { duration: spokenDuration(unionMs(spans), tr) }))
     const byTarget = new Map<string, Interval[]>()
     for (const i of r.items) {
       if (i.kind !== 'wait') continue
       const target = i.delegated
-        ? `${i.wait.on}, delegated`
+        ? tr('workTimeline.summary.delegated', { on: i.wait.on })
         : i.wait.reason === 'human'
-          ? 'the human'
+          ? tr('workTimeline.theHuman')
           : i.wait.reason
       byTarget.set(target, [...(byTarget.get(target) ?? []), [i.ms.start, i.ms.end]])
     }
-    for (const [target, ms] of byTarget) parts.push(`waited ${spokenDuration(unionMs(ms))} on ${target}`)
-    return `${r.agent || 'unnamed'} ${parts.join(', ')}`
+    for (const [target, ms] of byTarget)
+      parts.push(tr('workTimeline.summary.waited', { duration: spokenDuration(unionMs(ms), tr), target }))
+    return tr('workTimeline.summary.clause', {
+      agent: r.agent || tr('workTimeline.unnamed'),
+      parts: parts.join(', '),
+    })
   })
   const doers = working.filter((r) => r.items.some((i) => i.kind === 'span')).length
   const n = doers || working.length
-  const over = spokenDuration(axis.end - axis.start)
-  const who = doers ? 'Work by' : 'Activity by'
+  const over = spokenDuration(axis.end - axis.start, tr)
   const skipped = (Object.keys(SKIPPED) as StretchKind[]).flatMap((k) => {
     const ms = axis.pieces.filter((p) => p.skips === k).reduce((n, p) => n + p.end - p.start, 0)
-    return ms > 0 ? [`${SKIPPED[k]} ${longDuration(ms)}`] : []
+    return ms > 0 ? [tr(`workTimeline.skipped.${k}`, { duration: longDuration(ms, tr) })] : []
   })
-  const scale = skipped.length ? ` Not to scale: ${skipped.join(', ')}.` : ''
-  return `${who} ${n} agent${n === 1 ? '' : 's'} over ${over}: ${clauses.join('; ')}.${t.live ? ' Still going.' : ''}${scale}`
+  return tr(doers ? 'workTimeline.summary.workBy' : 'workTimeline.summary.activityBy', {
+    count: n,
+    over,
+    clauses: clauses.join('; '),
+    live: t.live ? tr('workTimeline.summary.stillGoing') : '',
+    scale: skipped.length ? tr('workTimeline.summary.notToScale', { skipped: skipped.join(', ') }) : '',
+  })
 }
 
 /**
@@ -488,7 +508,13 @@ export function unifyAgents(t: WorkTimeline): WorkTimeline {
 }
 
 /** The whole chart as the view draws it: rows, marks, blocked bands, the creation mark and the summary. */
-export function buildChart(timeline: WorkTimeline, now: number, win?: Window, width?: number): Chart {
+export function buildChart(
+  timeline: WorkTimeline,
+  now: number,
+  win?: Window,
+  width?: number,
+  tr: TFunction = shared.t,
+): Chart {
   const t = unifyAgents(timeline)
   const axis = axisFor(t, now, win, width)
   const going = t.live
@@ -616,6 +642,6 @@ export function buildChart(timeline: WorkTimeline, now: number, win?: Window, wi
       createdAt !== null && lead >= 1 && createdShare < 0 && !bands.some((b) => b.kind === 'start')
         ? { minutes: lead, left: Math.max(0, createdShare) }
         : null,
-    summary: summarize(t, rows, axis),
+    summary: summarize(t, rows, axis, tr),
   }
 }

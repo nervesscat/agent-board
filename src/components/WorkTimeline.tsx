@@ -1,9 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
+import type { TFunction } from 'i18next'
 import { useEffect, useId, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { DelayedLoading, SkeletonText } from '#/components/Loading'
 import { RunReportView, runReportLabel } from '#/components/RunReport'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '#/components/ui/dialog'
+import { shared } from '#/i18n'
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
 import { Tip } from '#/components/ui/tooltip'
 import { nameParts, parentName, shortName } from '#/lib/actorName'
@@ -62,38 +65,82 @@ export { spokenDuration }
  * report written for that run (src/lib/spanReport.ts), or its facts and that it has none.
  */
 
-const phaseName = (s: Pick<TimelineSpan, 'phase' | 'round'>) =>
-  s.round !== null ? `${s.phase} round ${s.round}` : s.phase
-const phaseShort = (s: Pick<TimelineSpan, 'phase' | 'round'>) =>
-  s.round !== null ? `${s.phase} r${s.round}` : s.phase
+const phaseName = (s: Pick<TimelineSpan, 'phase' | 'round'>, tr: TFunction) =>
+  s.round !== null ? tr('workTimeline.phaseRound', { phase: s.phase, round: s.round }) : s.phase
+const phaseShort = (s: Pick<TimelineSpan, 'phase' | 'round'>, tr: TFunction) =>
+  s.round !== null ? tr('workTimeline.phaseRoundShort', { phase: s.phase, round: s.round }) : s.phase
 
 /**
  * Where a segment ends, in words: `now` only while it is open on a live ticket. On a ticket no longer
  * worked an open segment ends at the ticket's last event, as the bar draws it, so it gives that time
  * (its `open` suffix still says it was never closed).
  */
-const until = (seg: { open: boolean; end: string }, live: boolean) =>
-  seg.open && live ? 'now' : clock(seg.end)
+const until = (seg: { open: boolean; end: string }, live: boolean, tr: TFunction) =>
+  seg.open && live ? tr('workTimeline.now') : clock(seg.end)
 
-export const spanLabel = (s: TimelineSpan, live: boolean) =>
-  `${phaseName(s)} by ${s.agent}${s.by !== s.agent ? ` (via ${s.by})` : ''}, ${clock(s.start)} to ${until(s, live)}, ${spokenDuration(Date.parse(s.end) - Date.parse(s.start))}${s.open ? ', open' : ''}`
+/** The board event's name where the chart's own table (WorkTimelineStyle) holds it in English only. */
+const markName = (kind: string, tr: TFunction) =>
+  kind === 'push' || kind === 'pr' || kind === 'preview' || kind === 'merge'
+    ? tr(`workTimeline.mark.${kind}`)
+    : tr('workTimeline.mark.other')
 
-export const waitLabel = (w: ChartWait, live: boolean) =>
-  `wait: ${w.reason} (${w.agent}), ${clock(w.start)} to ${until(w, live)}, ${spokenDuration(Date.parse(w.end) - Date.parse(w.start))}${w.open ? ', open' : ''}${w.note ? `: ${w.note}` : ''}`
+export const spanLabel = (s: TimelineSpan, live: boolean, tr: TFunction = shared.t) =>
+  tr('workTimeline.label.span', {
+    phase: phaseName(s, tr),
+    agent: s.agent,
+    via: s.by !== s.agent ? tr('workTimeline.label.via', { by: s.by }) : '',
+    from: clock(s.start),
+    to: until(s, live, tr),
+    duration: spokenDuration(Date.parse(s.end) - Date.parse(s.start), tr),
+    open: s.open ? tr('workTimeline.label.open') : '',
+  })
+
+export const waitLabel = (w: ChartWait, live: boolean, tr: TFunction = shared.t) =>
+  tr('workTimeline.label.wait', {
+    reason: w.reason,
+    agent: w.agent,
+    from: clock(w.start),
+    to: until(w, live, tr),
+    duration: spokenDuration(Date.parse(w.end) - Date.parse(w.start), tr),
+    open: w.open ? tr('workTimeline.label.open') : '',
+    note: w.note ? `: ${w.note}` : '',
+  })
 
 /** A wait delegated to another agent: the delegate in the name, as the wait's own story. */
-export const delegationLabel = (w: ChartWait, live: boolean) =>
-  `delegated to ${w.on} by ${w.agent}, ${clock(w.start)} to ${until(w, live)}, ${spokenDuration(Date.parse(w.end) - Date.parse(w.start))}${w.open ? ', open' : ''}${w.note ? `: ${w.note}` : ''}`
+export const delegationLabel = (w: ChartWait, live: boolean, tr: TFunction = shared.t) =>
+  tr('workTimeline.label.delegation', {
+    on: w.on,
+    agent: w.agent,
+    from: clock(w.start),
+    to: until(w, live, tr),
+    duration: spokenDuration(Date.parse(w.end) - Date.parse(w.start), tr),
+    open: w.open ? tr('workTimeline.label.open') : '',
+    note: w.note ? `: ${w.note}` : '',
+  })
 
-const handoffLabel = (h: { from: string; to: string; at: string; note: string }) =>
-  `${h.from} passed the work to ${h.to}, ${clock(h.at)}${h.note ? `: ${h.note}` : ''}`
+const handoffLabel = (h: { from: string; to: string; at: string; note: string }, tr: TFunction) =>
+  tr('workTimeline.label.handoff', {
+    from: h.from,
+    to: h.to,
+    time: clock(h.at),
+    note: h.note ? `: ${h.note}` : '',
+  })
+
+const markLabel = (m: TimelineMark, tr: TFunction) =>
+  tr('workTimeline.label.mark', {
+    name: markName(m.kind, tr),
+    note: m.note ? `: ${m.note}` : '',
+    time: clock(m.at),
+  })
 
 /** A collapsed period's story: its real start, end and length, and that it is not drawn to scale. */
-export const collapsedLabel = (b: Pick<Band, 'label' | 'start' | 'end' | 'open'>) =>
-  `${b.label}, ${stamp(new Date(b.start).toISOString())} to ${b.open ? 'now' : stamp(new Date(b.end).toISOString())}, ${longDuration(b.end - b.start)}, not drawn to scale`
-
-const markLabel = (m: TimelineMark) =>
-  `${(MARK[m.kind] ?? OTHER_MARK).name}${m.note ? `: ${m.note}` : ''}, ${clock(m.at)}`
+export const collapsedLabel = (b: Pick<Band, 'label' | 'start' | 'end' | 'open'>, tr: TFunction = shared.t) =>
+  tr('workTimeline.label.collapsed', {
+    label: b.label,
+    from: stamp(new Date(b.start).toISOString()),
+    to: b.open ? tr('workTimeline.now') : stamp(new Date(b.end).toISOString()),
+    duration: longDuration(b.end - b.start, tr),
+  })
 
 /** The pieces of the popover: a definition list of facts. */
 function Facts({ items }: { items: [string, ReactNode][] }) {
@@ -109,8 +156,8 @@ function Facts({ items }: { items: [string, ReactNode][] }) {
   )
 }
 
-const endedWhen = (seg: { open: boolean; end: string }, live: boolean) =>
-  seg.open ? (live ? 'running' : 'never closed') : stamp(seg.end)
+const endedWhen = (seg: { open: boolean; end: string }, live: boolean, tr: TFunction) =>
+  seg.open ? (live ? tr('workTimeline.running') : tr('workTimeline.neverClosed')) : stamp(seg.end)
 
 /**
  * A segment: its label as the tooltip and the button's name, its details in a popover opened by a click,
@@ -162,9 +209,12 @@ const AXIS_PX = 14
  * parent the timeline knows it under, are the tooltip and the label's accessible name.
  */
 function RowLabel({ name, depth, parent }: { name: string; depth: number; parent: string | null }) {
+  const { t: tr } = useTranslation()
   const parts = nameParts(name)
   const prefix = parentName(parts.parent)
-  const full = `${name || 'unnamed'}${parent ? `, sub-agent of ${parent}` : ''}`
+  const full = parent
+    ? tr('workTimeline.subAgentOf', { name: name || tr('workTimeline.unnamed'), parent })
+    : name || tr('workTimeline.unnamed')
   return (
     <Tip content={full}>
       <span
@@ -220,6 +270,7 @@ function WaitSegment({
   chart: Chart
   compact: boolean
 }) {
+  const { t: tr } = useTranslation()
   const { wait: w, seg, lane, delegated } = item
   const h = lanePx(compact)
   const text = compact ? 'text-[10px]' : 'text-[11px]'
@@ -229,15 +280,15 @@ function WaitSegment({
     const on = w.on as string
     return (
       <Segment
-        label={delegationLabel(w, chart.going)}
+        label={delegationLabel(w, chart.going, tr)}
         details={
           <Facts
             items={[
-              ['Delegated to', on],
-              ['By', w.agent],
-              ['Started', stamp(w.start)],
-              ['Ended', endedWhen(w, chart.going)],
-              ['Note', w.note || '—'],
+              [tr('workTimeline.fact.delegatedTo'), on],
+              [tr('workTimeline.fact.by'), w.agent],
+              [tr('workTimeline.fact.started'), stamp(w.start)],
+              [tr('workTimeline.fact.ended'), endedWhen(w, chart.going, tr)],
+              [tr('workTimeline.fact.note'), w.note || '—'],
             ]}
           />
         }
@@ -246,7 +297,11 @@ function WaitSegment({
         attrs={{ 'data-kind': 'delegation', 'data-on': on, 'data-narrow': seg.narrow ? 'true' : undefined }}
       >
         <span aria-hidden className="h-px min-w-2 flex-1 bg-current" />
-        {!seg.narrow && <span className="min-w-0 truncate rounded-sm bg-card px-1">delegated to {on}</span>}
+        {!seg.narrow && (
+          <span className="min-w-0 truncate rounded-sm bg-card px-1">
+            {tr('workTimeline.delegatedTo', { on })}
+          </span>
+        )}
       </Segment>
     )
   }
@@ -254,16 +309,16 @@ function WaitSegment({
   const Icon = human ? HUMAN_ICON : waitIcon(w.reason)
   return (
     <Segment
-      label={waitLabel(w, chart.going)}
+      label={waitLabel(w, chart.going, tr)}
       details={
         <Facts
           items={[
-            ['Waiting', w.agent],
-            ['On', w.reason === 'human' ? 'the human' : w.reason],
-            ['Started', stamp(w.start)],
-            ['Ended', endedWhen(w, chart.going)],
-            ['Duration', spokenDuration(Date.parse(w.end) - Date.parse(w.start))],
-            ['Note', w.note || '—'],
+            [tr('workTimeline.fact.waiting'), w.agent],
+            [tr('workTimeline.fact.on'), w.reason === 'human' ? tr('workTimeline.theHuman') : w.reason],
+            [tr('workTimeline.fact.started'), stamp(w.start)],
+            [tr('workTimeline.fact.ended'), endedWhen(w, chart.going, tr)],
+            [tr('workTimeline.fact.duration'), spokenDuration(Date.parse(w.end) - Date.parse(w.start), tr)],
+            [tr('workTimeline.fact.note'), w.note || '—'],
           ]}
         />
       }
@@ -307,15 +362,20 @@ function SpanSegment({
   compact: boolean
   onOpen: (spanId: number) => void
 }) {
+  const { t: tr } = useTranslation()
   const { span: s, seg, lane } = item
   const h = lanePx(compact)
   const text = compact ? 'text-[10px]' : 'text-[11px]'
-  const label = spanLabel(s, chart.going)
+  const label = spanLabel(s, chart.going, tr)
   return (
     <Tip content={label}>
       <button
         type="button"
-        aria-label={`Open the ${shortName(s.agent)} report${s.round !== null ? `, round ${s.round}` : ''}: ${label}`}
+        aria-label={
+          s.round !== null
+            ? tr('workTimeline.openReportRound', { agent: shortName(s.agent), round: s.round, label })
+            : tr('workTimeline.openReport', { agent: shortName(s.agent), label })
+        }
         onClick={() => onOpen(s.id)}
         className={`${SEG_BASE} cursor-pointer ${text} ${PHASE[s.phase] ?? OTHER_PHASE} ${s.open ? 'rounded-r-none' : ''}`}
         style={{
@@ -327,7 +387,7 @@ function SpanSegment({
         data-open={s.open ? 'true' : 'false'}
         data-narrow={seg.narrow ? 'true' : undefined}
       >
-        {!seg.narrow && <span className="min-w-0 truncate">{phaseShort(s)}</span>}
+        {!seg.narrow && <span className="min-w-0 truncate">{phaseShort(s, tr)}</span>}
       </button>
     </Tip>
   )
@@ -353,6 +413,7 @@ function SpanDialog({
   live: boolean
   onClose: () => void
 }) {
+  const { t: tr } = useTranslation()
   const fetched = useQuery({
     queryKey: ['span-reports', source?.projectId, source?.ticketId],
     queryFn: () =>
@@ -371,9 +432,11 @@ function SpanDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>{report ? `Run report: ${runReportLabel(report)}` : phaseName(s)}</DialogTitle>
+          <DialogTitle>
+            {report ? tr('runReport.dialogTitle', { label: runReportLabel(report, tr) }) : phaseName(s, tr)}
+          </DialogTitle>
           <DialogDescription className="sr-only">
-            {report ? 'The report written for this run' : 'The facts of this run'}
+            {report ? tr('workTimeline.reportDescription') : tr('workTimeline.factsDescription')}
           </DialogDescription>
         </DialogHeader>
         {report ? (
@@ -382,22 +445,28 @@ function SpanDialog({
           <div className="space-y-3">
             <Facts
               items={[
-                ['Who', s.by !== s.agent ? `${s.agent} (via ${s.by})` : s.agent],
-                ['Work', phaseName(s)],
-                ['Started', stamp(s.start)],
-                ['Ended', endedWhen(s, live)],
-                ['Duration', spokenDuration(Date.parse(s.end) - Date.parse(s.start))],
+                [
+                  tr('workTimeline.fact.who'),
+                  s.by !== s.agent ? `${s.agent}${tr('workTimeline.label.via', { by: s.by })}` : s.agent,
+                ],
+                [tr('workTimeline.fact.work'), phaseName(s, tr)],
+                [tr('workTimeline.fact.started'), stamp(s.start)],
+                [tr('workTimeline.fact.ended'), endedWhen(s, live, tr)],
+                [
+                  tr('workTimeline.fact.duration'),
+                  spokenDuration(Date.parse(s.end) - Date.parse(s.start), tr),
+                ],
               ]}
             />
             {loading ? (
-              <DelayedLoading label="Loading run report…">
+              <DelayedLoading label={tr('workTimeline.loadingReport')}>
                 <SkeletonText lines={1} />
               </DelayedLoading>
             ) : (
               <p className="text-xs text-muted-foreground">
                 {fetched.error
-                  ? 'The reports could not be loaded.'
-                  : `No report for this run${s.open ? ' yet' : ''}.`}
+                  ? tr('workTimeline.reportsFailed')
+                  : tr(s.open ? 'workTimeline.noReportYet' : 'workTimeline.noReport')}
               </p>
             )}
           </div>
@@ -408,17 +477,18 @@ function SpanDialog({
 }
 
 function HandoffMarker({ h }: { h: Handoff }) {
+  const { t: tr } = useTranslation()
   const { handoff: x } = h
   return (
     <Segment
-      label={handoffLabel(x)}
+      label={handoffLabel(x, tr)}
       details={
         <Facts
           items={[
-            ['From', x.from],
-            ['To', x.to],
-            ['At', stamp(x.at)],
-            ['Note', x.note || '—'],
+            [tr('workTimeline.fact.from'), x.from],
+            [tr('workTimeline.fact.to'), x.to],
+            [tr('workTimeline.fact.at'), stamp(x.at)],
+            [tr('workTimeline.fact.note'), x.note || '—'],
           ]}
         />
       }
@@ -458,6 +528,7 @@ export function WorkTimelineBar({
   /** The ticket the chart draws, for a span bar to open its run report; without it a bar opens its facts only. */
   reports?: SpanReports
 }) {
+  const { t: tr } = useTranslation()
   // The axis's now is the server's, so a browser clock behind it does not cut the live segments short.
   const now = onServerClock(useNow(30_000), useServerOffset(timeline.now))
   const summaryId = useId()
@@ -478,11 +549,11 @@ export function WorkTimelineBar({
   if (!timeline.start || !timeline.end || !hasWork(timeline))
     return (
       <p data-testid="work-timeline" className="text-xs text-muted-foreground">
-        No work recorded yet.
+        {tr('workTimeline.noWork')}
       </p>
     )
 
-  const chart = buildChart(timeline, now, win, width)
+  const chart = buildChart(timeline, now, win, width, tr)
   const { axis, rows, marks, bands } = chart
   const openedSpan = timeline.spans.find((x) => x.id === opened) ?? null
   const h = lanePx(compact)
@@ -547,12 +618,15 @@ export function WorkTimelineBar({
       </p>
       <div className="pb-1">
         {marks.length > 0 || bands.length > 0 || chart.created ? (
-          <Row label={<span className="text-muted-foreground">Board</span>} height={RAIL_PX}>
+          <Row
+            label={<span className="text-muted-foreground">{tr('workTimeline.board')}</span>}
+            height={RAIL_PX}
+          >
             {chart.created && (
-              <Tip content={`created ${chart.created.minutes} min before work`}>
+              <Tip content={tr('workTimeline.created', { count: chart.created.minutes })}>
                 <button
                   type="button"
-                  aria-label={`created ${chart.created.minutes} min before work`}
+                  aria-label={tr('workTimeline.created', { count: chart.created.minutes })}
                   data-kind="created"
                   className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-card bg-foreground outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
                   style={{ left: keepInside(chart.created.left, 5) }}
@@ -562,21 +636,29 @@ export function WorkTimelineBar({
             {bands.map((b) => (
               <Segment
                 key={b.key}
-                label={collapsedLabel(b)}
+                label={collapsedLabel(b, tr)}
                 details={
                   <Facts
                     items={[
-                      ['Waiting for', b.label],
-                      ['From', stamp(new Date(b.start).toISOString())],
-                      ['To', b.open ? 'now' : stamp(new Date(b.end).toISOString())],
-                      ['Duration', longDuration(b.end - b.start)],
-                      ['Not to scale', 'This time is shown as a short block, not at its real length.'],
+                      [tr('workTimeline.fact.waitingFor'), b.label],
+                      [tr('workTimeline.fact.from'), stamp(new Date(b.start).toISOString())],
+                      [
+                        tr('workTimeline.fact.to'),
+                        b.open ? tr('workTimeline.now') : stamp(new Date(b.end).toISOString()),
+                      ],
+                      [tr('workTimeline.fact.duration'), longDuration(b.end - b.start, tr)],
+                      [tr('workTimeline.fact.notToScale'), tr('workTimeline.notToScaleNote')],
                       ...(b.marks.length
                         ? [
                             [
-                              'Also then',
+                              tr('workTimeline.fact.alsoThen'),
                               b.marks
-                                .map((m) => `${(MARK[m.kind] ?? OTHER_MARK).name}, ${stamp(m.at)}`)
+                                .map((m) =>
+                                  tr('workTimeline.alsoThenItem', {
+                                    name: markName(m.kind, tr),
+                                    time: stamp(m.at),
+                                  }),
+                                )
                                 .join('; '),
                             ] as [string, ReactNode],
                           ]
@@ -597,13 +679,13 @@ export function WorkTimelineBar({
               return (
                 <Segment
                   key={m.id}
-                  label={markLabel(m)}
+                  label={markLabel(m, tr)}
                   details={
                     <Facts
                       items={[
-                        ['Event', meta.name],
-                        ['At', stamp(m.at)],
-                        ['Note', m.note || '—'],
+                        [tr('workTimeline.fact.event'), markName(m.kind, tr)],
+                        [tr('workTimeline.fact.at'), stamp(m.at)],
+                        [tr('workTimeline.fact.note'), m.note || '—'],
                       ]}
                     />
                   }
@@ -667,6 +749,7 @@ export function WorkTimelineBar({
               className={`absolute top-0 -translate-x-1/2 text-[10.5px] leading-[14px] font-medium ${BREAK_MARK}`}
               style={{ left: `${k.left * 100}%` }}
             >
+              {/* i18n-ignore: the skip mark */}
               //
             </span>
           ))}
@@ -676,13 +759,15 @@ export function WorkTimelineBar({
               className="absolute top-0 text-[10.5px] text-muted-foreground"
               style={{ right: `${(1 - nowLeft) * 100}%` }}
             >
-              now
+              {tr('workTimeline.now')}
             </span>
           )}
         </Row>
       </div>
       {chart.created && (
-        <p className="text-[10.5px] text-muted-foreground">created {chart.created.minutes} min before work</p>
+        <p className="text-[10.5px] text-muted-foreground">
+          {tr('workTimeline.created', { count: chart.created.minutes })}
+        </p>
       )}
       {openedSpan && (
         <SpanDialog

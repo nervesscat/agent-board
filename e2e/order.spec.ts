@@ -164,7 +164,7 @@ test('a placement that fails to save puts the column back as it was', async ({
   expect(await listed(human, project.id, 'todo')).toEqual([b, a])
 })
 
-test('a review card placed above a ticket it needs says to merge it after that one', async ({
+test('a review card shows no merge-after or needs badge, above or below a ticket it needs', async ({
   page,
   api,
   human,
@@ -176,20 +176,12 @@ test('a review card placed above a ticket it needs says to merge it after that o
   await page.goto(`/projects/${project.id}/features?view=board`)
   // Newest first puts it above what it needs.
   await expect.poll(() => shown(page, 'review')).toEqual([top.id, base.id])
-  const hint = card(page, top.id).getByText(`merge after #${base.id}`)
-  await expect(hint).toBeVisible()
-  await expect(card(page, base.id).getByText(/merge after/)).toHaveCount(0)
+  await expect(card(page, top.id)).not.toContainText(/merge after|needs #/)
 
-  // Placed below it, the hint goes; the need itself still shows.
+  // Placed below it, still nothing.
   await drag(page, top.id, 'below', base.id)
   await expect.poll(() => shown(page, 'review')).toEqual([base.id, top.id])
-  await expect(hint).toHaveCount(0)
-  await expect(card(page, top.id)).toContainText(`needs #${base.id}`)
-
-  // Back above it over the API (an agent setting the merge order), the hint is back after a reload.
-  await ok(human.patch(`/api/tickets/${top.id}`, { data: { position: 1 } }))
-  await page.reload()
-  await expect(card(page, top.id).getByText(`merge after #${base.id}`)).toBeVisible()
+  await expect(card(page, top.id)).not.toContainText(/merge after|needs #/)
 })
 
 test("a ticket's page agrees at once with a placement made on the board above it", async ({

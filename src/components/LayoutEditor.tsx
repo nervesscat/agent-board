@@ -13,6 +13,7 @@ import {
   SquareKanban,
 } from 'lucide-react'
 import { type DragEvent, type ReactNode, useEffect, useRef, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { LAYOUT_ICONS } from '#/components/layoutIcons'
@@ -27,19 +28,20 @@ import {
   type LayoutItem,
   allowedAreas,
   inArea,
-  layoutElement,
+  layoutLabel,
+  layoutLocked,
   moveInLayout,
   sameLayout,
 } from '#/lib/layout'
 import { cn } from '#/lib/utils'
 
-/** How each area reads in the editor: its list's name, and the words that place an element in it. */
-const AREAS: Record<LayoutArea, { name: string; where: string }> = {
-  nav: { name: 'Project menu', where: 'in the menu' },
-  overview: { name: 'Overview cards', where: 'on the Overview' },
-  'ticket.main': { name: 'Ticket page, main column', where: 'on the ticket page' },
-  'ticket.side': { name: 'Ticket page, side column', where: 'on the ticket page' },
-}
+/** How each area reads in the editor: the key of its list's name, and of the words that place an element in it. */
+const AREAS = {
+  nav: { name: 'layoutEditor.area.nav', where: 'layoutEditor.where.nav' },
+  overview: { name: 'layoutEditor.area.overview', where: 'layoutEditor.where.overview' },
+  'ticket.main': { name: 'layoutEditor.area.ticketMain', where: 'layoutEditor.where.ticket' },
+  'ticket.side': { name: 'layoutEditor.area.ticketSide', where: 'layoutEditor.where.ticket' },
+} as const satisfies Record<LayoutArea, { name: string; where: string }>
 
 /** A control of a tile, as the focus follows a moved tile to it. */
 type Control = 'up' | 'down' | 'column'
@@ -55,6 +57,7 @@ type DropPoint = { area: LayoutArea; index: number }
  * default saves the defaults at once, as the other sections of this page do.
  */
 export function LayoutEditor({ projectId, saved }: { projectId: string; saved: Layout }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [items, setItems] = useState(saved)
   const dirty = !sameLayout(items, saved)
@@ -72,7 +75,7 @@ export function LayoutEditor({ projectId, saved }: { projectId: string; saved: L
         // The Overview's cards, on the project's Overview and on Home.
         qc.invalidateQueries({ queryKey: ['summary'] }),
       ])
-      toast.success('Saved')
+      toast.success(t('common.saved'))
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
@@ -147,28 +150,27 @@ export function LayoutEditor({ projectId, saved }: { projectId: string; saved: L
 
   const hidden = items.filter((it) => it.hidden).length
   return (
-    <section id="layout" aria-label="Layout" className="max-w-5xl scroll-mt-16 space-y-3">
+    <section id="layout" aria-label={t('layoutEditor.title')} className="max-w-5xl scroll-mt-16 space-y-3">
       <div>
-        <h2 className="text-xl font-semibold tracking-tight">Layout</h2>
+        <h2 className="text-xl font-semibold tracking-tight">{t('layoutEditor.title')}</h2>
         <p className="text-sm text-muted-foreground">
-          What shows in this project, and where: the pages of its menu, the cards of its Overview (and of its
-          block on Home) and the sections of a ticket&apos;s page. Switch a tile off to hide it, drag it or
-          use its arrows to move it, and move a ticket section to the other column. A hidden page still opens
-          by its link. <Lock className="inline size-3 align-[-1px]" aria-hidden /> Locked ones move but always
-          show.
+          <Trans
+            i18nKey="layoutEditor.description"
+            components={{ lock: <Lock className="inline size-3 align-[-1px]" aria-hidden /> }}
+          />
         </p>
       </div>
       <div ref={root} className="grid gap-4 xl:grid-cols-[20rem_minmax(0,1fr)]">
-        <Panel icon={PanelLeft} name="Menu" items={inArea(items, 'nav')}>
+        <Panel icon={PanelLeft} name={t('layoutEditor.menu')} items={inArea(items, 'nav')}>
           {area('nav')}
         </Panel>
         <div className="min-w-0 space-y-4">
-          <Panel icon={LayoutDashboard} name="Overview" items={inArea(items, 'overview')}>
+          <Panel icon={LayoutDashboard} name={t('layoutEditor.overview')} items={inArea(items, 'overview')}>
             {area('overview', true)}
           </Panel>
           <Panel
             icon={SquareKanban}
-            name="Ticket page"
+            name={t('layoutEditor.ticketPage')}
             items={[...inArea(items, 'ticket.main'), ...inArea(items, 'ticket.side')]}
           >
             {/* The ticket's title and controls stay where they are: a still bar above the columns. */}
@@ -181,16 +183,16 @@ export function LayoutEditor({ projectId, saved }: { projectId: string; saved: L
               <span className="h-2 w-14 rounded-full bg-muted-foreground/15" />
             </div>
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-              <Column label="Main column">{area('ticket.main')}</Column>
-              <Column label="Side column">{area('ticket.side')}</Column>
+              <Column label={t('layoutEditor.mainColumn')}>{area('ticket.main')}</Column>
+              <Column label={t('layoutEditor.sideColumn')}>{area('ticket.side')}</Column>
             </div>
           </Panel>
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2">
         <span className="mr-auto text-xs text-muted-foreground" aria-live="polite">
-          {dirty ? 'Unsaved changes.' : 'No changes.'}
-          {hidden > 0 && ` ${hidden} hidden.`}
+          {dirty ? t('projectSettings.unsaved') : t('projectSettings.noChanges')}
+          {hidden > 0 && ` ${t('layoutEditor.hiddenCount', { count: hidden })}`}
         </span>
         <Button
           type="button"
@@ -199,7 +201,7 @@ export function LayoutEditor({ projectId, saved }: { projectId: string; saved: L
           disabled={save.isPending}
           onClick={() => save.mutate({ layout: null, from: items })}
         >
-          <RotateCcw data-icon="inline-start" /> Reset to default
+          <RotateCcw data-icon="inline-start" /> {t('layoutEditor.reset')}
         </Button>
         <Button
           type="button"
@@ -207,7 +209,7 @@ export function LayoutEditor({ projectId, saved }: { projectId: string; saved: L
           disabled={!dirty || save.isPending}
           onClick={() => save.mutate({ layout: items, from: items })}
         >
-          {save.isPending ? 'Saving…' : 'Save'}
+          {save.isPending ? t('projectSettings.saving') : t('projectSettings.save')}
         </Button>
       </div>
     </section>
@@ -226,6 +228,7 @@ function Panel({
   items: LayoutItem[]
   children: ReactNode
 }) {
+  const { t } = useTranslation()
   const shown = items.filter((it) => !it.hidden).length
   return (
     <div className="min-w-0 rounded-xl border bg-muted/30 p-3 shadow-xs">
@@ -233,7 +236,7 @@ function Panel({
         <Icon className="size-3.5" />
         <span className="uppercase tracking-wide">{name}</span>
         <span className="ml-auto font-normal tabular-nums">
-          {shown} of {items.length} shown
+          {t('layoutEditor.shown', { shown, total: items.length })}
         </span>
       </div>
       {children}
@@ -274,6 +277,7 @@ function Area({
   onDrop: (id: LayoutId, index: number) => void
   tile: (item: LayoutItem, index: number, count: number) => ReactNode
 }) {
+  const { t } = useTranslation()
   const takes = dragging !== null && allowedAreas(dragging).includes(area)
   const pointAt = (e: DragEvent<HTMLElement>) => {
     const tiles = [...e.currentTarget.querySelectorAll<HTMLElement>(':scope > [data-tile]')]
@@ -286,7 +290,7 @@ function Area({
   }
   return (
     <ul
-      aria-label={AREAS[area].name}
+      aria-label={t(AREAS[area].name)}
       data-area={area}
       onDragOver={(e) => {
         if (!takes) return
@@ -314,7 +318,7 @@ function Area({
       {items.map((it, i) => tile(it, i, items.length))}
       {!items.length && (
         <li className="flex h-10 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">
-          {takes ? 'Drop here' : 'Empty: drag sections here'}
+          {takes ? t('layoutEditor.dropHere') : t('layoutEditor.empty')}
         </li>
       )}
     </ul>
@@ -353,9 +357,11 @@ function Tile({
   onDragStart: () => void
   onDragEnd: () => void
 }) {
-  const el = layoutElement(item.id)
+  const { t } = useTranslation()
+  const name = layoutLabel(item.id, t)
+  const locked = layoutLocked(item.id, t)
   const Icon = LAYOUT_ICONS[item.id]
-  const where = AREAS[item.area].where
+  const where = t(AREAS[item.area].where)
   const toSide = item.area === 'ticket.main'
   // The drop line sits in the gap beside the tile: above or below it in a list, left or right in the grid.
   const line = (end: boolean) => (
@@ -376,7 +382,7 @@ function Tile({
       draggable
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = 'move'
-        e.dataTransfer.setData('text/plain', el.label)
+        e.dataTransfer.setData('text/plain', name)
         onDragStart()
       }}
       onDragEnd={onDragEnd}
@@ -404,11 +410,11 @@ function Tile({
           className={cn('size-4 shrink-0', item.hidden ? 'opacity-50' : 'text-muted-foreground')}
         />
         <span className={cn('truncate', item.hidden && 'line-through decoration-muted-foreground/60')}>
-          {el.label}
+          {name}
         </span>
         {item.hidden && <EyeOff aria-hidden className="size-3 shrink-0" />}
-        {el.locked && (
-          <Tip content={el.locked}>
+        {locked && (
+          <Tip content={locked}>
             <span className="inline-flex shrink-0">
               <Lock aria-hidden className="size-3 text-muted-foreground/70" />
             </span>
@@ -416,52 +422,60 @@ function Tile({
         )}
       </span>
       <span className="ml-auto flex shrink-0 items-center gap-0.5">
-        <Tip content="Move up">
+        <Tip content={t('layoutEditor.moveUp')}>
           <button
             type="button"
             data-control={`up:${item.id}`}
             className={iconButton}
             disabled={index === 0}
             onClick={() => onMove('up')}
-            aria-label={`Move ${el.label} up ${where}`}
+            aria-label={t('layoutEditor.moveUpIn', { name, where })}
           >
             <ChevronUp className="size-3.5" />
           </button>
         </Tip>
-        <Tip content="Move down">
+        <Tip content={t('layoutEditor.moveDown')}>
           <button
             type="button"
             data-control={`down:${item.id}`}
             className={iconButton}
             disabled={index === count - 1}
             onClick={() => onMove('down')}
-            aria-label={`Move ${el.label} down ${where}`}
+            aria-label={t('layoutEditor.moveDownIn', { name, where })}
           >
             <ChevronDown className="size-3.5" />
           </button>
         </Tip>
         {onColumn && (
-          <Tip content={toSide ? 'Move to the side column' : 'Move to the main column'}>
+          <Tip content={toSide ? t('layoutEditor.toSideTip') : t('layoutEditor.toMainTip')}>
             <button
               type="button"
               data-control={`column:${item.id}`}
               className={iconButton}
               onClick={onColumn}
-              aria-label={`Move ${el.label} to the ${toSide ? 'side' : 'main'} column`}
+              aria-label={toSide ? t('layoutEditor.toSide', { name }) : t('layoutEditor.toMain', { name })}
             >
               {toSide ? <ArrowRightToLine className="size-3.5" /> : <ArrowLeftToLine className="size-3.5" />}
             </button>
           </Tip>
         )}
-        <Tip content={el.locked ? `Always shown: ${el.locked.toLowerCase()}` : item.hidden ? 'Show' : 'Hide'}>
+        <Tip
+          content={
+            locked
+              ? t('layoutEditor.alwaysShown', { reason: locked.toLowerCase() })
+              : item.hidden
+                ? t('layoutEditor.show')
+                : t('layoutEditor.hide')
+          }
+        >
           {/* A wrapper, so a disabled switch still has its tooltip. */}
           <span className="ml-1 inline-flex">
             <Switch
               size="sm"
               checked={!item.hidden}
-              disabled={!!el.locked}
+              disabled={!!locked}
               onCheckedChange={(on) => onHidden(!on)}
-              aria-label={`Show ${el.label} ${where}`}
+              aria-label={t('layoutEditor.showIn', { name, where })}
             />
           </span>
         </Tip>

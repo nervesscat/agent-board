@@ -2,8 +2,10 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
+import type { TFunction } from 'i18next'
 import { Compass, CornerDownLeft, LayoutGrid, Loader2, Search, Settings2, X, Zap } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { copyText } from '#/components/AgentPicker'
@@ -54,6 +56,7 @@ const PROJECT_PATHS = {
   previews: '/projects/$id/previews',
   gallery: '/projects/$id/gallery',
   team: '/projects/$id/agents',
+  workflow: '/projects/$id/workflow',
   daily: '/projects/$id/daily',
   cleanup: '/projects/$id/cleanup',
   repositories: '/projects/$id/repositories',
@@ -62,141 +65,145 @@ const PROJECT_PATHS = {
 
 type ProjectPath = (typeof PROJECT_PATHS)[keyof typeof PROJECT_PATHS]
 
-const PROJECT_PAGES: {
-  key: string
-  to: ProjectPath
-  title: string
-  subtitle?: string
-  keywords?: string[]
-}[] = [
+/**
+ * The texts of the pages and settings are `palette.page.<text>` and `palette.setting.<text>`: a title, a
+ * subtitle and the words the item is found by (English ones too, whatever the language).
+ */
+type PageText =
+  | 'overview'
+  | 'board'
+  | 'roadmap'
+  | 'prs'
+  | 'reviews'
+  | 'previews'
+  | 'gallery'
+  | 'team'
+  | 'workflow'
+  | 'daily'
+  | 'cleanup'
+  | 'repositories'
+  | 'instructions'
+  | 'home'
+  | 'dailyGlobal'
+  | 'connect'
+  | 'settingsGlobal'
+type SettingText =
+  | 'theme'
+  | 'defaultAgent'
+  | 'previewsLimit'
+  | 'updates'
+  | 'agentRoles'
+  | 'tailnet'
+  | 'devices'
+  | 'instructions'
+  | 'instructionsHistory'
+  | 'defaultPhases'
+  | 'tagSuggestions'
+  | 'stalledTickets'
+  | 'notifications'
+  | 'stages'
+  | 'runs'
+  | 'layout'
+  | 'agentTokens'
+  | 'skills'
+
+/** The words an item is found by, from the comma-separated text. */
+const words = (text: string) => text.split(',').map((word) => word.trim())
+
+const PROJECT_PAGES: { key: string; to: ProjectPath; id: PageText }[] = [
   {
     key: 'overview',
     to: PROJECT_PATHS.overview,
-    title: 'Overview',
-    subtitle: "The project's summary",
-    keywords: ['home', 'project', 'summary', 'needs you'],
+    id: 'overview',
   },
   {
     key: 'board',
     to: PROJECT_PATHS.board,
-    title: 'Board',
-    subtitle: 'Ongoing features',
-    keywords: ['tickets', 'features', 'kanban', 'stages', 'in progress'],
+    id: 'board',
   },
   {
     key: 'roadmap',
     to: PROJECT_PATHS.roadmap,
-    title: 'Roadmap',
-    subtitle: 'The work timeline',
-    keywords: ['timeline', 'work', 'schedule'],
+    id: 'roadmap',
   },
   {
     key: 'prs',
     to: PROJECT_PATHS.prs,
-    title: 'PR queue',
-    subtitle: 'Pull requests to review and waiting on others',
-    keywords: ['prs', 'pull requests', 'reviews', 'merge'],
+    id: 'prs',
   },
   {
     key: 'reviews',
     to: PROJECT_PATHS.reviews,
-    title: 'Reviews',
-    subtitle: 'Review results, in the PR queue',
-    keywords: ['verdict', 'findings', 'review results', 'prs'],
+    id: 'reviews',
   },
   {
     key: 'previews',
     to: PROJECT_PATHS.previews,
-    title: 'Previews',
-    subtitle: 'The previews the board runs',
-    keywords: ['runs', 'servers', 'ports'],
+    id: 'previews',
   },
   {
     key: 'gallery',
     to: PROJECT_PATHS.gallery,
-    title: 'Gallery',
-    subtitle: 'Files and screenshots',
-    keywords: ['files', 'images', 'uploads'],
+    id: 'gallery',
   },
   {
     key: 'team',
     to: PROJECT_PATHS.team,
-    title: 'Team',
-    subtitle: 'The agents the project works with',
-    keywords: ['agents', 'personas', 'reservations'],
+    id: 'team',
+  },
+  {
+    key: 'workflow',
+    to: PROJECT_PATHS.workflow,
+    id: 'workflow',
   },
   {
     key: 'daily',
     to: PROJECT_PATHS.daily,
-    title: 'Daily',
-    subtitle: "The project's day",
-    keywords: ['activity', 'today', 'report'],
+    id: 'daily',
   },
   {
     key: 'cleanup',
     to: PROJECT_PATHS.cleanup,
-    title: 'Cleanup',
-    subtitle: 'Branches and worktrees left behind',
-    keywords: ['branches', 'worktrees', 'delete', 'leftovers'],
+    id: 'cleanup',
   },
   {
     key: 'repositories',
     to: PROJECT_PATHS.repositories,
-    title: 'Repositories',
-    subtitle: 'Checkouts this project reads',
-    keywords: ['repos', 'git', 'checkouts'],
+    id: 'repositories',
   },
   {
     key: 'instructions',
     to: PROJECT_PATHS.instructions,
-    title: 'Instructions',
-    subtitle: 'Settings: what every agent reads',
-    keywords: ['settings', 'project settings', 'rules', 'layout', 'phases', 'stages', 'runs'],
+    id: 'instructions',
   },
 ]
 
-const GLOBAL_PAGES: {
-  key: string
-  to: '/' | '/daily' | '/agents' | '/settings'
-  title: string
-  subtitle: string
-  keywords?: string[]
-}[] = [
+const GLOBAL_PAGES: { key: string; to: '/' | '/daily' | '/agents' | '/settings'; id: PageText }[] = [
   {
     key: 'home',
     to: '/',
-    title: 'Home',
-    subtitle: 'Every project at a glance',
-    keywords: ['projects', 'summary', 'board'],
+    id: 'home',
   },
   {
     key: 'daily-global',
     to: '/daily',
-    title: 'Daily',
-    subtitle: 'What every project did',
-    keywords: ['activity', 'reports', 'today'],
+    id: 'dailyGlobal',
   },
   {
     key: 'connect',
     to: '/agents',
-    title: 'Connect',
-    subtitle: 'Connect an agent and install the skill',
-    keywords: ['agents', 'mcp', 'tokens', 'setup', 'install'],
+    id: 'connect',
   },
   {
     key: 'settings-global',
     to: '/settings',
-    title: 'Settings',
-    subtitle: 'Board-wide preferences',
-    keywords: ['preferences', 'theme', 'previews', 'devices'],
+    id: 'settingsGlobal',
   },
 ]
 
 type Section = {
   key: string
-  title: string
-  subtitle?: string
-  keywords?: string[]
+  id: SettingText
   hash: string
   /** The page the section lives on; the settings page unless the section moved elsewhere. */
   path?: ProjectPath
@@ -209,54 +216,40 @@ type Section = {
 const BOARD_SETTINGS: Section[] = [
   {
     key: 'theme',
-    title: 'Theme',
-    subtitle: 'System, light or dark',
-    keywords: ['appearance', 'colour', 'color', 'dark', 'light', 'system'],
+    id: 'theme',
     hash: 'theme',
   },
   {
     key: 'default-agent',
-    title: 'Default agent CLI',
-    subtitle: 'The CLI Connect opens on',
-    keywords: ['agent', 'claude', 'codex', 'opencode', 'connect'],
+    id: 'defaultAgent',
     hash: 'default-agent',
   },
   {
     key: 'previews-limit',
-    title: 'Previews limit',
-    subtitle: 'How many previews run at once',
-    keywords: ['previews', 'runs', 'limit', 'ports'],
+    id: 'previewsLimit',
     hash: 'previews',
   },
   {
     key: 'updates',
-    title: 'Updates',
-    subtitle: "The board app's updates",
-    keywords: ['version', 'release', 'upgrade'],
+    id: 'updates',
     hash: 'updates',
     humanOnly: true,
   },
   {
     key: 'agent-roles',
-    title: 'Agent roles',
-    subtitle: 'Worker or orchestrator',
-    keywords: ['agents', 'tokens', 'orchestrator', 'worker', 'permissions'],
+    id: 'agentRoles',
     hash: 'agent-roles',
     humanOnly: true,
   },
   {
     key: 'tailnet',
-    title: 'Tailnet entrance',
-    subtitle: 'Reach the board from another device',
-    keywords: ['tailscale', 'network', 'remote', 'public'],
+    id: 'tailnet',
     hash: 'tailnet',
     humanOnly: true,
   },
   {
     key: 'devices',
-    title: 'Devices and passkeys',
-    subtitle: 'The devices that sign in',
-    keywords: ['passkeys', 'sessions', 'sign in', 'security'],
+    id: 'devices',
     hash: 'devices',
     humanOnly: true,
     signInOnly: true,
@@ -266,67 +259,49 @@ const BOARD_SETTINGS: Section[] = [
 const PROJECT_SETTINGS: Section[] = [
   {
     key: 'instructions',
-    title: 'Project instructions',
-    subtitle: 'What every agent reads',
-    keywords: ['rules', 'agents', 'prompt'],
+    id: 'instructions',
     hash: 'instructions',
     path: PROJECT_PATHS.instructions,
   },
   {
     key: 'instructions-history',
-    title: 'Instructions history',
-    subtitle: 'Every change to the instructions',
-    keywords: ['versions', 'history', 'changes'],
+    id: 'instructionsHistory',
     hash: 'instructions-history',
     path: PROJECT_PATHS.instructions,
   },
   {
     key: 'default-phases',
-    title: 'Default phases',
-    subtitle: 'The tasks every new ticket starts with',
-    keywords: ['tasks', 'phases', 'new ticket'],
+    id: 'defaultPhases',
     hash: 'default-phases',
   },
   {
     key: 'tag-suggestions',
-    title: 'Tag suggestions',
-    subtitle: 'The tags offered on tickets',
-    keywords: ['tags', 'labels'],
+    id: 'tagSuggestions',
     hash: 'tag-suggestions',
   },
   {
     key: 'stalled-tickets',
-    title: 'Stalled tickets',
-    subtitle: 'When a ticket reads as stalled',
-    keywords: ['stall', 'minutes', 'idle'],
+    id: 'stalledTickets',
     hash: 'stalled-tickets',
   },
   {
     key: 'notifications',
-    title: 'Notifications',
-    subtitle: 'Which alerts this project shows',
-    keywords: ['alerts', 'mute', 'bell', 'reminders'],
+    id: 'notifications',
     hash: 'notifications',
   },
   {
     key: 'stages',
-    title: 'Stages',
-    subtitle: 'The board columns and what they mean',
-    keywords: ['columns', 'workflow', 'status', 'work stage'],
+    id: 'stages',
     hash: 'stages',
   },
   {
     key: 'runs',
-    title: 'Runs',
-    subtitle: 'Previews and jobs the board runs',
-    keywords: ['previews', 'jobs', 'commands', 'build'],
+    id: 'runs',
     hash: 'runs',
   },
   {
     key: 'layout',
-    title: 'Layout',
-    subtitle: 'The pages, cards and ticket sections',
-    keywords: ['arrange', 'menu', 'sidebar'],
+    id: 'layout',
     hash: 'layout',
   },
 ]
@@ -334,17 +309,13 @@ const PROJECT_SETTINGS: Section[] = [
 const CONNECT_SECTIONS: Section[] = [
   {
     key: 'agent-tokens',
-    title: 'Agent tokens',
-    subtitle: 'The tokens agents sign in with',
-    keywords: ['tokens', 'agents', 'keys', 'revoke', 'roles'],
+    id: 'agentTokens',
     hash: 'agent-tokens',
     humanOnly: true,
   },
   {
     key: 'skills',
-    title: 'Review skills',
-    subtitle: 'Install the review skills (Claude Code)',
-    keywords: ['skills', 'review', 'install'],
+    id: 'skills',
     hash: 'review-skills',
   },
 ]
@@ -369,6 +340,7 @@ function where(pathname: string, search: Record<string, unknown>) {
  * Escape closes and hands the focus back where it was. An empty box remembers what was picked last.
  */
 export function CommandPalette() {
+  const { t } = useTranslation()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const search = useRouterState({ select: (s) => s.location.search }) as Record<string, unknown>
   const { projectId, ticketId } = where(pathname, search)
@@ -414,8 +386,8 @@ export function CommandPalette() {
     enabled: open && projectId !== null && ticketSearch !== '',
     placeholderData: keepSearchRows(projectId ?? 0, 'root'),
   })
-  const ticketItems = (found.data ?? []).map((t) => ticketEntry(t, projectId!, stages, navigate))
-  const allTicketItems = (allTickets.data ?? []).map((t) => ticketEntry(t, projectId!, stages, navigate))
+  const ticketItems = (found.data ?? []).map((row) => ticketEntry(row, projectId!, stages, navigate))
+  const allTicketItems = (allTickets.data ?? []).map((row) => ticketEntry(row, projectId!, stages, navigate))
 
   const startStop = useMutation({
     mutationFn: (what: 'start' | 'stop') =>
@@ -424,11 +396,12 @@ export function CommandPalette() {
       const refused = results.filter((r) => !r.ok)
       if (refused.length)
         toast.warning(
-          `${refused.length} not ${what === 'start' ? 'started' : 'stopped'}: ${refused
-            .map((r) => `${r.name} (${r.reason})`)
-            .join('; ')}`,
+          t(what === 'start' ? 'palette.notStarted' : 'palette.notStopped', {
+            count: refused.length,
+            details: refused.map((r) => `${r.name} (${r.reason})`).join('; '),
+          }),
         )
-      else if (what === 'stop' && !results.length) toast.info('Nothing was running')
+      else if (what === 'stop' && !results.length) toast.info(t('palette.nothingRunning'))
       qc.invalidateQueries({ queryKey: ['ticket-runs'] })
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -530,9 +503,9 @@ export function CommandPalette() {
       staticItems.push({
         key: `page:${projectId}:${page.key}`,
         kind: 'page',
-        title: page.title,
-        subtitle: page.subtitle,
-        keywords: page.keywords,
+        title: t(`palette.page.${page.id}.title`),
+        subtitle: t(`palette.page.${page.id}.subtitle`),
+        keywords: words(t(`palette.page.${page.id}.keywords`)),
         run: () => navigate({ to: page.to, params: { id: String(projectId) } }),
       })
     }
@@ -540,9 +513,9 @@ export function CommandPalette() {
       staticItems.push({
         key: `setting:${projectId}:${section.key}`,
         kind: 'setting',
-        title: section.title,
-        subtitle: section.subtitle,
-        keywords: section.keywords,
+        title: t(`palette.setting.${section.id}.title`),
+        subtitle: t(`palette.setting.${section.id}.subtitle`),
+        keywords: words(t(`palette.setting.${section.id}.keywords`)),
         run: () =>
           section.path
             ? navigate({ to: section.path, params: { id: String(projectId) }, hash: section.hash })
@@ -552,9 +525,9 @@ export function CommandPalette() {
     staticItems.push({
       key: `action:new-ticket:${projectId}`,
       kind: 'action',
-      title: 'New ticket',
-      subtitle: `Create a ticket in ${project?.name ?? 'this project'}`,
-      keywords: ['create', 'add', 'ticket', 'lane', 'new'],
+      title: t('newTicket.newTicket'),
+      subtitle: project ? t('palette.createIn', { name: project.name }) : t('palette.createInThis'),
+      keywords: words(t('palette.keywords.newTicket')),
       run: () => setNewTicketOpen(true),
     })
     if (ticketId !== null) {
@@ -562,30 +535,30 @@ export function CommandPalette() {
         {
           key: `action:copy-ticket-link:${projectId}:${ticketId}`,
           kind: 'action',
-          title: 'Copy ticket link',
-          subtitle: 'Put this ticket’s address on the clipboard',
-          keywords: ['url', 'share', 'clipboard'],
+          title: t('palette.copyLink'),
+          subtitle: t('palette.copyLinkText'),
+          keywords: words(t('palette.keywords.copyLink')),
           run: () => {
             void copyText(
               `${window.location.origin}/projects/${projectId}/features/${ticketId}`,
-              'Ticket link copied',
+              t('palette.linkCopied'),
             )
           },
         },
         {
           key: `action:start-preview:${projectId}:${ticketId}`,
           kind: 'action',
-          title: 'Start preview',
-          subtitle: "Start the ticket's previews and jobs",
-          keywords: ['run', 'preview', 'start', 'server'],
+          title: t('palette.startPreview'),
+          subtitle: t('palette.startPreviewText'),
+          keywords: words(t('palette.keywords.startPreview')),
           run: () => startStop.mutate('start'),
         },
         {
           key: `action:stop-preview:${projectId}:${ticketId}`,
           kind: 'action',
-          title: 'Stop preview',
-          subtitle: "Stop the ticket's previews and jobs",
-          keywords: ['run', 'preview', 'stop', 'server'],
+          title: t('palette.stopPreview'),
+          subtitle: t('palette.stopPreviewText'),
+          keywords: words(t('palette.keywords.stopPreview')),
           run: () => startStop.mutate('stop'),
         },
       )
@@ -595,9 +568,9 @@ export function CommandPalette() {
     staticItems.push({
       key: `page:global:${page.key}`,
       kind: 'page',
-      title: page.title,
-      subtitle: page.subtitle,
-      keywords: page.keywords,
+      title: t(`palette.page.${page.id}.title`),
+      subtitle: t(`palette.page.${page.id}.subtitle`),
+      keywords: words(t(`palette.page.${page.id}.keywords`)),
       run: () => navigate({ to: page.to }),
     })
   }
@@ -608,9 +581,9 @@ export function CommandPalette() {
     staticItems.push({
       key: `setting:global:${section.key}`,
       kind: 'setting',
-      title: section.title,
-      subtitle: section.subtitle,
-      keywords: section.keywords,
+      title: t(`palette.setting.${section.id}.title`),
+      subtitle: t(`palette.setting.${section.id}.subtitle`),
+      keywords: words(t(`palette.setting.${section.id}.keywords`)),
       run: () => navigate({ to: '/settings', hash: section.hash }),
     })
   }
@@ -619,9 +592,9 @@ export function CommandPalette() {
     staticItems.push({
       key: `setting:global:connect-${section.key}`,
       kind: 'setting',
-      title: section.title,
-      subtitle: section.subtitle,
-      keywords: section.keywords,
+      title: t(`palette.setting.${section.id}.title`),
+      subtitle: t(`palette.setting.${section.id}.subtitle`),
+      keywords: words(t(`palette.setting.${section.id}.keywords`)),
       run: () => navigate({ to: '/agents', hash: section.hash }),
     })
   }
@@ -629,9 +602,9 @@ export function CommandPalette() {
     staticItems.push({
       key: `action:switch-project:${p.id}`,
       kind: 'action',
-      title: `Switch to ${p.name}`,
-      subtitle: p.id === projectId ? 'Current project' : 'Open its Overview',
-      keywords: ['project', 'switch', 'open', p.name],
+      title: t('palette.switchTo', { name: p.name }),
+      subtitle: p.id === projectId ? t('palette.currentProject') : t('palette.openOverview'),
+      keywords: [...words(t('palette.keywords.switchProject')), p.name],
       run: () => navigate({ to: '/projects/$id', params: { id: String(p.id) } }),
     })
   }
@@ -643,10 +616,10 @@ export function CommandPalette() {
     const byKey = new Map([...staticItems, ...allTicketItems].map((item) => [item.key, item]))
     const recent = recentKeys.map((key) => byKey.get(key)).filter((item): item is Entry => item !== undefined)
     groups = recent.length
-      ? [{ kind: 'recent', label: 'Recent', items: recent }]
-      : groupItems(staticItems).map(asGroup)
+      ? [{ kind: 'recent', label: t('palette.recent'), items: recent }]
+      : groupItems(staticItems).map((group) => asGroup(group, t))
   } else {
-    groups = groupItems(rankItems([...ticketItems, ...staticItems], q)).map(asGroup)
+    groups = groupItems(rankItems([...ticketItems, ...staticItems], q)).map((group) => asGroup(group, t))
   }
   const flat = groups.flatMap((group) => group.items)
 
@@ -666,11 +639,11 @@ export function CommandPalette() {
 
   return (
     <>
-      <Tip content="Search the board (Ctrl+F)">
+      <Tip content={t('palette.searchTip')}>
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Search the board"
+          aria-label={t('palette.search')}
           onClick={() => (open ? input.current?.focus() : openPalette())}
         >
           <Search />
@@ -688,11 +661,8 @@ export function CommandPalette() {
           initialFocus={input}
           className="top-[10vh] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-xl"
         >
-          <DialogTitle className="sr-only">Search the board</DialogTitle>
-          <DialogDescription className="sr-only">
-            Search tickets, pages, settings and actions. Use the up and down keys to move, Enter to run one,
-            and Escape to close.
-          </DialogDescription>
+          <DialogTitle className="sr-only">{t('palette.search')}</DialogTitle>
+          <DialogDescription className="sr-only">{t('palette.description')}</DialogDescription>
           <div className="flex items-center gap-2 border-b px-3">
             <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden />
             <Input
@@ -719,12 +689,12 @@ export function CommandPalette() {
                 }
               }}
               role="combobox"
-              aria-label="Search the board"
+              aria-label={t('palette.search')}
               aria-controls="command-palette-list"
               aria-expanded={open}
               aria-autocomplete="list"
               aria-activedescendant={flat.length ? `command-palette-option-${active}` : undefined}
-              placeholder="Search tickets, pages, settings and actions…"
+              placeholder={t('palette.placeholder')}
               className="h-11 rounded-none border-0 bg-transparent px-0 focus-visible:ring-0 dark:bg-transparent"
             />
             {searching && (
@@ -733,7 +703,7 @@ export function CommandPalette() {
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="Close search"
+              aria-label={t('palette.close')}
               onClick={close}
               className="shrink-0"
             >
@@ -743,11 +713,11 @@ export function CommandPalette() {
           <div
             id="command-palette-list"
             role="listbox"
-            aria-label="Search results"
+            aria-label={t('palette.results')}
             className="max-h-[min(60vh,26rem)] overflow-x-hidden overflow-y-auto overscroll-contain p-1"
           >
             {q === '' && allTickets.isLoading && recentKeys.some((k) => k.startsWith('ticket:')) && (
-              <DelayedLoading label="Loading recent tickets…" className="space-y-2 px-2 py-2">
+              <DelayedLoading label={t('loading.recentTickets')} className="space-y-2 px-2 py-2">
                 <Skeleton className="h-4 w-2/3" />
                 <Skeleton className="h-4 w-1/2" />
               </DelayedLoading>
@@ -809,24 +779,30 @@ export function CommandPalette() {
             })}
             {!flat.length && (
               <p className="px-3 py-6 text-center text-sm text-muted-foreground" role="status">
-                {searching ? 'Searching…' : q ? `No matches for “${q}”.` : 'Type to search the board.'}
+                {searching
+                  ? t('palette.searching')
+                  : q
+                    ? t('palette.noMatches', { query: q })
+                    : t('palette.type')}
               </p>
             )}
           </div>
           <div className="flex items-center gap-4 border-t px-3 py-2 text-[11px] text-muted-foreground">
             <span>
               <kbd className="rounded border bg-muted px-1">↑</kbd>{' '}
-              <kbd className="rounded border bg-muted px-1">↓</kbd> to move
+              <kbd className="rounded border bg-muted px-1">↓</kbd> {t('palette.toMove')}
             </span>
             <span>
-              <kbd className="rounded border bg-muted px-1">↵</kbd> to open
+              <kbd className="rounded border bg-muted px-1">↵</kbd> {t('palette.toOpen')}
             </span>
             <span>
-              <kbd className="rounded border bg-muted px-1">esc</kbd> to close
+              {/* i18n-ignore: key names */}
+              <kbd className="rounded border bg-muted px-1">esc</kbd> {t('palette.toClose')}
             </span>
             <span className="ml-auto hidden sm:inline">
+              {/* i18n-ignore: key names */}
               <kbd className="rounded border bg-muted px-1">Ctrl</kbd>{' '}
-              <kbd className="rounded border bg-muted px-1">F</kbd> anywhere
+              <kbd className="rounded border bg-muted px-1">F</kbd> {t('palette.anywhere')}
             </span>
           </div>
         </DialogContent>
@@ -867,9 +843,9 @@ function ticketEntry(
   }
 }
 
-const asGroup = (group: PaletteGroup<Entry>): Group => ({
+const asGroup = (group: PaletteGroup<Entry>, t: TFunction): Group => ({
   kind: group.kind,
-  label: group.label,
+  label: t(`palette.kinds.${group.kind}`),
   items: group.items,
 })
 

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { FolderOpen } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { BranchSelect } from '#/components/BranchSelect'
@@ -45,6 +46,7 @@ export function RepoDialog({
   repo?: Repo
   defaultProjectId?: number
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const { data: projects } = useProjects()
   const [projectId, setProjectId] = useState('')
@@ -87,7 +89,7 @@ export function RepoDialog({
   const remove = useMutation({ mutationFn: () => del(`/api/repos/${repo!.id}`), onSuccess: done, onError })
   const projectItems = Object.fromEntries([
     ...(projects ?? []).map((p) => [String(p.id), p.name]),
-    [NEW, 'New project…'],
+    [NEW, t('repoDialog.newProject')],
   ])
 
   return (
@@ -101,13 +103,13 @@ export function RepoDialog({
           className="space-y-4"
         >
           <DialogHeader>
-            <DialogTitle>{repo ? `Edit ${repo.name}` : 'New repository'}</DialogTitle>
-            <DialogDescription>
-              A local git checkout. The board reads it with git and gh; it never writes to it.
-            </DialogDescription>
+            <DialogTitle>
+              {repo ? t('repoDialog.editTitle', { name: repo.name }) : t('repoDialog.newTitle')}
+            </DialogTitle>
+            <DialogDescription>{t('repoDialog.description')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="project">Project</Label>
+            <Label htmlFor="project">{t('repoDialog.project')}</Label>
             {projects?.length ? (
               <Select value={projectId} onValueChange={(v) => setProjectId(v as string)} items={projectItems}>
                 <SelectTrigger id="project" className="w-full">
@@ -119,7 +121,7 @@ export function RepoDialog({
                       {p.name}
                     </SelectItem>
                   ))}
-                  <SelectItem value={NEW}>New project…</SelectItem>
+                  <SelectItem value={NEW}>{t('repoDialog.newProject')}</SelectItem>
                 </SelectContent>
               </Select>
             ) : null}
@@ -127,44 +129,42 @@ export function RepoDialog({
               <Input
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
-                placeholder="Project name"
+                placeholder={t('repoDialog.projectName')}
                 required
               />
             )}
             {repo && !isNew && Number(projectId) !== repo.projectId && (
-              <p className="text-xs text-muted-foreground">
-                Its PRs, tickets and review results move with it.
-              </p>
+              <p className="text-xs text-muted-foreground">{t('repoDialog.moves')}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="path">Repository path</Label>
+            <Label htmlFor="path">{t('repoDialog.path')}</Label>
             <div className="flex gap-2">
               <Input
                 id="path"
                 value={repoPath}
                 onChange={(e) => setRepoPath(e.target.value)}
-                placeholder="/home/you/code/… or C:\code\…"
+                placeholder={t('repoDialog.pathPlaceholder')}
                 required
                 className="font-mono"
               />
               <Button type="button" variant="outline" onClick={() => setBrowsing(true)}>
-                <FolderOpen data-icon="inline-start" /> Browse…
+                <FolderOpen data-icon="inline-start" /> {t('repoDialog.browse')}
               </Button>
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
+              <Label htmlFor="name">{t('repoDialog.name')}</Label>
               <Input
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="from GitHub or the folder"
+                placeholder={t('repoDialog.namePlaceholder')}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="base">Base branch</Label>
+              <Label htmlFor="base">{t('repoDialog.baseBranch')}</Label>
               <BranchSelect
                 id="base"
                 value={baseBranch}
@@ -180,25 +180,24 @@ export function RepoDialog({
                 <AlertDialogTrigger
                   render={<Button type="button" variant="ghost" className="mr-auto text-destructive" />}
                 >
-                  Remove repo
+                  {t('repoDialog.removeRepo')}
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Remove {repo.name}?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Its PR queue entries go with it. Tickets and review results stay in the project, but its
-                      PR tickets go with it. The checkout on disk is untouched.
-                    </AlertDialogDescription>
+                    <AlertDialogTitle>{t('repoDialog.removeTitle', { name: repo.name })}</AlertDialogTitle>
+                    <AlertDialogDescription>{t('repoDialog.removeDescription')}</AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>Keep</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => remove.mutate()}>Remove</AlertDialogAction>
+                    <AlertDialogCancel>{t('repoDialog.keep')}</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => remove.mutate()}>
+                      {t('repoDialog.remove')}
+                    </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
             )}
             <Button type="submit" disabled={save.isPending}>
-              {save.isPending ? 'Saving…' : repo ? 'Save' : 'Add repository'}
+              {save.isPending ? t('repoDialog.saving') : repo ? t('repoDialog.save') : t('repoDialog.add')}
             </Button>
           </DialogFooter>
         </form>

@@ -8,7 +8,7 @@ import { kindOf, listStages } from './stages'
 import { timelinesFor } from './workTimeline'
 
 /** The kinds of stage a top-level ticket is in to show on the roadmap: being worked or waiting. */
-const SHOWN = new Set(['active', 'blocked', 'review'])
+const SHOWN = new Set(['active', 'blocked', 'review', 'approved'])
 
 /** One row on the roadmap: a ticket or a lane, with its tasks in tree order. */
 export type RoadmapRow = {

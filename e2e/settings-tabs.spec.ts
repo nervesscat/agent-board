@@ -13,7 +13,7 @@ const remembered = (page: Page, id: number) =>
   expect.poll(() => page.evaluate(() => localStorage.getItem('current-project'))).toBe(String(id))
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-const BOARD_IDS = ['default-agent', 'theme', 'previews']
+const BOARD_IDS = ['default-agent', 'theme', 'language', 'previews']
 const PROJECT_IDS = [
   'kinds',
   'default-phases',
@@ -22,6 +22,7 @@ const PROJECT_IDS = [
   'notifications',
   'stages',
   'runs',
+  'resume',
   'layout',
 ]
 

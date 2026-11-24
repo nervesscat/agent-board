@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { MAX_PETS, TITLE_LIMIT, elapsed, petsOf, phaseLabel } from './agentsAtWork'
+import { MAX_PETS, TITLE_LIMIT, heardAgo, petsOf, phaseLabel } from './agentsAtWork'
 
 const NOW = Date.parse('2026-01-01T12:00:00Z')
 const minutesAgo = (m: number) => new Date(NOW - m * 60_000).toISOString()
@@ -222,8 +222,10 @@ describe('petsOf', () => {
   it.each([
     ['done', { key: 'done', name: 'Done', kind: 'done' }],
     ['cancelled', { key: 'cancelled', name: 'Cancelled', kind: 'cancelled' }],
-    ['approved', { key: 'approved', name: 'Approved', kind: 'review' }],
+    ['approved', { key: 'approved', name: 'Approved', kind: 'approved' }],
+    ['an approved stage with another key', { key: 'go', name: 'Go', kind: 'approved' }],
     ['a renamed done stage', { key: 'shipped', name: 'Shipped', kind: 'done' }],
+    ['release', { key: 'release', name: 'Release', kind: 'done' }],
   ])('shows no agent on a ticket in %s, live or quiet', (_, hidden) => {
     const r = petsOf(
       {
@@ -241,19 +243,19 @@ describe('petsOf', () => {
     ['in progress', { key: 'in_progress', name: 'In progress', kind: 'active' }],
     ['blocked', { key: 'blocked', name: 'Blocked', kind: 'blocked' }],
     ['in review', { key: 'review', name: 'In review', kind: 'review' }],
-    ['release', { key: 'release', name: 'Release', kind: 'review' }],
+    ['a review stage named Release', { key: 'release', name: 'Release', kind: 'review' }],
   ])('keeps the agents on a ticket in %s', (_, shown) => {
     const r = petsOf({ liveNow: [live({ stage: shown })], recentlyActive: [] }, NOW)
     expect(r.pets).toHaveLength(1)
   })
 
   it('reads the time only from the clock it is given', () => {
-    expect(elapsed(minutesAgo(0), NOW)).toBe('just now')
-    expect(elapsed(minutesAgo(3), NOW)).toBe('3 min')
-    expect(elapsed(minutesAgo(125), NOW)).toBe('2 h')
-    expect(elapsed(minutesAgo(3000), NOW)).toBe('2 d')
+    expect(heardAgo(minutesAgo(0), NOW)).toBe('just now')
+    expect(heardAgo(minutesAgo(3), NOW)).toBe('3 min ago')
+    expect(heardAgo(minutesAgo(125), NOW)).toBe('2 h ago')
+    expect(heardAgo(minutesAgo(3000), NOW)).toBe('2 d ago')
     // A server time a little ahead of this clock is not negative.
-    expect(elapsed(minutesAgo(-2), NOW)).toBe('just now')
+    expect(heardAgo(minutesAgo(-2), NOW)).toBe('just now')
     const r = petsOf({ liveNow: [live({ lastHeardAt: minutesAgo(0) })], recentlyActive: [] }, NOW)
     expect(r.pets[0]!.since).toBe('last heard just now')
   })

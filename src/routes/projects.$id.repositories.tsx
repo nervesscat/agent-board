@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { FolderGit2, Plus } from 'lucide-react'
 import { useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 
 import { Empty } from '#/components/Empty'
 import { DelayedLoading } from '#/components/Loading'
@@ -15,6 +16,7 @@ import { useHydrated } from '#/lib/useHydrated'
 export const Route = createFileRoute('/projects/$id/repositories')({ component: Repositories })
 
 function Repositories() {
+  const { t } = useTranslation()
   const { id } = Route.useParams()
   const { data: project, isLoading } = useProject(id)
   const hydrated = useHydrated()
@@ -27,15 +29,15 @@ function Repositories() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Repositories</h1>
-          <p className="text-sm text-muted-foreground">Checkouts this project reads.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('repositories.title')}</h1>
+          <p className="text-sm text-muted-foreground">{t('repositories.description')}</p>
         </div>
         <Button className="w-full sm:w-auto" onClick={() => setAdding(true)}>
-          <Plus data-icon="inline-start" /> New repository
+          <Plus data-icon="inline-start" /> {t('repositories.new')}
         </Button>
       </div>
       {!hydrated || isLoading ? (
-        <DelayedLoading label="Loading repositories…">
+        <DelayedLoading label={t('loading.repositories')}>
           <div aria-hidden className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[0, 1, 2].map((i) => (
               <Skeleton key={i} className="h-28" />
@@ -64,14 +66,18 @@ function Repositories() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="truncate text-xs text-muted-foreground">
-                  base {r.baseBranch} · <span className="font-mono">{r.repoPath}</span>
+                  <Trans
+                    i18nKey="repositories.baseLine"
+                    values={{ branch: r.baseBranch, path: r.repoPath }}
+                    components={{ path: <span className="font-mono" /> }}
+                  />
                 </CardContent>
               </Card>
             </button>
           ))}
         </div>
       ) : (
-        <Empty>No repositories in this project yet. Add one: the path of a local git checkout.</Empty>
+        <Empty>{t('repositories.empty')}</Empty>
       )}
       <RepoDialog open={adding} onOpenChange={setAdding} defaultProjectId={Number(id)} />
       {/* The repo stays set while the dialog animates closed, so its title does not flip. */}

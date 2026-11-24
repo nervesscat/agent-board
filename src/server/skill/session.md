@@ -30,7 +30,7 @@ What you do with it:
 
 - **Before anything else, call it.** It is your first read of the project, and it is cheaper than
   learning the same thing from five tickets.
-- **approved, to merge** (`approvedToMerge`): the tickets in Approved are the human's go-ahead to merge; an orchestrator merges them without asking again. Name them; they are not waiting on the human.
+- **approved, to merge** (`approvedToMerge`): the tickets in Approved (the stage of kind `approved`) are the human's go-ahead to merge; an orchestrator merges them without asking again. Name them; they are not waiting on the human.
 - **Do not take or duplicate a ticket a live entry names.** Another session's agent is on it: wait,
   ask in its thread, or work something else, and never claim it behind its back.
 - **Pick up what nobody holds**: the first ticket with no live entry, no open span and no wait.
@@ -97,12 +97,15 @@ When the human names a ticket to start ("start with 859", "work on the notificat
   rules decide what may run at the same time.
 
 You never run `todo-review` in your own context and wait for it, and you work in no worktree. The
-agent you start runs the project's protocol: its ticket agent writes the spec, starts the builder,
-and runs `/feature-review` for the rounds the ticket's complexity allows, with `/feature-review`'s
-phases trying to break the change before the hand-off. Whoever moves a ticket to review starts its
+agent you start runs the project's protocol, and the order of it is the project's workflow
+(`get_workflow`, which the board serves; the human sets it on the project's Workflow page, and you
+never change it): its ticket agent follows the steps that workflow lists for the ticket, among them
+the builder and the `/feature-review` rounds that try to break the change before the hand-off.
+Whoever moves a ticket to review starts its
 preview first, whenever the project has a preview setup and the change can be previewed; when it
 cannot, the hand-off says why. A ticket that reached review without its preview and
-without that reason is not handed off: send its agent back to start it.
+without that reason is not handed off (unless the ticket's workflow lists the preview step as skipped, turned
+off on the Workflow page, which the summary says): send its agent back to start it.
 
 ## Short UI comments: confirm first
 
@@ -145,6 +148,9 @@ the close below keeps its own cleanup.
 When the human answers a decision card, or comments on a ticket and moves it back to In progress,
 relaunch that ticket's agent at once, briefed with the answer or the comment. The agent replies under
 the post: its plan first, then the result. A comment with no stage move does not relaunch by itself.
+When the project has a resume command, the board starts that work itself on the human's answer or move
+(the ticket's Resume card says so): relaunch only when it says nothing started. An agent that can stay
+alive may call `wait_for_answer` on the card instead of ending its turn.
 
 A short UI comment is the exception: the human confirms the reading first ([Short UI comments:
 confirm first](#short-ui-comments-confirm-first)); once they have, relaunch at once, briefed with the

@@ -35,8 +35,17 @@ export const KIND_LABELS: Record<Kind, string> = {
 /** Every project starts as software: that is what all existing projects are. */
 export const DEFAULT_KINDS: readonly Kind[] = ['software']
 
-/** The menu pages that only make sense with git. Hidden for a project with no software kind. */
-export const GIT_SIDE_PAGES = ['nav.prs', 'nav.previews', 'nav.cleanup', 'nav.repositories'] as const
+/**
+ * The menu pages that only make sense with git (the Workflow orders the build-and-review cycle).
+ * Hidden for a project with no software kind.
+ */
+export const GIT_SIDE_PAGES = [
+  'nav.prs',
+  'nav.previews',
+  'nav.workflow',
+  'nav.cleanup',
+  'nav.repositories',
+] as const
 
 /**
  * The top-level phases a ticket of a project with no software kind starts with: the work, then its

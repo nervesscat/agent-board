@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bot, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { useId, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { RoleBadge } from '#/components/Actor'
@@ -21,9 +22,6 @@ import { Tip } from '#/components/ui/tooltip'
 import { type ActorRow, type AgentTokenRow, del, errorMessage, get, patch } from '#/lib/api'
 import { ago } from '#/lib/format'
 
-const ORCHESTRATOR_TIP =
-  "An orchestrator also changes the projects' instructions; each change waits in your Needs you until you review or revert it. Its subagents that say who they are (<token>/<name>) stay workers."
-
 /**
  * The Agents section of Settings: every agent token (an identity on the board) with its role, the
  * switch that makes it an orchestrator or a worker again, when it was last used, and Revoke; under
@@ -32,6 +30,7 @@ const ORCHESTRATOR_TIP =
  * (api.ts).
  */
 export function AgentIdentities() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const tokens = useQuery({
     queryKey: ['agent-tokens'],
@@ -45,8 +44,12 @@ export function AgentIdentities() {
   const setRole = useMutation({
     mutationFn: ({ id, role }: { id: number; role: AgentTokenRow['role'] }) =>
       patch<AgentTokenRow>(`/api/agent-tokens/${id}`, { role }),
-    onSuccess: (t) => {
-      toast.success(t.role === 'orchestrator' ? `${t.name} is an orchestrator` : `${t.name} is a worker`)
+    onSuccess: (tok) => {
+      toast.success(
+        tok.role === 'orchestrator'
+          ? t('tokens.identities.nowOrchestrator', { name: tok.name })
+          : t('tokens.identities.nowWorker', { name: tok.name }),
+      )
       refresh()
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -60,72 +63,78 @@ export function AgentIdentities() {
     (actors.data ?? []).filter((a) => a.kind === 'agent' && a.name.startsWith(`${token}/`))
 
   return (
-    <section aria-label="Agent tokens" className="space-y-2">
-      <h2 className="text-sm font-medium">Agent tokens</h2>
-      <p className="text-sm text-muted-foreground">
-        Who is who: each agent token is an identity on the board, an orchestrator unless you make it a worker.
-        Its subagents that name themselves under it are listed with it, always as workers; a long list starts
-        folded, with an eye button for the rest.
-      </p>
+    <section aria-label={t('tokens.title')} className="space-y-2">
+      <h2 className="text-sm font-medium">{t('tokens.title')}</h2>
+      <p className="text-sm text-muted-foreground">{t('tokens.identities.text')}</p>
       {tokens.error && <p className="text-xs text-destructive">{errorMessage(tokens.error)}</p>}
       {tokens.data?.length === 0 && (
-        <p className="text-xs text-muted-foreground">No agent tokens yet: Connect an agent makes them.</p>
+        <p className="text-xs text-muted-foreground">{t('tokens.identities.empty')}</p>
       )}
       {!!tokens.data?.length && (
         <ul className="divide-y rounded-md border text-sm">
-          {tokens.data.map((t) => {
-            const subs = subsOf(t.name)
-            const orchestrator = t.role === 'orchestrator'
+          {tokens.data.map((tk) => {
+            const subs = subsOf(tk.name)
+            const orchestrator = tk.role === 'orchestrator'
             return (
-              <li key={t.id} aria-label={`Agent ${t.name}`} className="space-y-2 px-3 py-2">
+              <li
+                key={tk.id}
+                aria-label={t('tokens.identities.agentAria', { name: tk.name })}
+                className="space-y-2 px-3 py-2"
+              >
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                   <KeyRound className="size-4 shrink-0 text-muted-foreground" aria-hidden />
                   <div className="min-w-0 flex-1 basis-40">
                     <div className="flex flex-wrap items-center gap-1.5 font-medium">
-                      <span className="wrap-anywhere">{t.name}</span>
-                      <RoleBadge role={t.role} />
+                      <span className="wrap-anywhere">{tk.name}</span>
+                      <RoleBadge role={tk.role} />
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {t.lastUsedAt ? `last used ${ago(t.lastUsedAt)}` : 'never used'}
+                      {tk.lastUsedAt
+                        ? t('tokens.lastUsed', { when: ago(tk.lastUsedAt) })
+                        : t('tokens.neverUsed')}
                     </div>
                   </div>
-                  <Tip content={ORCHESTRATOR_TIP}>
+                  <Tip content={t('tokens.identities.orchestratorTip')}>
                     <label className="flex items-center gap-2 text-xs">
                       <Switch
                         size="sm"
                         checked={orchestrator}
                         disabled={setRole.isPending}
-                        aria-label={`${t.name}: orchestrator`}
+                        aria-label={t('tokens.identities.orchestratorAria', { name: tk.name })}
                         onCheckedChange={(on) =>
-                          setRole.mutate({ id: t.id, role: on ? 'orchestrator' : 'worker' })
+                          setRole.mutate({ id: tk.id, role: on ? 'orchestrator' : 'worker' })
                         }
                       />
-                      Orchestrator
+                      {t('tokens.identities.orchestrator')}
                     </label>
                   </Tip>
                   <AlertDialog>
                     <AlertDialogTrigger
-                      render={<Button size="sm" variant="ghost" aria-label={`Revoke ${t.name}`} />}
+                      render={
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          aria-label={t('tokens.identities.revokeAria', { name: tk.name })}
+                        />
+                      }
                     >
-                      Revoke
+                      {t('connect.revoke')}
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Revoke {t.name}&apos;s token?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          The agent using it, and every subagent working under it, is refused from its next
-                          request on. Generate commands again on Connect an agent to connect it with a new
-                          one.
-                        </AlertDialogDescription>
+                        <AlertDialogTitle>{t('tokens.revokeTitle', { name: tk.name })}</AlertDialogTitle>
+                        <AlertDialogDescription>{t('tokens.identities.revokeText')}</AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>Keep</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => revoke.mutate(t.id)}>Revoke</AlertDialogAction>
+                        <AlertDialogCancel>{t('connect.keep')}</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => revoke.mutate(tk.id)}>
+                          {t('connect.revoke')}
+                        </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
                 </div>
-                {subs.length > 0 && <Workers token={t.name} subs={subs} />}
+                {subs.length > 0 && <Workers token={tk.name} subs={subs} />}
               </li>
             )
           })}
@@ -146,18 +155,19 @@ const WORKERS_SHOWN = 3
  * page scrolls, never the list.
  */
 function Workers({ token, subs }: { token: string; subs: ActorRow[] }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const listId = useId()
   const more = subs.length > WORKERS_SHOWN
   const shown = open || !more ? subs : subs.slice(0, WORKERS_SHOWN)
   // One icon-only toggle, the same filled button in both states: an eye for the rows the list hides
   // (press to show them), an eye with a line once they are shown (press to hide them again).
-  const label = open ? 'Hide the agents' : `Show the ${subs.length} agents`
+  const label = open ? t('tokens.identities.hide') : t('tokens.identities.show', { count: subs.length })
   return (
     <div className="ml-7 space-y-1 border-l pl-3">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <h3 className="flex flex-wrap items-center gap-x-1.5 text-xs font-medium text-muted-foreground">
-          Working under {token}
+          {t('tokens.identities.workingUnder', { token })}
           <span className="rounded-full bg-muted px-1.5 font-normal tabular-nums">{subs.length}</span>
         </h3>
         {more && (
@@ -177,13 +187,17 @@ function Workers({ token, subs }: { token: string; subs: ActorRow[] }) {
           </Tip>
         )}
       </div>
-      <ul id={listId} aria-label={`Working under ${token}`} className="space-y-1">
+      <ul id={listId} aria-label={t('tokens.identities.workingUnder', { token })} className="space-y-1">
         {shown.map((a) => (
           <li key={a.name} className="flex flex-wrap items-center gap-x-1.5 text-xs">
             <Bot className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
             <span className="font-medium wrap-anywhere">{a.name}</span>
             <RoleBadge role={a.role} />
-            {a.lastSeenAt && <span className="text-muted-foreground">seen {ago(a.lastSeenAt)}</span>}
+            {a.lastSeenAt && (
+              <span className="text-muted-foreground">
+                {t('tokens.identities.seen', { when: ago(a.lastSeenAt) })}
+              </span>
+            )}
           </li>
         ))}
       </ul>

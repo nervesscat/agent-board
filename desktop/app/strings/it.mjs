@@ -1,0 +1,38 @@
+// The desktop app's own texts in it (see ../strings.mjs). Every key of en.mjs, the same {{placeholders}} and <tags>.
+export default {
+  open: 'Apri',
+  openInBrowser: 'Apri nel browser',
+  retryNow: 'Riprova ora',
+  startAtLogin: 'Avvia all’accesso',
+  quit: 'Esci',
+  openSettings: 'Apri il file delle impostazioni',
+  openLogs: 'Apri la cartella dei log',
+  openHome: 'Apri la cartella dell’app',
+  startAtLoginFailed: 'Impossibile cambiare l’avvio all’accesso.',
+  cannotStart: 'La bacheca non può avviarsi.',
+  settingsInvalid: 'Le impostazioni della bacheca non sono valide.',
+  homeUnusable:
+    "La cartella dell'app {{home}} non è utilizzabile: {{error}}\n\nImposta AGENT_BOARD_HOME su una cartella scrivibile, oppure rimuovilo per usare quella predefinita.",
+  homeLine: "{{error}}\n\nLa cartella dell'app: {{home}}",
+  dataFolderUnusable:
+    'La sua cartella dei dati {{dir}} non è utilizzabile: {{error}}\n\nImposta un altro DATA_DIR in {{file}}, o nell’ambiente, e riavvia l’app.',
+  logsLine: '{{detail}}\n\nLog: {{logs}}',
+  stopped: 'La bacheca si è fermata.',
+  restartedTimes_one: ' È stata riavviata {{count}} volta.',
+  restartedTimes_other: ' È stata riavviata {{count}} volte.',
+  noOutput: '(nessun output)',
+  exitedSignal: 'È stata terminata da {{signal}} alle {{time}}.',
+  exitedCode: 'È terminata con codice {{code}} alle {{time}}.',
+  exited: 'È terminata alle {{time}}.',
+  reasonCode: 'codice di uscita {{code}}',
+  reasonSignal: 'segnale {{signal}}',
+  reasonNone: 'nessun codice di uscita',
+  tipRestarting: '{{name}}: riavvio della bacheca ({{reason}})',
+  tipRestarted: '{{name}}: {{url}} (riavviata alle {{time}} dopo {{reason}})',
+  notifyRestarted: 'La bacheca è stata riavviata ({{reason}}).',
+  didNotStart: 'La bacheca non si è avviata.',
+  didNotAnswer: 'Non ha risposto su {{url}} entro un minuto.',
+  unreachableHeading: 'La bacheca su <code>{{address}}</code> non è raggiungibile.',
+  unreachableBody:
+    'La bacheca gira su un altro computer: controlla che questo sia online e che la bacheca sia in esecuzione lì. L’app riprova da sola, e {{retry}} riprova subito.',
+}

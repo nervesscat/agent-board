@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+
 import { Loading, LoadingBar, SkeletonCard, SkeletonText } from '#/components/Loading'
 import { Skeleton } from '#/components/ui/skeleton'
 import { type Layout, type LayoutId, shownIn } from '#/lib/layout'
@@ -20,10 +22,11 @@ const LINES: Partial<Record<LayoutId, number>> = {
  * cards of the project's layout, as placeholders in the same two columns.
  */
 export function TicketSkeleton({ layout }: { layout: Layout }) {
+  const { t } = useTranslation()
   const main = shownIn(layout, 'ticket.main')
   const side = shownIn(layout, 'ticket.side')
   return (
-    <Loading label="Loading ticket…" className="flex flex-col gap-6">
+    <Loading label={t('loading.ticket')} className="flex flex-col gap-6">
       <LoadingBar />
       <Skeleton className="h-4 w-56" />
       <div className="flex flex-wrap items-start gap-3">

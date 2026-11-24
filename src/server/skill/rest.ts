@@ -9,6 +9,7 @@ export const TOOL_ROUTES: Record<string, string> = {
   find_project:
     'GET /api/projects, then match your origin (`githubRepo` owner/name), checkout path or folder against `repos[]` yourself',
   get_project: 'GET /api/projects/:id',
+  get_workflow: 'GET /api/projects/:id/workflow/effective?ticketId=',
   set_project_instructions: 'PUT /api/projects/:id/instructions `{instructions}`',
   set_tag_suggestions: 'PATCH /api/projects/:id `{tagSuggestions}`',
   list_notes: 'GET /api/projects/:id/notes',
@@ -78,6 +79,8 @@ export const TOOL_ROUTES: Record<string, string> = {
   get_ticket_git: 'GET /api/tickets/:id/git',
   cleanup_report: 'GET /api/projects/:id/cleanup',
   cleanup_delete: 'POST /api/projects/:id/cleanup/delete `{items[]}`',
+  wait_for_answer:
+    'GET /api/tickets/:id/answer?postId=&timeoutSeconds= (blocks until the answer or the timeout)',
   list_my_threads: 'GET /api/projects/:id/threads?since=',
   check_inbox: 'GET /api/projects/:id/inbox?since=',
   latest_actions: 'GET /api/projects/:id/latest-actions',
