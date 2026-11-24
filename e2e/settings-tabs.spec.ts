@@ -22,6 +22,7 @@ const PROJECT_IDS = [
   'notifications',
   'stages',
   'runs',
+  'resume',
   'layout',
 ]
 

@@ -33,14 +33,17 @@ beforeAll(async () => {
 })
 
 const pr = (number: number, mergedAt: string | null = null) => ({ number, mergedAt }) as GhPr
-const flag = (args: string[], name: string) => args[args.indexOf(name) + 1]
+const flag = (args: string[], name: string) =>
+  args.includes(name) ? args[args.indexOf(name) + 1] : undefined
 
 describe('listMyPrs', () => {
-  it('searches my PRs and the ones I review, open and recently merged, each search bounded', async () => {
+  it('searches my PRs and the ones I review, open and recently merged, each search bounded, and lists the open ones', async () => {
     calls = []
     answer = () => []
     await listMyPrs('/r/app', { mergedSince: '2026-09-22' })
-    const searches = calls.map((a) => `${flag(a, '--state')} ${flag(a, '--limit')} ${flag(a, '--search')}`)
+    const searches = calls.map(
+      (a) => `${flag(a, '--state')} ${flag(a, '--limit')} ${flag(a, '--search') ?? 'no search'}`,
+    )
     expect(searches.sort()).toEqual(
       [
         'open 100 author:@me',
@@ -51,15 +54,17 @@ describe('listMyPrs', () => {
         'merged 30 review-requested:@me merged:>=2026-09-22',
         'merged 30 reviewed-by:@me merged:>=2026-09-22',
         'merged 30 assignee:@me merged:>=2026-09-22',
+        'open 100 no search',
       ].sort(),
     )
+    expect(calls).toHaveLength(9)
     for (const a of calls) expect(flag(a, '--json')).toContain('mergedAt')
     for (const a of calls) expect(flag(a, '--json')).toContain('reviewRequests')
   })
 
   it('merges what the searches found, with the searches that found each', async () => {
     answer = (args) => {
-      const search = flag(args, '--search')!
+      const search = flag(args, '--search') ?? ''
       if (search === 'author:@me') return [pr(1)]
       if (search === 'review-requested:@me') return [pr(2)]
       if (search === 'assignee:@me') return [pr(1), pr(3)]
@@ -73,6 +78,29 @@ describe('listMyPrs', () => {
       [3, false, true, null],
       [4, false, false, '2026-10-01T10:00:00Z'],
     ])
+    expect(found.every((p) => p.involvesMe)).toBe(true)
+  })
+
+  it("flags a PR only the plain open list finds as not involving me, and keeps the searches' flags", async () => {
+    answer = (args) => {
+      const search = flag(args, '--search')
+      if (search === undefined) return [pr(1), pr(2), pr(3), pr(5)]
+      if (search === 'author:@me') return [pr(1)]
+      if (search === 'review-requested:@me') return [pr(2)]
+      if (search === 'assignee:@me') return [pr(2)]
+      if (search.startsWith('reviewed-by:@me merged')) return [pr(4, '2026-10-01T10:00:00Z')]
+      return []
+    }
+    const found = await listMyPrs('/r/app', { mergedSince: '2026-09-22' })
+    expect(found.map((p) => [p.number, p.involvesMe, p.requested, p.assigned])).toEqual([
+      [1, true, false, false],
+      [2, true, true, true],
+      [4, true, false, false],
+      [3, false, false, false],
+      [5, false, false, false],
+    ])
+    // One entry per number: a PR in two lists appears once.
+    expect(new Set(found.map((p) => p.number)).size).toBe(found.length)
   })
 
   it('fails as a whole when a merged search fails, so the refresh counts the repo as failed', async () => {
@@ -81,6 +109,14 @@ describe('listMyPrs', () => {
       return [pr(1)]
     }
     await expect(listMyPrs('/r/app', { mergedSince: '2026-09-22' })).rejects.toThrow('merged search failed')
+  })
+
+  it('fails as a whole when the plain open list fails', async () => {
+    answer = (args) => {
+      if (flag(args, '--search') === undefined) throw new Error('gh: open list failed')
+      return [pr(1)]
+    }
+    await expect(listMyPrs('/r/app', { mergedSince: '2026-09-22' })).rejects.toThrow('open list failed')
   })
 })
 

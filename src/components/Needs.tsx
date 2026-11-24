@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { GitMerge, Plus, TriangleAlert, X } from 'lucide-react'
+import { GitMerge, Plus, Sparkles, TriangleAlert, X } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { cn } from 'cn'
@@ -10,7 +10,15 @@ import { Button } from '#/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
 import { shared } from '#/i18n'
-import { ApiError, errorMessage, get, type Need, type TicketFull, type TicketRow } from '#/lib/api'
+import {
+  ApiError,
+  errorMessage,
+  get,
+  type Need,
+  type TicketFull,
+  type TicketGit,
+  type TicketRow,
+} from '#/lib/api'
 
 const AMBER = 'bg-amber-500/10 text-amber-700 dark:text-amber-400'
 const GREEN = 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
@@ -78,18 +86,12 @@ export function NeedsStatus({ t }: { t: TicketFull }) {
 
 /**
  * The Needs field of the ticket's details: what must be merged into its base before it can be done,
- * as chips (× takes one off), a picker of the project's other tickets to add one, and the open
- * tickets whose unmerged work its branch already holds, each with "Add as a need".
+ * as chips (× takes one off; the ones the board added carry a sparkle), a picker of the project's
+ * other tickets to add one, and, for the open tickets whose unmerged work its branch holds but the board
+ * cannot tell for sure is theirs (so it added no need), a row each with "Add as a need". The board adds
+ * the ones it can prove itself, so those never show here.
  */
-export function NeedsField({
-  t,
-  includes = [],
-  onSave,
-}: {
-  t: TicketFull
-  includes?: number[]
-  onSave: (needs: number[]) => void
-}) {
+export function NeedsField({ t, onSave }: { t: TicketFull; onSave: (needs: number[]) => void }) {
   const { t: tr } = useTranslation()
   // Every ticket of the project, lanes too: a branch can stand on any of them.
   const { data: tickets = [], isPending } = useQuery({
@@ -97,25 +99,36 @@ export function NeedsField({
     queryFn: () => get<TicketRow[]>(`/api/projects/${t.projectId}/tickets`),
     staleTime: 30_000,
   })
+  // Read apart from the ticket's git state: the scan behind it is the slow part, and the server keeps
+  // its answer until a branch or a ticket changes.
+  const { data: included } = useQuery({
+    queryKey: ['ticket-git', String(t.id), 'includes'],
+    queryFn: () => get<TicketGit>(`/api/tickets/${t.id}/git?includes=1`),
+    select: (g) => g.includes ?? [],
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  })
   const ids = t.needs.map((n) => n.id)
+  const suggested = (included ?? []).filter((id) => !ids.includes(id) && !t.neededBy.some((n) => n.id === id))
+  const title = (id: number) => tickets.find((x) => x.id === id)?.title
   // Not itself, not twice, and not one that needs it already (the server checks longer loops).
   const blocked = new Set([t.id, ...ids, ...t.neededBy.map((n) => n.id)])
   const options = tickets.filter((x) => !blocked.has(x.id)).sort((a, b) => b.id - a.id)
   const items = Object.fromEntries(options.map((x) => [String(x.id), `#${x.id} ${x.title}`]))
-  const title = (id: number) => tickets.find((x) => x.id === id)?.title
-  const suggested = includes.filter((id) => !ids.includes(id))
   return (
     <div className="space-y-1.5">
       {t.needs.length > 0 && (
         <ul className="flex flex-wrap gap-1">
           {t.needs.map((n) => (
-            <Tip key={n.id} content={needTitle(n)}>
+            <Tip key={n.id} content={n.auto ? `${needTitle(n)}\n${tr('needs.autoTitle')}` : needTitle(n)}>
               <li
+                data-auto={n.auto || undefined}
                 className={cn(
                   'inline-flex max-w-full items-center gap-1 rounded px-1.5 py-0.5 text-xs',
                   n.merged ? GREEN : AMBER,
                 )}
               >
+                {n.auto && <Sparkles aria-label={tr('needs.addedByBoard')} className="size-3 shrink-0" />}
                 <Link
                   to="/projects/$id/features/$ticketId"
                   params={{ id: String(t.projectId), ticketId: String(n.id) }}
@@ -168,7 +181,11 @@ export function NeedsField({
         </SelectContent>
       </Select>
       {suggested.map((id) => (
-        <div key={id} className={cn('flex items-start gap-1.5 rounded px-1.5 py-1 text-xs', AMBER)}>
+        <div
+          key={id}
+          data-testid="includes-hint"
+          className={cn('flex items-start gap-1.5 rounded px-1.5 py-1 text-xs', AMBER)}
+        >
           <TriangleAlert className="mt-px size-3.5 shrink-0" />
           <span className="min-w-0 flex-1">
             <Trans
@@ -185,7 +202,7 @@ export function NeedsField({
               }}
             />
           </span>
-          <Tip content={tr('needs.cannotBeDone', { id: t.id, need: id })}>
+          <Tip content={tr('needs.cannotBeDoneUnsure', { id: t.id, need: id })}>
             <Button
               type="button"
               variant="outline"

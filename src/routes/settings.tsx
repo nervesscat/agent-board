@@ -2,10 +2,11 @@ import { createFileRoute, useLocation, useNavigate, useRouter } from '@tanstack/
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { BackToModule } from '#/components/BackToModule'
 import { BoardSettings } from '#/components/BoardSettings'
 import { ProjectSettings } from '#/components/ProjectSettings'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs'
-import { currentProjectId, rememberCurrentProject, useProjects } from '#/lib/project'
+import { rememberCurrentProject, useCurrentProjectId, useProjects } from '#/lib/project'
 import { whenArrived } from '#/lib/remembered'
 import {
   type SettingsTab,
@@ -40,11 +41,13 @@ function Settings() {
   const failed = isError && projects === undefined
   const ready = hydrated && !isPending && !failed
   const list = projects ?? []
+  // Follows the project selector: choosing another project on the Board tab changes this one.
+  const current = useCurrentProjectId(list.map((p) => p.id))
   const resolved = ready
     ? resolveSettings(
         search,
         hash,
-        Number(currentProjectId(list.map((p) => p.id))) || undefined,
+        Number(current) || undefined,
         list.map((p) => p.id),
       )
     : null
@@ -79,7 +82,10 @@ function Settings() {
   }, [correct, dropHash, hash, navigate, router])
   return (
     <div className="max-w-3xl space-y-6">
-      <h1 className="text-xl font-semibold tracking-tight">{t('settings.title')}</h1>
+      <div className="space-y-2">
+        <BackToModule />
+        <h1 className="text-xl font-semibold tracking-tight">{t('settings.title')}</h1>
+      </div>
       <Tabs
         value={tab ?? 'board'}
         onValueChange={(value) => {

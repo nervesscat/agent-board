@@ -372,6 +372,14 @@ export function workLine(
       why: '',
     }
   }
+  // Approved is the human's go-ahead, already given: nothing is waiting on them, only the merge.
+  if (t.stage?.kind === 'approved')
+    return {
+      state: 'nothing',
+      text: `Nothing open · approved, waiting to merge`,
+      detail,
+      why: '',
+    }
   if (t.stage?.kind === 'review')
     return {
       state: 'your-turn',

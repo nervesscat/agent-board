@@ -35,7 +35,6 @@
     "previews": "プレビューを読み込み中…",
     "repositories": "リポジトリを読み込み中…",
     "roadmap": "ロードマップを読み込み中…",
-    "runReports": "実行レポートを読み込み中…",
     "earlierVersions": "以前のバージョンを読み込み中…",
     "workspaces": "ワークスペースを読み込み中…"
   },
@@ -46,7 +45,8 @@
     "settings": "設定",
     "testMode": "テストモード",
     "authOff": "認証オフ",
-    "authOffTip": "BOARD_ENV={{env}}、ログイン無効: {{actor}} としてログイン中です。本番のボードではありません。"
+    "authOffTip": "BOARD_ENV={{env}}、ログイン無効: {{actor}} としてログイン中です。本番のボードではありません。",
+    "connectAgent": "エージェントの接続"
   },
   "time": {
     "never": "—",
@@ -471,7 +471,8 @@
       "blocked": "ブロック",
       "review": "レビュー",
       "done": "完了",
-      "cancelled": "中止"
+      "cancelled": "中止",
+      "approved": "承認済み"
     },
     "hint": {
       "open": "着手待ちです。担当を取ると、作業開始ステージに移ります",
@@ -479,7 +480,8 @@
       "blocked": "あなたの対応待ちです",
       "review": "レビューに引き渡し済みです",
       "done": "完了済みです。担当は取れません",
-      "cancelled": "取りやめです。却下するとチケットはここに移り、そのタスクは進捗から外れます"
+      "cancelled": "取りやめです。却下するとチケットはここに移り、そのタスクは進捗から外れます",
+      "approved": "マージのあなたの承認です。エージェントはチケットをここに移しません"
     },
     "color": {
       "gray": "グレー",
@@ -600,20 +602,20 @@
         "previews": "プレビュー",
         "gallery": "ギャラリー",
         "agents": "チーム",
-        "runReports": "実行レポート",
         "daily": "デイリー",
         "cleanup": "クリーンアップ",
         "repositories": "リポジトリ",
-        "instructions": "指示"
+        "instructions": "指示",
+        "workflow": "ワークフロー"
       },
       "overview": {
         "needsYou": "要対応",
         "inProgress": "進行中",
         "doneToday": "今日完了",
-        "next": "次の予定",
         "carryingOver": "持ち越し",
         "notes": "ノート",
-        "agents": "稼働中のエージェント"
+        "agents": "稼働中のエージェント",
+        "lostContact": "連絡途絶"
       },
       "ticket": {
         "instructions": "指示",
@@ -624,7 +626,8 @@
         "runs": "実行",
         "details": "詳細",
         "branch": "ブランチ",
-        "workspaces": "ワークスペース"
+        "workspaces": "ワークスペース",
+        "resume": "再開"
       }
     },
     "locked": {
@@ -1434,20 +1437,7 @@
     "dialogTitleEmpty": "実行レポート",
     "round": "第{{round}}回",
     "difficultyShort": "難易度 {{n}}/5",
-    "confidenceShort": "確信度 {{n}}/5",
-    "panelTitle": "実行レポート",
-    "panelHeading_other": "実行レポート · {{count}}件の実行",
-    "pageTitle": "実行レポート",
-    "pageText": "各サブエージェントの実行がどうだったかを、本人の言葉で記録します。レポートは実行ごとに1件で、レビューの各回には各エージェントが1件ずつ書きます。",
-    "allAgents": "すべてのエージェント",
-    "agent": "エージェント",
-    "ticketPlaceholder": "チケット番号",
-    "ticketNumber": "チケット番号",
-    "filter": "絞り込み",
-    "clear": "クリア",
-    "emptyFiltered": "この条件の実行レポートはありません。",
-    "empty": "実行レポートはまだありません。",
-    "openTicket": "チケットを開く"
+    "confidenceShort": "確信度 {{n}}/5"
   },
   "projectAgents": {
     "title": "チーム",
@@ -1581,7 +1571,8 @@
     "tagsPlaceholder": "高、フォーム",
     "branchesOff": "同じリポジトリなら、<branch>{{branch}}</branch> から分岐します。",
     "uploading": "アップロード中…",
-    "create": "作成"
+    "create": "作成",
+    "workflow": "ワークフロー"
   },
   "notes": {
     "title": "ノート",
@@ -1830,6 +1821,11 @@
         "title": "設定",
         "subtitle": "ボード全体の設定",
         "keywords": "環境設定, テーマ, プレビュー, デバイス, settings"
+      },
+      "workflow": {
+        "title": "ワークフロー",
+        "subtitle": "エージェントがチケットで踏むステップを、ツリーで表示",
+        "keywords": "ステップ, プリセット, レビューラウンド, 引き渡し, 委任, 順序, workflow, steps"
       }
     },
     "setting": {
@@ -1993,7 +1989,6 @@
   },
   "ticketBoard": {
     "stage": "ステージ",
-    "mergeAfter": "{{list}} の後にマージ",
     "archiveTip_other": "{{stage}} の{{count}}件のチケットをアーカイブ",
     "archiveAll": "すべてアーカイブ",
     "archiveTitle_other": "{{count}}件のチケットをアーカイブしますか?",
@@ -2013,8 +2008,7 @@
     "nothingArchived": "アーカイブはありません。",
     "archived": "{{when}}にアーカイブ",
     "archivedBy": "<actor/> が{{when}}にアーカイブ",
-    "restore": "復元",
-    "laneApproved_other": "承認済み {{count}}件"
+    "restore": "復元"
   },
   "ticketList": {
     "archivedToast_other": "{{count}}件のチケットをアーカイブしました",
@@ -2056,8 +2050,10 @@
     "addPlaceholder": "先にマージが必要なチケットを追加…",
     "noOthers": "他のチケットはありません",
     "includes": "<goto>{{ref}}</goto> の未マージの作業を含みます",
-    "cannotBeDone": "#{{need}} のブランチがベースにマージされるまで、#{{id}} は完了にできません",
-    "addAsNeed": "依存として追加"
+    "addAsNeed": "依存として追加",
+    "autoTitle": "ボードが追加しました: このチケットのブランチに、あのチケットの未マージのコミットが入っています。ブランチから消えれば、これも外れます。ここで外した場合は保持されます(同じコミットでは再び追加されません)。",
+    "addedByBoard": "ボードが追加",
+    "cannotBeDoneUnsure": "これらのコミットが誰のものか、ボードは確実には判断できないため、依存は追加しませんでした。#{{id}} は、#{{need}} のブランチがベースにマージされるまで完了にできません。"
   },
   "verdict": {
     "approve": "承認",
@@ -2096,11 +2092,15 @@
       "others": {
         "label": "他者待ち",
         "title": "あなたのPR(エージェントのも含む): 承認待ち、全レビュアーが承認済み、またはレビュアーのコメントで保留中"
+      },
+      "all": {
+        "label": "すべてのPR",
+        "title": "リポジトリのオープンなPRすべて。誰が書いたか、あなたに関係があるかは問いません"
       }
     },
     "reviewers": {
-      "all": "すべてのPR",
-      "mine": "自分がレビュアーのもの"
+      "mine": "自分がレビュアーのもの",
+      "involving": "自分に関係するもの"
     },
     "tabs": {
       "pending": "保留中",
@@ -2110,7 +2110,8 @@
     },
     "empty": {
       "me": "レビューする{{stage}}のものはありません。",
-      "others": "他者待ちの{{stage}}のものはありません。"
+      "others": "他者待ちの{{stage}}のものはありません。",
+      "all": "オープンなPRに{{stage}}のものはありません。"
     },
     "refresh": "更新",
     "mergeAfterTip": "このチケットは、先に次のマージが必要です:\n{{list}}",
@@ -2137,7 +2138,8 @@
     "holdTitle": "#{{number}} を保留にする",
     "holdText": "あなたとエージェント向けのメモです。GitHubには変更を加えません。",
     "holdPlaceholder": "待たせる理由…",
-    "holdConfirm": "保留にする"
+    "holdConfirm": "保留にする",
+    "notInvolvingYou": "あなたに関係なし"
   },
   "workStatus": {
     "state": {
@@ -2318,7 +2320,15 @@
       "human": "人の対応待ち{{duration}}",
       "review": "レビュー中{{duration}}",
       "merge": "マージ待ち{{duration}}"
-    }
+    },
+    "openReport": "{{agent}}のレポートを開く: {{label}}",
+    "openReportRound": "{{agent}}の第{{round}}回のレポートを開く: {{label}}",
+    "reportDescription": "この実行のために書かれたレポート",
+    "factsDescription": "この実行の事実",
+    "loadingReport": "実行レポートを読み込み中…",
+    "reportsFailed": "レポートを読み込めませんでした。",
+    "noReport": "この実行のレポートはありません。",
+    "noReportYet": "この実行のレポートはまだありません。"
   },
   "roadmap": {
     "title": "ロードマップ",
@@ -2407,8 +2417,9 @@
     },
     "lost": {
       "title": "連絡途絶",
-      "link": "連絡途絶: <id>#{{id}}</id> {{title}}",
-      "detail": "{{agent}} · {{phase}} · {{since}} · 最終連絡 {{minutes}}分前"
+      "empty": "連絡途絶はありません。",
+      "lastHeardTip": "最後の連絡: {{when}}",
+      "lastHeard": "最後の連絡は{{duration}}前"
     },
     "inProgress": {
       "title": "進行中",
@@ -2421,22 +2432,11 @@
       "closed": "{{time}}にクローズ",
       "activity_other": "今日は{{count}}件の出来事がありました: デイリー"
     },
-    "next": {
-      "title": "次の予定",
-      "titleStage": "次の予定: {{stage}}",
-      "empty": "予定されているものはありません。",
-      "emptyStage": "{{stage}} に予定されているものはありません。",
-      "tasks": "タスク {{done}}/{{total}}",
-      "more": "ほか{{count}}件",
-      "blocked": "ブロック {{count}}件",
-      "backlog": "バックログ {{count}}件",
-      "board": "ボード"
-    },
     "carryingOver": {
       "title": "持ち越し",
-      "empty": "今日より前から持ち越したものはありません。",
       "startedTip": "{{when}}に作業を開始",
-      "days_other": "{{count}}日間進行中"
+      "days_other": "{{count}}日間進行中",
+      "emptyShown": "今日より前からのブロックやレビュー中のものはありません。"
     }
   },
   "notifications": {
@@ -2483,17 +2483,13 @@
     "restoredToast": "ボードに戻しました",
     "disapprovedToast": "#{{id}} を却下して中止しました",
     "undo": "元に戻すと、却下を取り消して {{stage}} に戻します。",
-    "undoMoved": "元に戻すと、却下を取り消して {{stage}} に戻します。#{{next}} に移動しました。",
     "undoAction": "元に戻す",
     "summary": "サマリー",
-    "openedBy": "<actor/> が{{when}}に作成",
     "updated": "{{when}}に更新",
     "archivedBy": "{{name}} が{{when}}にアーカイブ",
     "archivedByLane": "{{name}} が{{when}}に、親のチケットと一緒にアーカイブ",
     "someone": "誰か",
     "archivedBadge": "アーカイブ済み",
-    "lanesWarningTip": "このチケットは、レーンよりも先の段階とされています",
-    "lanesNotDone_other": "未完了のレーン {{count}}件",
     "decisionNeeded": "要判断",
     "archiveTip": "レーンごとボードから外します。機能ページの「アーカイブ済み」から戻せます",
     "deleteTitle": "このチケットを削除しますか?",
@@ -2557,7 +2553,6 @@
     "newSubtaskOf": "{{name}} の新しいサブタスク",
     "add": "追加",
     "addPhase": "フェーズを追加: Implementation、Pushed、PR…",
-    "noCall": "判定なし",
     "all": "すべて",
     "nounLane": "レーン",
     "laneOf": "レーン {{n}}/{{count}}",
@@ -2567,13 +2562,10 @@
     "previousNoun": "前の{{noun}}",
     "nextNoun": "次の{{noun}}",
     "stepKeysTip": "[ と ] で前後に移動します",
-    "lanesDone": "完了 {{done}}/{{total}} · 承認済み {{approved}}",
-    "lanesDisapproved": "却下 {{count}}件",
     "lanesCancelled": "中止 {{count}}件",
     "allTasks": "全タスク {{done}}/{{total}}",
     "noLanes": "レーンはありません。作業の一部を並行して進める場合は、このチケットをレーンに分割してください。各レーンには、専用のブランチ、担当者、タスク、更新が付きます。",
     "filterStage": "ステージ",
-    "filterVerdict": "判定",
     "filterTags": "タグ",
     "showing": "{{total}}件中{{shown}}件を表示",
     "clearFilters": "絞り込みを解除",
@@ -2643,7 +2635,14 @@
     "workspacesDesc": "エージェントがこのチケット用に開いた、ワークツリー、サブブランチ、サブエージェントのサンドボックスです。",
     "workspacesDescLanes": "エージェントがこのチケットとそのレーン用に開いた、ワークツリー、サブブランチ、サブエージェントのサンドボックスです。",
     "noneYet": "まだありません。",
-    "updatedLabel": "更新"
+    "breadcrumb": "パンくずリスト",
+    "scrollSideUp": "サイド列を上にスクロール",
+    "scrollSideDown": "サイド列を下にスクロール",
+    "workflow": "ワークフロー",
+    "workflowOwn": "このチケットに設定された{{workflow}}ワークフローに従います。",
+    "workflowProject": "プロジェクトのワークフロー({{workflow}})に従います。",
+    "workflowSteps": "ステップを見る",
+    "lanesProgress": "{{done}}/{{total}} 完了"
   },
   "complexity": {
     "label": {
@@ -2652,12 +2651,12 @@
       "high": "高",
       "max": "最大"
     },
-    "selectHint": "低: レビューなし。中: レビュー1回。高: 最大3回。最大: ゼロから作る作業向けで最大10回。既存のコードベースの機能は、どれほど難しくても最大にはなりません。",
-    "hint": {
-      "low": "低: レビューなし。builder自身が検証します。",
-      "mid": "中: レビュー1回。",
-      "high": "高: レビュー最大3回。",
-      "max": "最大: サイトやアプリ全体をゼロから作る、新製品や単体のサービス向けで、レビューは最大10回、通過した最初の回で終わります。既存のコードベースの機能は、どれほど難しくても高までです。"
+    "workflowHint": "低: Standardワークフローではspecもレビューもなし。中・高・最大: プロジェクトのワークフローが定めるレビューラウンド(Standard: 1回、3回、最大10回)。最大はゼロから作る作業向けで、既存のコードベースの機能は、どれほど難しくても最大にはしません。",
+    "levelHint": {
+      "low": "低: プロジェクトのワークフローが定めるレビューラウンド(Standard: なし)。builderが自分で検証します。",
+      "mid": "中: プロジェクトのワークフローが定めるレビューラウンド(Standard: 1回)。",
+      "high": "高: プロジェクトのワークフローが定めるレビューラウンド(Standard: 最大3回)。",
+      "max": "最大: プロジェクトのワークフローが定めるレビューラウンド(Standard: 最大10回)。サイトやアプリ全体をゼロから作る場合、新しいプロダクト、単独のサービス向けで、通過した最初のラウンドで止まります。既存のコードベースの機能は、どれほど難しくても高までです。"
     }
   },
   "agentsAtWork": {
@@ -2695,6 +2694,266 @@
       "minutes_other": "{{count}}分",
       "hours_other": "{{count}}時間",
       "days_other": "{{count}}日"
+    }
+  },
+  "workflowChips": {
+    "selfTip": "チケットのエージェントが自分で行います",
+    "agentTip": {
+      "picked": "このために選ばれたチームのエージェントです。指示はチームのページに書かれています。ロール({{agent}})が、そのスパンと実行レポートの名前になります。",
+      "role": "ロール({{agent}})と同名のチームのエージェントです。指示はチームのページに書かれています。ロール({{agent}})が、そのスパンと実行レポートの名前になります。",
+      "default": "{{agent}}という名前のチームのエージェントはいないため、組み込みの{{agent}}ロールとして実行されます。指示はチームのページに書かれています。ロール({{agent}})が、そのスパンと実行レポートの名前になります。"
+    },
+    "agentMissing": "エージェントなし",
+    "missingTip": "{{picked}}が選ばれていますが、チームにその名前のエージェントは現在いません。エージェントが戻るか別のエージェントが選ばれるまで、{{name}}として実行されます。",
+    "locked": "固定",
+    "lockedAboveLow": "低より上で固定",
+    "skippedOnLow": "低ではスキップ",
+    "changed": "変更あり",
+    "changedTip": "プリセットからの変更: {{what}}"
+  },
+  "workflowGraph": {
+    "label": "複雑度「{{complexity}}」のチケットの{{label}}ワークフロー",
+    "complexity": {
+      "low": "低",
+      "mid": "中",
+      "high": "高",
+      "max": "最大"
+    },
+    "roundSurvives": "ラウンド通過",
+    "roundFails": "ラウンド失敗",
+    "inParallel": "並列",
+    "reviewRound": "レビューラウンド",
+    "noRoundsOn": "{{complexity}}ではレビューラウンドなし"
+  },
+  "workflowPanel": {
+    "idle": "グラフのステップを選ぶと、その内容を確認し、実行するエージェント、労力、実行するかどうか、順序での位置を変更できます。",
+    "runnerAgents": "チケットのエージェントが/feature-reviewを自分で実行します。そのフェーズは、フェーズのノードで選んだチームのエージェントが実行します。",
+    "selfAgent": "チケットのエージェントが自分で行います。選べるチームのエージェントはありません。",
+    "whatItDoes": "内容",
+    "handoffTo": "{{next}}への引き渡し",
+    "result": "結果",
+    "team": {
+      "title": "チームのエージェント",
+      "default": "既定({{name}})",
+      "notInTeam": "{{name}}(チームにいません)",
+      "missing": "{{picked}}が選ばれていますが、チームにその名前のエージェントは現在いません。エージェントが戻るか別のエージェントが選ばれるまで、{{name}}として実行されます。選択を解除するには「既定」を選んでください。",
+      "runsAs": "{{name}}として実行されます。指示はチームのページに書かれています。ロール({{role}})が、そのスパンと実行レポートの名前になります。",
+      "runsAsDefault": "{{name}}として実行されます(組み込みのエージェント: チームにその名前のものはありません)。指示はチームのページに書かれています。ロール({{role}})が、そのスパンと実行レポートの名前になります。"
+    },
+    "placeInOrder": "順序での位置",
+    "moveUp": "上へ移動",
+    "moveDown": "下へ移動",
+    "moveUpTip": "上へ移動: {{step}}が早く実行されます",
+    "moveDownTip": "下へ移動: {{step}}が後に実行されます",
+    "runs": "実行する",
+    "run": "{{step}}を実行",
+    "alsoRunOnLow": "低のチケットでも{{step}}を実行",
+    "aboveLowNote": "このスイッチは、低のチケットでも実行するかどうかだけを決めます。",
+    "effort": "労力",
+    "effortHint": "Agentツールの労力としてそのまま渡されます。{{hint}}。",
+    "reviewRuns": "ラウンドごとに別々の/feature-reviewを{{total}}回実行します: {{runs}}。それぞれ別のエージェント名で動き、互いの指摘は見えません。",
+    "survival": "<strong>ラウンドを通過する条件</strong>: {{survival}}。"
+  },
+  "workflowPage": {
+    "title": "ワークフロー",
+    "intro": "チケットが「To do」から引き渡しに至るまでの流れです。エージェントが踏むステップを順に、誰が実行し、何を次に渡すかを示します。プロジェクトは1つのワークフローに従い、チケットはそのページで別のものを指定できます。エージェントはボードからこれを読むので、ここでの変更は次の実行から反映されます。",
+    "graphShows": "グラフは複雑度「{{complexity}}」のチケットを表示しています。",
+    "projectFollows": "プロジェクトはこのワークフローに従います",
+    "use": "このワークフローを使う",
+    "resetThis": "このワークフローをリセット",
+    "resetTitle": "{{label}}ワークフローをリセットしますか?",
+    "resetBody": "順序、スイッチ、労力、チームのエージェント、レビューラウンドが、{{label}}プリセットの初期状態に戻ります。他のプリセットの変更はそのまま残ります。",
+    "cancel": "キャンセル",
+    "reset": "リセット",
+    "sectionLabel": "{{label}}ワークフロー",
+    "projects": "プロジェクトの",
+    "summary_other": "複雑度「{{complexity}}」のチケットで{{count}}ステップ · レビュー: {{rounds}}"
+  },
+  "workflowPresets": {
+    "group": "ワークフローのプリセット",
+    "active": "使用中",
+    "tweaked": "調整済み",
+    "complexity": "複雑度",
+    "stats_other": "{{count}}ステップ · レビューラウンド {{rounds}}",
+    "light": {
+      "label": "Light",
+      "description": "ビルド、ゲート、レビュアー1人、意図の確認、引き渡し。specエージェントも環境も、個別のhuntもありません。"
+    },
+    "standard": {
+      "label": "Standard",
+      "description": "フルサイクル: spec、ビルド、ゲート、レビューラウンド(spec、環境、verify、独立した2つのhunt、refute、マージの確認)、その後に意図の確認、PR、CI、プレビュー、引き渡し。"
+    },
+    "thorough": {
+      "label": "Thorough",
+      "description": "Standardに加えて、専用のテスト作成パス、セキュリティチェックリストによる3つ目のhunt、各レビューラウンドの最後の意図の確認、低より上のすべてのレベルでレビューラウンドが1回増えます。"
+    },
+    "maximum": {
+      "label": "Maximum",
+      "description": "Thoroughに加えて、独立した2つ目のspec、最初のレビューを見ない別のエージェントによる各ラウンドの2回目のフルレビュー、すべてのエージェントでの高い労力。"
+    }
+  },
+  "workflowReview": {
+    "legend": "複雑度ごとのレビューラウンド",
+    "changed": "変更あり",
+    "notSaved": "保存されていません: {{reason}}",
+    "default": "既定 {{value}}"
+  },
+  "workflowReads": {
+    "title": "エージェントが読むもの",
+    "hint": "このワークフローについてget_workflowが返すテキスト",
+    "textLabel": "ワークフローのテキスト"
+  },
+  "workflowSelect": {
+    "project": "プロジェクトのワークフロー({{label}})",
+    "hint": "エージェントが従うワークフローです。プロジェクト自身のものか、このチケットだけに使う4つのプリセットのいずれかです。プロジェクトのワークフローを変えても、別のものを指定したチケットは変わりません。"
+  },
+  "workflowView": {
+    "noRounds": "レビューラウンドなし",
+    "rounds_other": "{{count}}ラウンド",
+    "complexity": {
+      "low": "低",
+      "mid": "中",
+      "high": "高",
+      "max": "最大"
+    },
+    "effort": {
+      "auto": "自動",
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "effortLevel": {
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "autoLevel": "自動: {{level}}",
+    "autoEffortHint": "自動はチケットに合わせます: 低のチケットは低、中と高は中、最大は高",
+    "separator": "、",
+    "you": "あなた",
+    "skippedNoRounds": "レビューラウンドなし",
+    "skippedOff": "オフ",
+    "changed": {
+      "moved": "順序での位置",
+      "off": "オフにした",
+      "effort": "労力",
+      "agent": "チームのエージェント"
+    },
+    "name": {
+      "agent": "エージェント {{name}}",
+      "locked": "固定",
+      "skipsOnLow": "低のチケットではスキップ"
+    },
+    "lockReason": {
+      "claim": "固定: チケットを読んで担当を取るまで、何も始められません。",
+      "build": "固定: 変更をビルドしないまま納品されることはありません。",
+      "gate": "固定: 確認されていない変更は先に進みません。",
+      "intent": "低より上で固定: 低より上のすべてのチケットは、引き渡す前に人間本人の言葉と照らして確認されます。",
+      "always": "固定: これがないとチケットは引き渡せません。"
+    },
+    "survival": {
+      "light": "レビュアーが再現できた指摘がなく、builderの根拠がすべての受け入れ基準を満たしている",
+      "standard": "判定がSHIP、動作確認がYES、ベース確認がNOで、すべての受け入れ基準が実行によってPASS(UNVERIFIEDは、エスカレーションの規則に挙げられた、乗り越えられなかった理由がある場合のみ)",
+      "thoroughIntent": "判定がSHIP、動作確認がYES、ベース確認がNOで、すべての受け入れ基準が実行によってPASS(UNVERIFIEDは、エスカレーションの規則に挙げられた、乗り越えられなかった理由がある場合のみ)で、ラウンド最後の意図の確認が一致している",
+      "maximum": "2つのレビューがどちらも通過し({{standard}})、突き合わせで未解決の指摘が残らない",
+      "maximumIntent": "2つのレビューがどちらも通過し({{standard}})、突き合わせで未解決の指摘が残らず、ラウンド最後の意図の確認が一致している"
+    },
+    "move": {
+      "after": "{{step}}は{{other}}の後に置く必要があります",
+      "stayFirst": "{{step}}は最初のままにする必要があります",
+      "stayLast": "{{step}}は最後のままにする必要があります",
+      "alreadyFirst": "{{step}}はすでに最初です",
+      "alreadyLast": "{{step}}はすでに最後です"
+    }
+  },
+  "backToModule": {
+    "back": "{{label}}に戻る",
+    "home": "ホーム"
+  },
+  "ticketLine": {
+    "openedBy": "{{name}}({{role}})が{{when}}に作成",
+    "updated": "{{when}}に更新",
+    "opened": "{{when}}に作成"
+  },
+  "resumeSettings": {
+    "title": "再開",
+    "intro": "質問をしたエージェントは、そのターンを終えます。ここにコマンドを設定すると、ボード上の判断カードに答えたとき、またはチケットをブロックやレビューのステージから作業中のステージに戻したときに、ボードが自分で作業を続けます。コマンドはこのマシンのチケットのワークツリーで実行され、質問とあなたの回答(または直近の発言)が標準入力と <code>BOARD_RESUME_PROMPT_FILE</code> で指定されたファイルに渡されます。<code>BOARD_URL</code>、<code>BOARD_PROJECT_ID</code>、<code>BOARD_TICKET_ID</code>、<code>BOARD_AGENT_NAME</code> が設定されます。エージェントが稼働中のチケットや、すでに再開中のチケットでは何も起動しません。ボードのユーザーの権限で実行され、設定できるのはあなただけです。空欄はオフです。",
+    "presets": "プリセット",
+    "found": "あり",
+    "notFound": "なし",
+    "command": "再開コマンド",
+    "commandPlaceholder": "claude -p(空欄: オフ)",
+    "timeout": "停止までの時間(分)",
+    "save": "保存",
+    "saving": "保存中…",
+    "timeoutProblem": "{{min}}から{{max}}までの整数。",
+    "unsaved": "未保存の変更があります。",
+    "noChanges": "変更はありません。",
+    "off": "再開はオフです。"
+  },
+  "resumeCard": {
+    "title": "再開",
+    "resume": "再開",
+    "retry": "再試行",
+    "started": "ボードが作業を再び開始しました",
+    "empty": "このチケットを再開したものはまだありません。",
+    "setInSettings": "人間がプロジェクトの設定で設定します。",
+    "failed": "ボードは再開できませんでした: {{reason}}",
+    "log": "ログ",
+    "state": {
+      "queued": "開始中",
+      "running": "実行中",
+      "succeeded": "完了",
+      "failed": "失敗",
+      "skipped": "未開始"
+    }
+  },
+  "runReportsWindow": {
+    "reports": "レポート",
+    "reportsCount": "レポート({{n}})",
+    "title": "実行レポート",
+    "description": "このチケットの実行レポートです。フィルターと並べ替えが使えます。1件を開くと全文が表示されます。",
+    "back": "レポートに戻る",
+    "none": "実行レポートはまだありません。",
+    "noMatch": "この条件に合うレポートはありません。",
+    "count_other": "{{count}}件中{{shown}}件のレポート",
+    "clearFilters": "フィルターをクリア",
+    "filter": {
+      "agent": "エージェント",
+      "round": "ラウンド",
+      "time": "期間",
+      "difficulty": "難易度",
+      "confidence": "確信度",
+      "duration": "所要時間",
+      "sortBy": "並べ替え"
+    },
+    "items": {
+      "allAgents": "すべてのエージェント",
+      "allRounds": "すべてのラウンド",
+      "round": "第{{n}}回",
+      "noRound": "ラウンドなし"
+    },
+    "time": {
+      "any": "すべての期間",
+      "hour": "直近1時間",
+      "today": "今日",
+      "week": "直近7日間"
+    },
+    "duration": {
+      "any": "すべて",
+      "reported": "報告あり",
+      "unreported": "報告なし"
+    },
+    "rating": {
+      "any": "すべて",
+      "unrated": "未評価"
+    },
+    "sort": {
+      "newest": "新しい順",
+      "oldest": "古い順",
+      "longest": "長い順",
+      "difficulty": "難易度が高い順",
+      "confidence": "確信度が高い順"
     }
   }
 }

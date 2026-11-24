@@ -75,7 +75,8 @@ describe('the entries that ask the human', () => {
       6: 'cancelled',
     })
     expect(askingHuman(entries, lookup).map((e) => e.ticketId)).toEqual([1, 2, 3])
-    for (const kind of ['active', 'review', 'blocked'] as const) expect(asksHuman(kind)).toBe(true)
+    for (const kind of ['active', 'review', 'approved', 'blocked'] as const)
+      expect(asksHuman(kind)).toBe(true)
     for (const kind of ['open', 'done', 'cancelled'] as const) expect(asksHuman(kind)).toBe(false)
     expect(asksHuman(undefined)).toBe(false)
   })

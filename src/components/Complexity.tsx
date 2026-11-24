@@ -33,7 +33,7 @@ export function ComplexitySelect({
   const labels = Object.fromEntries(COMPLEXITIES.map((l) => [l, t(`complexity.label.${l}`)]))
   return (
     <Select value={value} onValueChange={(v) => v && onChange(v as Complexity)} items={labels}>
-      <Tip content={t('complexity.selectHint')}>
+      <Tip content={t('complexity.workflowHint')}>
         <SelectTrigger id={id} size={size} className={className}>
           <SelectValue />
         </SelectTrigger>
@@ -53,7 +53,7 @@ export function ComplexitySelect({
 export function ComplexityChip({ level, className = '' }: { level: Complexity; className?: string }) {
   const { t } = useTranslation()
   return (
-    <Tip content={t(`complexity.hint.${level}`)}>
+    <Tip content={t(`complexity.levelHint.${level}`)}>
       <span
         className={`inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[11px] leading-none font-medium ${CHIP_COLOR[level]} ${className}`}
       >

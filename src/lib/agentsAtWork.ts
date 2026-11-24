@@ -69,7 +69,7 @@ export function phaseLabel(phase: string | null, round: number | null): string {
 
 /** The stages whose tickets show no agent: Done, Cancelled and Approved (the human's go-ahead to merge). */
 export const hiddenStage = (stage: Live['stage']): boolean =>
-  stage.kind === 'done' || stage.kind === 'cancelled' || stage.key === 'approved'
+  stage.kind === 'done' || stage.kind === 'cancelled' || stage.kind === 'approved'
 
 export function petsOf(
   work: Pick<LiveWorkPayload, 'liveNow' | 'recentlyActive'> | undefined,

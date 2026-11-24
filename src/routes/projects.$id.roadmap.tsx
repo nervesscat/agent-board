@@ -366,7 +366,13 @@ function Row({
           aria-label={tr('roadmap.workTimeline')}
         >
           {/* Keyed on the choice, not the times: a new choice re-anchors a live track at now; the ticking end does not. */}
-          <WorkTimelineBar key={windowKey} timeline={row.work} compact={Boolean(lane)} window={timeWindow} />
+          <WorkTimelineBar
+            key={windowKey}
+            timeline={row.work}
+            compact={Boolean(lane)}
+            window={timeWindow}
+            reports={{ projectId: Number(projectId), ticketId: row.id }}
+          />
           {hasWork(row.work) && <WorkSummary totals={row.work.totals} />}
         </div>
       </div>

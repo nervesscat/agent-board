@@ -29,7 +29,7 @@ import { timelinesFor } from './workTimeline'
 const DAY_MS = 86_400_000
 
 /** Worked on, waiting on the human, or handed off: a ticket in any of these is in progress. */
-const IN_PROGRESS: StageKind[] = ['active', 'blocked', 'review']
+const IN_PROGRESS: StageKind[] = ['active', 'blocked', 'review', 'approved']
 const inProgress = (kind: StageKind | undefined) => !!kind && IN_PROGRESS.includes(kind)
 
 /** A stage that parks work for later instead of lining it up next (Backlog, Icebox, Someday…). */
@@ -170,6 +170,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       and(
         eq(schema.prs.projectId, project.id),
         eq(schema.prs.open, true),
+        eq(schema.prs.involvesMe, true),
         eq(schema.prs.waitingOn, 'me'),
         eq(schema.prs.reviewStage, 'pending'),
         eq(schema.prs.hold, false),
@@ -292,8 +293,10 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       ]
     })
     .sort((a, b) => Date.parse(a.lastSignalAt) - Date.parse(b.lastSignalAt))
+  // Not what is approved already: a ticket judged by the human, or one in the Approved stage (a lane
+  // is judged by moving there), which is listed as approved, to merge below.
   const reviews = tickets
-    .filter((t) => kind(t.status) === 'review' && !t.approvedAt)
+    .filter((t) => kind(t.status) === 'review' && !t.approvedAt && t.status !== 'approved')
     .map((t) => ({
       id: t.id,
       title: t.title,
@@ -403,6 +406,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         activity: activityOf(timelines.get(t.id)!.timeline),
         stale:
           kind(t.status) !== 'review' &&
+          kind(t.status) !== 'approved' &&
           now.getTime() - new Date(post?.createdAt ?? since).getTime() > STALE_MS,
         updatedAt: t.updatedAt,
       }
@@ -444,6 +448,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       and(
         eq(schema.prs.projectId, project.id),
         eq(schema.prs.open, false),
+        eq(schema.prs.involvesMe, true),
         gte(schema.prs.closedAt, from),
         lt(schema.prs.closedAt, to),
       ),
@@ -522,16 +527,16 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         instructionChanges.length +
         stalled.length,
     },
-    // The tickets in Approved: the human's go-ahead to merge, which an orchestrator merges without asking again.
+    // The tickets in an approved-kind stage: the human's go-ahead to merge, which an orchestrator merges without asking again.
     approvedToMerge: tickets
-      .filter((t) => t.status === 'approved' && kind(t.status) === 'review')
+      .filter((t) => kind(t.status) === 'approved')
       .map((t) => ({
         ticketId: t.id,
         title: t.title,
         prNumber: t.prNumber,
         label: 'approved, to merge' as const,
       })),
-    inProgress: progress.filter((t) => t.kind !== 'review'),
+    inProgress: progress.filter((t) => t.kind !== 'review' && t.kind !== 'approved'),
     // Lost contact: outside Needs you and its count (the facts are per agent, not per ticket).
     lostContact,
     doneToday: { tickets: doneTickets, prs: closedPrs, activity },

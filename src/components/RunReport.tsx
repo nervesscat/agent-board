@@ -1,12 +1,10 @@
 import type { TFunction } from 'i18next'
 import { Check, ClipboardList, X } from 'lucide-react'
-import { useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 
 import { Actor } from '#/components/Actor'
 import { Markdown } from '#/components/Markdown'
 import { Badge } from '#/components/ui/badge'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '#/components/ui/dialog'
 import { Tip } from '#/components/ui/tooltip'
 import { ago, shortSha, stamp } from '#/lib/format'
 import {
@@ -24,10 +22,8 @@ export const runReportLabel = (r: Pick<RunReport, 'agent' | 'round'>, t: TFuncti
   r.round === null ? r.agent : t('runReport.label', { agent: r.agent, round: r.round })
 
 /** Its duration: `not reported` when neither a span measured it nor the agent gave a time. */
-export const runReportDuration = (
-  r: Pick<RunReport, 'durationMs' | 'durationSource'>,
-  t: TFunction = shared.t,
-) => (r.durationSource === 'unknown' ? t('runReport.notReported') : formatDuration(r.durationMs))
+const runReportDuration = (r: Pick<RunReport, 'durationMs' | 'durationSource'>, t: TFunction = shared.t) =>
+  r.durationSource === 'unknown' ? t('runReport.notReported') : formatDuration(r.durationMs)
 
 /** The report's sections in the template's order, then any the agent added of its own. */
 function sectionEntries(r: RunReport) {
@@ -162,29 +158,6 @@ export function RunReportView({ r }: { r: RunReport }) {
   )
 }
 
-/** The dialog a report opens in; `report` null keeps it closed. */
-export function RunReportDialog({ report, onClose }: { report: RunReport | null; onClose: () => void }) {
-  const { t } = useTranslation()
-  // Keeps showing the last one while the dialog animates closed.
-  const [last, setLast] = useState(report)
-  if (report && report.id !== last?.id) setLast(report)
-  const shown = report ?? last
-  return (
-    <Dialog open={report !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>
-            {shown
-              ? t('runReport.dialogTitle', { label: runReportLabel(shown, t) })
-              : t('runReport.dialogTitleEmpty')}
-          </DialogTitle>
-        </DialogHeader>
-        {shown && <RunReportView r={shown} />}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 /** One report as a row: what ran, its round, its numbers; opening it shows the whole report. */
 export function RunReportRowButton({ r, onOpen }: { r: RunReport; onOpen: () => void }) {
   const { t } = useTranslation()
@@ -212,30 +185,5 @@ export function RunReportRowButton({ r, onOpen }: { r: RunReport; onOpen: () => 
         <span className="ml-auto text-xs text-muted-foreground">{ago(r.createdAt)}</span>
       </span>
     </button>
-  )
-}
-
-/**
- * A ticket's run reports on the feed's Agents side: one report per subagent run, newest first. Nothing
- * is shown for a ticket no subagent reported on.
- */
-export function RunReportsPanel({ reports }: { reports: RunReport[] }) {
-  const { t } = useTranslation()
-  const [open, setOpen] = useState<RunReport | null>(null)
-  if (!reports.length) return null
-  return (
-    <section aria-label={t('runReport.panelTitle')} className="mb-4 space-y-2">
-      <h3 className="text-xs font-medium text-muted-foreground">
-        {t('runReport.panelHeading', { count: reports.length })}
-      </h3>
-      <ul className="space-y-1">
-        {reports.map((r) => (
-          <li key={r.id}>
-            <RunReportRowButton r={r} onOpen={() => setOpen(r)} />
-          </li>
-        ))}
-      </ul>
-      <RunReportDialog report={open} onClose={() => setOpen(null)} />
-    </section>
   )
 }

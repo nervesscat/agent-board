@@ -222,8 +222,10 @@ describe('petsOf', () => {
   it.each([
     ['done', { key: 'done', name: 'Done', kind: 'done' }],
     ['cancelled', { key: 'cancelled', name: 'Cancelled', kind: 'cancelled' }],
-    ['approved', { key: 'approved', name: 'Approved', kind: 'review' }],
+    ['approved', { key: 'approved', name: 'Approved', kind: 'approved' }],
+    ['an approved stage with another key', { key: 'go', name: 'Go', kind: 'approved' }],
     ['a renamed done stage', { key: 'shipped', name: 'Shipped', kind: 'done' }],
+    ['release', { key: 'release', name: 'Release', kind: 'done' }],
   ])('shows no agent on a ticket in %s, live or quiet', (_, hidden) => {
     const r = petsOf(
       {
@@ -241,7 +243,7 @@ describe('petsOf', () => {
     ['in progress', { key: 'in_progress', name: 'In progress', kind: 'active' }],
     ['blocked', { key: 'blocked', name: 'Blocked', kind: 'blocked' }],
     ['in review', { key: 'review', name: 'In review', kind: 'review' }],
-    ['release', { key: 'release', name: 'Release', kind: 'review' }],
+    ['a review stage named Release', { key: 'release', name: 'Release', kind: 'review' }],
   ])('keeps the agents on a ticket in %s', (_, shown) => {
     const r = petsOf({ liveNow: [live({ stage: shown })], recentlyActive: [] }, NOW)
     expect(r.pets).toHaveLength(1)

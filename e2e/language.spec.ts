@@ -55,7 +55,7 @@ test('Settings has a Language selector with English and Spanish among its twenty
   ])
   // The top bar too.
   const bar = page.getByRole('banner')
-  await expect(bar.getByRole('link', { name: 'Conectar', exact: true })).toBeVisible()
+  await expect(bar.getByRole('link', { name: 'Conectar un agente', exact: true })).toBeVisible()
   await expect(bar.getByRole('link', { name: 'Ajustes', exact: true })).toBeVisible()
   expect(await page.evaluate(() => (window as unknown as { stillHere?: boolean }).stillHere)).toBe(true)
 

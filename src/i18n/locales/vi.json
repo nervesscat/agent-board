@@ -35,7 +35,6 @@
     "previews": "Đang tải preview…",
     "repositories": "Đang tải repo…",
     "roadmap": "Đang tải lộ trình…",
-    "runReports": "Đang tải báo cáo lượt chạy…",
     "earlierVersions": "Đang tải phiên bản cũ hơn…",
     "workspaces": "Đang tải workspace…"
   },
@@ -46,7 +45,8 @@
     "settings": "Cài đặt",
     "testMode": "chế độ test",
     "authOff": "tắt auth",
-    "authOffTip": "BOARD_ENV={{env}}, tắt đăng nhập: đang đăng nhập với tư cách {{actor}}. Không phải board thật."
+    "authOffTip": "BOARD_ENV={{env}}, tắt đăng nhập: đang đăng nhập với tư cách {{actor}}. Không phải board thật.",
+    "connectAgent": "Kết nối agent"
   },
   "time": {
     "never": "—",
@@ -471,7 +471,8 @@
       "blocked": "Bị chặn",
       "review": "Review",
       "done": "Xong",
-      "cancelled": "Đã hủy"
+      "cancelled": "Đã hủy",
+      "approved": "Đã duyệt"
     },
     "hint": {
       "open": "chờ được nhận; khi nhận sẽ chuyển sang cột bắt đầu làm việc",
@@ -479,7 +480,8 @@
       "blocked": "đang chờ bạn",
       "review": "đã bàn giao để review",
       "done": "đã xong; không thể nhận",
-      "cancelled": "đã bỏ; không duyệt sẽ chuyển ticket về đây, và các tác vụ của nó rời khỏi tiến độ"
+      "cancelled": "đã bỏ; không duyệt sẽ chuyển ticket về đây, và các tác vụ của nó rời khỏi tiến độ",
+      "approved": "sự đồng ý của bạn để merge; không agent nào chuyển ticket vào đây"
     },
     "color": {
       "gray": "xám",
@@ -600,20 +602,20 @@
         "previews": "Preview",
         "gallery": "Thư viện",
         "agents": "Nhóm",
-        "runReports": "Báo cáo lượt chạy",
         "daily": "Hằng ngày",
         "cleanup": "Dọn dẹp",
         "repositories": "Repo",
-        "instructions": "Hướng dẫn"
+        "instructions": "Hướng dẫn",
+        "workflow": "Quy trình"
       },
       "overview": {
         "needsYou": "Cần bạn",
         "inProgress": "Đang làm",
         "doneToday": "Xong hôm nay",
-        "next": "Tiếp theo",
         "carryingOver": "Còn tồn",
         "notes": "Ghi chú",
-        "agents": "Agent đang làm việc"
+        "agents": "Agent đang làm việc",
+        "lostContact": "Mất liên lạc"
       },
       "ticket": {
         "instructions": "Hướng dẫn",
@@ -624,7 +626,8 @@
         "runs": "Lượt chạy",
         "details": "Chi tiết",
         "branch": "Branch",
-        "workspaces": "Workspace"
+        "workspaces": "Workspace",
+        "resume": "Tiếp tục"
       }
     },
     "locked": {
@@ -1434,20 +1437,7 @@
     "dialogTitleEmpty": "Báo cáo lượt chạy",
     "round": "vòng {{round}}",
     "difficultyShort": "độ khó {{n}}/5",
-    "confidenceShort": "độ tin cậy {{n}}/5",
-    "panelTitle": "Báo cáo lượt chạy",
-    "panelHeading_other": "Báo cáo lượt chạy · {{count}} lượt chạy",
-    "pageTitle": "Báo cáo lượt chạy",
-    "pageText": "Mỗi lượt chạy subagent diễn ra thế nào, theo lời của chính nó. Mỗi lượt chạy một báo cáo; một vòng review có một báo cáo cho mỗi agent của nó.",
-    "allAgents": "Mọi agent",
-    "agent": "Agent",
-    "ticketPlaceholder": "Ticket #",
-    "ticketNumber": "Số ticket",
-    "filter": "Lọc",
-    "clear": "Xóa",
-    "emptyFiltered": "Không có báo cáo lượt chạy cho bộ lọc đó.",
-    "empty": "Chưa có báo cáo lượt chạy.",
-    "openTicket": "Mở ticket"
+    "confidenceShort": "độ tin cậy {{n}}/5"
   },
   "projectAgents": {
     "title": "Nhóm",
@@ -1581,7 +1571,8 @@
     "tagsPlaceholder": "High, Forms",
     "branchesOff": "Tách từ <branch>{{branch}}</branch> khi cùng repo.",
     "uploading": "Đang tải lên…",
-    "create": "Tạo"
+    "create": "Tạo",
+    "workflow": "Quy trình"
   },
   "notes": {
     "title": "Ghi chú",
@@ -1830,6 +1821,11 @@
         "title": "Cài đặt",
         "subtitle": "Tùy chọn toàn board",
         "keywords": "tùy chọn, giao diện, preview, thiết bị, settings"
+      },
+      "workflow": {
+        "title": "Quy trình",
+        "subtitle": "Các bước agent làm theo cho một ticket, dạng cây",
+        "keywords": "bước, preset, vòng review, bàn giao, giao việc, thứ tự, workflow, steps"
       }
     },
     "setting": {
@@ -1993,7 +1989,6 @@
   },
   "ticketBoard": {
     "stage": "Cột",
-    "mergeAfter": "merge sau {{list}}",
     "archiveTip_other": "Lưu trữ {{count}} ticket trong {{stage}}",
     "archiveAll": "Lưu trữ tất cả",
     "archiveTitle_other": "Lưu trữ {{count}} ticket?",
@@ -2013,8 +2008,7 @@
     "nothingArchived": "Chưa lưu trữ gì.",
     "archived": "đã lưu trữ {{when}}",
     "archivedBy": "đã lưu trữ {{when}} bởi <actor/>",
-    "restore": "Khôi phục",
-    "laneApproved_other": "{{count}} đã duyệt"
+    "restore": "Khôi phục"
   },
   "ticketList": {
     "archivedToast_other": "Đã lưu trữ {{count}} ticket",
@@ -2056,8 +2050,10 @@
     "addPlaceholder": "Thêm ticket cần merge trước…",
     "noOthers": "Không có ticket khác",
     "includes": "Gồm công việc chưa merge từ <goto>{{ref}}</goto>",
-    "cannotBeDone": "#{{id}} không thể xong cho đến khi branch của #{{need}} được merge vào branch gốc của nó",
-    "addAsNeed": "Thêm làm yêu cầu"
+    "addAsNeed": "Thêm làm yêu cầu",
+    "autoTitle": "Board tự thêm: branch của ticket này chứa các commit chưa merge của ticket kia. Nó tự mất khi branch không còn như vậy, và gỡ ở đây là dứt hẳn (không thêm lại cho cùng các commit).",
+    "addedByBoard": "Board tự thêm",
+    "cannotBeDoneUnsure": "Board không chắc các commit này là của ai, nên không thêm yêu cầu nào. #{{id}} chưa thể xong cho đến khi branch của #{{need}} được merge vào branch gốc."
   },
   "verdict": {
     "approve": "Duyệt",
@@ -2096,11 +2092,15 @@
       "others": {
         "label": "Chờ người khác",
         "title": "PR của bạn (cả của agent): chờ duyệt, đã được mọi reviewer duyệt, hoặc đang tạm giữ vì bình luận của họ"
+      },
+      "all": {
+        "label": "Mọi PR",
+        "title": "Mọi PR đang mở của các repo, ai viết cũng được và có liên quan đến bạn hay không"
       }
     },
     "reviewers": {
-      "all": "Mọi PR",
-      "mine": "Chỉ tôi là reviewer"
+      "mine": "Chỉ tôi là reviewer",
+      "involving": "Liên quan đến tôi"
     },
     "tabs": {
       "pending": "Đang chờ",
@@ -2110,7 +2110,8 @@
     },
     "empty": {
       "me": "Không có PR {{stage}} cần review.",
-      "others": "Không có PR {{stage}} đang chờ người khác."
+      "others": "Không có PR {{stage}} đang chờ người khác.",
+      "all": "Không có PR {{stage}} trong các PR đang mở."
     },
     "refresh": "Làm mới",
     "mergeAfterTip": "Ticket của nó cần các PR này được merge trước:\n{{list}}",
@@ -2137,7 +2138,8 @@
     "holdTitle": "Tạm giữ #{{number}}",
     "holdText": "Một ghi chú cho bạn và các agent. GitHub không bị động đến.",
     "holdPlaceholder": "Vì sao phải chờ…",
-    "holdConfirm": "Tạm giữ"
+    "holdConfirm": "Tạm giữ",
+    "notInvolvingYou": "không liên quan đến bạn"
   },
   "workStatus": {
     "state": {
@@ -2318,7 +2320,15 @@
       "human": "chờ con người {{duration}}",
       "review": "đang review {{duration}}",
       "merge": "chờ merge {{duration}}"
-    }
+    },
+    "openReport": "Mở báo cáo của {{agent}}: {{label}}",
+    "openReportRound": "Mở báo cáo của {{agent}}, vòng {{round}}: {{label}}",
+    "reportDescription": "Báo cáo viết cho lượt chạy này",
+    "factsDescription": "Các thông tin của lượt chạy này",
+    "loadingReport": "Đang tải báo cáo lượt chạy…",
+    "reportsFailed": "Không tải được các báo cáo.",
+    "noReport": "Lượt chạy này không có báo cáo.",
+    "noReportYet": "Lượt chạy này chưa có báo cáo."
   },
   "roadmap": {
     "title": "Lộ trình",
@@ -2407,8 +2417,9 @@
     },
     "lost": {
       "title": "Mất liên lạc",
-      "link": "Mất liên lạc: <id>#{{id}}</id> {{title}}",
-      "detail": "{{agent}} · {{phase}} · {{since}} · tin cuối {{minutes}} phút trước"
+      "empty": "Không có ai mất liên lạc.",
+      "lastHeardTip": "Tin cuối {{when}}",
+      "lastHeard": "tin cuối cách đây {{duration}}"
     },
     "inProgress": {
       "title": "Đang làm",
@@ -2421,22 +2432,11 @@
       "closed": "đóng {{time}}",
       "activity_other": "Hôm nay có {{count}} việc xảy ra: Hằng ngày"
     },
-    "next": {
-      "title": "Tiếp theo",
-      "titleStage": "Tiếp theo: {{stage}}",
-      "empty": "Chưa xếp gì.",
-      "emptyStage": "Chưa xếp gì trong {{stage}}.",
-      "tasks": "{{done}}/{{total}} tác vụ",
-      "more": "thêm {{count}}",
-      "blocked": "{{count}} bị chặn",
-      "backlog": "{{count}} trong backlog",
-      "board": "Board"
-    },
     "carryingOver": {
       "title": "Còn tồn",
-      "empty": "Không có gì tồn từ trước hôm nay.",
       "startedTip": "Công việc bắt đầu {{when}}",
-      "days_other": "đang làm {{count}} ngày"
+      "days_other": "đang làm {{count}} ngày",
+      "emptyShown": "Không có gì bị chặn hay đang review từ trước hôm nay."
     }
   },
   "notifications": {
@@ -2483,17 +2483,13 @@
     "restoredToast": "Đã khôi phục về board",
     "disapprovedToast": "#{{id}} bị không duyệt và đã hủy",
     "undo": "Hoàn tác sẽ thu hồi việc không duyệt và đưa nó về {{stage}}.",
-    "undoMoved": "Hoàn tác sẽ thu hồi việc không duyệt và đưa nó về {{stage}}. Đã chuyển sang #{{next}}.",
     "undoAction": "Hoàn tác",
     "summary": "Tóm tắt",
-    "openedBy": "mở bởi <actor/> {{when}}",
     "updated": "cập nhật {{when}}",
     "archivedBy": "Được {{name}} lưu trữ {{when}}",
     "archivedByLane": "Được {{name}} lưu trữ {{when}}, cùng ticket mà nó là lane",
     "someone": "ai đó",
     "archivedBadge": "Đã lưu trữ",
-    "lanesWarningTip": "Ticket này được đánh dấu tiến xa hơn các lane của nó",
-    "lanesNotDone_other": "{{count}} lane chưa xong",
     "decisionNeeded": "cần quyết định",
     "archiveTip": "Đưa nó khỏi board, cùng các lane; Đã lưu trữ trên trang tính năng sẽ đưa nó về",
     "deleteTitle": "Xóa ticket này?",
@@ -2557,7 +2553,6 @@
     "newSubtaskOf": "Tác vụ con mới của {{name}}",
     "add": "Thêm",
     "addPhase": "Thêm giai đoạn: Implementation, Pushed, PR…",
-    "noCall": "Chưa quyết",
     "all": "Tất cả",
     "nounLane": "lane",
     "laneOf": "lane {{n}} trên {{count}}",
@@ -2567,13 +2562,10 @@
     "previousNoun": "{{noun}} trước",
     "nextNoun": "{{noun}} sau",
     "stepKeysTip": "[ và ] để lùi và tiến",
-    "lanesDone": "xong {{done}}/{{total}} · {{approved}} đã duyệt",
-    "lanesDisapproved": "{{count}} không duyệt",
     "lanesCancelled": "{{count}} đã hủy",
     "allTasks": "mọi tác vụ {{done}}/{{total}}",
     "noLanes": "Không có lane. Hãy tách ticket này thành các lane khi các phần của nó chạy song song: mỗi lane có branch, người được giao, tác vụ và cập nhật riêng.",
     "filterStage": "Cột",
-    "filterVerdict": "Kết luận",
     "filterTags": "Tag",
     "showing": "hiện {{shown}} trên {{total}}",
     "clearFilters": "xóa bộ lọc",
@@ -2643,7 +2635,14 @@
     "workspacesDesc": "Các worktree, branch con và sandbox của subagent mà agent đã mở cho ticket này.",
     "workspacesDescLanes": "Các worktree, branch con và sandbox của subagent mà agent đã mở cho ticket này và các lane của nó.",
     "noneYet": "Chưa có.",
-    "updatedLabel": "cập nhật"
+    "breadcrumb": "Đường dẫn",
+    "scrollSideUp": "Cuộn cột bên lên",
+    "scrollSideDown": "Cuộn cột bên xuống",
+    "workflow": "Quy trình",
+    "workflowOwn": "Theo quy trình {{workflow}}, đặt riêng cho ticket này.",
+    "workflowProject": "Theo quy trình của dự án ({{workflow}}).",
+    "workflowSteps": "Xem các bước",
+    "lanesProgress": "{{done}}/{{total}} xong"
   },
   "complexity": {
     "label": {
@@ -2652,12 +2651,12 @@
       "high": "Cao",
       "max": "Tối đa"
     },
-    "selectHint": "Thấp: không review. Vừa: một vòng review. Cao: tối đa ba. Tối đa: đến mười vòng, cho việc làm từ đầu; một tính năng trong codebase có sẵn không bao giờ là tối đa, dù khó đến đâu.",
-    "hint": {
-      "low": "Thấp: không review. Builder tự kiểm chứng.",
-      "mid": "Vừa: một vòng review.",
-      "high": "Cao: tối đa ba vòng review.",
-      "max": "Tối đa: đến mười vòng review, cho cả một trang web hoặc ứng dụng làm từ đầu, một sản phẩm mới hay một dịch vụ độc lập, và dừng ở vòng đầu tiên vượt qua. Một tính năng trong codebase có sẵn tối đa là cao, dù khó đến đâu."
+    "workflowHint": "Thấp: không có spec hay review trong quy trình Chuẩn. Vừa, Cao và Tối đa: số vòng review do quy trình của dự án đặt (Chuẩn: một, ba, tối đa mười). Tối đa dành cho công việc xây từ đầu; một tính năng trong codebase có sẵn không bao giờ là tối đa, dù khó đến đâu.",
+    "levelHint": {
+      "low": "Thấp: số vòng review do quy trình của dự án đặt (Chuẩn: không có). Builder tự kiểm chứng.",
+      "mid": "Vừa: số vòng review do quy trình của dự án đặt (Chuẩn: một).",
+      "high": "Cao: số vòng review do quy trình của dự án đặt (Chuẩn: tối đa ba).",
+      "max": "Tối đa: số vòng review do quy trình của dự án đặt (Chuẩn: tối đa mười), cho cả một site hay app xây từ đầu, một sản phẩm mới hoặc một dịch vụ độc lập, và dừng ở vòng đầu tiên đạt. Một tính năng trong codebase có sẵn tối đa là cao, dù khó đến đâu."
     }
   },
   "agentsAtWork": {
@@ -2695,6 +2694,266 @@
       "minutes_other": "{{count}} phút",
       "hours_other": "{{count}} giờ",
       "days_other": "{{count}} ngày"
+    }
+  },
+  "workflowChips": {
+    "selfTip": "Agent của ticket tự làm bước này",
+    "agentTip": {
+      "picked": "Agent của Nhóm được chọn cho bước này. Hướng dẫn của nó viết ở trang Nhóm. Vai trò ({{agent}}) đặt tên cho span và báo cáo lượt chạy của nó.",
+      "role": "Agent của Nhóm có tên như vai trò của nó ({{agent}}). Hướng dẫn của nó viết ở trang Nhóm. Vai trò ({{agent}}) đặt tên cho span và báo cáo lượt chạy của nó.",
+      "default": "Không có agent nào của Nhóm tên {{agent}}: nó chạy như vai trò {{agent}} có sẵn. Hướng dẫn của nó viết ở trang Nhóm. Vai trò ({{agent}}) đặt tên cho span và báo cáo lượt chạy của nó."
+    },
+    "agentMissing": "thiếu agent",
+    "missingTip": "{{picked}} được chọn cho bước này nhưng Nhóm hiện không có agent tên đó: nó chạy như {{name}} cho đến khi agent quay lại hoặc có agent khác được chọn.",
+    "locked": "Cố định",
+    "lockedAboveLow": "Cố định từ mức vừa",
+    "skippedOnLow": "Bỏ qua ở mức thấp",
+    "changed": "đã đổi",
+    "changedTip": "Khác với preset: {{what}}"
+  },
+  "workflowGraph": {
+    "label": "Quy trình {{label}} cho ticket mức {{complexity}}",
+    "complexity": {
+      "low": "thấp",
+      "mid": "vừa",
+      "high": "cao",
+      "max": "tối đa"
+    },
+    "roundSurvives": "vòng đạt",
+    "roundFails": "vòng không đạt",
+    "inParallel": "Song song",
+    "reviewRound": "Vòng review",
+    "noRoundsOn": "Không có vòng review ở mức {{complexity}}"
+  },
+  "workflowPanel": {
+    "idle": "Chọn một bước trong biểu đồ để xem nó làm gì và để đổi ai chạy nó, effort, có chạy hay không và vị trí trong thứ tự.",
+    "runnerAgents": "Agent của ticket tự chạy /feature-review. Các giai đoạn của nó chạy các agent của Nhóm riêng, chọn trên các nút giai đoạn.",
+    "selfAgent": "Agent của ticket tự làm bước này: không có agent của Nhóm để chọn.",
+    "whatItDoes": "Nó làm gì",
+    "handoffTo": "Bàn giao cho {{next}}",
+    "result": "Kết quả",
+    "team": {
+      "title": "Agent của Nhóm",
+      "default": "Mặc định ({{name}})",
+      "notInTeam": "{{name}} (không có trong Nhóm)",
+      "missing": "{{picked}} được chọn cho bước này, nhưng Nhóm hiện không có agent tên đó. Nó chạy như {{name}} cho đến khi agent quay lại hoặc có agent khác được chọn. Chọn Mặc định để bỏ lựa chọn.",
+      "runsAs": "Chạy như {{name}}. Hướng dẫn của nó viết ở trang Nhóm; vai trò ({{role}}) đặt tên cho span và báo cáo lượt chạy của nó.",
+      "runsAsDefault": "Chạy như {{name}} (agent có sẵn: Nhóm không có agent tên đó). Hướng dẫn của nó viết ở trang Nhóm; vai trò ({{role}}) đặt tên cho span và báo cáo lượt chạy của nó."
+    },
+    "placeInOrder": "Vị trí trong thứ tự",
+    "moveUp": "Chuyển lên",
+    "moveDown": "Chuyển xuống",
+    "moveUpTip": "Chuyển lên: {{step}} chạy sớm hơn",
+    "moveDownTip": "Chuyển xuống: {{step}} chạy muộn hơn",
+    "runs": "Chạy",
+    "run": "Chạy {{step}}",
+    "alsoRunOnLow": "Chạy {{step}} cả với ticket mức thấp",
+    "aboveLowNote": "Công tắc này chỉ quyết định nó có chạy cả với ticket mức thấp hay không.",
+    "effort": "Effort",
+    "effortHint": "Được truyền đi làm effort của công cụ Agent. {{hint}}.",
+    "reviewRuns": "Chạy {{total}} lượt /feature-review riêng biệt mỗi vòng: {{runs}}, mỗi lượt dưới tên agent riêng và không bao giờ thấy phát hiện của lượt kia.",
+    "survival": "<strong>Một vòng đạt khi</strong> {{survival}}."
+  },
+  "workflowPage": {
+    "title": "Quy trình",
+    "intro": "Cách một ticket đi từ To do đến bàn giao: các bước agent của nó chạy, theo thứ tự, ai chạy từng bước và mỗi bước bàn giao gì cho bước sau. Dự án theo một quy trình; một ticket có thể chọn quy trình khác ở trang của nó. Các agent đọc quy trình từ board, nên thay đổi ở đây được áp dụng từ lượt chạy kế tiếp của chúng.",
+    "graphShows": "Biểu đồ cho thấy một ticket mức {{complexity}}.",
+    "projectFollows": "Dự án theo quy trình này",
+    "use": "Dùng quy trình này",
+    "resetThis": "Đặt lại quy trình này",
+    "resetTitle": "Đặt lại quy trình {{label}}?",
+    "resetBody": "Thứ tự, công tắc, effort, agent của Nhóm và vòng review của nó quay về như preset {{label}} có sẵn. Các preset khác giữ những gì đã đổi trong chúng.",
+    "cancel": "Hủy",
+    "reset": "Đặt lại",
+    "sectionLabel": "Quy trình {{label}}",
+    "projects": "của dự án",
+    "summary_other": "{{count}} bước cho ticket mức {{complexity}} · review: {{rounds}}"
+  },
+  "workflowPresets": {
+    "group": "Preset quy trình",
+    "active": "Đang dùng",
+    "tweaked": "Đã chỉnh",
+    "complexity": "Độ phức tạp",
+    "stats_other": "{{count}} bước · vòng review {{rounds}}",
+    "light": {
+      "label": "Nhẹ",
+      "description": "Build, cổng kiểm tra, một reviewer, kiểm tra intent và bàn giao: không có agent spec, không có môi trường, không tách các lượt săn lỗi."
+    },
+    "standard": {
+      "label": "Chuẩn",
+      "description": "Chu trình đầy đủ: spec, build, cổng kiểm tra, các vòng review với spec, môi trường, verify, hai lượt săn lỗi độc lập, refute và kiểm tra merge, rồi kiểm tra intent, PR, CI, preview và bàn giao."
+    },
+    "thorough": {
+      "label": "Kỹ lưỡng",
+      "description": "Chuẩn cộng thêm một lượt viết test riêng, lượt săn lỗi thứ ba với danh sách kiểm tra bảo mật, kiểm tra intent ở cuối mỗi vòng review, và thêm một vòng review ở mọi mức trên thấp."
+    },
+    "maximum": {
+      "label": "Tối đa",
+      "description": "Kỹ lưỡng cộng thêm một spec thứ hai độc lập, một lượt review đầy đủ thứ hai của mỗi vòng bởi một agent khác không bao giờ thấy lượt đầu, và effort cao cho mọi agent."
+    }
+  },
+  "workflowReview": {
+    "legend": "Vòng review theo độ phức tạp",
+    "changed": "đã đổi",
+    "notSaved": "Chưa lưu: {{reason}}",
+    "default": "mặc định {{value}}"
+  },
+  "workflowReads": {
+    "title": "Những gì agent đọc",
+    "hint": "văn bản get_workflow trả về cho quy trình này",
+    "textLabel": "Văn bản quy trình"
+  },
+  "workflowSelect": {
+    "project": "Quy trình của dự án ({{label}})",
+    "hint": "Quy trình mà agent của nó theo: của riêng dự án, hoặc một trong bốn preset chỉ cho ticket này. Đổi quy trình của dự án không làm đổi ticket đã chọn một quy trình."
+  },
+  "workflowView": {
+    "noRounds": "không có vòng review",
+    "rounds_other": "{{count}} vòng",
+    "complexity": {
+      "low": "Thấp",
+      "mid": "Vừa",
+      "high": "Cao",
+      "max": "Tối đa"
+    },
+    "effort": {
+      "auto": "Tự động",
+      "low": "Thấp",
+      "medium": "Trung bình",
+      "high": "Cao"
+    },
+    "effortLevel": {
+      "low": "thấp",
+      "medium": "trung bình",
+      "high": "cao"
+    },
+    "autoLevel": "Tự động: {{level}}",
+    "autoEffortHint": "Tự động theo ticket: thấp cho ticket mức thấp, trung bình cho mức vừa và cao, cao cho mức tối đa",
+    "separator": ", ",
+    "you": "bạn",
+    "skippedNoRounds": "Không có vòng review",
+    "skippedOff": "Tắt",
+    "changed": {
+      "moved": "vị trí trong thứ tự",
+      "off": "đã tắt",
+      "effort": "effort của nó",
+      "agent": "agent của Nhóm cho nó"
+    },
+    "name": {
+      "agent": "agent {{name}}",
+      "locked": "cố định",
+      "skipsOnLow": "bỏ qua với ticket mức thấp"
+    },
+    "lockReason": {
+      "claim": "Cố định: không gì bắt đầu được trước khi ticket được đọc và nhận.",
+      "build": "Cố định: không có gì được giao nếu thay đổi chưa được build.",
+      "gate": "Cố định: không thay đổi nào đi tiếp mà chưa được kiểm tra.",
+      "intent": "Cố định từ mức vừa: mọi ticket trên mức thấp đều được đối chiếu với lời của chính con người trước khi bàn giao.",
+      "always": "Cố định: không có nó thì ticket không thể bàn giao."
+    },
+    "survival": {
+      "light": "reviewer không tái hiện được phát hiện nào và bằng chứng của builder bao phủ mọi tiêu chí chấp nhận",
+      "standard": "kết luận là SHIP, kiểm tra chạy được là YES, kiểm tra trên base là NO và mọi tiêu chí chấp nhận là PASS bằng thực thi (UNVERIFIED chỉ khi có lý do mà các quy tắc leo thang nêu tên và không thể vượt qua)",
+      "thoroughIntent": "kết luận là SHIP, kiểm tra chạy được là YES, kiểm tra trên base là NO và mọi tiêu chí chấp nhận là PASS bằng thực thi (UNVERIFIED chỉ khi có lý do mà các quy tắc leo thang nêu tên và không thể vượt qua), và kiểm tra intent ở cuối vòng khớp",
+      "maximum": "cả hai lượt review đều đạt ({{standard}}) và bước đối chiếu không để phát hiện nào còn mở",
+      "maximumIntent": "cả hai lượt review đều đạt ({{standard}}), bước đối chiếu không để phát hiện nào còn mở và kiểm tra intent ở cuối vòng khớp"
+    },
+    "move": {
+      "after": "{{step}} phải đứng sau {{other}}",
+      "stayFirst": "{{step}} phải ở đầu",
+      "stayLast": "{{step}} phải ở cuối",
+      "alreadyFirst": "{{step}} đã ở đầu",
+      "alreadyLast": "{{step}} đã ở cuối"
+    }
+  },
+  "backToModule": {
+    "back": "Quay lại {{label}}",
+    "home": "Trang chủ"
+  },
+  "ticketLine": {
+    "openedBy": "Mở bởi {{name}} ({{role}}) vào {{when}}",
+    "updated": "Cập nhật vào {{when}}",
+    "opened": "Mở vào {{when}}"
+  },
+  "resumeSettings": {
+    "title": "Tiếp tục",
+    "intro": "Agent hỏi một câu hỏi thì kết thúc lượt của nó. Với một lệnh ở đây, board tự tiếp tục công việc khi bạn trả lời một thẻ quyết định trên board, hoặc chuyển ticket từ cột bị chặn hay review về lại cột đang làm: nó chạy lệnh trên máy này, trong worktree của ticket, với câu hỏi và câu trả lời của bạn (hoặc những lời gần nhất của bạn) ở đầu vào chuẩn và trong tệp đặt tên bởi <code>BOARD_RESUME_PROMPT_FILE</code>; <code>BOARD_URL</code>, <code>BOARD_PROJECT_ID</code>, <code>BOARD_TICKET_ID</code> và <code>BOARD_AGENT_NAME</code> được đặt sẵn. Không có gì được khởi động cho ticket đang có agent hoạt động hoặc đang được tiếp tục. Lệnh chạy với quyền của người dùng board, và chỉ bạn đặt được. Để trống là tắt.",
+    "presets": "Preset",
+    "found": "tìm thấy",
+    "notFound": "không tìm thấy",
+    "command": "Lệnh tiếp tục",
+    "commandPlaceholder": "claude -p (để trống: tắt)",
+    "timeout": "Dừng sau (phút)",
+    "save": "Lưu",
+    "saving": "Đang lưu…",
+    "timeoutProblem": "Một số nguyên từ {{min}} đến {{max}}.",
+    "unsaved": "Có thay đổi chưa lưu.",
+    "noChanges": "Không có thay đổi.",
+    "off": "Tiếp tục tự động đang tắt."
+  },
+  "resumeCard": {
+    "title": "Tiếp tục",
+    "resume": "Tiếp tục",
+    "retry": "Thử lại",
+    "started": "Board đã bắt đầu lại công việc",
+    "empty": "Chưa có gì tiếp tục ticket này.",
+    "setInSettings": "Con người đặt trong cài đặt của dự án.",
+    "failed": "Board không tiếp tục được: {{reason}}",
+    "log": "Nhật ký",
+    "state": {
+      "queued": "Đang khởi động",
+      "running": "Đang chạy",
+      "succeeded": "Đã xong",
+      "failed": "Thất bại",
+      "skipped": "Không khởi động"
+    }
+  },
+  "runReportsWindow": {
+    "reports": "Báo cáo",
+    "reportsCount": "Báo cáo ({{n}})",
+    "title": "Báo cáo lượt chạy",
+    "description": "Các báo cáo lượt chạy của ticket này, có bộ lọc và sắp xếp. Mở một báo cáo để xem đầy đủ.",
+    "back": "Quay lại báo cáo",
+    "none": "Chưa có báo cáo lượt chạy.",
+    "noMatch": "Không có báo cáo nào khớp các bộ lọc này.",
+    "count_other": "{{shown}} trên {{count}} báo cáo",
+    "clearFilters": "Xóa bộ lọc",
+    "filter": {
+      "agent": "Agent",
+      "round": "Vòng",
+      "time": "Thời gian",
+      "difficulty": "Độ khó",
+      "confidence": "Độ tin cậy",
+      "duration": "Thời lượng",
+      "sortBy": "Sắp xếp theo"
+    },
+    "items": {
+      "allAgents": "Mọi agent",
+      "allRounds": "Mọi vòng",
+      "round": "Vòng {{n}}",
+      "noRound": "Không có vòng"
+    },
+    "time": {
+      "any": "Mọi lúc",
+      "hour": "Giờ qua",
+      "today": "Hôm nay",
+      "week": "7 ngày qua"
+    },
+    "duration": {
+      "any": "Bất kỳ",
+      "reported": "Có báo cáo",
+      "unreported": "Không báo cáo"
+    },
+    "rating": {
+      "any": "Bất kỳ",
+      "unrated": "Chưa đánh giá"
+    },
+    "sort": {
+      "newest": "Mới nhất",
+      "oldest": "Cũ nhất",
+      "longest": "Lâu nhất",
+      "difficulty": "Độ khó cao nhất",
+      "confidence": "Độ tin cậy cao nhất"
     }
   }
 }

@@ -79,7 +79,7 @@ describe("a project's layout", () => {
     expect(nav.map((it) => it.id)).toEqual([
       'nav.gallery',
       'nav.agents',
-      'nav.runReports',
+      'nav.workflow',
       'nav.daily',
       'nav.cleanup',
       'nav.repositories',
@@ -117,7 +117,7 @@ describe("a project's layout", () => {
       'overview.needsYou',
       'overview.agents',
       'overview.inProgress',
-      'overview.next',
+      'overview.lostContact',
       'overview.carryingOver',
       'overview.notes',
     ])

@@ -42,6 +42,7 @@ import type { AlertGroup, AlertSeverity } from '#/lib/alerts'
 import type { AlertButton } from '#/server/alerts/registry'
 import type { ManagedPreview } from '#/server/managedPreview'
 import type { OpencodeConfig } from '#/server/opencodeConfig'
+import type { ResumeView, ticketResume } from '#/server/resume'
 import type { RunState } from '#/server/runs'
 import type {
   AlsoRunning,
@@ -64,7 +65,16 @@ import type { ActorRole, ActorRow } from '#/server/actors'
 import type { AgentTokenRow } from '#/server/tokens'
 import type { LiveWork } from '#/server/liveWork'
 import type { ProjectWork, TicketEvent } from '#/server/workTimeline'
+import type { effectiveWorkflow, workflowOverview } from '#/server/workflow'
 import type { WorkTimeline } from './workTimeline'
+
+/** `/api/projects/:id/workflow`: the active preset and every preset with its tweaks and steps as a tree. */
+export type WorkflowOverview = ReturnType<typeof workflowOverview>
+/** `/api/projects/:id/workflow/effective`: the workflow a ticket (or a preset and complexity) follows, with its text. */
+export type WorkflowEffective = ReturnType<typeof effectiveWorkflow>
+/** What the ticket's Resume card reads: whether resuming is on, the resume in hand with its log tail, the earlier ones. */
+export type TicketResume = ReturnType<typeof ticketResume>
+export type TicketResumeRow = ResumeView
 
 /** A project as the API returns it: always with its repos. */
 export type Project = ProjectFull
@@ -112,7 +122,7 @@ export type {
   WorkspacePreview,
 }
 export type { ActorRole, ActorRow, AgentTokenRow, ProjectInstructionChange }
-export type { RunReport, RunReportRow } from './runReports'
+export type { RunReport } from './runReports'
 export type {
   PushedToday,
   ReportDue,
@@ -297,8 +307,8 @@ export interface TicketGit {
     worktree: Worktree | null
     lane: { id: number; title: string } | null
   })[]
-  /** Open tickets whose unmerged work the ticket's branch holds. */
-  includes: number[]
+  /** Open tickets whose unmerged work the ticket's branch holds, that the board could not tell for sure and added no need for. Only there with `?includes=1`. */
+  includes?: number[]
 }
 
 /** `/api/daily`: a day's activity, every write in order, with its project's name. */

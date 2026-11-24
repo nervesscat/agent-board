@@ -127,6 +127,7 @@ function prRow(projectId: number, n: number, extra: Partial<PrRow> = {}): PrRow 
     reviewDecision: null,
     myReview: 'none',
     requested: false,
+    involvesMe: true,
     waitingOn: 'me',
     reviewStage: 'pending',
     mergeable: 'MERGEABLE',
@@ -182,11 +183,18 @@ test('hovering shows what the title said, and each element stays what it was, wi
 
   // The ticket page.
   await page.goto(`/projects/${project.id}/features/${t.id}`)
-  const openedBy = page.locator('span').filter({ hasText: /^opened by / })
-  const actor = openedBy.locator('span[data-slot="tooltip-trigger"]')
-  await expectTooltip(actor, `${HUMAN} (Human): you, signed in with a passkey`)
+  const line = page.locator('[data-fact]').first().locator('..')
+  const actor = line.locator('span[data-slot="tooltip-trigger"]').first()
+  await expectTooltip(actor, new RegExp(`^Opened by ${HUMAN} \\(Human\\) on .+`))
   expect(await tagOf(actor)).toBe('span')
-  await expect(openedBy.getByRole('button')).toHaveCount(0)
+  await expect(line.locator('[data-fact]').getByRole('button')).toHaveCount(0)
+  // The times: the full date and time, and a screen reader hears it, not just "just now".
+  const opened = line.locator('[data-fact]').nth(1)
+  const updated = line.locator('[data-fact]').nth(2)
+  await expectTooltip(opened, /^Opened on .+\d/)
+  await expectTooltip(updated, /^Updated on .+\d/)
+  await expect(opened.locator('.sr-only')).toHaveText(/^Opened on .+\d/)
+  await expect(updated.locator('.sr-only')).toHaveText(/^Updated on .+\d/)
 
   // The post's actions: the same buttons, by the same names, each with its tooltip.
   const post = page.getByRole('article').filter({ hasText: 'A post to act on.' })
@@ -224,11 +232,8 @@ test('hovering shows what the title said, and each element stays what it was, wi
   // An agent's name.
   await page.goto(`/projects/${project.id}/features/${byAgent.id}`)
   await expectTooltip(
-    page
-      .locator('span')
-      .filter({ hasText: /^opened by / })
-      .locator('span[data-slot="tooltip-trigger"]'),
-    `${AGENT} (Agent): an agent, signed in with a token`,
+    page.locator('[data-fact]').first().locator('span[data-slot="tooltip-trigger"]'),
+    new RegExp(`^Opened by ${AGENT} \\(Agent\\) on .+`),
   )
 
   // The project's agents: icon buttons named as their tooltips say.
@@ -290,26 +295,42 @@ test('keyboard focus opens the same tooltip as hover, and leaving or Escape clos
   await expect(tooltip(page)).toHaveText('Attach files')
 })
 
-test('a tooltip of several lines keeps them, each on its own row', async ({ page, api, human, project }) => {
+test("the top bar's Connect and Settings are icon buttons with a tooltip, a name and an active state", async ({
+  page,
+}) => {
+  await page.goto('/')
+  const bar = page.getByRole('banner')
+  const connect = bar.getByRole('link', { name: 'Connect an agent', exact: true })
+  const settings = bar.getByRole('link', { name: 'Settings', exact: true })
+  // Icons, not words: each link holds one svg and no text of its own.
+  for (const link of [connect, settings]) {
+    await expect(link.locator('svg')).toHaveCount(1)
+    await expect(link).toHaveText('')
+  }
+  await expectTooltip(connect, 'Connect an agent')
+  await expectTooltip(settings, 'Settings')
+  // The same size as the notification bell beside them.
+  const size = async (l: Locator) => {
+    const b = (await l.boundingBox())!
+    return [Math.round(b.width), Math.round(b.height)]
+  }
+  expect(await size(connect)).toEqual(await size(bar.getByRole('button', { name: 'Notifications' })))
+
+  // Keyboard focus opens the tooltip too, and the page's own link is the active one.
+  await connect.focus()
+  await expect(tooltip(page)).toHaveText('Connect an agent')
+  await connect.click()
+  await expect(page).toHaveURL(/\/agents$/)
+  await expect(connect).toHaveAttribute('aria-current', 'page')
+  await expect(settings).not.toHaveAttribute('aria-current', 'page')
+  await settings.click()
+  await expect(page).toHaveURL(/\/settings$/)
+  await expect(settings).toHaveAttribute('aria-current', 'page')
+})
+
+test('a tooltip of several lines keeps them, each on its own row', async ({ page, api, project }) => {
   const base = await api.ticket({ title: 'Foundation', status: 'todo' })
   const t = await api.ticket({ title: 'Built on it', status: 'in_progress' })
-  await ok(human.patch(`/api/tickets/${t.id}`, { data: { needs: [base.id] } }))
-
-  const card = (await board(page, project.id))('in_progress', /Built on it/)
-  const needs = card.locator('span[data-slot="tooltip-trigger"]').filter({ hasText: `needs #${base.id}` })
-  await expectTooltip(needs, `Merge first:\n#${base.id} Foundation: not done, no branch`)
-  // The rows its text is drawn on.
-  const lines = await tooltip(page).evaluate((el) => {
-    const tops = new Set<number>()
-    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
-    for (let n = walk.nextNode(); n; n = walk.nextNode()) {
-      const range = document.createRange()
-      range.selectNodeContents(n)
-      for (const r of range.getClientRects()) if (r.width) tops.add(Math.round(r.top))
-    }
-    return tops.size
-  })
-  expect(lines).toBe(2)
 
   await stubQueue(page, project.id, [
     prRow(project.id, 9, {
@@ -331,6 +352,18 @@ test('a tooltip of several lines keeps them, each on its own row', async ({ page
     mergeAfter,
     `Its ticket needs these merged first:\nPR #7 (from #${base.id} Foundation)\nPR #8 (from #${t.id} Built on it)`,
   )
+  // The rows its text is drawn on.
+  const lines = await tooltip(page).evaluate((el) => {
+    const tops = new Set<number>()
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+      const range = document.createRange()
+      range.selectNodeContents(n)
+      for (const r of range.getClientRects()) if (r.width) tops.add(Math.round(r.top))
+    }
+    return tops.size
+  })
+  expect(lines).toBe(3)
 })
 
 test('a trigger that also opens a dialog, a select or a tab shows its tooltip and still does that', async ({
@@ -706,12 +739,7 @@ test('nested tooltips: the innermost shows, the outer one on its own part, never
   await expect(tooltip(page)).toHaveCount(1)
 })
 
-test("nested tooltips on a board card: the needs badge's own, the card's title around it", async ({
-  page,
-  api,
-  human,
-  project,
-}) => {
+test("a board card's title tooltip, with no needs badge on it", async ({ page, api, human, project }) => {
   await ok(human.post(`/api/projects/${project.id}/agents/defaults`, { data: {} }))
   const name = DEFAULT_AGENT_NAMES[0]
   const base = await api.ticket({ title: 'Underneath', status: 'todo' })
@@ -719,16 +747,9 @@ test("nested tooltips on a board card: the needs badge's own, the card's title a
   await ok(human.patch(`/api/tickets/${t.id}`, { data: { needs: [base.id], assignee: name } }))
 
   const card = (await board(page, project.id))('in_progress', /On the card/)
-  const needs = card.locator('span[data-slot="tooltip-trigger"]').filter({ hasText: `needs #${base.id}` })
-  const needsTip = `Merge first:\n#${base.id} Underneath: not done, no branch`
-  await expectTooltip(needs, needsTip)
-  await expect(tooltip(page)).toHaveCount(1)
-  // From the badge onto the card's own padding, and back: one bubble each time, the one under the pointer.
+  await expect(card).not.toContainText('needs #')
   await card.hover({ position: { x: 4, y: 4 } })
   await expect(tooltip(page)).toHaveText('On the card')
-  await expect(tooltip(page)).toHaveCount(1)
-  await needs.hover()
-  await expect(tooltip(page)).toHaveText(needsTip)
   await expect(tooltip(page)).toHaveCount(1)
   // The card leaves who holds the ticket to the ticket page: its assignee is not on it.
   await expect(card.getByText(name)).toHaveCount(0)

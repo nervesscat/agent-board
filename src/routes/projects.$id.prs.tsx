@@ -40,10 +40,12 @@ import { recall, remember, useRestoreRemembered, whenArrived } from '#/lib/remem
 import { anchorId, cameBack, useAnchor, useReveal } from '#/lib/reveal'
 
 // ?result=<id> opens that review result over the queue (a verdict on a card links there); ?filter= is
-// the filter picked (none, or one no longer offered such as an old `all`: the one this browser
-// remembers, else To review); ?reviewer= is the To review switch picked (All PRs, or Just me as
-// reviewer: none, or a value no longer offered: the one this browser remembers, else All PRs). A link
-// lands on a PR's card as #pr-<id>, on a reply to the review result as #reply-<id> (src/lib/reveal.ts).
+// the filter picked (none, or one not offered: the one this browser remembers, else To review);
+// ?reviewer= is the To review switch picked (Involving me, or Just me as reviewer: none, or a value
+// not offered: the one this browser remembers, else Involving me; its value stays `all`, so an old
+// link keeps its meaning). A link that names the switch and no filter is for To review, whatever
+// filter this browser remembers. A link lands on a PR's card as #pr-<id>, on a reply to the review
+// result as #reply-<id> (src/lib/reveal.ts).
 export const Route = createFileRoute('/projects/$id/prs')({
   component: PrQueue,
   validateSearch: z.object({
@@ -55,10 +57,13 @@ export const Route = createFileRoute('/projects/$id/prs')({
 
 const TABS = [{ key: 'pending' }, { key: 'reviewed' }, { key: 'on_hold' }, { key: 'done' }] as const
 
-const FILTERS: { key: PrFilter }[] = [{ key: 'me' }, { key: 'others' }]
+const FILTERS: { key: PrFilter }[] = [{ key: 'me' }, { key: 'others' }, { key: 'all' }]
 // The To review switch, in the same tab row as the filters: the whole side, or the PRs whose review
 // GitHub still asks of me (`requested`). Shown only while To review is picked.
-const REVIEWERS: { key: PrReviewer }[] = [{ key: 'all' }, { key: 'mine' }]
+const REVIEWERS: { key: PrReviewer; label: 'prQueue.reviewers.involving' | 'prQueue.reviewers.mine' }[] = [
+  { key: 'all', label: 'prQueue.reviewers.involving' },
+  { key: 'mine', label: 'prQueue.reviewers.mine' },
+]
 // A tab's underline, drawn by the line style only (these are the default style), hangs 5px below it:
 // without it, nothing of a tab reaches outside its list, so the list has nothing to scroll.
 const NO_UNDERLINE = 'after:hidden'
@@ -93,15 +98,19 @@ function PrQueue() {
   const { data: project } = useProject(id)
   // The tab and the list both follow the URL, so the server's render and the browser's agree.
   const filter = picked ?? 'me'
-  // The switch is To review's alone (Waiting on others has no narrowing): All PRs elsewhere.
+  // The switch is To review's alone (the other choices have no narrowing): Involving me elsewhere.
   const reviewer = pickedReviewer ?? 'all'
+  // A link that names the switch and no filter is for To review: it is read once, as the page opens,
+  // since the remembered switch is later put in the URL too.
+  const [forReview] = useState(pickedReviewer !== undefined)
+  const unnamed = forReview ? 'me' : undefined
   // Whether the stage or the filter shown is one the reader picked, since a link last set the stage.
   const picks = useRef(false)
   // Put in the URL for the reader (the remembered one, or the one that shows a linked PR): the link's
   // anchor stays. A filter the reader picks ends what the link had to show.
   const showFilter = (f: PrFilter) =>
     navigate({ search: (s) => ({ ...s, filter: f }), hash: true, replace: true })
-  useRestoreRemembered(FILTER_KEY, picked, PR_FILTERS, showFilter)
+  useRestoreRemembered(FILTER_KEY, picked ?? unnamed, PR_FILTERS, showFilter)
   // The switch's choice is kept the same way: in the URL (so a reload and a link keep it) and in this
   // browser for a visit without one.
   const showReviewer = (r: PrReviewer) =>
@@ -132,8 +141,8 @@ function PrQueue() {
 
   const anchor = useAnchor()
   // The PR a link lands on: its stage's tab, once per link, and the filter and the switch that show it
-  // (the side it waits on, and All PRs if Just me as reviewer hides it) when what is in the URL (once
-  // it is there, remembered or not) hides it.
+  // (the side it waits on, and Involving me if Just me as reviewer hides it; All PRs for one that
+  // involves me not) when what is in the URL (once it is there, remembered or not) hides it.
   const linkedId = anchorId(anchor?.holder ?? anchor?.target, 'pr')
   const linked = data?.find((p) => p.id === linkedId)
   // The filter and the switch this browser remembers, read after mount: undefined for none, null
@@ -144,9 +153,9 @@ function PrQueue() {
     setRemembered(recall(FILTER_KEY, PR_FILTERS))
     setRememberedReviewer(recall(REVIEWER_KEY, PR_REVIEWERS))
   }, [])
-  // What the list stays on: the filter and the switch in the URL, else To review and All PRs once
+  // What the list stays on: the filter and the switch in the URL, else To review and Involving me once
   // nothing remembered is to be put there; null while that is not known yet.
-  const staying = picked ?? (remembered === undefined ? 'me' : null)
+  const staying = picked ?? unnamed ?? (remembered === undefined ? 'me' : null)
   const stayingReviewer = pickedReviewer ?? (rememberedReviewer === undefined ? 'all' : null)
   // The anchor is brought into view once the list it is in has settled: the remembered filter and
   // switch put in the URL, then switched to what shows the linked PR if that hides it. Each switch
@@ -194,10 +203,12 @@ function PrQueue() {
       }
       // Once the move to the page has finished, as the remembered filter (`whenArrived`): the PRs may
       // be drawn from the cache as it mounts. A render before then that changes what this reads waits
-      // again. Both changes go in one move: the PR's side, and All PRs if that side is To review and
-      // the switch would hide it. Neither is remembered: they are for this visit, as the filter is.
+      // again. Both changes go in one move: the PR's side, and Involving me if that side is To review
+      // and the switch would hide it. A PR that involves me not is shown by All PRs alone. Neither is
+      // remembered: they are for this visit, as the filter is.
       return whenArrived(router, () => {
         switchedFor.current = hash
+        if (!linked.involvesMe) return showFilter('all')
         const narrows = stayingReviewer === 'mine' && !linked.requested
         if (linked.waitingOn !== 'me' || !narrows) return showFilter(linked.waitingOn)
         navigate({
@@ -216,11 +227,12 @@ function PrQueue() {
           <h1 className="text-xl font-semibold tracking-tight">{tr('prQueue.title')}</h1>
           <p className="text-sm text-muted-foreground">{tr('prQueue.subtitle')}</p>
         </div>
-        {/* The filter row, the switch and Refresh wrap among themselves and, when they cannot sit
-            beside the title, onto a line of their own: a phone shows no sideways scroll. */}
+        {/* The filter choices and Refresh sit top right on every filter, and wrap among themselves and,
+            when they cannot sit beside the title, onto a line of their own: a phone shows no sideways scroll. */}
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <Tabs value={filter} onValueChange={(v) => pickFilter(v as PrFilter)}>
-            <TabsList>
+          <Tabs value={filter} onValueChange={(v) => pickFilter(v as PrFilter)} className="max-w-full">
+            {/* Three choices with their counts do not fit one row of a phone: there they wrap onto a second. */}
+            <TabsList className="max-w-full flex-wrap group-data-horizontal/tabs:h-auto sm:flex-nowrap sm:group-data-horizontal/tabs:h-8">
               {FILTERS.map((f) => (
                 <Tip key={f.key} content={tr(`prQueue.filters.${f.key}.title`)}>
                   <TabsTrigger value={f.key} className={NO_UNDERLINE}>
@@ -233,17 +245,6 @@ function PrQueue() {
               ))}
             </TabsList>
           </Tabs>
-          {filter === 'me' && (
-            <Tabs value={reviewer} onValueChange={(v) => pickReviewer(v as PrReviewer)}>
-              <TabsList>
-                {REVIEWERS.map((r) => (
-                  <TabsTrigger key={r.key} value={r.key} className={NO_UNDERLINE}>
-                    {tr(`prQueue.reviewers.${r.key}`)}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          )}
           <Button
             variant="outline"
             size="sm"
@@ -270,6 +271,20 @@ function PrQueue() {
           // Four stages do not fit one row on a phone: there they take two rows of two, so every stage
           // and its count shows without the list or the page scrolling.
           listClassName="grid w-full grid-cols-2 group-data-horizontal/tabs:h-auto sm:inline-flex sm:w-fit sm:group-data-horizontal/tabs:h-8"
+          // The To review switch sits on the stages' row, to its right, and shows only there.
+          trailing={
+            filter === 'me' ? (
+              <Tabs value={reviewer} onValueChange={(v) => pickReviewer(v as PrReviewer)}>
+                <TabsList>
+                  {REVIEWERS.map((r) => (
+                    <TabsTrigger key={r.key} value={r.key} className={NO_UNDERLINE}>
+                      {tr(r.label)}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            ) : undefined
+          }
         >
           {TABS.map((t) => (
             <TabsContent key={t.key} value={t.key} className="space-y-2">
@@ -387,7 +402,14 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
                 })}
               </span>
             )}
-            <span>· {pr.waitingOn === 'me' ? tr('prQueue.forYourReview') : tr('prQueue.yourPr')}</span>
+            <span>
+              ·{' '}
+              {!pr.involvesMe
+                ? tr('prQueue.notInvolvingYou')
+                : pr.waitingOn === 'me'
+                  ? tr('prQueue.forYourReview')
+                  : tr('prQueue.yourPr')}
+            </span>
           </div>
           {pr.open && <PrState pr={pr} className="mt-1.5" />}
           {pr.tickets.length > 0 && (

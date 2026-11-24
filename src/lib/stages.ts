@@ -16,11 +16,22 @@ export const newTicketStage = (stages: StageLike[]): StageLike | undefined =>
 
 export const isClosed = (kind: StageKind) => kind === 'done' || kind === 'cancelled'
 
+/**
+ * The stage keys Overview's Carrying over lists: the project's blocked stages and its In review stage,
+ * the first of kind review. Approved and Release have kinds of their own, so they are never "in review";
+ * a later stage of kind review is not either.
+ */
+export function carryingOverStages(stages: StageLike[]): Set<string> {
+  const inReview = stages.find((s) => s.kind === 'review')
+  return new Set(stages.filter((s) => s.kind === 'blocked' || s === inReview).map((s) => s.key))
+}
+
 export const STAGE_KIND_LABEL: Record<StageKind, string> = {
   open: 'Open',
   active: 'Active',
   blocked: 'Blocked',
   review: 'Review',
+  approved: 'Approved',
   done: 'Done',
   cancelled: 'Cancelled',
 }
@@ -162,18 +173,4 @@ export function positionBy(column: Card[], id: number, anchor: number, side: 'ab
   const rest = column.filter((t) => t.id !== id)
   const i = rest.findIndex((t) => t.id === anchor)
   return i < 0 ? null : side === 'above' ? i + 1 : i + 2
-}
-
-/**
- * In one column in order, the tickets each card sits above while it needs them merged first: the
- * "merge after #N" a review column shows where its order and the needs disagree.
- */
-export function mergeAfter<T extends Card & { needs: { id: number; merged: boolean }[] }>(column: T[]) {
-  const out = new Map<number, number[]>()
-  column.forEach((t, i) => {
-    const below = new Set(column.slice(i + 1).map((x) => x.id))
-    const ids = t.needs.filter((n) => !n.merged && below.has(n.id)).map((n) => n.id)
-    if (ids.length) out.set(t.id, ids)
-  })
-  return out
 }

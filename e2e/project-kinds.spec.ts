@@ -63,6 +63,7 @@ test('a project with no software kind hides its git pages in the menu, and its s
   await expect(nav.getByRole('link', { name: 'Overview' })).toBeVisible()
   await expect(nav.getByRole('link', { name: 'PR queue' })).toHaveCount(0)
   await expect(nav.getByRole('link', { name: 'Previews' })).toHaveCount(0)
+  await expect(nav.getByRole('link', { name: 'Workflow' })).toHaveCount(0)
   await expect(nav.getByRole('link', { name: 'Cleanup' })).toHaveCount(0)
   await expect(nav.getByRole('link', { name: 'Repositories' })).toHaveCount(0)
 
@@ -276,8 +277,9 @@ test('an agent cannot close a hand-off, and approving a ticket that names a repo
     }),
   )
   await ok(human.put(`/api/tickets/${named.id}/approval`, { data: { verdict: 'approved' } }))
+  // It moves to Approved, a stage of its own kind, not to a done stage.
   expect((await ok<{ stage: { kind: string } }>(human.get(`/api/tickets/${named.id}`))).stage.kind).toBe(
-    'review',
+    'approved',
   )
 })
 

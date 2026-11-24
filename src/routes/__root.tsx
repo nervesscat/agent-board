@@ -8,9 +8,10 @@ import {
   createRootRouteWithContext,
 } from '@tanstack/react-router'
 import type { i18n as I18n } from 'i18next'
-import { Menu } from 'lucide-react'
+import { Menu, Plug, Settings } from 'lucide-react'
 import { Fragment, useEffect, useState } from 'react'
 import { I18nextProvider, useTranslation } from 'react-i18next'
+import { cn } from 'cn'
 
 import { CrossBoardMark } from '#/components/CrossBoardMark'
 import { CommandPalette } from '#/components/CommandPalette'
@@ -24,7 +25,7 @@ import { ReportDueBanner } from '#/components/ReportDueBanner'
 import { UpdateCard } from '#/components/UpdateCard'
 import { UpdateBadge } from '#/components/Updates'
 import { Badge } from '#/components/ui/badge'
-import { Button } from '#/components/ui/button'
+import { Button, buttonVariants } from '#/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
 import { Toaster } from '#/components/ui/sonner'
 import { Tip, TooltipProvider } from '#/components/ui/tooltip'
@@ -96,11 +97,12 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 /**
  * The board-wide pages, on the right of the top bar. Under `md` they fold into a menu: between `sm` and
  * `md` the lockup, the auth-off badge, the project switcher and the links do not fit on one row.
- * A project's pages, Daily among them, are in its own menu beside the page.
+ * A project's pages, Daily among them, are in its own menu beside the page. Beside the search and the
+ * notifications they are icon buttons with a tooltip (`name`); in the menu they keep their words.
  */
 const PAGES = [
-  { to: '/agents', label: 'shell.connect' },
-  { to: '/settings', label: 'shell.settings' },
+  { to: '/agents', label: 'shell.connect', name: 'shell.connectAgent', Icon: Plug },
+  { to: '/settings', label: 'shell.settings', name: 'shell.settings', Icon: Settings },
 ] as const
 
 /**
@@ -150,15 +152,20 @@ function Board() {
             <GettingStartedEntry />
             <NotificationCenter />
           </div>
-          <div className="hidden items-center gap-5 md:flex">
+          <div className="hidden items-center gap-2 md:flex">
             {PAGES.map((p) => (
-              <Link
-                key={p.to}
-                to={p.to}
-                className="text-muted-foreground hover:text-foreground [&.active]:text-foreground"
-              >
-                {t(p.label)}
-              </Link>
+              <Tip key={p.to} content={t(p.name)}>
+                <Link
+                  to={p.to}
+                  aria-label={t(p.name)}
+                  className={cn(
+                    buttonVariants({ variant: 'ghost', size: 'icon' }),
+                    '[&.active]:bg-muted [&.active]:text-foreground',
+                  )}
+                >
+                  <p.Icon />
+                </Link>
+              </Tip>
             ))}
           </div>
           <PagesMenu />

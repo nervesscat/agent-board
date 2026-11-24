@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useLocation, useNavigate, useParams, useSearch } from '@tanstack/react-router'
+import { useLocation, useNavigate, useSearch } from '@tanstack/react-router'
 import { Check, ChevronsUpDown, FolderGit2, Plus, Settings2 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -32,7 +32,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover
 import { Tip } from '#/components/ui/tooltip'
 import { del, errorMessage, patch, post, type Project, type ProjectRow } from '#/lib/api'
 import { type Kind, DEFAULT_KINDS } from '#/lib/kinds'
-import { useProjects } from '#/lib/project'
+import { rememberCurrentProject, useProjects, useSelectedProject } from '#/lib/project'
 import { projectTabSearch, validateSettingsSearch } from '#/lib/settingsTabs'
 import { useHydrated } from '#/lib/useHydrated'
 
@@ -43,12 +43,12 @@ const MODULES = ['overview', 'prs', 'features', 'daily', 'settings'] as const
 export function ProjectSwitcher() {
   const { t } = useTranslation()
   const { data: projects } = useProjects()
-  const params = useParams({ strict: false }) as { id?: string }
   const { pathname } = useLocation()
   // On the Settings page's project tab the project is the address's.
   const search = validateSettingsSearch(useSearch({ strict: false }) as Record<string, unknown>)
   const onProjectTab = pathname === '/settings' && search.tab === 'project' && search.project !== undefined
-  const id = params.id ?? (onProjectTab ? String(search.project) : undefined)
+  // Connect an agent and the Settings page keep the project the browser was last in selected.
+  const id = useSelectedProject()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -60,13 +60,18 @@ export function ProjectSwitcher() {
   const module = onProjectTab
     ? 'settings'
     : (MODULES.find((m) => (pathname.split('/')[3] || 'overview') === m) ?? 'overview')
+  // Where the page does not use the project (Connect, the Settings page's Board tab) a new one is only
+  // selected: the page stays, and its back button goes to the new project's Overview.
+  const stays = !onProjectTab && (pathname === '/agents' || pathname === '/settings')
   const go = (projectId: number | string) =>
-    module === 'settings'
-      ? navigate({ to: '/settings', search: projectTabSearch(projectId) })
-      : navigate({
-          to: module === 'overview' ? '/projects/$id' : `/projects/$id/${module}`,
-          params: { id: String(projectId) },
-        })
+    stays
+      ? rememberCurrentProject(projectId)
+      : module === 'settings'
+        ? navigate({ to: '/settings', search: projectTabSearch(projectId) })
+        : navigate({
+            to: module === 'overview' ? '/projects/$id' : `/projects/$id/${module}`,
+            params: { id: String(projectId) },
+          })
   const item =
     'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground'
 

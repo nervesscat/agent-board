@@ -35,7 +35,6 @@
     "previews": "Preview লোড হচ্ছে…",
     "repositories": "রিপোজিটরি লোড হচ্ছে…",
     "roadmap": "রোডম্যাপ লোড হচ্ছে…",
-    "runReports": "রান রিপোর্ট লোড হচ্ছে…",
     "earlierVersions": "আগের সংস্করণ লোড হচ্ছে…",
     "workspaces": "Workspace লোড হচ্ছে…"
   },
@@ -46,7 +45,8 @@
     "settings": "সেটিংস",
     "testMode": "টেস্ট মোড",
     "authOff": "auth বন্ধ",
-    "authOffTip": "BOARD_ENV={{env}}, সাইন-ইন বন্ধ: {{actor}} হিসেবে সাইন ইন করা। এটি লাইভ বোর্ড নয়।"
+    "authOffTip": "BOARD_ENV={{env}}, সাইন-ইন বন্ধ: {{actor}} হিসেবে সাইন ইন করা। এটি লাইভ বোর্ড নয়।",
+    "connectAgent": "এজেন্ট সংযুক্ত করুন"
   },
   "time": {
     "never": "—",
@@ -480,7 +480,8 @@
       "blocked": "আটকে আছে",
       "review": "রিভিউ",
       "done": "সম্পন্ন",
-      "cancelled": "বাতিল"
+      "cancelled": "বাতিল",
+      "approved": "অনুমোদিত"
     },
     "hint": {
       "open": "নেওয়ার অপেক্ষায়; দাবি করলে কাজ শুরুর ধাপে চলে যায়",
@@ -488,7 +489,8 @@
       "blocked": "আপনার অপেক্ষায়",
       "review": "রিভিউয়ের জন্য হস্তান্তরিত",
       "done": "শেষ; দাবি করা যায় না",
-      "cancelled": "বাদ; অননুমোদন করলে ticket এখানে আসে, আর তার কাজগুলো অগ্রগতি থেকে বাদ যায়"
+      "cancelled": "বাদ; অননুমোদন করলে ticket এখানে আসে, আর তার কাজগুলো অগ্রগতি থেকে বাদ যায়",
+      "approved": "merge করার জন্য আপনার সম্মতি; কোনো এজেন্ট ticket এখানে সরায় না"
     },
     "color": {
       "gray": "ধূসর",
@@ -611,20 +613,20 @@
         "previews": "Preview",
         "gallery": "গ্যালারি",
         "agents": "টিম",
-        "runReports": "রান রিপোর্ট",
         "daily": "দৈনিক",
         "cleanup": "Cleanup",
         "repositories": "রিপোজিটরি",
-        "instructions": "নির্দেশনা"
+        "instructions": "নির্দেশনা",
+        "workflow": "ওয়ার্কফ্লো"
       },
       "overview": {
         "needsYou": "আপনার অপেক্ষায়",
         "inProgress": "চলছে",
         "doneToday": "আজ সম্পন্ন",
-        "next": "পরবর্তী",
         "carryingOver": "চলমান থেকে যাওয়া",
         "notes": "নোট",
-        "agents": "কর্মরত এজেন্ট"
+        "agents": "কর্মরত এজেন্ট",
+        "lostContact": "যোগাযোগ হারিয়েছে"
       },
       "ticket": {
         "instructions": "নির্দেশনা",
@@ -635,7 +637,8 @@
         "runs": "রান",
         "details": "বিবরণ",
         "branch": "Branch",
-        "workspaces": "Workspace"
+        "workspaces": "Workspace",
+        "resume": "পুনরায় চালু"
       }
     },
     "locked": {
@@ -1478,21 +1481,7 @@
     "dialogTitleEmpty": "রান রিপোর্ট",
     "round": "রাউন্ড {{round}}",
     "difficultyShort": "কাঠিন্য {{n}}/5",
-    "confidenceShort": "আস্থা {{n}}/5",
-    "panelTitle": "রান রিপোর্ট",
-    "panelHeading_one": "রান রিপোর্ট · {{count}}টি রান",
-    "panelHeading_other": "রান রিপোর্ট · {{count}}টি রান",
-    "pageTitle": "রান রিপোর্ট",
-    "pageText": "প্রতিটি সাব-এজেন্ট রান কেমন গেল, তার নিজের কথায়। প্রতি রানে একটি রিপোর্ট; একটি রিভিউ রাউন্ডে তার প্রতিটি এজেন্টের একটি করে থাকে।",
-    "allAgents": "সব এজেন্ট",
-    "agent": "এজেন্ট",
-    "ticketPlaceholder": "Ticket #",
-    "ticketNumber": "Ticket নম্বর",
-    "filter": "ফিল্টার",
-    "clear": "সাফ করুন",
-    "emptyFiltered": "ওই ফিল্টারের জন্য কোনো রান রিপোর্ট নেই।",
-    "empty": "এখনও কোনো রান রিপোর্ট নেই।",
-    "openTicket": "ticket খুলুন"
+    "confidenceShort": "আস্থা {{n}}/5"
   },
   "projectAgents": {
     "title": "টিম",
@@ -1631,7 +1620,8 @@
     "tagsPlaceholder": "High, Forms",
     "branchesOff": "একই repo-তে হলে <branch>{{branch}}</branch> থেকে branch হয়।",
     "uploading": "আপলোড হচ্ছে…",
-    "create": "তৈরি করুন"
+    "create": "তৈরি করুন",
+    "workflow": "ওয়ার্কফ্লো"
   },
   "notes": {
     "title": "নোট",
@@ -1885,6 +1875,11 @@
         "title": "সেটিংস",
         "subtitle": "পুরো বোর্ডের পছন্দ",
         "keywords": "পছন্দ, থিম, preview, ডিভাইস, settings"
+      },
+      "workflow": {
+        "title": "ওয়ার্কফ্লো",
+        "subtitle": "ticket-এর জন্য এজেন্টরা যে পদক্ষেপগুলো অনুসরণ করে, গাছের আকারে",
+        "keywords": "পদক্ষেপ, প্রিসেট, রিভিউ রাউন্ড, হ্যান্ড-অফ, ডেলিগেশন, ক্রম, workflow, steps, presets"
       }
     },
     "setting": {
@@ -2050,7 +2045,6 @@
   },
   "ticketBoard": {
     "stage": "ধাপ",
-    "mergeAfter": "{{list}}-এর পরে merge",
     "archiveTip_one": "{{stage}}-এর {{count}}টি ticket আর্কাইভ করুন",
     "archiveTip_other": "{{stage}}-এর {{count}}টি ticket আর্কাইভ করুন",
     "archiveAll": "সব আর্কাইভ",
@@ -2075,9 +2069,7 @@
     "nothingArchived": "কিছু আর্কাইভ হয়নি।",
     "archived": "আর্কাইভ হয়েছে {{when}}",
     "archivedBy": "<actor/> আর্কাইভ করেছে {{when}}",
-    "restore": "ফিরিয়ে আনুন",
-    "laneApproved_one": "{{count}}টি অনুমোদিত",
-    "laneApproved_other": "{{count}}টি অনুমোদিত"
+    "restore": "ফিরিয়ে আনুন"
   },
   "ticketList": {
     "archivedToast_one": "{{count}}টি ticket আর্কাইভ হয়েছে",
@@ -2121,8 +2113,10 @@
     "addPlaceholder": "ticket যোগ করুন…",
     "noOthers": "অন্য কোনো ticket নেই",
     "includes": "<goto>{{ref}}</goto> থেকে অ-merge করা কাজ অন্তর্ভুক্ত",
-    "cannotBeDone": "#{{need}}-এর branch তার বেসে merge না হওয়া পর্যন্ত #{{id}} সম্পন্ন করা যায় না",
-    "addAsNeed": "নির্ভরতা হিসেবে যোগ"
+    "addAsNeed": "নির্ভরতা হিসেবে যোগ",
+    "autoTitle": "বোর্ড যোগ করেছে: এই ticket-এর branch-এ ওই ticket-এর অ-merge করা commit আছে। branch-এ আর তা না থাকলে এটি চলে যায়, আর এখানে সরালে সেটাই থাকে (একই commit-এর জন্য আবার যোগ হয় না)।",
+    "addedByBoard": "বোর্ড যোগ করেছে",
+    "cannotBeDoneUnsure": "এই commit-গুলো কার, বোর্ড নিশ্চিত বলতে পারে না, তাই কোনো নির্ভরতা যোগ করেনি। #{{need}}-এর branch তার base-এ merge না হওয়া পর্যন্ত #{{id}} সম্পন্ন হতে পারে না।"
   },
   "verdict": {
     "approve": "অনুমোদন",
@@ -2161,11 +2155,15 @@
       "others": {
         "label": "অন্যের অপেক্ষায়",
         "title": "আপনার PR (এজেন্টদেরও): অনুমোদনের অপেক্ষায়, প্রতিটি রিভিউয়ার অনুমোদন করেছে, বা তাদের মন্তব্যে স্থগিত"
+      },
+      "all": {
+        "label": "সব PR",
+        "title": "repo-গুলোর প্রতিটি খোলা PR, যে-ই লিখুক এবং আপনার সঙ্গে জড়িত হোক বা না হোক"
       }
     },
     "reviewers": {
-      "all": "সব PR",
-      "mine": "শুধু আমি রিভিউয়ার"
+      "mine": "শুধু আমি রিভিউয়ার",
+      "involving": "আমি জড়িত"
     },
     "tabs": {
       "pending": "অপেক্ষমাণ",
@@ -2175,7 +2173,8 @@
     },
     "empty": {
       "me": "রিভিউ করার মতো {{stage}} কিছু নেই।",
-      "others": "অন্যের অপেক্ষায় {{stage}} কিছু নেই।"
+      "others": "অন্যের অপেক্ষায় {{stage}} কিছু নেই।",
+      "all": "খোলা PR-গুলোর মধ্যে {{stage}} কিছু নেই।"
     },
     "refresh": "রিফ্রেশ",
     "mergeAfterTip": "এর ticket-এর জন্য আগে এগুলো merge হওয়া দরকার:\n{{list}}",
@@ -2202,7 +2201,8 @@
     "holdTitle": "#{{number}} স্থগিত করুন",
     "holdText": "আপনার ও এজেন্টদের জন্য একটি নোট। GitHub ছোঁয়া হয় না।",
     "holdPlaceholder": "কেন অপেক্ষায়…",
-    "holdConfirm": "স্থগিত"
+    "holdConfirm": "স্থগিত",
+    "notInvolvingYou": "আপনি জড়িত নন"
   },
   "workStatus": {
     "state": {
@@ -2385,7 +2385,15 @@
       "human": "{{duration}} মানুষের অপেক্ষায়",
       "review": "{{duration}} রিভিউতে",
       "merge": "{{duration}} merge-এর অপেক্ষায়"
-    }
+    },
+    "openReport": "{{agent}}-এর রিপোর্ট খুলুন: {{label}}",
+    "openReportRound": "{{agent}}-এর রিপোর্ট খুলুন, রাউন্ড {{round}}: {{label}}",
+    "reportDescription": "এই রানের জন্য লেখা রিপোর্ট",
+    "factsDescription": "এই রানের তথ্য",
+    "loadingReport": "রান রিপোর্ট লোড হচ্ছে…",
+    "reportsFailed": "রিপোর্টগুলো লোড করা যায়নি।",
+    "noReport": "এই রানের কোনো রিপোর্ট নেই।",
+    "noReportYet": "এই রানের রিপোর্ট এখনও নেই।"
   },
   "roadmap": {
     "title": "রোডম্যাপ",
@@ -2479,8 +2487,9 @@
     },
     "lost": {
       "title": "যোগাযোগ হারিয়েছে",
-      "link": "যোগাযোগ হারিয়েছে: <id>#{{id}}</id> {{title}}",
-      "detail": "{{agent}} · {{phase}} · {{since}} · শেষ খবর {{minutes}} মিনিট আগে"
+      "empty": "কারও সঙ্গে যোগাযোগ হারায়নি।",
+      "lastHeardTip": "শেষ খবর {{when}}",
+      "lastHeard": "শেষ খবর {{duration}} আগে"
     },
     "inProgress": {
       "title": "চলছে",
@@ -2494,23 +2503,12 @@
       "activity_one": "আজ {{count}}টি ঘটনা ঘটেছে: দৈনিক",
       "activity_other": "আজ {{count}}টি ঘটনা ঘটেছে: দৈনিক"
     },
-    "next": {
-      "title": "পরবর্তী",
-      "titleStage": "পরবর্তী: {{stage}}",
-      "empty": "কিছু সাজানো নেই।",
-      "emptyStage": "{{stage}}-এ কিছু সাজানো নেই।",
-      "tasks": "{{done}}/{{total}} কাজ",
-      "more": "আরও {{count}}টি",
-      "blocked": "{{count}}টি আটকে",
-      "backlog": "backlog-এ {{count}}টি",
-      "board": "বোর্ড"
-    },
     "carryingOver": {
       "title": "চলমান থেকে যাওয়া",
-      "empty": "আজকের আগে থেকে কিছু চলে আসেনি।",
       "startedTip": "এর কাজ শুরু হয়েছিল {{when}}",
       "days_one": "{{count}} দিন ধরে চলছে",
-      "days_other": "{{count}} দিন ধরে চলছে"
+      "days_other": "{{count}} দিন ধরে চলছে",
+      "emptyShown": "আজকের আগের কোনো আটকে থাকা বা রিভিউয়ে থাকা কিছু নেই।"
     }
   },
   "notifications": {
@@ -2557,18 +2555,13 @@
     "restoredToast": "বোর্ডে ফিরিয়ে আনা হয়েছে",
     "disapprovedToast": "#{{id}} অননুমোদিত ও বাতিল হয়েছে",
     "undo": "পূর্বাবস্থা: অননুমোদন ফিরিয়ে নিয়ে এটি {{stage}}-এ ফেরত দেয়।",
-    "undoMoved": "পূর্বাবস্থা: অননুমোদন ফিরিয়ে নিয়ে এটি {{stage}}-এ ফেরত দেয়। #{{next}}-এ যাওয়া হয়েছে।",
     "undoAction": "পূর্বাবস্থা",
     "summary": "সারাংশ",
-    "openedBy": "<actor/> খুলেছে {{when}}",
     "updated": "আপডেট {{when}}",
     "archivedBy": "{{name}} আর্কাইভ করেছে {{when}}",
     "archivedByLane": "{{name}} আর্কাইভ করেছে {{when}}, যে ticket-এর এটি lane তার সাথে",
     "someone": "কেউ একজন",
     "archivedBadge": "আর্কাইভ",
-    "lanesWarningTip": "এই ticket তার lane-গুলোর চেয়ে বেশি এগিয়ে চিহ্নিত",
-    "lanesNotDone_one": "{{count}}টি lane সম্পন্ন নয়",
-    "lanesNotDone_other": "{{count}}টি lane সম্পন্ন নয়",
     "decisionNeeded": "সিদ্ধান্ত দরকার",
     "archiveTip": "lane-সহ এটি বোর্ড থেকে সরান; ফিচার পাতার আর্কাইভ তা ফিরিয়ে আনে",
     "deleteTitle": "এই ticket মুছবেন?",
@@ -2634,7 +2627,6 @@
     "newSubtaskOf": "{{name}}-এর নতুন উপকাজ",
     "add": "যোগ",
     "addPhase": "একটি পর্ব যোগ করুন: Implementation, Pushed, PR…",
-    "noCall": "সিদ্ধান্ত নেই",
     "all": "সব",
     "nounLane": "lane",
     "laneOf": "{{count}}-এর lane {{n}}",
@@ -2644,13 +2636,10 @@
     "previousNoun": "আগের {{noun}}",
     "nextNoun": "পরের {{noun}}",
     "stepKeysTip": "[ ও ] পেছনে ও সামনে যায়",
-    "lanesDone": "{{done}}/{{total}} সম্পন্ন · {{approved}}টি অনুমোদিত",
-    "lanesDisapproved": "{{count}}টি অননুমোদিত",
     "lanesCancelled": "{{count}}টি বাতিল",
     "allTasks": "সব কাজ {{done}}/{{total}}",
     "noLanes": "কোনো lane নেই। এর অংশগুলো সমান্তরালে চললে ticket-টি lane-এ ভাগ করুন: প্রতিটি lane পায় নিজস্ব branch, দায়িত্বপ্রাপ্ত, কাজ ও আপডেট।",
     "filterStage": "ধাপ",
-    "filterVerdict": "সিদ্ধান্ত",
     "filterTags": "ট্যাগ",
     "showing": "{{total}}-এর {{shown}}টি দেখানো হচ্ছে",
     "clearFilters": "ফিল্টার সাফ করুন",
@@ -2722,7 +2711,14 @@
     "workspacesDesc": "এই ticket-এর জন্য এজেন্টদের খোলা worktree, উপ-branch ও সাব-এজেন্ট স্যান্ডবক্স।",
     "workspacesDescLanes": "এই ticket ও তার lane-গুলোর জন্য এজেন্টদের খোলা worktree, উপ-branch ও সাব-এজেন্ট স্যান্ডবক্স।",
     "noneYet": "এখনও কিছু নেই।",
-    "updatedLabel": "আপডেট"
+    "breadcrumb": "ব্রেডক্রাম্ব",
+    "scrollSideUp": "পাশের কলাম উপরে স্ক্রল করুন",
+    "scrollSideDown": "পাশের কলাম নিচে স্ক্রল করুন",
+    "workflow": "ওয়ার্কফ্লো",
+    "workflowOwn": "এই ticket-এ ঠিক করা {{workflow}} ওয়ার্কফ্লো অনুসরণ করে।",
+    "workflowProject": "প্রজেক্টের ওয়ার্কফ্লো ({{workflow}}) অনুসরণ করে।",
+    "workflowSteps": "পদক্ষেপগুলো দেখুন",
+    "lanesProgress": "{{done}}/{{total}} সম্পন্ন"
   },
   "complexity": {
     "label": {
@@ -2731,12 +2727,12 @@
       "high": "বেশি",
       "max": "সর্বোচ্চ"
     },
-    "selectHint": "কম: রিভিউ নেই। মাঝারি: একটি রিভিউ রাউন্ড। বেশি: তিনটি পর্যন্ত। সর্বোচ্চ: শূন্য থেকে বানানো কাজের জন্য দশটি রাউন্ড পর্যন্ত; বিদ্যমান কোডবেসের ফিচার যত কঠিনই হোক কখনও সর্বোচ্চ নয়।",
-    "hint": {
-      "low": "কম: রিভিউ নেই। builder নিজেই যাচাই করে।",
-      "mid": "মাঝারি: একটি রিভিউ রাউন্ড।",
-      "high": "বেশি: তিনটি রিভিউ রাউন্ড পর্যন্ত।",
-      "max": "সর্বোচ্চ: শূন্য থেকে বানানো পুরো সাইট বা অ্যাপ, নতুন প্রোডাক্ট বা স্বতন্ত্র সার্ভিসের জন্য দশটি রিভিউ রাউন্ড পর্যন্ত, এবং টিকে যাওয়া প্রথম রাউন্ডেই থামে। বিদ্যমান কোডবেসের ফিচার যত কঠিনই হোক বড়জোর বেশি।"
+    "workflowHint": "কম: Standard ওয়ার্কফ্লোতে কোনো spec বা রিভিউ নেই। মাঝারি, বেশি ও সর্বোচ্চ: প্রজেক্টের ওয়ার্কফ্লো যত রিভিউ রাউন্ড ঠিক করে (Standard: একটি, তিনটি, দশটি পর্যন্ত)। সর্বোচ্চ শুধু শূন্য থেকে গড়া কাজের জন্য; বিদ্যমান কোডবেসের ফিচার যত কঠিনই হোক, কখনও সর্বোচ্চ নয়।",
+    "levelHint": {
+      "low": "কম: প্রজেক্টের ওয়ার্কফ্লো যত রিভিউ রাউন্ড ঠিক করে (Standard: কোনোটি নয়)। বিল্ডার নিজেই যাচাই করে।",
+      "mid": "মাঝারি: প্রজেক্টের ওয়ার্কফ্লো যত রিভিউ রাউন্ড ঠিক করে (Standard: একটি)।",
+      "high": "বেশি: প্রজেক্টের ওয়ার্কফ্লো যত রিভিউ রাউন্ড ঠিক করে (Standard: তিনটি পর্যন্ত)।",
+      "max": "সর্বোচ্চ: প্রজেক্টের ওয়ার্কফ্লো যত রিভিউ রাউন্ড ঠিক করে (Standard: দশটি পর্যন্ত), শূন্য থেকে গড়া পুরো সাইট বা অ্যাপ, নতুন প্রোডাক্ট বা স্বতন্ত্র সার্ভিসের জন্য; আর যে রাউন্ড টিকে যায় সেখানেই থামে। বিদ্যমান কোডবেসের ফিচার যত কঠিনই হোক, বড়জোর বেশি।"
     }
   },
   "agentsAtWork": {
@@ -2778,6 +2774,270 @@
       "hours_other": "{{count}} ঘণ্টা",
       "days_one": "{{count}} দিন",
       "days_other": "{{count}} দিন"
+    }
+  },
+  "workflowChips": {
+    "selfTip": "ticket-এর এজেন্ট এটি নিজেই করে",
+    "agentTip": {
+      "picked": "এর জন্য বাছা টিমের এজেন্ট। এর নির্দেশনা টিম পাতায় লেখা। ভূমিকা ({{agent}}) এর span ও রান রিপোর্টের নাম ঠিক করে।",
+      "role": "ভূমিকার নামে নামকরা টিমের এজেন্ট ({{agent}})। এর নির্দেশনা টিম পাতায় লেখা। ভূমিকা ({{agent}}) এর span ও রান রিপোর্টের নাম ঠিক করে।",
+      "default": "টিমে {{agent}} নামে কোনো এজেন্ট নেই: এটি বিল্ট-ইন {{agent}} ভূমিকা হিসেবে চলে। এর নির্দেশনা টিম পাতায় লেখা। ভূমিকা ({{agent}}) এর span ও রান রিপোর্টের নাম ঠিক করে।"
+    },
+    "agentMissing": "এজেন্ট নেই",
+    "missingTip": "এর জন্য {{picked}} বাছা হয়েছিল, কিন্তু টিমে এখন ওই নামের এজেন্ট নেই: এজেন্ট ফিরে না আসা বা অন্য কাউকে বাছা পর্যন্ত এটি {{name}} হিসেবে চলে।",
+    "locked": "লক করা",
+    "lockedAboveLow": "কমের উপরে লক করা",
+    "skippedOnLow": "কমে বাদ",
+    "changed": "বদলানো",
+    "changedTip": "প্রিসেট থেকে বদলানো: {{what}}"
+  },
+  "workflowGraph": {
+    "label": "{{complexity}} ticket-এর জন্য {{label}} ওয়ার্কফ্লো",
+    "complexity": {
+      "low": "কম",
+      "mid": "মাঝারি",
+      "high": "বেশি",
+      "max": "সর্বোচ্চ"
+    },
+    "roundSurvives": "রাউন্ড টিকে যায়",
+    "roundFails": "রাউন্ড ব্যর্থ",
+    "inParallel": "সমান্তরালে",
+    "reviewRound": "রিভিউ রাউন্ড",
+    "noRoundsOn": "{{complexity}}-তে কোনো রিভিউ রাউন্ড নেই"
+  },
+  "workflowPanel": {
+    "idle": "গ্রাফে একটি পদক্ষেপ বেছে দেখুন সেটি কী করে, এবং কে চালায়, তার effort, চলবে কি না ও ক্রমে তার জায়গা বদলান।",
+    "runnerAgents": "ticket-এর এজেন্ট /feature-review নিজেই চালায়। এর পর্বগুলো টিমের নিজ নিজ এজেন্ট চালায়, যাদের পর্বের নোডে বাছা হয়।",
+    "selfAgent": "ticket-এর এজেন্ট এটি নিজেই করে: বাছার মতো কোনো টিম এজেন্ট নেই।",
+    "whatItDoes": "এটি কী করে",
+    "handoffTo": "{{next}}-কে হ্যান্ড-অফ",
+    "result": "ফলাফল",
+    "team": {
+      "title": "টিমের এজেন্ট",
+      "default": "ডিফল্ট ({{name}})",
+      "notInTeam": "{{name}} (টিমে নেই)",
+      "missing": "এর জন্য {{picked}} বাছা হয়েছিল, কিন্তু টিমে এখন ওই নামের এজেন্ট নেই। এজেন্ট ফিরে না আসা বা অন্য কাউকে বাছা পর্যন্ত এটি {{name}} হিসেবে চলে। বাছাই সরাতে ডিফল্ট বেছে নিন।",
+      "runsAs": "{{name}} হিসেবে চলে। এর নির্দেশনা টিম পাতায় লেখা; ভূমিকা ({{role}}) এর span ও রান রিপোর্টের নাম ঠিক করে।",
+      "runsAsDefault": "{{name}} হিসেবে চলে (বিল্ট-ইন এজেন্ট: টিমে ওই নামে কেউ নেই)। এর নির্দেশনা টিম পাতায় লেখা; ভূমিকা ({{role}}) এর span ও রান রিপোর্টের নাম ঠিক করে।"
+    },
+    "placeInOrder": "ক্রমে জায়গা",
+    "moveUp": "উপরে সরান",
+    "moveDown": "নিচে সরান",
+    "moveUpTip": "উপরে সরান: {{step}} আগে চলবে",
+    "moveDownTip": "নিচে সরান: {{step}} পরে চলবে",
+    "runs": "চলে",
+    "run": "{{step}} চালান",
+    "alsoRunOnLow": "কম ticket-এও {{step}} চালান",
+    "aboveLowNote": "এই সুইচ শুধু ঠিক করে এটি কম ticket-এও চলবে কি না।",
+    "effort": "Effort",
+    "effortHint": "Agent টুলের effort হিসেবে পাঠানো হয়। {{hint}}।",
+    "reviewRuns": "প্রতি রাউন্ডে {{total}}টি আলাদা /feature-review রান চালায়: {{runs}}, প্রতিটি নিজস্ব এজেন্ট নামে এবং অন্যের ফলাফল কখনও না দেখে।",
+    "survival": "<strong>রাউন্ড টিকে যায় যখন</strong> {{survival}}।"
+  },
+  "workflowPage": {
+    "title": "ওয়ার্কফ্লো",
+    "intro": "ticket কীভাবে To do থেকে হ্যান্ড-অফ পর্যন্ত যায়: এর এজেন্টের চালানো পদক্ষেপ ক্রমানুসারে, কে কোনটি চালায় এবং কোনটি পরেরটিকে কী দেয়। প্রজেক্ট একটি ওয়ার্কফ্লো অনুসরণ করে; ticket নিজের পাতায় অন্যটি বেছে নিতে পারে। এজেন্টরা বোর্ড থেকে এটি পড়ে, তাই এখানকার বদল তাদের পরের রান থেকে মানা হয়।",
+    "graphShows": "গ্রাফে একটি {{complexity}} ticket দেখানো হয়েছে।",
+    "projectFollows": "প্রজেক্ট এই ওয়ার্কফ্লো অনুসরণ করে",
+    "use": "এই ওয়ার্কফ্লো ব্যবহার করুন",
+    "resetThis": "এই ওয়ার্কফ্লো রিসেট করুন",
+    "resetTitle": "{{label}} ওয়ার্কফ্লো রিসেট করবেন?",
+    "resetBody": "এর ক্রম, সুইচ, effort, টিমের এজেন্ট ও রিভিউ রাউন্ড {{label}} প্রিসেটের মূল অবস্থায় ফিরে যাবে। অন্য প্রিসেটগুলোতে করা বদল থেকে যাবে।",
+    "cancel": "বাতিল",
+    "reset": "রিসেট",
+    "sectionLabel": "{{label}} ওয়ার্কফ্লো",
+    "projects": "প্রজেক্টের",
+    "summary_one": "{{complexity}} ticket-এর জন্য {{count}}টি পদক্ষেপ · রিভিউ: {{rounds}}",
+    "summary_other": "{{complexity}} ticket-এর জন্য {{count}}টি পদক্ষেপ · রিভিউ: {{rounds}}"
+  },
+  "workflowPresets": {
+    "group": "ওয়ার্কফ্লো প্রিসেট",
+    "active": "সক্রিয়",
+    "tweaked": "বদলানো",
+    "complexity": "জটিলতা",
+    "stats_one": "{{count}}টি পদক্ষেপ · রিভিউ রাউন্ড {{rounds}}",
+    "stats_other": "{{count}}টি পদক্ষেপ · রিভিউ রাউন্ড {{rounds}}",
+    "light": {
+      "label": "Light",
+      "description": "বিল্ড, গেট, একজন রিভিউয়ার, intent check ও হ্যান্ড-অফ: কোনো spec এজেন্ট, এনভায়রনমেন্ট বা আলাদা হান্ট নেই।"
+    },
+    "standard": {
+      "label": "Standard",
+      "description": "পূর্ণ চক্র: spec, বিল্ড, গেট, রিভিউ রাউন্ড (spec, এনভায়রনমেন্ট, verify, দুটি স্বাধীন হান্ট, refute ও merge check), তারপর intent check, PR, CI, preview ও হ্যান্ড-অফ।"
+    },
+    "thorough": {
+      "label": "Thorough",
+      "description": "Standard-এর সঙ্গে আলাদা টেস্ট লেখার ধাপ, নিরাপত্তা চেকলিস্টসহ তৃতীয় হান্ট, প্রতিটি রিভিউ রাউন্ডের শেষে intent check, এবং কমের উপরের প্রতিটি স্তরে আরও একটি রিভিউ রাউন্ড।"
+    },
+    "maximum": {
+      "label": "Maximum",
+      "description": "Thorough-এর সঙ্গে দ্বিতীয় স্বাধীন spec, প্রতিটি রাউন্ডের দ্বিতীয় পূর্ণ রিভিউ অন্য এজেন্টের হাতে যে প্রথমটি কখনও দেখে না, এবং প্রতিটি এজেন্টে উচ্চ effort।"
+    }
+  },
+  "workflowReview": {
+    "legend": "জটিলতা অনুযায়ী রিভিউ রাউন্ড",
+    "changed": "বদলানো",
+    "notSaved": "সংরক্ষণ হয়নি: {{reason}}",
+    "default": "ডিফল্ট {{value}}"
+  },
+  "workflowReads": {
+    "title": "এজেন্টরা যা পড়ে",
+    "hint": "এই ওয়ার্কফ্লোর জন্য get_workflow যে লেখা দেয়",
+    "textLabel": "ওয়ার্কফ্লোর লেখা"
+  },
+  "workflowSelect": {
+    "project": "প্রজেক্টের ওয়ার্কফ্লো ({{label}})",
+    "hint": "এর এজেন্ট যে ওয়ার্কফ্লো অনুসরণ করে: প্রজেক্টের নিজেরটি, অথবা শুধু এই ticket-এর জন্য চারটি প্রিসেটের একটি। প্রজেক্টের ওয়ার্কফ্লো বদলালে নিজের ওয়ার্কফ্লো বাছা ticket বদলায় না।"
+  },
+  "workflowView": {
+    "noRounds": "কোনো রিভিউ রাউন্ড নেই",
+    "rounds_one": "{{count}}টি রাউন্ড",
+    "rounds_other": "{{count}}টি রাউন্ড",
+    "complexity": {
+      "low": "কম",
+      "mid": "মাঝারি",
+      "high": "বেশি",
+      "max": "সর্বোচ্চ"
+    },
+    "effort": {
+      "auto": "অটো",
+      "low": "কম",
+      "medium": "মাঝারি",
+      "high": "বেশি"
+    },
+    "effortLevel": {
+      "low": "কম",
+      "medium": "মাঝারি",
+      "high": "বেশি"
+    },
+    "autoLevel": "অটো: {{level}}",
+    "autoEffortHint": "অটো ticket অনুসরণ করে: কম ticket-এ কম, মাঝারি ও বেশিতে মাঝারি, সর্বোচ্চে বেশি",
+    "separator": ", ",
+    "you": "আপনি",
+    "skippedNoRounds": "কোনো রিভিউ রাউন্ড নেই",
+    "skippedOff": "বন্ধ",
+    "changed": {
+      "moved": "ক্রমে এর জায়গা",
+      "off": "বন্ধ করা হয়েছে",
+      "effort": "এর effort",
+      "agent": "এর টিমের এজেন্ট"
+    },
+    "name": {
+      "agent": "এজেন্ট {{name}}",
+      "locked": "লক করা",
+      "skipsOnLow": "কম ticket-এ বাদ"
+    },
+    "lockReason": {
+      "claim": "লক করা: ticket পড়ে দাবি করার আগে কিছুই শুরু হতে পারে না।",
+      "build": "লক করা: পরিবর্তন বিল্ড না হলে কিছুই পৌঁছে দেওয়া হয় না।",
+      "gate": "লক করা: কোনো পরিবর্তন যাচাই ছাড়া এগোয় না।",
+      "intent": "কমের উপরে লক করা: কমের উপরের প্রতিটি ticket হ্যান্ড-অফের আগে মানুষের নিজের কথার সঙ্গে মেলানো হয়।",
+      "always": "লক করা: এটি ছাড়া ticket হ্যান্ড-অফ করা যায় না।"
+    },
+    "survival": {
+      "light": "রিভিউয়ার কোনো সমস্যা পুনরুৎপাদন করতে পারেনি এবং বিল্ডারের প্রমাণ প্রতিটি গ্রহণযোগ্যতার শর্ত কভার করে",
+      "standard": "verdict SHIP, works check YES, base check NO এবং প্রতিটি গ্রহণযোগ্যতার শর্ত চালিয়ে PASS (UNVERIFIED শুধু এসকেলেশন নিয়মে নাম থাকা এমন কারণে, যা পার হওয়া যায়নি)",
+      "thoroughIntent": "verdict SHIP, works check YES, base check NO এবং প্রতিটি গ্রহণযোগ্যতার শর্ত চালিয়ে PASS (UNVERIFIED শুধু এসকেলেশন নিয়মে নাম থাকা এমন কারণে, যা পার হওয়া যায়নি), এবং রাউন্ডের শেষের intent check মেলে",
+      "maximum": "দুটি রিভিউই টিকে যায় ({{standard}}) এবং সমন্বয়ের পর কোনো সমস্যা খোলা থাকে না",
+      "maximumIntent": "দুটি রিভিউই টিকে যায় ({{standard}}), সমন্বয়ের পর কোনো সমস্যা খোলা থাকে না এবং রাউন্ডের শেষের intent check মেলে"
+    },
+    "move": {
+      "after": "{{step}} অবশ্যই {{other}}-এর পরে আসবে",
+      "stayFirst": "{{step}} অবশ্যই প্রথমে থাকবে",
+      "stayLast": "{{step}} অবশ্যই শেষে থাকবে",
+      "alreadyFirst": "{{step}} ইতিমধ্যে প্রথমে",
+      "alreadyLast": "{{step}} ইতিমধ্যে শেষে"
+    }
+  },
+  "backToModule": {
+    "back": "{{label}}-এ ফিরুন",
+    "home": "হোম"
+  },
+  "ticketLine": {
+    "openedBy": "{{when}}-এ খুলেছেন {{name}} ({{role}})",
+    "updated": "{{when}}-এ আপডেট হয়েছে",
+    "opened": "{{when}}-এ খোলা হয়েছে"
+  },
+  "resumeSettings": {
+    "title": "পুনরায় চালু",
+    "intro": "প্রশ্ন করলে এজেন্ট তার পালা শেষ করে। এখানে একটি কমান্ড দিলে, বোর্ডে কোনো সিদ্ধান্ত কার্ডের উত্তর দিলে বা ticket আটকে থাকা বা রিভিউয়ের ধাপ থেকে সক্রিয় ধাপে ফেরালে বোর্ড নিজেই কাজ চালিয়ে যায়: এই মেশিনে, ticket-এর worktree-তে কমান্ডটি চালায়, প্রশ্ন ও আপনার উত্তর (বা আপনার সর্বশেষ কথা) তার স্ট্যান্ডার্ড ইনপুটে এবং <code>BOARD_RESUME_PROMPT_FILE</code> নামের ফাইলে দিয়ে; <code>BOARD_URL</code>, <code>BOARD_PROJECT_ID</code>, <code>BOARD_TICKET_ID</code> ও <code>BOARD_AGENT_NAME</code> সেট থাকে। যে ticket-এ এজেন্ট চলছে বা আগে থেকেই পুনরায় চালু হচ্ছে, সেটির জন্য কিছু শুরু হয় না। এটি বোর্ডের ব্যবহারকারীর অধিকারে চলে, আর শুধু আপনি এটি সেট করতে পারেন। খালি থাকলে বন্ধ।",
+    "presets": "প্রিসেট",
+    "found": "পাওয়া গেছে",
+    "notFound": "পাওয়া যায়নি",
+    "command": "পুনরায় চালুর কমান্ড",
+    "commandPlaceholder": "claude -p (খালি: বন্ধ)",
+    "timeout": "এত পরে থামান (মিনিট)",
+    "save": "সংরক্ষণ",
+    "saving": "সংরক্ষণ হচ্ছে…",
+    "timeoutProblem": "{{min}} থেকে {{max}}-এর মধ্যে একটি পূর্ণসংখ্যা।",
+    "unsaved": "অসংরক্ষিত পরিবর্তন আছে।",
+    "noChanges": "কোনো পরিবর্তন নেই।",
+    "off": "পুনরায় চালু বন্ধ আছে।"
+  },
+  "resumeCard": {
+    "title": "পুনরায় চালু",
+    "resume": "পুনরায় চালু",
+    "retry": "আবার চেষ্টা",
+    "started": "বোর্ড কাজ আবার শুরু করেছে",
+    "empty": "এখনও কেউ এই ticket পুনরায় চালু করেনি।",
+    "setInSettings": "মানুষ এটি প্রজেক্টের সেটিংসে ঠিক করেন।",
+    "failed": "বোর্ড পুনরায় চালু করতে পারেনি: {{reason}}",
+    "log": "লগ",
+    "state": {
+      "queued": "শুরু হচ্ছে",
+      "running": "চলছে",
+      "succeeded": "শেষ হয়েছে",
+      "failed": "ব্যর্থ",
+      "skipped": "শুরু হয়নি"
+    }
+  },
+  "runReportsWindow": {
+    "reports": "রিপোর্ট",
+    "reportsCount": "রিপোর্ট ({{n}})",
+    "title": "রান রিপোর্ট",
+    "description": "এই ticket-এর রান রিপোর্ট, ফিল্টার ও সাজানোসহ। একটি খুললে পুরোটা দেখা যায়।",
+    "back": "রিপোর্টে ফিরুন",
+    "none": "এখনও কোনো রান রিপোর্ট নেই।",
+    "noMatch": "এই ফিল্টারে কোনো রিপোর্ট মেলেনি।",
+    "count_one": "{{count}}টি রিপোর্টের {{shown}}টি",
+    "count_other": "{{count}}টি রিপোর্টের {{shown}}টি",
+    "clearFilters": "ফিল্টার সাফ করুন",
+    "filter": {
+      "agent": "এজেন্ট",
+      "round": "রাউন্ড",
+      "time": "সময়",
+      "difficulty": "কাঠিন্য",
+      "confidence": "আস্থা",
+      "duration": "সময়কাল",
+      "sortBy": "সাজান"
+    },
+    "items": {
+      "allAgents": "সব এজেন্ট",
+      "allRounds": "সব রাউন্ড",
+      "round": "রাউন্ড {{n}}",
+      "noRound": "রাউন্ড নেই"
+    },
+    "time": {
+      "any": "যেকোনো সময়",
+      "hour": "শেষ ঘণ্টা",
+      "today": "আজ",
+      "week": "শেষ 7 দিন"
+    },
+    "duration": {
+      "any": "যেকোনো",
+      "reported": "জানানো হয়েছে",
+      "unreported": "জানানো হয়নি"
+    },
+    "rating": {
+      "any": "যেকোনো",
+      "unrated": "রেটিং নেই"
+    },
+    "sort": {
+      "newest": "নতুন আগে",
+      "oldest": "পুরনো আগে",
+      "longest": "দীর্ঘতম আগে",
+      "difficulty": "সর্বোচ্চ কাঠিন্য",
+      "confidence": "সর্বোচ্চ আস্থা"
     }
   }
 }

@@ -1,6 +1,6 @@
 import { deflateRawSync, inflateRawSync } from 'node:zlib'
 
-import { asc, count, eq, isNull, type SQL } from 'drizzle-orm'
+import { and, asc, count, eq, isNull, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db, schema } from '#/db'
@@ -58,7 +58,11 @@ export function listProjects() {
   const repos = listRepos()
   // The features' count: a PR's own ticket is in the PR queue only.
   const tickets = countBy(schema.tickets.projectId, schema.tickets, isNull(schema.tickets.prId))
-  const prs = countBy(schema.prs.projectId, schema.prs, eq(schema.prs.open, true))
+  const prs = countBy(
+    schema.prs.projectId,
+    schema.prs,
+    and(eq(schema.prs.open, true), eq(schema.prs.involvesMe, true)),
+  )
   return db
     .select()
     .from(schema.projects)
@@ -290,6 +294,8 @@ export function updateProject(
       | 'layout'
       | 'workStage'
       | 'kinds'
+      | 'resumeCommand'
+      | 'resumeTimeoutMinutes'
     >
   >,
   actor: string,

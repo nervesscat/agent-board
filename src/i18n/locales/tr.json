@@ -35,7 +35,6 @@
     "previews": "preview'lar yükleniyor…",
     "repositories": "repolar yükleniyor…",
     "roadmap": "yol haritası yükleniyor…",
-    "runReports": "run raporları yükleniyor…",
     "earlierVersions": "önceki sürümler yükleniyor…",
     "workspaces": "workspace'ler yükleniyor…"
   },
@@ -46,7 +45,8 @@
     "settings": "Ayarlar",
     "testMode": "test modu",
     "authOff": "auth kapalı",
-    "authOffTip": "BOARD_ENV={{env}}, oturum açma kapalı: {{actor}} olarak oturum açık. Canlı pano değil."
+    "authOffTip": "BOARD_ENV={{env}}, oturum açma kapalı: {{actor}} olarak oturum açık. Canlı pano değil.",
+    "connectAgent": "Ajan bağla"
   },
   "time": {
     "never": "—",
@@ -480,7 +480,8 @@
       "blocked": "Engelli",
       "review": "İnceleme",
       "done": "Bitti",
-      "cancelled": "İptal edildi"
+      "cancelled": "İptal edildi",
+      "approved": "Onaylandı"
     },
     "hint": {
       "open": "alınmayı bekliyor; üstlenme onu işin başladığı aşamaya taşır",
@@ -488,7 +489,8 @@
       "blocked": "seni bekliyor",
       "review": "incelemeye devredildi",
       "done": "bitti; üstlenilemez",
-      "cancelled": "vazgeçildi; reddetme ticket'ı buraya taşır ve görevleri ilerlemeden çıkar"
+      "cancelled": "vazgeçildi; reddetme ticket'ı buraya taşır ve görevleri ilerlemeden çıkar",
+      "approved": "merge için onayın; hiçbir ajan ticket'ı buraya taşımaz"
     },
     "color": {
       "gray": "gri",
@@ -611,20 +613,20 @@
         "previews": "Preview'lar",
         "gallery": "Galeri",
         "agents": "Ekip",
-        "runReports": "Çalıştırma raporları",
         "daily": "Günlük",
         "cleanup": "Temizlik",
         "repositories": "Repolar",
-        "instructions": "Talimatlar"
+        "instructions": "Talimatlar",
+        "workflow": "İş akışı"
       },
       "overview": {
         "needsYou": "Seni bekliyor",
         "inProgress": "Sürüyor",
         "doneToday": "Bugün biten",
-        "next": "Sıradaki",
         "carryingOver": "Devredenler",
         "notes": "Notlar",
-        "agents": "Çalışan ajanlar"
+        "agents": "Çalışan ajanlar",
+        "lostContact": "Bağlantı koptu"
       },
       "ticket": {
         "instructions": "Talimatlar",
@@ -635,7 +637,8 @@
         "runs": "Çalıştırmalar",
         "details": "Ayrıntılar",
         "branch": "Branch",
-        "workspaces": "Workspace'ler"
+        "workspaces": "Workspace'ler",
+        "resume": "Devam ettir"
       }
     },
     "locked": {
@@ -1478,21 +1481,7 @@
     "dialogTitleEmpty": "Çalıştırma raporu",
     "round": "tur {{round}}",
     "difficultyShort": "zorluk {{n}}/5",
-    "confidenceShort": "güven {{n}}/5",
-    "panelTitle": "Çalıştırma raporları",
-    "panelHeading_one": "Çalıştırma raporları · {{count}} çalıştırma",
-    "panelHeading_other": "Çalıştırma raporları · {{count}} çalıştırma",
-    "pageTitle": "Çalıştırma raporları",
-    "pageText": "Her alt ajan çalıştırmasının nasıl geçtiği, kendi sözleriyle. Çalıştırma başına bir rapor; bir inceleme turunda ajanlarının her birinden birer rapor olur.",
-    "allAgents": "Tüm ajanlar",
-    "agent": "Ajan",
-    "ticketPlaceholder": "Ticket #",
-    "ticketNumber": "Ticket numarası",
-    "filter": "Filtre",
-    "clear": "Temizle",
-    "emptyFiltered": "Bu filtreye uyan çalıştırma raporu yok.",
-    "empty": "Henüz çalıştırma raporu yok.",
-    "openTicket": "Ticket'ı aç"
+    "confidenceShort": "güven {{n}}/5"
   },
   "projectAgents": {
     "title": "Ekip",
@@ -1631,7 +1620,8 @@
     "tagsPlaceholder": "Yüksek, Formlar",
     "branchesOff": "Aynı repodaysa <branch>{{branch}}</branch> üzerinden dallanır.",
     "uploading": "Yükleniyor…",
-    "create": "Oluştur"
+    "create": "Oluştur",
+    "workflow": "İş akışı"
   },
   "notes": {
     "title": "Notlar",
@@ -1885,6 +1875,11 @@
         "title": "Ayarlar",
         "subtitle": "Tüm pano için tercihler",
         "keywords": "tercihler, tema, preview, cihazlar, settings, preferences"
+      },
+      "workflow": {
+        "title": "İş akışı",
+        "subtitle": "Ajanların bir ticket için izlediği adımlar, ağaç olarak",
+        "keywords": "adımlar, hazır ayarlar, inceleme turları, devir, devretme, sıra, workflow, steps, presets"
       }
     },
     "setting": {
@@ -2050,7 +2045,6 @@
   },
   "ticketBoard": {
     "stage": "Aşama",
-    "mergeAfter": "şundan sonra merge et: {{list}}",
     "archiveTip_one": "{{stage}} aşamasındaki {{count}} ticket'ı arşivle",
     "archiveTip_other": "{{stage}} aşamasındaki {{count}} ticket'ı arşivle",
     "archiveAll": "Tümünü arşivle",
@@ -2075,9 +2069,7 @@
     "nothingArchived": "Arşivlenen yok.",
     "archived": "arşivlendi {{when}}",
     "archivedBy": "arşivlendi {{when}}, yapan: <actor/>",
-    "restore": "Geri yükle",
-    "laneApproved_one": "{{count}} onaylandı",
-    "laneApproved_other": "{{count}} onaylandı"
+    "restore": "Geri yükle"
   },
   "ticketList": {
     "archivedToast_one": "{{count}} ticket arşivlendi",
@@ -2121,8 +2113,10 @@
     "addPlaceholder": "Ticket ekle…",
     "noOthers": "Başka ticket yok",
     "includes": "<goto>{{ref}}</goto> ticket'ından merge edilmemiş iş içerir",
-    "cannotBeDone": "#{{id}}, #{{need}} numaralı ticket'ın branch'i base'ine merge edilmeden bitirilemez",
-    "addAsNeed": "Bağımlılık olarak ekle"
+    "addAsNeed": "Bağımlılık olarak ekle",
+    "autoTitle": "Pano ekledi: bu ticket'ın branch'i, o ticket'ın merge edilmemiş commit'lerini içeriyor. Branch artık içermediğinde kalkar; burada kaldırırsan kalıcı olur (aynı commit'ler için yeniden eklenmez).",
+    "addedByBoard": "Pano ekledi",
+    "cannotBeDoneUnsure": "Pano bu commit'lerin kime ait olduğundan emin olamadı, bu yüzden bağımlılık eklemedi. #{{id}}, #{{need}} ticket'ının branch'i base'ine merge edilene kadar bitemez."
   },
   "verdict": {
     "approve": "Onayla",
@@ -2161,11 +2155,15 @@
       "others": {
         "label": "Başkalarını bekleyen",
         "title": "Kendi PR'ların (ajanlarınkiler dahil): onay bekleyen, tüm inceleyenlerin onayladığı ya da yorumları yüzünden beklemede olan"
+      },
+      "all": {
+        "label": "Tüm PR'lar",
+        "title": "Repoların tüm açık PR'ları: kimin yazdığına ve seni ilgilendirip ilgilendirmediğine bakılmaksızın"
       }
     },
     "reviewers": {
-      "all": "Tüm PR'lar",
-      "mine": "Yalnızca ben inceleyenim"
+      "mine": "Yalnızca ben inceleyenim",
+      "involving": "Beni ilgilendiren"
     },
     "tabs": {
       "pending": "Bekleyen",
@@ -2175,7 +2173,8 @@
     },
     "empty": {
       "me": "İncelenecek {{stage}} bir şey yok.",
-      "others": "Başkalarını bekleyen {{stage}} bir şey yok."
+      "others": "Başkalarını bekleyen {{stage}} bir şey yok.",
+      "all": "Açık PR'lar arasında {{stage}} bir şey yok."
     },
     "refresh": "Yenile",
     "mergeAfterTip": "Ticket'ı önce bunların merge edilmesini gerektiriyor:\n{{list}}",
@@ -2202,7 +2201,8 @@
     "holdTitle": "#{{number}} beklemeye alınsın mı",
     "holdText": "Senin ve ajanlar için bir not. GitHub'a dokunulmaz.",
     "holdPlaceholder": "Neden bekliyor…",
-    "holdConfirm": "Beklemeye al"
+    "holdConfirm": "Beklemeye al",
+    "notInvolvingYou": "seni ilgilendirmiyor"
   },
   "workStatus": {
     "state": {
@@ -2385,7 +2385,15 @@
       "human": "insanı bekledi, {{duration}}",
       "review": "incelemede, {{duration}}",
       "merge": "merge bekledi, {{duration}}"
-    }
+    },
+    "openReport": "Raporu aç ({{agent}}): {{label}}",
+    "openReportRound": "Raporu aç ({{agent}}), tur {{round}}: {{label}}",
+    "reportDescription": "Bu çalıştırma için yazılan rapor",
+    "factsDescription": "Bu çalıştırmanın bilgileri",
+    "loadingReport": "Çalıştırma raporu yükleniyor…",
+    "reportsFailed": "Raporlar yüklenemedi.",
+    "noReport": "Bu çalıştırma için rapor yok.",
+    "noReportYet": "Bu çalıştırma için henüz rapor yok."
   },
   "roadmap": {
     "title": "Yol haritası",
@@ -2479,8 +2487,9 @@
     },
     "lost": {
       "title": "Bağlantı koptu",
-      "link": "Bağlantı koptu: <id>#{{id}}</id> {{title}}",
-      "detail": "{{agent}} · {{phase}} · {{since}} · son haber {{minutes}} dk önce"
+      "empty": "Bağlantısı kopan yok.",
+      "lastHeardTip": "Son haber: {{when}}",
+      "lastHeard": "son haber {{duration}} önce"
     },
     "inProgress": {
       "title": "Sürüyor",
@@ -2494,23 +2503,12 @@
       "activity_one": "Bugün {{count}} olay oldu: Günlük",
       "activity_other": "Bugün {{count}} olay oldu: Günlük"
     },
-    "next": {
-      "title": "Sıradaki",
-      "titleStage": "Sıradaki: {{stage}}",
-      "empty": "Sırada bir şey yok.",
-      "emptyStage": "{{stage}} aşamasında sırada bir şey yok.",
-      "tasks": "{{done}}/{{total}} görev",
-      "more": "{{count}} daha",
-      "blocked": "{{count}} engelli",
-      "backlog": "{{count}} backlog'da",
-      "board": "Pano"
-    },
     "carryingOver": {
       "title": "Devredenler",
-      "empty": "Bugünden önceden devreden bir şey yok.",
       "startedTip": "Üzerindeki iş {{when}} başladı",
       "days_one": "{{count}} gündür sürüyor",
-      "days_other": "{{count}} gündür sürüyor"
+      "days_other": "{{count}} gündür sürüyor",
+      "emptyShown": "Bugünden önceden kalan engelli ya da incelemede bir şey yok."
     }
   },
   "notifications": {
@@ -2557,18 +2555,13 @@
     "restoredToast": "Panoya geri yüklendi",
     "disapprovedToast": "#{{id}} reddedildi ve iptal edildi",
     "undo": "Geri al, reddi geri çeker ve ticket'ı {{stage}} aşamasına döndürür.",
-    "undoMoved": "Geri al, reddi geri çeker ve ticket'ı {{stage}} aşamasına döndürür. #{{next}} ticket'ına geçildi.",
     "undoAction": "Geri al",
     "summary": "Özet",
-    "openedBy": "<actor/> açtı, {{when}}",
     "updated": "güncellendi {{when}}",
     "archivedBy": "Arşivleyen: {{name}}, {{when}}",
     "archivedByLane": "Arşivleyen: {{name}}, {{when}}; bağlı olduğu ticket'la birlikte",
     "someone": "biri",
     "archivedBadge": "Arşivlendi",
-    "lanesWarningTip": "Bu ticket, lane'lerinden daha ileri bir aşamada işaretli",
-    "lanesNotDone_one": "{{count}} lane bitmedi",
-    "lanesNotDone_other": "{{count}} lane bitmedi",
     "decisionNeeded": "karar gerekli",
     "archiveTip": "Lane'leriyle birlikte panodan kaldır; özellikler sayfasındaki Arşivlenen onu geri getirir",
     "deleteTitle": "Bu ticket silinsin mi?",
@@ -2634,7 +2627,6 @@
     "newSubtaskOf": "Yeni alt görev: {{name}}",
     "add": "Ekle",
     "addPhase": "Faz ekle: Implementation, Pushed, PR…",
-    "noCall": "Karar yok",
     "all": "Tümü",
     "nounLane": "lane",
     "laneOf": "lane {{n}} / {{count}}",
@@ -2644,13 +2636,10 @@
     "previousNoun": "Önceki {{noun}}",
     "nextNoun": "Sonraki {{noun}}",
     "stepKeysTip": "[ ve ] geri ve ileri gider",
-    "lanesDone": "{{done}}/{{total}} bitti · {{approved}} onaylı",
-    "lanesDisapproved": "{{count}} reddedildi",
     "lanesCancelled": "{{count}} iptal edildi",
     "allTasks": "tüm görevler {{done}}/{{total}}",
     "noLanes": "Lane yok. Bir ticket'ın parçaları paralel yürüyorsa onu lane'lere böl: her lane'in kendi branch'i, atananı, görevleri ve güncellemeleri olur.",
     "filterStage": "Aşama",
-    "filterVerdict": "Karar",
     "filterTags": "Etiketler",
     "showing": "{{total}} içinden {{shown}} gösteriliyor",
     "clearFilters": "filtreleri temizle",
@@ -2722,7 +2711,14 @@
     "workspacesDesc": "Ajanların bu ticket için açtığı worktree'ler, alt branch'ler ve alt ajan sandbox'ları.",
     "workspacesDescLanes": "Ajanların bu ticket ve lane'leri için açtığı worktree'ler, alt branch'ler ve alt ajan sandbox'ları.",
     "noneYet": "Henüz yok.",
-    "updatedLabel": "güncellendi"
+    "breadcrumb": "Gezinti yolu",
+    "scrollSideUp": "Yan sütunu yukarı kaydır",
+    "scrollSideDown": "Yan sütunu aşağı kaydır",
+    "workflow": "İş akışı",
+    "workflowOwn": "Şu iş akışını izler: {{workflow}}. Bu ticket'ta ayarlandı.",
+    "workflowProject": "Projenin iş akışını izler ({{workflow}}).",
+    "workflowSteps": "Adımlara bak",
+    "lanesProgress": "{{done}}/{{total}} bitti"
   },
   "complexity": {
     "label": {
@@ -2731,12 +2727,12 @@
       "high": "Yüksek",
       "max": "Maks"
     },
-    "selectHint": "Düşük: inceleme yok. Orta: bir inceleme turu. Yüksek: en fazla üç. Maks: sıfırdan yapılan işler için en fazla on tur; mevcut bir kod tabanındaki özellik ne kadar zor olursa olsun asla maks değildir.",
-    "hint": {
-      "low": "Düşük: inceleme yok. Builder kendisi doğrular.",
-      "mid": "Orta: bir inceleme turu.",
-      "high": "Yüksek: en fazla üç inceleme turu.",
-      "max": "Maks: sıfırdan yapılan bütün bir site ya da uygulama, yeni bir ürün ya da bağımsız bir servis için en fazla on inceleme turu; ayakta kalan ilk turda durur. Mevcut bir kod tabanındaki özellik ne kadar zor olursa olsun en fazla yüksektir."
+    "workflowHint": "Düşük: Standart iş akışında spec ve inceleme yok. Orta, Yüksek ve Maks: projenin iş akışının belirlediği inceleme turları (Standart: bir, üç, en fazla on). Maks, sıfırdan yazılan işler içindir; mevcut bir kod tabanındaki özellik ne kadar zor olursa olsun asla maks değildir.",
+    "levelHint": {
+      "low": "Düşük: projenin iş akışının belirlediği inceleme turları (Standart: yok). Builder bunu kendisi doğrular.",
+      "mid": "Orta: projenin iş akışının belirlediği inceleme turları (Standart: bir).",
+      "high": "Yüksek: projenin iş akışının belirlediği inceleme turları (Standart: en fazla üç).",
+      "max": "Maks: projenin iş akışının belirlediği inceleme turları (Standart: en fazla on); sıfırdan yazılan bir site ya da uygulama, yeni bir ürün ya da bağımsız bir servis için; geçen ilk turda durur. Mevcut bir kod tabanındaki özellik ne kadar zor olursa olsun en fazla yüksektir."
     }
   },
   "agentsAtWork": {
@@ -2778,6 +2774,270 @@
       "hours_other": "{{count}} saat",
       "days_one": "{{count}} gün",
       "days_other": "{{count}} gün"
+    }
+  },
+  "workflowChips": {
+    "selfTip": "Ticket ajanı bunu kendisi yapar",
+    "agentTip": {
+      "picked": "Bunun için seçilen Ekip ajanı. Talimatları Ekip sayfasında yazılı. Rol ({{agent}}) span'lerini ve çalıştırma raporlarını adlandırır.",
+      "role": "Rolüyle ({{agent}}) aynı adı taşıyan Ekip ajanı. Talimatları Ekip sayfasında yazılı. Rol ({{agent}}) span'lerini ve çalıştırma raporlarını adlandırır.",
+      "default": "{{agent}} adında bir Ekip ajanı yok: yerleşik {{agent}} rolü olarak çalışır. Talimatları Ekip sayfasında yazılı. Rol ({{agent}}) span'lerini ve çalıştırma raporlarını adlandırır."
+    },
+    "agentMissing": "ajan yok",
+    "missingTip": "Bunun için {{picked}} seçilmişti ama Ekip'te artık bu adda bir ajan yok: ajan geri gelene ya da başkası seçilene kadar {{name}} olarak çalışır.",
+    "locked": "Kilitli",
+    "lockedAboveLow": "Düşükten yukarıda kilitli",
+    "skippedOnLow": "Düşükte atlanır",
+    "changed": "değişti",
+    "changedTip": "Hazır ayardan değişti: {{what}}"
+  },
+  "workflowGraph": {
+    "label": "{{label}} iş akışı, ticket karmaşıklığı: {{complexity}}",
+    "complexity": {
+      "low": "düşük",
+      "mid": "orta",
+      "high": "yüksek",
+      "max": "maks"
+    },
+    "roundSurvives": "tur geçer",
+    "roundFails": "tur geçmez",
+    "inParallel": "Paralel",
+    "reviewRound": "İnceleme turu",
+    "noRoundsOn": "İnceleme turu yok: {{complexity}}"
+  },
+  "workflowPanel": {
+    "idle": "Ne yaptığını görmek, kimin çalıştıracağını, eforunu, çalışıp çalışmayacağını ve sıradaki yerini değiştirmek için grafikte bir adım seç.",
+    "runnerAgents": "Ticket ajanı /feature-review'ı kendisi çalıştırır. Fazları, faz düğümlerinde seçilen kendi Ekip ajanlarını çalıştırır.",
+    "selfAgent": "Bunu ticket ajanı kendisi yapar: seçilecek Ekip ajanı yok.",
+    "whatItDoes": "Ne yapar",
+    "handoffTo": "Sonraki adıma devir: {{next}}",
+    "result": "Sonuç",
+    "team": {
+      "title": "Ekip ajanı",
+      "default": "Varsayılan ({{name}})",
+      "notInTeam": "{{name}} (Ekip'te yok)",
+      "missing": "Bunun için {{picked}} seçilmişti ama Ekip'te artık bu adda bir ajan yok. Ajan geri gelene ya da başkası seçilene kadar {{name}} olarak çalışır. Seçimi temizlemek için Varsayılan'ı seç.",
+      "runsAs": "{{name}} olarak çalışır. Talimatları Ekip sayfasında yazılı; rol ({{role}}) span'lerini ve çalıştırma raporlarını adlandırır.",
+      "runsAsDefault": "{{name}} olarak çalışır (yerleşik ajan: Ekip'te bu adda ajan yok). Talimatları Ekip sayfasında yazılı; rol ({{role}}) span'lerini ve çalıştırma raporlarını adlandırır."
+    },
+    "placeInOrder": "Sıradaki yeri",
+    "moveUp": "Yukarı taşı",
+    "moveDown": "Aşağı taşı",
+    "moveUpTip": "Yukarı taşı: {{step}} daha erken çalışır",
+    "moveDownTip": "Aşağı taşı: {{step}} daha geç çalışır",
+    "runs": "Çalışır",
+    "run": "Çalıştır: {{step}}",
+    "alsoRunOnLow": "Düşük ticket'larda da çalıştır: {{step}}",
+    "aboveLowNote": "Bu anahtar yalnızca düşük bir ticket'ta da çalışıp çalışmayacağına karar verir.",
+    "effort": "Efor",
+    "effortHint": "Agent aracının eforu olarak iletilir. {{hint}}.",
+    "reviewRuns": "Her turda {{total}} ayrı /feature-review çalıştırır: {{runs}}; her biri kendi ajan adıyla çalışır ve diğerinin bulgularını hiç görmez.",
+    "survival": "<strong>Bir tur şu durumda geçer:</strong> {{survival}}."
+  },
+  "workflowPage": {
+    "title": "İş akışı",
+    "intro": "Bir ticket'ın To do'dan devire kadar nasıl ilerlediği: ajanının sırayla çalıştırdığı adımlar, her birini kimin çalıştırdığı ve her birinin sonrakine ne devrettiği. Proje tek bir iş akışını izler; bir ticket kendi sayfasında başka birini seçebilir. Ajanlar bunu panodan okur, bu yüzden burada yapılan değişiklik sonraki çalıştırmalarından itibaren geçerli olur.",
+    "graphShows": "Grafik, karmaşıklığı {{complexity}} olan bir ticket'ı gösterir.",
+    "projectFollows": "Proje bu iş akışını izliyor",
+    "use": "Bu iş akışını kullan",
+    "resetThis": "Bu iş akışını sıfırla",
+    "resetTitle": "{{label}} iş akışı sıfırlansın mı?",
+    "resetBody": "Sırası, anahtarları, eforları, Ekip ajanları ve inceleme turları {{label}} hazır ayarının varsayılanlarına döner. Diğer hazır ayarlar içlerinde yapılan değişiklikleri korur.",
+    "cancel": "İptal",
+    "reset": "Sıfırla",
+    "sectionLabel": "{{label}} iş akışı",
+    "projects": "projenin",
+    "summary_one": "{{count}} adım · karmaşıklık {{complexity}} · inceleme: {{rounds}}",
+    "summary_other": "{{count}} adım · karmaşıklık {{complexity}} · inceleme: {{rounds}}"
+  },
+  "workflowPresets": {
+    "group": "Hazır iş akışları",
+    "active": "Etkin",
+    "tweaked": "Değiştirilmiş",
+    "complexity": "Karmaşıklık",
+    "stats_one": "{{count}} adım · inceleme turları {{rounds}}",
+    "stats_other": "{{count}} adım · inceleme turları {{rounds}}",
+    "light": {
+      "label": "Hafif",
+      "description": "Yapım, kontrol, tek inceleyen, niyet kontrolü ve devir: spec ajanı, ortam ve ayrı hata avları yok."
+    },
+    "standard": {
+      "label": "Standart",
+      "description": "Tam döngü: spec, yapım, kontrol; spec, ortam, doğrulama, iki bağımsız hata avı, çürütme ve merge kontrolünden oluşan inceleme turları; ardından niyet kontrolü, PR, CI, preview ve devir."
+    },
+    "thorough": {
+      "label": "Kapsamlı",
+      "description": "Standart, artı özel bir test yazma geçişi, güvenlik kontrol listesiyle üçüncü bir hata avı, her inceleme turunun sonunda niyet kontrolü ve düşükten yukarıdaki her seviyede bir inceleme turu daha."
+    },
+    "maximum": {
+      "label": "Maksimum",
+      "description": "Kapsamlı, artı ikinci bir bağımsız spec, her turun ilkini hiç görmeyen farklı bir ajanla ikinci tam incelemesi ve her ajanda yüksek efor."
+    }
+  },
+  "workflowReview": {
+    "legend": "Karmaşıklığa göre inceleme turları",
+    "changed": "değişti",
+    "notSaved": "Kaydedilmedi: {{reason}}",
+    "default": "varsayılan {{value}}"
+  },
+  "workflowReads": {
+    "title": "Ajanların okuduğu",
+    "hint": "get_workflow'un bu iş akışı için sunduğu metin",
+    "textLabel": "İş akışı metni"
+  },
+  "workflowSelect": {
+    "project": "Projenin iş akışı ({{label}})",
+    "hint": "Ajanının izlediği iş akışı: projenin kendisi ya da yalnızca bu ticket için dört hazır ayardan biri. Projenin iş akışını değiştirmek, kendi iş akışını seçmiş bir ticket'ı etkilemez."
+  },
+  "workflowView": {
+    "noRounds": "inceleme turu yok",
+    "rounds_one": "{{count}} tur",
+    "rounds_other": "{{count}} tur",
+    "complexity": {
+      "low": "Düşük",
+      "mid": "Orta",
+      "high": "Yüksek",
+      "max": "Maks"
+    },
+    "effort": {
+      "auto": "Otomatik",
+      "low": "Düşük",
+      "medium": "Orta",
+      "high": "Yüksek"
+    },
+    "effortLevel": {
+      "low": "düşük",
+      "medium": "orta",
+      "high": "yüksek"
+    },
+    "autoLevel": "Otomatik: {{level}}",
+    "autoEffortHint": "Otomatik ticket'ı izler: düşük ticket için düşük, orta ve yüksek için orta, maks için yüksek",
+    "separator": ", ",
+    "you": "sen",
+    "skippedNoRounds": "İnceleme turu yok",
+    "skippedOff": "Kapalı",
+    "changed": {
+      "moved": "sıradaki yeri",
+      "off": "kapatıldı",
+      "effort": "eforu",
+      "agent": "Ekip ajanı"
+    },
+    "name": {
+      "agent": "ajan {{name}}",
+      "locked": "kilitli",
+      "skipsOnLow": "düşük ticket'larda atlanır"
+    },
+    "lockReason": {
+      "claim": "Kilitli: ticket okunup üstlenilmeden hiçbir şey başlayamaz.",
+      "build": "Kilitli: değişiklik yapılmadan hiçbir şey teslim edilmez.",
+      "gate": "Kilitli: hiçbir değişiklik denetlenmeden ilerlemez.",
+      "intent": "Düşükten yukarıda kilitli: düşükten yukarıdaki her ticket, devredilmeden önce insanın kendi sözleriyle karşılaştırılır.",
+      "always": "Kilitli: ticket onsuz devredilemez."
+    },
+    "survival": {
+      "light": "inceleyen hiçbir bulguyu yeniden üretemedi ve builder'ın kanıtları her kabul ölçütünü kapsıyor",
+      "standard": "karar SHIP, çalışıyor kontrolü YES, base kontrolü NO ve her kabul ölçütü çalıştırılarak PASS (UNVERIFIED yalnızca, aşılamayan ve yükseltme kurallarında adı geçen bir neden için)",
+      "thoroughIntent": "karar SHIP, çalışıyor kontrolü YES, base kontrolü NO ve her kabul ölçütü çalıştırılarak PASS (UNVERIFIED yalnızca, aşılamayan ve yükseltme kurallarında adı geçen bir neden için) ve turun sonundaki niyet kontrolü örtüşüyor",
+      "maximum": "iki inceleme de geçiyor ({{standard}}) ve uzlaştırma hiçbir bulguyu açık bırakmıyor",
+      "maximumIntent": "iki inceleme de geçiyor ({{standard}}), uzlaştırma hiçbir bulguyu açık bırakmıyor ve turun sonundaki niyet kontrolü örtüşüyor"
+    },
+    "move": {
+      "after": "{{step}}, {{other}} adımından sonra gelmeli",
+      "stayFirst": "{{step}} ilk adım kalmalı",
+      "stayLast": "{{step}} son adım kalmalı",
+      "alreadyFirst": "{{step}} zaten ilk adım",
+      "alreadyLast": "{{step}} zaten son adım"
+    }
+  },
+  "backToModule": {
+    "back": "Geri: {{label}}",
+    "home": "Ana sayfa"
+  },
+  "ticketLine": {
+    "openedBy": "Açan: {{name}} ({{role}}), {{when}}",
+    "updated": "Güncellendi: {{when}}",
+    "opened": "Açıldı: {{when}}"
+  },
+  "resumeSettings": {
+    "title": "Devam ettirme",
+    "intro": "Soru soran bir ajan turunu bitirir. Buraya bir komut yazarsan, panodaki bir karar kartını yanıtladığında ya da bir ticket'ı engelli ya da inceleme aşamasından aktif bir aşamaya geri taşıdığında pano işe kendisi devam eder: komutu bu makinede, ticket'ın worktree'sinde çalıştırır; soru ve yanıtın (ya da son sözlerin) standart girdisinde ve <code>BOARD_RESUME_PROMPT_FILE</code> adlı dosyadadır; <code>BOARD_URL</code>, <code>BOARD_PROJECT_ID</code>, <code>BOARD_TICKET_ID</code> ve <code>BOARD_AGENT_NAME</code> ayarlıdır. Canlı ajanı olan ya da zaten devam ettirilen bir ticket için hiçbir şey başlatılmaz. Pano kullanıcısının yetkileriyle çalışır ve yalnızca sen ayarlayabilirsin. Boş bırakmak kapatır.",
+    "presets": "Hazır ayarlar",
+    "found": "bulundu",
+    "notFound": "bulunamadı",
+    "command": "Devam ettirme komutu",
+    "commandPlaceholder": "claude -p (boş: kapalı)",
+    "timeout": "Şu kadar sonra durdur (dakika)",
+    "save": "Kaydet",
+    "saving": "Kaydediliyor…",
+    "timeoutProblem": "{{min}} ile {{max}} arasında bir tam sayı.",
+    "unsaved": "Kaydedilmemiş değişiklikler var.",
+    "noChanges": "Değişiklik yok.",
+    "off": "Devam ettirme kapalı."
+  },
+  "resumeCard": {
+    "title": "Devam ettir",
+    "resume": "Devam ettir",
+    "retry": "Yeniden dene",
+    "started": "Pano işi yeniden başlattı",
+    "empty": "Bu ticket'ı henüz devam ettiren olmadı.",
+    "setInSettings": "İnsan bunu projenin ayarlarında belirler.",
+    "failed": "Pano devam ettiremedi: {{reason}}",
+    "log": "Günlük",
+    "state": {
+      "queued": "Başlıyor",
+      "running": "Çalışıyor",
+      "succeeded": "Bitti",
+      "failed": "Başarısız",
+      "skipped": "Başlamadı"
+    }
+  },
+  "runReportsWindow": {
+    "reports": "Raporlar",
+    "reportsCount": "Raporlar ({{n}})",
+    "title": "Çalıştırma raporları",
+    "description": "Bu ticket'ın çalıştırma raporları; filtreler ve sıralamayla. Birini açmak onu tam olarak gösterir.",
+    "back": "Raporlara dön",
+    "none": "Henüz çalıştırma raporu yok.",
+    "noMatch": "Bu filtrelere uyan rapor yok.",
+    "count_one": "{{count}} rapordan {{shown}}",
+    "count_other": "{{count}} rapordan {{shown}}",
+    "clearFilters": "Filtreleri temizle",
+    "filter": {
+      "agent": "Ajan",
+      "round": "Tur",
+      "time": "Zaman",
+      "difficulty": "Zorluk",
+      "confidence": "Güven",
+      "duration": "Süre",
+      "sortBy": "Sıralama"
+    },
+    "items": {
+      "allAgents": "Tüm ajanlar",
+      "allRounds": "Tüm turlar",
+      "round": "Tur {{n}}",
+      "noRound": "Turu yok"
+    },
+    "time": {
+      "any": "Her zaman",
+      "hour": "Son saat",
+      "today": "Bugün",
+      "week": "Son 7 gün"
+    },
+    "duration": {
+      "any": "Hepsi",
+      "reported": "Bildirilen",
+      "unreported": "Bildirilmeyen"
+    },
+    "rating": {
+      "any": "Hepsi",
+      "unrated": "Puanlanmamış"
+    },
+    "sort": {
+      "newest": "En yeni",
+      "oldest": "En eski",
+      "longest": "En uzun",
+      "difficulty": "En yüksek zorluk",
+      "confidence": "En yüksek güven"
     }
   }
 }

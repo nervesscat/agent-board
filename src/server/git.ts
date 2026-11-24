@@ -169,6 +169,8 @@ export interface MyGhPr extends GhPr {
   requested: boolean
   /** I am one of its assignees. */
   assigned: boolean
+  /** One of the four searches found it; false for a PR only the plain list of open PRs found. */
+  involvesMe: boolean
 }
 
 const PR_FIELDS =
@@ -182,7 +184,10 @@ const MERGED_LIMIT = 30
  * The PRs I am in: the ones I authored (agents push with my account), the ones where my review was
  * requested, the ones I already reviewed, and the ones assigned to me. Open ones, and the ones of the
  * same searches merged on or after `mergedSince` (a date, YYYY-MM-DD), at most `MERGED_LIMIT` per
- * search: the queue keeps them a while after they land, never the repo's whole history.
+ * search: the queue keeps them a while after they land, never the repo's whole history. One more call
+ * lists the repo's open PRs without a search (All PRs): one only that call finds is not mine
+ * (`involvesMe` false). It returns the `OPEN_LIMIT` most recent, so beyond that an older open PR
+ * of someone else is not in All PRs; the ones that involve me are still found by the searches.
  */
 export async function listMyPrs(repoPath: string, opts: { mergedSince: string }): Promise<MyGhPr[]> {
   const searches = ['author:@me', 'review-requested:@me', 'reviewed-by:@me', 'assignee:@me'] as const
@@ -195,31 +200,46 @@ export async function listMyPrs(repoPath: string, opts: { mergedSince: string })
       query: `${search} merged:>=${opts.mergedSince}`,
     })),
   ]
-  const found = await Promise.all(
-    queries.map((q) =>
-      gh<GhPr[]>(repoPath, [
-        'pr',
-        'list',
-        '--state',
-        q.state,
-        '--limit',
-        String(q.limit),
-        '--search',
-        q.query,
-        '--json',
-        PR_FIELDS,
-      ]),
+  const [found, everyOpen] = await Promise.all([
+    Promise.all(
+      queries.map((q) =>
+        gh<GhPr[]>(repoPath, [
+          'pr',
+          'list',
+          '--state',
+          q.state,
+          '--limit',
+          String(q.limit),
+          '--search',
+          q.query,
+          '--json',
+          PR_FIELDS,
+        ]),
+      ),
     ),
-  )
+    gh<GhPr[]>(repoPath, [
+      'pr',
+      'list',
+      '--state',
+      'open',
+      '--limit',
+      String(OPEN_LIMIT),
+      '--json',
+      PR_FIELDS,
+    ]),
+  ])
   const byNumber = new Map<number, MyGhPr>()
   found.forEach((prs, i) => {
     for (const pr of prs) {
-      const seen = byNumber.get(pr.number) ?? { ...pr, requested: false, assigned: false }
+      const seen = byNumber.get(pr.number) ?? { ...pr, requested: false, assigned: false, involvesMe: true }
       if (queries[i]!.search === 'review-requested:@me') seen.requested = true
       if (queries[i]!.search === 'assignee:@me') seen.assigned = true
       byNumber.set(pr.number, seen)
     }
   })
+  for (const pr of everyOpen)
+    if (!byNumber.has(pr.number))
+      byNumber.set(pr.number, { ...pr, requested: false, assigned: false, involvesMe: false })
   return [...byNumber.values()]
 }
 
@@ -993,7 +1013,8 @@ export async function addsNothing(repoPath: string, base: string, ref: string): 
 /**
  * Whether `ref` holds work of `other` that none of `bases` has: a commit of `other`'s own (not in a
  * base, nor in one of `others`, the other branches, those of them `other` itself is built on) that is
- * in `ref`. A branch built on `ref` does not count, and without a base nothing can be told. Each is a
+ * in `ref`, or a copy of one (the same change under another sha: a cherry-pick, or a rebase of `other`'s
+ * commits). A branch built on `ref` does not count, and without a base nothing can be told. Each is a
  * commit's full sha, so the answer is about those commits whatever the branches did since.
  */
 export async function holdsWorkOf(
@@ -1005,6 +1026,31 @@ export async function holdsWorkOf(
 ) {
   if (!bases.length) return false
   if (await isAncestor(repoPath, ref, other)) return false
+  // What `other` stands on is not its own work: the shared commits may be a third branch's. rev-list
+  // prints each of `others` that is not in `other`; one in a base is left out too, which changes
+  // nothing: what a base holds is not counted anyway.
+  const tips = [...new Set(others)]
+  const over = tips.length ? await git(repoPath, ['rev-list', ...tips, '--not', other, ...bases]) : ''
+  const notBelow = new Set(over ? over.split('\n') : [])
+  const stands = tips.filter((x) => !notBelow.has(x))
+  const below = [...bases, ...stands]
+  // A copy: of the commits only one of the two has (outside the bases and what `other` stands on), a
+  // pair with the same change on both sides is marked `=`.
+  const marks = await git(repoPath, [
+    'rev-list',
+    '--no-merges',
+    '--cherry-mark',
+    `${ref}...${other}`,
+    '--not',
+    ...below,
+  ])
+  // An empty commit (a "trigger the checks" one) has the empty change, which any two share: it is no copy.
+  for (const line of marks.split('\n'))
+    if (
+      line.startsWith('=') &&
+      (await git(repoPath, ['diff-tree', '--root', '-r', '--no-commit-id', line.slice(1)]))
+    )
+      return true
   // Quick way out: nothing the two share lies outside the bases.
   const shared = await git(repoPath, ['merge-base', '--all', ref, other]).catch(() => '')
   let outside = false
@@ -1013,14 +1059,66 @@ export async function holdsWorkOf(
     if (!landed.some(Boolean)) outside = true
   }
   if (!outside) return false
-  // What `other` stands on is not its own work: the shared commits may be a third branch's. rev-list
-  // prints each of `others` that is not in `other`; one in a base is left out too, which changes
-  // nothing: what a base holds is not counted anyway.
-  const tips = [...new Set(others)]
-  const over = tips.length ? await git(repoPath, ['rev-list', ...tips, '--not', other, ...bases]) : ''
-  const notBelow = new Set(over ? over.split('\n') : [])
-  const stands = tips.filter((x) => !notBelow.has(x))
-  const own = ['rev-list', '--count', other, ...[...bases, ...stands].map((b) => `^${b}`)]
+  const own = ['rev-list', '--count', other, ...below.map((b) => `^${b}`)]
   const mine = Number(await git(repoPath, own))
   return mine > 0 && Number(await git(repoPath, [...own, `^${ref}`])) < mine
+}
+
+/**
+ * Whether `tip` has commits of its own: not in a branch below it, nor in `bases`. A commit is not its
+ * own when a branch other than `own` (the full names of its own refs, such as `refs/heads/x` and
+ * `refs/remotes/origin/x`) holds it and is itself in `tip`'s history: base history, what the branch is
+ * built on and a shared integration branch all are. Local branches and every remote's. `bases` (shas)
+ * are where the work is headed: what they already hold has landed, even where its branch was kept.
+ */
+export async function hasOwnCommits(
+  repoPath: string,
+  tip: string,
+  own: string[],
+  bases: string[],
+): Promise<boolean> {
+  const out = await git(repoPath, [
+    'for-each-ref',
+    `--merged=${tip}`,
+    '--format=%(refname) %(objectname)',
+    'refs/heads',
+    'refs/remotes',
+  ])
+  const below = new Set<string>(bases)
+  for (const line of out ? out.split('\n') : []) {
+    const [name, sha] = line.split(' ')
+    if (!own.includes(name!)) below.add(sha!)
+  }
+  return Number(await git(repoPath, ['rev-list', '--count', tip, '--not', ...below])) > 0
+}
+
+/**
+ * Whether the branch at `ref` holds the work of the branch at `other` for certain: `other`'s tip is a
+ * strict ancestor of `ref`'s (equal tips could be either one's), and `other` has commits of its own
+ * (`hasOwnCommits`). The topology then says who owns them. Two branches that only share a commit below
+ * both tips, or a copy of the commits with other shas (rebased), are not certain. Both are full shas, `bases` those of the
+ * bases of the branch at `ref`. Without bases nothing can be told, as in `holdsWorkOf`: `other` may be
+ * the base itself, whose whole history would count as its own commits.
+ */
+export async function holdsOwnWork(
+  repoPath: string,
+  ref: string,
+  other: string,
+  otherOwn: string[],
+  bases: string[],
+): Promise<boolean> {
+  if (!bases.length || ref === other || !(await isAncestor(repoPath, other, ref))) return false
+  return hasOwnCommits(repoPath, other, otherOwn, bases)
+}
+
+/** The branches (full ref names, as `for-each-ref` gives them) whose tip is in the history of `sha`. */
+export async function refsMergedInto(repoPath: string, sha: string): Promise<Set<string>> {
+  const out = await git(repoPath, [
+    'for-each-ref',
+    `--merged=${sha}`,
+    '--format=%(refname)',
+    'refs/heads',
+    'refs/remotes',
+  ])
+  return new Set(out ? out.split('\n') : [])
 }

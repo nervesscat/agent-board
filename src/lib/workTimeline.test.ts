@@ -234,9 +234,10 @@ describe('buildTimeline', () => {
     expect(archived.totals.workingMs).toBe(20 * MIN)
     // Blocked and review stages are live too.
     expect(build([span, hb], '11:00', { status: 'review' }).totals.workingMs).toBe(60 * MIN)
+    expect(build([span, hb], '11:00', { status: 'approved' }).totals.workingMs).toBe(60 * MIN)
   })
 
-  it("lists each stay in a review-kind stage with the stage's own name", () => {
+  it("lists each stay in a review or approved stage with the stage's own name", () => {
     const events = [
       event('span_start', '09:30', { phase: 'build' }),
       event('stage', '10:00', { agent: 'board', by: 'board', fromStage: 'in_progress', toStage: 'review' }),

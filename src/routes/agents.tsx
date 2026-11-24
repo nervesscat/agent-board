@@ -6,6 +6,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
+import { BackToModule } from '#/components/BackToModule'
 import { AgentPicker, CopyBlock, copyText } from '#/components/AgentPicker'
 import { AgentTokenList, GenerateCommands } from '#/components/AgentTokens'
 import { SkillInstallButton, useSkillToken } from '#/components/SkillInstall'
@@ -65,7 +66,8 @@ function ConnectAgents() {
   const mcp = mcpSetup(client, setup.boardUrl, token)
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
+      <div className="space-y-2">
+        <BackToModule />
         <h1 className="text-xl font-semibold tracking-tight">{t('connect.title')}</h1>
         <p className="text-sm text-muted-foreground">
           <Trans

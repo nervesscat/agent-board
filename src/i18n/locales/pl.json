@@ -35,7 +35,6 @@
     "previews": "Wczytywanie: podglądy…",
     "repositories": "Wczytywanie: repozytoria…",
     "roadmap": "Wczytywanie: roadmapa…",
-    "runReports": "Wczytywanie: raporty z uruchomień…",
     "earlierVersions": "Wczytywanie: wcześniejsze wersje…",
     "workspaces": "Wczytywanie: workspace'y…"
   },
@@ -46,7 +45,8 @@
     "settings": "Ustawienia",
     "testMode": "tryb testu",
     "authOff": "bez loginu",
-    "authOffTip": "BOARD_ENV={{env}}, logowanie wyłączone: zalogowano jako {{actor}}. To nie jest działająca tablica."
+    "authOffTip": "BOARD_ENV={{env}}, logowanie wyłączone: zalogowano jako {{actor}}. To nie jest działająca tablica.",
+    "connectAgent": "Połącz agenta"
   },
   "time": {
     "never": "—",
@@ -498,7 +498,8 @@
       "blocked": "Zablokowane",
       "review": "Recenzja",
       "done": "Gotowe",
-      "cancelled": "Anulowane"
+      "cancelled": "Anulowane",
+      "approved": "Zatwierdzone"
     },
     "hint": {
       "open": "czeka na podjęcie; przejęcie przenosi je do etapu, w którym zaczyna się praca",
@@ -506,7 +507,8 @@
       "blocked": "czeka na ciebie",
       "review": "przekazane do recenzji",
       "done": "ukończone; nie można go przejąć",
-      "cancelled": "porzucone; odrzucenie przenosi tu zgłoszenie, a jego zadania znikają z postępu"
+      "cancelled": "porzucone; odrzucenie przenosi tu zgłoszenie, a jego zadania znikają z postępu",
+      "approved": "twoja zgoda na scalenie; żaden agent nie przenosi tu zgłoszenia"
     },
     "color": {
       "gray": "szary",
@@ -633,20 +635,20 @@
         "previews": "Podglądy",
         "gallery": "Galeria",
         "agents": "Zespół",
-        "runReports": "Raporty uruchomień",
         "daily": "Dzienny",
         "cleanup": "Porządki",
         "repositories": "Repozytoria",
-        "instructions": "Instrukcje"
+        "instructions": "Instrukcje",
+        "workflow": "Przepływ pracy"
       },
       "overview": {
         "needsYou": "Czeka na ciebie",
         "inProgress": "W toku",
         "doneToday": "Gotowe dziś",
-        "next": "Następne",
         "carryingOver": "Przechodzące",
         "notes": "Notatki",
-        "agents": "Agenci przy pracy"
+        "agents": "Agenci przy pracy",
+        "lostContact": "Utracony kontakt"
       },
       "ticket": {
         "instructions": "Instrukcje",
@@ -657,7 +659,8 @@
         "runs": "Uruchomienia",
         "details": "Szczegóły",
         "branch": "Gałąź",
-        "workspaces": "Obszary robocze"
+        "workspaces": "Obszary robocze",
+        "resume": "Wznawianie"
       }
     },
     "locked": {
@@ -1566,23 +1569,7 @@
     "dialogTitleEmpty": "Raport uruchomienia",
     "round": "runda {{round}}",
     "difficultyShort": "trudność {{n}}/5",
-    "confidenceShort": "pewność {{n}}/5",
-    "panelTitle": "Raporty uruchomień",
-    "panelHeading_one": "Raporty uruchomień · {{count}} uruchomienie",
-    "panelHeading_few": "Raporty uruchomień · {{count}} uruchomienia",
-    "panelHeading_many": "Raporty uruchomień · {{count}} uruchomień",
-    "panelHeading_other": "Raporty uruchomień · {{count}} uruchomienia",
-    "pageTitle": "Raporty uruchomień",
-    "pageText": "Jak poszło każde uruchomienie subagenta, jego własnymi słowami. Jeden raport na uruchomienie; runda recenzji ma po jednym od każdego ze swoich agentów.",
-    "allAgents": "Wszyscy agenci",
-    "agent": "Agent",
-    "ticketPlaceholder": "Zgłoszenie nr",
-    "ticketNumber": "Numer zgłoszenia",
-    "filter": "Filtruj",
-    "clear": "Wyczyść",
-    "emptyFiltered": "Brak raportów uruchomień dla tego filtra.",
-    "empty": "Brak raportów uruchomień.",
-    "openTicket": "Otwórz zgłoszenie"
+    "confidenceShort": "pewność {{n}}/5"
   },
   "projectAgents": {
     "title": "Zespół",
@@ -1731,7 +1718,8 @@
     "tagsPlaceholder": "Wysoki, Formularze",
     "branchesOff": "Odgałęzia się od <branch>{{branch}}</branch>, gdy jest w tym samym repozytorium.",
     "uploading": "Przesyłanie…",
-    "create": "Utwórz"
+    "create": "Utwórz",
+    "workflow": "Przepływ pracy"
   },
   "notes": {
     "title": "Notatki",
@@ -1995,6 +1983,11 @@
         "title": "Ustawienia",
         "subtitle": "Preferencje całej tablicy",
         "keywords": "preferencje, motyw, podglądy, urządzenia"
+      },
+      "workflow": {
+        "title": "Przepływ pracy",
+        "subtitle": "Kroki, które agenci wykonują dla zgłoszenia, jako drzewo",
+        "keywords": "workflow, kroki, presety, rundy recenzji, przekazanie, delegowanie, kolejność"
       }
     },
     "setting": {
@@ -2164,7 +2157,6 @@
   },
   "ticketBoard": {
     "stage": "Etap",
-    "mergeAfter": "scal po {{list}}",
     "archiveTip_one": "Zarchiwizuj {{count}} zgłoszenie w {{stage}}",
     "archiveTip_few": "Zarchiwizuj {{count}} zgłoszenia w {{stage}}",
     "archiveTip_many": "Zarchiwizuj {{count}} zgłoszeń w {{stage}}",
@@ -2199,11 +2191,7 @@
     "nothingArchived": "Nic nie zarchiwizowano.",
     "archived": "zarchiwizowano {{when}}",
     "archivedBy": "zarchiwizowano {{when}} przez <actor/>",
-    "restore": "Przywróć",
-    "laneApproved_one": "{{count}} zatwierdzona",
-    "laneApproved_few": "{{count}} zatwierdzone",
-    "laneApproved_many": "{{count}} zatwierdzonych",
-    "laneApproved_other": "{{count}} zatwierdzonej"
+    "restore": "Przywróć"
   },
   "ticketList": {
     "archivedToast_one": "Zarchiwizowano {{count}} zgłoszenie",
@@ -2251,8 +2239,10 @@
     "addPlaceholder": "Dodaj zgłoszenie…",
     "noOthers": "Brak innych zgłoszeń",
     "includes": "Zawiera niescaloną pracę z <goto>{{ref}}</goto>",
-    "cannotBeDone": "#{{id}} nie może być gotowe, dopóki gałąź #{{need}} nie zostanie scalona do swojej bazy",
-    "addAsNeed": "Dodaj jako zależność"
+    "addAsNeed": "Dodaj jako zależność",
+    "autoTitle": "Dodane przez tablicę: gałąź tego zgłoszenia zawiera niescalone commity tamtego zgłoszenia. Znika, gdy gałąź już ich nie zawiera, a usunięcie go tutaj jest trwałe (nie zostanie dodane ponownie dla tych samych commitów).",
+    "addedByBoard": "Dodane przez tablicę",
+    "cannotBeDoneUnsure": "Tablica nie może ustalić z pewnością, czyje są te commity, więc nie dodała zależności. #{{id}} nie może być gotowe, dopóki gałąź #{{need}} nie zostanie scalona do swojej bazy."
   },
   "verdict": {
     "approve": "Zatwierdź",
@@ -2291,11 +2281,15 @@
       "others": {
         "label": "Czekają na innych",
         "title": "Twoje PR (także agentów): oczekujące akceptacje, zatwierdzone przez każdego recenzenta albo wstrzymane przez ich komentarze"
+      },
+      "all": {
+        "label": "Wszystkie PR",
+        "title": "Każdy otwarty PR tych repozytoriów, bez względu na autora i na to, czy dotyczy ciebie"
       }
     },
     "reviewers": {
-      "all": "Wszystkie PR",
-      "mine": "Tylko ja jako recenzent"
+      "mine": "Tylko ja jako recenzent",
+      "involving": "Dotyczące mnie"
     },
     "tabs": {
       "pending": "Oczekujące",
@@ -2305,7 +2299,8 @@
     },
     "empty": {
       "me": "Brak PR do recenzji: {{stage}}.",
-      "others": "Brak PR czekających na innych: {{stage}}."
+      "others": "Brak PR czekających na innych: {{stage}}.",
+      "all": "Brak PR wśród otwartych: {{stage}}."
     },
     "refresh": "Odśwież",
     "mergeAfterTip": "Jego zgłoszenie wymaga najpierw scalenia:\n{{list}}",
@@ -2332,7 +2327,8 @@
     "holdTitle": "Wstrzymaj #{{number}}",
     "holdText": "Notatka dla ciebie i agentów. GitHub nie jest ruszany.",
     "holdPlaceholder": "Dlaczego czeka…",
-    "holdConfirm": "Wstrzymaj"
+    "holdConfirm": "Wstrzymaj",
+    "notInvolvingYou": "nie dotyczy ciebie"
   },
   "workStatus": {
     "state": {
@@ -2519,7 +2515,15 @@
       "human": "czeka na człowieka {{duration}}",
       "review": "w recenzji {{duration}}",
       "merge": "czeka na scalenie {{duration}}"
-    }
+    },
+    "openReport": "Otwórz raport {{agent}}: {{label}}",
+    "openReportRound": "Otwórz raport {{agent}}, runda {{round}}: {{label}}",
+    "reportDescription": "Raport napisany dla tego uruchomienia",
+    "factsDescription": "Fakty o tym uruchomieniu",
+    "loadingReport": "Wczytywanie raportu uruchomienia…",
+    "reportsFailed": "Nie udało się wczytać raportów.",
+    "noReport": "Brak raportu dla tego uruchomienia.",
+    "noReportYet": "Jeszcze brak raportu dla tego uruchomienia."
   },
   "roadmap": {
     "title": "Roadmapa",
@@ -2626,8 +2630,9 @@
     },
     "lost": {
       "title": "Utracony kontakt",
-      "link": "Utracony kontakt: <id>#{{id}}</id> {{title}}",
-      "detail": "{{agent}} · {{phase}} · {{since}} · ostatnia wieść {{minutes}} min temu"
+      "empty": "Brak utraconego kontaktu.",
+      "lastHeardTip": "Ostatni sygnał {{when}}",
+      "lastHeard": "ostatni sygnał {{duration}} temu"
     },
     "inProgress": {
       "title": "W toku",
@@ -2643,25 +2648,14 @@
       "activity_many": "{{count}} zdarzeń dziś: Dzienny",
       "activity_other": "{{count}} zdarzenia dziś: Dzienny"
     },
-    "next": {
-      "title": "Następne",
-      "titleStage": "Następne: {{stage}}",
-      "empty": "Nic nie jest zaplanowane.",
-      "emptyStage": "Nic nie jest zaplanowane w {{stage}}.",
-      "tasks": "{{done}}/{{total}} zadań",
-      "more": "jeszcze {{count}}",
-      "blocked": "zablokowane: {{count}}",
-      "backlog": "w backlogu: {{count}}",
-      "board": "Tablica"
-    },
     "carryingOver": {
       "title": "Przechodzące",
-      "empty": "Nic nie przechodzi z poprzednich dni.",
       "startedTip": "Praca nad tym zaczęła się {{when}}",
       "days_one": "{{count}} dzień w toku",
       "days_few": "{{count}} dni w toku",
       "days_many": "{{count}} dni w toku",
-      "days_other": "{{count}} dnia w toku"
+      "days_other": "{{count}} dnia w toku",
+      "emptyShown": "Nic zablokowanego ani w recenzji sprzed dzisiaj."
     }
   },
   "notifications": {
@@ -2708,20 +2702,13 @@
     "restoredToast": "Przywrócono na tablicę",
     "disapprovedToast": "#{{id}} odrzucone i anulowane",
     "undo": "Cofnięcie anuluje odrzucenie i zwraca do {{stage}}.",
-    "undoMoved": "Cofnięcie anuluje odrzucenie i zwraca do {{stage}}. Przejście do #{{next}}.",
     "undoAction": "Cofnij",
     "summary": "Podsumowanie",
-    "openedBy": "otworzone przez <actor/> {{when}}",
     "updated": "zaktualizowano {{when}}",
     "archivedBy": "Zarchiwizowane przez {{name}} {{when}}",
     "archivedByLane": "Zarchiwizowane przez {{name}} {{when}}, razem ze zgłoszeniem, którego jest ścieżką",
     "someone": "ktoś",
     "archivedBadge": "Zarchiwizowane",
-    "lanesWarningTip": "To zgłoszenie jest oznaczone jako dalej niż jego ścieżki",
-    "lanesNotDone_one": "{{count}} ścieżka niegotowa",
-    "lanesNotDone_few": "{{count}} ścieżki niegotowe",
-    "lanesNotDone_many": "{{count}} ścieżek niegotowych",
-    "lanesNotDone_other": "{{count}} ścieżki niegotowej",
     "decisionNeeded": "wymagana decyzja",
     "archiveTip": "Zdejmij z tablicy razem ze ścieżkami; Zarchiwizowane na stronie funkcji je przywraca",
     "deleteTitle": "Usunąć to zgłoszenie?",
@@ -2791,7 +2778,6 @@
     "newSubtaskOf": "Nowe podzadanie: {{name}}",
     "add": "Dodaj",
     "addPhase": "Dodaj fazę: Implementation, Pushed, PR…",
-    "noCall": "Bez decyzji",
     "all": "Wszystkie",
     "nounLane": "ścieżka",
     "laneOf": "ścieżka {{n}} z {{count}}",
@@ -2801,13 +2787,10 @@
     "previousNoun": "Poprzednie: {{noun}}",
     "nextNoun": "Następne: {{noun}}",
     "stepKeysTip": "[ i ] cofają i przesuwają do przodu",
-    "lanesDone": "gotowe {{done}}/{{total}} · zatwierdzone {{approved}}",
-    "lanesDisapproved": "odrzucone: {{count}}",
     "lanesCancelled": "anulowane: {{count}}",
     "allTasks": "wszystkie zadania {{done}}/{{total}}",
     "noLanes": "Brak ścieżek. Podziel to zgłoszenie na ścieżki, gdy jego części biegną równolegle: każda ścieżka dostaje własną gałąź, osobę przypisaną, zadania i aktualizacje.",
     "filterStage": "Etap",
-    "filterVerdict": "Werdykt",
     "filterTags": "Tagi",
     "showing": "pokazano {{shown}} z {{total}}",
     "clearFilters": "wyczyść filtry",
@@ -2883,7 +2866,14 @@
     "workspacesDesc": "Worktree, podgałęzie i piaskownice subagentów, które agenci otworzyli dla tego zgłoszenia.",
     "workspacesDescLanes": "Worktree, podgałęzie i piaskownice subagentów, które agenci otworzyli dla tego zgłoszenia i jego ścieżek.",
     "noneYet": "Na razie brak.",
-    "updatedLabel": "zaktualizowano"
+    "breadcrumb": "Nawigacja okruszkowa",
+    "scrollSideUp": "Przewiń kolumnę boczną w górę",
+    "scrollSideDown": "Przewiń kolumnę boczną w dół",
+    "workflow": "Przepływ pracy",
+    "workflowOwn": "Działa według przepływu pracy {{workflow}}, ustawionego dla tego zgłoszenia.",
+    "workflowProject": "Działa według przepływu pracy projektu ({{workflow}}).",
+    "workflowSteps": "Zobacz kroki",
+    "lanesProgress": "{{done}}/{{total}} gotowe"
   },
   "complexity": {
     "label": {
@@ -2892,12 +2882,12 @@
       "high": "Wysoka",
       "max": "Maks."
     },
-    "selectHint": "Niska: bez recenzji. Średnia: jedna runda recenzji. Wysoka: do trzech. Maks.: do dziesięciu rund, dla pracy budowanej od zera; funkcja w istniejącej bazie kodu nigdy nie jest maks., choćby była trudna.",
-    "hint": {
-      "low": "Niska: bez recenzji. Builder weryfikuje to sam.",
-      "mid": "Średnia: jedna runda recenzji.",
-      "high": "Wysoka: do trzech rund recenzji.",
-      "max": "Maks.: do dziesięciu rund recenzji, dla całej witryny lub aplikacji budowanej od zera, nowego produktu albo samodzielnej usługi; kończy się na pierwszej rundzie, która przechodzi. Funkcja w istniejącej bazie kodu to co najwyżej wysoka, choćby była trudna."
+    "workflowHint": "Niska: w przepływie standardowym bez spec i recenzji. Średnia, Wysoka i Maks.: rundy recenzji ustawione przez przepływ pracy projektu (Standardowy: jedna, trzy, do dziesięciu). Maks. jest dla pracy budowanej od zera; funkcja w istniejącej bazie kodu nigdy nie jest maks., choćby trudna.",
+    "levelHint": {
+      "low": "Niska: rundy recenzji ustawione przez przepływ pracy projektu (Standardowy: brak). Builder weryfikuje sam.",
+      "mid": "Średnia: rundy recenzji ustawione przez przepływ pracy projektu (Standardowy: jedna).",
+      "high": "Wysoka: rundy recenzji ustawione przez przepływ pracy projektu (Standardowy: do trzech).",
+      "max": "Maks.: rundy recenzji ustawione przez przepływ pracy projektu (Standardowy: do dziesięciu), dla całej witryny lub aplikacji budowanej od zera, nowego produktu albo samodzielnej usługi; kończy się na pierwszej rundzie, która przechodzi. Funkcja w istniejącej bazie kodu to najwyżej wysoka, choćby trudna."
     }
   },
   "agentsAtWork": {
@@ -2947,6 +2937,278 @@
       "days_few": "{{count}} dni",
       "days_many": "{{count}} dni",
       "days_other": "{{count}} dnia"
+    }
+  },
+  "workflowChips": {
+    "selfTip": "Agent zgłoszenia robi to sam",
+    "agentTip": {
+      "picked": "Agent z Zespołu wybrany do tego kroku. Jego instrukcje są na stronie Zespół. Rola ({{agent}}) nazywa jego spany i raporty uruchomień.",
+      "role": "Agent z Zespołu nazwany jak jego rola ({{agent}}). Jego instrukcje są na stronie Zespół. Rola ({{agent}}) nazywa jego spany i raporty uruchomień.",
+      "default": "Żaden agent z Zespołu nie nazywa się {{agent}}: działa jako wbudowana rola {{agent}}. Jego instrukcje są na stronie Zespół. Rola ({{agent}}) nazywa jego spany i raporty uruchomień."
+    },
+    "agentMissing": "brak agenta",
+    "missingTip": "Wybrano {{picked}}, ale w Zespole nie ma teraz agenta o tej nazwie: działa jako {{name}}, dopóki agent nie wróci albo nie zostanie wybrany inny.",
+    "locked": "Zablokowane",
+    "lockedAboveLow": "Zablokowane powyżej niskiej",
+    "skippedOnLow": "Pomijane przy niskiej",
+    "changed": "zmienione",
+    "changedTip": "Zmienione względem presetu: {{what}}"
+  },
+  "workflowGraph": {
+    "label": "Przepływ pracy {{label}} dla zgłoszenia, złożoność: {{complexity}}",
+    "complexity": {
+      "low": "niska",
+      "mid": "średnia",
+      "high": "wysoka",
+      "max": "maks."
+    },
+    "roundSurvives": "runda przechodzi",
+    "roundFails": "runda nie przechodzi",
+    "inParallel": "Równolegle",
+    "reviewRound": "Runda recenzji",
+    "noRoundsOn": "Brak rund recenzji przy złożoności: {{complexity}}"
+  },
+  "workflowPanel": {
+    "idle": "Wybierz krok na wykresie, aby zobaczyć, co robi, i zmienić, kto go wykonuje, jego nakład, czy się uruchamia i jego miejsce w kolejności.",
+    "runnerAgents": "Agent zgłoszenia sam uruchamia /feature-review. Jego fazy uruchamiają własnych agentów z Zespołu, wybieranych na węzłach faz.",
+    "selfAgent": "Agent zgłoszenia robi to sam: nie ma agenta z Zespołu do wyboru.",
+    "whatItDoes": "Co robi",
+    "handoffTo": "Przekazanie do: {{next}}",
+    "result": "Wynik",
+    "team": {
+      "title": "Agent z Zespołu",
+      "default": "Domyślny ({{name}})",
+      "notInTeam": "{{name}} (nie ma w Zespole)",
+      "missing": "Wybrano {{picked}}, ale w Zespole nie ma teraz agenta o tej nazwie. Działa jako {{name}}, dopóki agent nie wróci albo nie zostanie wybrany inny. Wybierz Domyślny, aby wyczyścić wybór.",
+      "runsAs": "Działa jako {{name}}. Jego instrukcje są na stronie Zespół; rola ({{role}}) nazywa jego spany i raporty uruchomień.",
+      "runsAsDefault": "Działa jako {{name}} (wbudowany agent: w Zespole nie ma agenta o tej nazwie). Jego instrukcje są na stronie Zespół; rola ({{role}}) nazywa jego spany i raporty uruchomień."
+    },
+    "placeInOrder": "Miejsce w kolejności",
+    "moveUp": "Przesuń wyżej",
+    "moveDown": "Przesuń niżej",
+    "moveUpTip": "Przesuń wyżej: {{step}} uruchamia się wcześniej",
+    "moveDownTip": "Przesuń niżej: {{step}} uruchamia się później",
+    "runs": "Uruchamia się",
+    "run": "Uruchamiaj: {{step}}",
+    "alsoRunOnLow": "Uruchamiaj {{step}} także dla zgłoszeń o niskiej złożoności",
+    "aboveLowNote": "Ten przełącznik decyduje tylko o tym, czy krok uruchamia się także dla zgłoszenia o niskiej złożoności.",
+    "effort": "Nakład",
+    "effortHint": "Przekazywany jako nakład narzędzia Agent. {{hint}}.",
+    "reviewRuns": "Osobne uruchomienia /feature-review w każdej rundzie ({{total}}): {{runs}}, każde pod własną nazwą agenta i bez wglądu w znaleziska pozostałych.",
+    "survival": "<strong>Runda przechodzi, gdy</strong> {{survival}}."
+  },
+  "workflowPage": {
+    "title": "Przepływ pracy",
+    "intro": "Jak zgłoszenie przechodzi od To do do przekazania: kroki, które wykonuje jego agent, w kolejności, kto wykonuje każdy i co każdy przekazuje następnemu. Projekt działa według jednego przepływu pracy; zgłoszenie może wskazać inny na swojej stronie. Agenci czytają go z tablicy, więc zmiana tutaj obowiązuje od ich następnego uruchomienia.",
+    "graphShows": "Wykres pokazuje zgłoszenie o złożoności: {{complexity}}.",
+    "projectFollows": "Projekt działa według tego przepływu pracy",
+    "use": "Użyj tego przepływu pracy",
+    "resetThis": "Zresetuj ten przepływ pracy",
+    "resetTitle": "Zresetować przepływ pracy {{label}}?",
+    "resetBody": "Jego kolejność, przełączniki, nakłady, agenci z Zespołu i rundy recenzji wracają do ustawień presetu {{label}}. Pozostałe presety zachowują zmiany.",
+    "cancel": "Anuluj",
+    "reset": "Zresetuj",
+    "sectionLabel": "Przepływ pracy {{label}}",
+    "projects": "projektu",
+    "summary_one": "{{count}} krok · złożoność: {{complexity}} · recenzja: {{rounds}}",
+    "summary_few": "{{count}} kroki · złożoność: {{complexity}} · recenzja: {{rounds}}",
+    "summary_many": "{{count}} kroków · złożoność: {{complexity}} · recenzja: {{rounds}}",
+    "summary_other": "{{count}} kroku · złożoność: {{complexity}} · recenzja: {{rounds}}"
+  },
+  "workflowPresets": {
+    "group": "Presety przepływu pracy",
+    "active": "Aktywny",
+    "tweaked": "Zmieniony",
+    "complexity": "Złożoność",
+    "stats_one": "{{count}} krok · rundy recenzji {{rounds}}",
+    "stats_few": "{{count}} kroki · rundy recenzji {{rounds}}",
+    "stats_many": "{{count}} kroków · rundy recenzji {{rounds}}",
+    "stats_other": "{{count}} kroku · rundy recenzji {{rounds}}",
+    "light": {
+      "label": "Lekki",
+      "description": "Budowa, bramka, jeden recenzent, kontrola intent i przekazanie: bez agenta spec, bez env, bez osobnych hunt."
+    },
+    "standard": {
+      "label": "Standardowy",
+      "description": "Pełny cykl: spec, budowa, bramka, rundy recenzji ze spec, env, verify, dwoma niezależnymi hunt, refute i sprawdzeniem merge, potem kontrola intent, PR, CI, podgląd i przekazanie."
+    },
+    "thorough": {
+      "label": "Dokładny",
+      "description": "Standardowy plus osobne przejście z pisaniem testów, trzeci hunt z listą kontrolną bezpieczeństwa, kontrola intent na końcu każdej rundy recenzji i jedna runda recenzji więcej na każdym poziomie powyżej niskiego."
+    },
+    "maximum": {
+      "label": "Maksymalny",
+      "description": "Dokładny plus drugi, niezależny spec, druga pełna recenzja każdej rundy przez innego agenta, który nigdy nie widzi pierwszej, i wysoki nakład każdego agenta."
+    }
+  },
+  "workflowReview": {
+    "legend": "Rundy recenzji według złożoności",
+    "changed": "zmienione",
+    "notSaved": "Nie zapisano: {{reason}}",
+    "default": "domyślnie {{value}}"
+  },
+  "workflowReads": {
+    "title": "Co czytają agenci",
+    "hint": "tekst, który get_workflow zwraca dla tego przepływu pracy",
+    "textLabel": "Tekst przepływu pracy"
+  },
+  "workflowSelect": {
+    "project": "Przepływ pracy projektu ({{label}})",
+    "hint": "Przepływ pracy, według którego działa agent zgłoszenia: własny projektu albo jeden z czterech presetów tylko dla tego zgłoszenia. Zmiana przepływu pracy projektu nie zmienia zgłoszenia, które wskazuje własny."
+  },
+  "workflowView": {
+    "noRounds": "bez rund recenzji",
+    "rounds_one": "{{count}} runda",
+    "rounds_few": "{{count}} rundy",
+    "rounds_many": "{{count}} rund",
+    "rounds_other": "{{count}} rundy",
+    "complexity": {
+      "low": "Niska",
+      "mid": "Średnia",
+      "high": "Wysoka",
+      "max": "Maks."
+    },
+    "effort": {
+      "auto": "Auto",
+      "low": "Niski",
+      "medium": "Średni",
+      "high": "Wysoki"
+    },
+    "effortLevel": {
+      "low": "niski",
+      "medium": "średni",
+      "high": "wysoki"
+    },
+    "autoLevel": "Auto: {{level}}",
+    "autoEffortHint": "Auto podąża za zgłoszeniem: niski dla niskiej złożoności, średni dla średniej i wysokiej, wysoki dla maks.",
+    "separator": ", ",
+    "you": "ty",
+    "skippedNoRounds": "Bez rund recenzji",
+    "skippedOff": "Wyłączone",
+    "changed": {
+      "moved": "jego miejsce w kolejności",
+      "off": "wyłączone",
+      "effort": "jego nakład",
+      "agent": "jego agent z Zespołu"
+    },
+    "name": {
+      "agent": "agent {{name}}",
+      "locked": "zablokowane",
+      "skipsOnLow": "pomijane dla zgłoszeń o niskiej złożoności"
+    },
+    "lockReason": {
+      "claim": "Zablokowane: nic nie może ruszyć, zanim zgłoszenie nie zostanie przeczytane i przejęte.",
+      "build": "Zablokowane: nic nie jest dostarczane bez zbudowania zmiany.",
+      "gate": "Zablokowane: żadna zmiana nie idzie dalej bez sprawdzenia.",
+      "intent": "Zablokowane powyżej niskiej: każde zgłoszenie powyżej niskiej złożoności jest sprawdzane z własnymi słowami człowieka, zanim zostanie przekazane.",
+      "always": "Zablokowane: zgłoszenia nie można przekazać bez tego."
+    },
+    "survival": {
+      "light": "recenzent nie odtworzył żadnego znaleziska, a dowody buildera obejmują każde kryterium akceptacji",
+      "standard": "werdykt to SHIP, works check to YES, base check to NO, a każde kryterium akceptacji ma PASS na podstawie wykonania (UNVERIFIED tylko z powodu, który nazywają zasady eskalacji i którego nie dało się obejść)",
+      "thoroughIntent": "werdykt to SHIP, works check to YES, base check to NO, każde kryterium akceptacji ma PASS na podstawie wykonania (UNVERIFIED tylko z powodu, który nazywają zasady eskalacji i którego nie dało się obejść), a kontrola intent na końcu rundy się zgadza",
+      "maximum": "obie recenzje przechodzą ({{standard}}), a uzgodnienie nie zostawia otwartego żadnego znaleziska",
+      "maximumIntent": "obie recenzje przechodzą ({{standard}}), uzgodnienie nie zostawia otwartego żadnego znaleziska, a kontrola intent na końcu rundy się zgadza"
+    },
+    "move": {
+      "after": "{{step}}: musi być po {{other}}",
+      "stayFirst": "{{step}}: musi pozostać pierwszym krokiem",
+      "stayLast": "{{step}}: musi pozostać ostatnim krokiem",
+      "alreadyFirst": "{{step}}: jest już pierwszym krokiem",
+      "alreadyLast": "{{step}}: jest już ostatnim krokiem"
+    }
+  },
+  "backToModule": {
+    "back": "Wróć do: {{label}}",
+    "home": "Start"
+  },
+  "ticketLine": {
+    "openedBy": "Otwarte przez {{name}} ({{role}}), {{when}}",
+    "updated": "Zaktualizowano: {{when}}",
+    "opened": "Otwarto: {{when}}"
+  },
+  "resumeSettings": {
+    "title": "Wznawianie",
+    "intro": "Agent, który zadaje pytanie, kończy swoją turę. Z poleceniem ustawionym tutaj tablica sama kontynuuje pracę, gdy odpowiesz na kartę decyzji na tablicy albo przeniesiesz zgłoszenie z etapu zablokowanego lub recenzji z powrotem do aktywnego: uruchamia polecenie na tej maszynie, w worktree zgłoszenia, z pytaniem i twoją odpowiedzią (albo twoimi ostatnimi słowami) na standardowym wejściu i w pliku wskazanym przez <code>BOARD_RESUME_PROMPT_FILE</code>; ustawione są <code>BOARD_URL</code>, <code>BOARD_PROJECT_ID</code>, <code>BOARD_TICKET_ID</code> i <code>BOARD_AGENT_NAME</code>. Nic nie jest uruchamiane dla zgłoszenia z działającym agentem ani takiego, które już jest wznawiane. Działa z uprawnieniami użytkownika tablicy i tylko ty możesz to ustawić. Puste oznacza wyłączone.",
+    "presets": "Presety",
+    "found": "znaleziono",
+    "notFound": "nie znaleziono",
+    "command": "Polecenie wznawiania",
+    "commandPlaceholder": "claude -p (puste: wyłączone)",
+    "timeout": "Zatrzymaj po (minuty)",
+    "save": "Zapisz",
+    "saving": "Zapisywanie…",
+    "timeoutProblem": "Liczba całkowita od {{min}} do {{max}}.",
+    "unsaved": "Niezapisane zmiany.",
+    "noChanges": "Brak zmian.",
+    "off": "Wznawianie jest wyłączone."
+  },
+  "resumeCard": {
+    "title": "Wznawianie",
+    "resume": "Wznów",
+    "retry": "Ponów",
+    "started": "Tablica ponownie uruchomiła pracę",
+    "empty": "Nic jeszcze nie wznowiło tego zgłoszenia.",
+    "setInSettings": "Człowiek ustawia to w ustawieniach projektu.",
+    "failed": "Tablica nie mogła wznowić pracy: {{reason}}",
+    "log": "Log",
+    "state": {
+      "queued": "Uruchamianie",
+      "running": "W toku",
+      "succeeded": "Zakończone",
+      "failed": "Nieudane",
+      "skipped": "Nie uruchomiono"
+    }
+  },
+  "runReportsWindow": {
+    "reports": "Raporty",
+    "reportsCount": "Raporty ({{n}})",
+    "title": "Raporty uruchomień",
+    "description": "Raporty uruchomień tego zgłoszenia, z filtrami i sortowaniem. Otwarcie raportu pokazuje go w całości.",
+    "back": "Wróć do raportów",
+    "none": "Brak raportów uruchomień.",
+    "noMatch": "Żaden raport nie pasuje do tych filtrów.",
+    "count_one": "{{shown}} z {{count}} raportu",
+    "count_few": "{{shown}} z {{count}} raportów",
+    "count_many": "{{shown}} z {{count}} raportów",
+    "count_other": "{{shown}} z {{count}} raportu",
+    "clearFilters": "Wyczyść filtry",
+    "filter": {
+      "agent": "Agent",
+      "round": "Runda",
+      "time": "Czas",
+      "difficulty": "Trudność",
+      "confidence": "Pewność",
+      "duration": "Czas trwania",
+      "sortBy": "Sortuj według"
+    },
+    "items": {
+      "allAgents": "Wszyscy agenci",
+      "allRounds": "Wszystkie rundy",
+      "round": "Runda {{n}}",
+      "noRound": "Bez rundy"
+    },
+    "time": {
+      "any": "Dowolny czas",
+      "hour": "Ostatnia godzina",
+      "today": "Dziś",
+      "week": "Ostatnie 7 dni"
+    },
+    "duration": {
+      "any": "Dowolny",
+      "reported": "Podany",
+      "unreported": "Niepodany"
+    },
+    "rating": {
+      "any": "Dowolna",
+      "unrated": "Bez oceny"
+    },
+    "sort": {
+      "newest": "Najnowsze",
+      "oldest": "Najstarsze",
+      "longest": "Najdłuższe",
+      "difficulty": "Najwyższa trudność",
+      "confidence": "Najwyższa pewność"
     }
   }
 }

@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { AssigneeSelect } from '#/components/AssigneeSelect'
 import { AnnotateImage, useAnnotations } from '#/components/AnnotateImage'
 import { ComplexitySelect } from '#/components/Complexity'
+import { WorkflowSelect } from '#/components/WorkflowSelect'
 import { PendingFiles, useFileDrop, useUploads } from '#/components/PendingFiles'
 import { RichEditor } from '#/components/RichEditor'
 import { StatusSelect } from '#/components/StatusSelect'
@@ -29,7 +30,9 @@ import { Skeleton } from '#/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { errorMessage, post, type Ticket, type TicketFull } from '#/lib/api'
 import { DEFAULT_COMPLEXITY, type Complexity } from '#/lib/constants'
+import { hasGitSide } from '#/lib/kinds'
 import { useProject } from '#/lib/project'
+import { DEFAULT_WORKFLOW_PRESET, type WorkflowPresetId } from '#/lib/workflow'
 import { newTicketStage } from '#/lib/stages'
 import { addTags, overTagLimits } from '#/lib/tags'
 import { addTasks } from '#/lib/tasks'
@@ -76,9 +79,14 @@ export function NewTicket({
   const { data: project, isPending: projectPending } = useProject(projectId)
   const [picked, setPicked] = useState('')
   const repos = project?.repos ?? []
+  const hasWorkflow = !parent && hasGitSide(project?.kinds)
+  // With one repository the Workflow field fills the cell under Stage and Complexity; Tags spans both rows.
+  const stacked = hasWorkflow && repos.length <= 1
   const repoId = picked || String(parent?.repoId ?? repos[0]?.id ?? '')
   const [stage, setStage] = useState('')
   const [complexity, setComplexity] = useState<Complexity>(DEFAULT_COMPLEXITY)
+  // The ticket's own workflow; none follows the project's.
+  const [workflow, setWorkflow] = useState<WorkflowPresetId | null>(null)
   // Sent as the stage's key: the kind `open` would resolve to To do. None until the stages have loaded.
   const status = parent ? undefined : stage || newTicketStage(project?.stages ?? [])?.key
   // A ticket waits for its stage, so that leaving it alone always means Backlog.
@@ -118,6 +126,7 @@ export function NewTicket({
         status,
         // A lane has no picker: it copies its parent's level on the server.
         complexity: parent ? undefined : complexity,
+        workflowPreset: parent ? undefined : (workflow ?? undefined),
         repoId: repoId ? Number(repoId) : undefined,
         tasks: addTasks(tasks, taskText),
         attachmentIds: files.ids,
@@ -138,6 +147,7 @@ export function NewTicket({
       setTags([])
       setTagText('')
       setStage('')
+      setWorkflow(null)
       files.clear()
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -218,7 +228,9 @@ export function NewTicket({
               onChange={setBody}
               onFiles={annotate.add}
               onAttach={() => fileInput.current?.click()}
-              minHeight="min-h-32"
+              // One rem under the old height, which helps pay for the Workflow field: the empty dialog fits
+              // the screen with room left for a task to be added without it running out of height.
+              minHeight="min-h-28"
               caretRoom={caretRoom}
               label={t('newTicket.instructions')}
               placeholder={t('newTicket.instructionsPlaceholder')}
@@ -255,7 +267,7 @@ export function NewTicket({
               </p>
             )}
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
             {/* A top-level ticket's Stage and level share a row: Stage takes what the level leaves of the cell. */}
             {!parent && (
               <div className="flex gap-4">
@@ -321,7 +333,7 @@ export function NewTicket({
                 <AssigneeSelect id="assignee" value={assignee} onChange={setAssignee} />
               </div>
             )}
-            <div className="space-y-2">
+            <div className={cn('space-y-2', stacked && 'sm:row-span-2')}>
               <Label htmlFor="tags">{t('newTicket.tags')}</Label>
               <TagsInput
                 id="tags"
@@ -333,6 +345,21 @@ export function NewTicket({
                 choices={tagChoices}
               />
             </div>
+            {/* A lane follows its parent's workflow; the workflow module is for projects with a git side. It goes under
+                Stage and Complexity, in the room Tags' suggestions leave beside them, so it adds no row. */}
+            {hasWorkflow && (
+              <div className="space-y-2">
+                <Label htmlFor="workflow">{t('newTicket.workflow')}</Label>
+                <WorkflowSelect
+                  id="workflow"
+                  value={workflow}
+                  projectPreset={project?.workflowPreset ?? DEFAULT_WORKFLOW_PRESET}
+                  onChange={setWorkflow}
+                  size="default"
+                  className="w-full"
+                />
+              </div>
+            )}
           </div>
           {parent && (parent.branch || parent.baseBranch) && (
             <p className="text-xs text-muted-foreground">

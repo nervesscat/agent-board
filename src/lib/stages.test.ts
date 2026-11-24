@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import { DEFAULT_STAGES } from './constants'
 import {
+  carryingOverStages,
   columnNeighbours,
-  mergeAfter,
   newTicketStage,
   placeInColumn,
   positionBy,
@@ -231,19 +231,6 @@ describe('placed tickets', () => {
     expect(after(column, 12, positionBy(order, 12, 13, 'below')!)).toEqual([11, 13, 12, 14, 15])
     expect(positionBy(order, 12, 99, 'above')).toBeNull()
   })
-
-  it('flag a card placed above a ticket it needs merged first', () => {
-    const needing = (id: number, needs: { id: number; merged: boolean }[]) => ({
-      ...placed(id, null, '2026-10-01T10:00:00Z'),
-      needs,
-    })
-    const a = needing(1, [{ id: 2, merged: false }])
-    const b = needing(2, [])
-    expect(mergeAfter([a, b])).toEqual(new Map([[1, [2]]]))
-    expect(mergeAfter([b, a])).toEqual(new Map())
-    // Once what it needs is merged, the order no longer matters.
-    expect(mergeAfter([{ ...a, needs: [{ id: 2, merged: true }] }, b])).toEqual(new Map())
-  })
 })
 
 describe('the stage a new ticket starts on', () => {
@@ -269,5 +256,30 @@ describe('the stage a new ticket starts on', () => {
 
   it('is none until the stages have loaded', () => {
     expect(newTicketStage([])).toBeUndefined()
+  })
+})
+
+describe('carrying over stages', () => {
+  it('are the blocked stage and In review, not Approved or Release', () => {
+    const stages: StageLike[] = [
+      ...DEFAULT_STAGES,
+      { key: 'release', name: 'Release', kind: 'review', color: 'gray' },
+    ]
+    expect([...carryingOverStages(stages)].sort()).toEqual(['blocked', 'review'])
+  })
+
+  it('count every blocked stage and only the first review stage', () => {
+    const stages: StageLike[] = [
+      { key: 'todo', name: 'To do', kind: 'open', color: 'gray' },
+      { key: 'waiting', name: 'Waiting', kind: 'blocked', color: 'amber' },
+      { key: 'stuck', name: 'Stuck', kind: 'blocked', color: 'amber' },
+      { key: 'checking', name: 'Checking', kind: 'review', color: 'violet' },
+      { key: 'approved', name: 'Approved', kind: 'review', color: 'teal' },
+    ]
+    expect([...carryingOverStages(stages)].sort()).toEqual(['checking', 'stuck', 'waiting'])
+  })
+
+  it('are none when the project has neither', () => {
+    expect(carryingOverStages([{ key: 'todo', name: 'To do', kind: 'open', color: 'gray' }]).size).toBe(0)
   })
 })

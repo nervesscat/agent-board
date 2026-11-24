@@ -75,8 +75,6 @@ describe('lanes', () => {
     expect(top[0]!.rollup).toEqual({ done: 1, total: 4 })
     expect(top[0]!.lanes).toEqual({
       total: 2,
-      approved: 0,
-      disapproved: 0,
       byStage: { in_progress: 1, todo: 1 },
     })
 
@@ -146,21 +144,17 @@ describe('lanes', () => {
     expect(() => features.setWorkspacePreview(999_999, '', 'codex')).toThrow(/not found/)
   })
 
-  it("carry the human's verdict; disapproving cancels, taking it back reopens", () => {
-    const parent = features.createTicket(projectId, { title: 'verdicts', repoId: otherRepo }, 'me')
-    const a = features.createTicket(projectId, { title: 'a', parentId: parent.id, tasks: ['x'] }, 'claude')
-    const b = features.createTicket(projectId, { title: 'b', parentId: parent.id, tasks: ['y'] }, 'claude')
-    const row = () => features.listTickets(projectId).find((t) => t.id === parent.id)!
+  it("carry the human's verdict on a ticket; disapproving cancels, taking it back reopens", () => {
+    const a = features.createTicket(projectId, { title: 'a', repoId: otherRepo, tasks: ['x'] }, 'claude')
+    const b = features.createTicket(projectId, { title: 'b', repoId: otherRepo, tasks: ['y'] }, 'claude')
 
-    const approved = features.setVerdict(a.id, 'approved', 'enrique')
-    expect(approved).toMatchObject({ approvedBy: 'enrique', disapprovedAt: null })
-    expect(features.getTicketFull(parent.id).lanes.find((l) => l.id === a.id)!.approvedBy).toBe('enrique')
+    expect(features.setVerdict(a.id, 'approved', 'enrique')).toMatchObject({
+      approvedBy: 'enrique',
+      disapprovedAt: null,
+    })
 
     const rejected = features.setVerdict(b.id, 'disapproved', 'enrique')
     expect(rejected).toMatchObject({ status: 'cancelled', disapprovedBy: 'enrique', approvedAt: null })
-    expect(row().lanes).toMatchObject({ approved: 1, disapproved: 1, byStage: { cancelled: 1 } })
-    // The cancelled lane's task is no longer part of the work.
-    expect(row().rollup).toEqual({ done: 0, total: 1 })
 
     // Switching straight to approved clears the disapproval and reopens it.
     expect(features.setVerdict(b.id, 'approved', 'enrique')).toMatchObject({
@@ -168,7 +162,7 @@ describe('lanes', () => {
       disapprovedAt: null,
       approvedBy: 'enrique',
     })
-    // An undo puts back the stage and the call the lane had before.
+    // An undo puts back the stage and the call the ticket had before.
     features.updateTicket(b.id, { status: 'review' }, 'claude')
     features.setVerdict(b.id, 'disapproved', 'enrique')
     expect(features.setVerdict(b.id, 'approved', 'enrique', { reopenTo: 'review' })).toMatchObject({
@@ -177,7 +171,25 @@ describe('lanes', () => {
     })
     features.setVerdict(a.id, null, 'enrique')
     expect(features.getTicket(a.id)).toMatchObject({ approvedAt: null, approvedBy: '', status: 'todo' })
-    expect(row().lanes).toMatchObject({ approved: 1, disapproved: 0 })
+  })
+
+  it('refuse a verdict on a lane: its stage is the call', () => {
+    const parent = features.createTicket(projectId, { title: 'lane verdicts', repoId: otherRepo }, 'me')
+    const a = features.createTicket(projectId, { title: 'a', parentId: parent.id, tasks: ['x'] }, 'claude')
+    const b = features.createTicket(projectId, { title: 'b', parentId: parent.id, tasks: ['y'] }, 'claude')
+    for (const verdict of ['approved', 'disapproved', null] as const)
+      expect(() => features.setVerdict(a.id, verdict, 'enrique')).toThrow(/judged by its stage/)
+    expect(features.getTicket(a.id)).toMatchObject({ status: 'todo', approvedAt: null, disapprovedAt: null })
+
+    // Cancelling and moving on stages is how a lane is dropped or accepted.
+    features.updateTicket(b.id, { status: 'cancelled' }, 'enrique')
+    const row = features.listTickets(projectId).find((t) => t.id === parent.id)!
+    expect(row.lanes).toEqual({ total: 2, byStage: { cancelled: 1, todo: 1 } })
+    // The cancelled lane's task is no longer part of the work.
+    expect(row.rollup).toEqual({ done: 0, total: 1 })
+    for (const lane of features.getTicketFull(parent.id).lanes)
+      for (const key of ['approvedAt', 'approvedBy', 'disapprovedAt', 'disapprovedBy'])
+        expect(lane).not.toHaveProperty(key)
   })
 
   it('carry tags: cleaned up, filterable in any casing', () => {
@@ -1214,7 +1226,7 @@ describe('the Approved stage', () => {
     db.insert(schema.repos).values({ projectId: pid, name: 'app', repoPath: '/r/approved' }).run()
   })
 
-  it('comes after In review in the default stages, a review stage like it', () => {
+  it('comes after In review in the default stages, with a stage kind of its own', () => {
     const all = stages.listStages(pid)
     expect(all.map((s) => s.key)).toEqual([
       'backlog',
@@ -1226,11 +1238,21 @@ describe('the Approved stage', () => {
       'done',
       'cancelled',
     ])
-    expect(all.find((s) => s.key === 'approved')).toMatchObject({ name: 'Approved', kind: 'review' })
-    // The first review stage stays In review: the board's by-kind picks land there, never in Approved.
+    expect(all.find((s) => s.key === 'approved')).toMatchObject({ name: 'Approved', kind: 'approved' })
+    // A status given as a kind lands in the first stage of that kind: `review` in In review, `approved` in Approved.
     expect(stages.firstOfKind(all, 'review')!.key).toBe('review')
     expect(stages.resolveStage(all, 'review').key).toBe('review')
     expect(stages.resolveStage(all, 'approved').key).toBe('approved')
+    // `done` is the first done stage, the board's own finishing the last (Release before Done).
+    const withRelease = [
+      ...all.slice(0, 6),
+      { ...all[6]!, key: 'release', name: 'Release', kind: 'done' as const },
+      ...all.slice(6),
+    ]
+    expect(stages.firstOfKind(withRelease, 'done')!.key).toBe('release')
+    expect(stages.lastOfKind(withRelease, 'done')!.key).toBe('done')
+    expect(stages.lastOfKind(all, 'approved')!.key).toBe('approved')
+    expect(stages.lastOfKind(all, 'open')!.key).toBe('todo')
   })
 
   it("moves a ticket in review there on the human's approval, and back on an undo", () => {
@@ -1404,7 +1426,7 @@ describe('the go-ahead, put back and taken back', () => {
 })
 
 describe('the go-ahead after the stages change', () => {
-  it('a take-back returns a ticket from Approved even when the stage was made another kind', async () => {
+  it('a take-back leaves a ticket where it is once its stage is no longer of kind approved', async () => {
     const { db, schema } = await import('#/db')
     const stages = await import('./stages')
     const pid = db.insert(schema.projects).values({ name: 'kind-change' }).returning().get().id
@@ -1413,6 +1435,93 @@ describe('the go-ahead after the stages change', () => {
     const t = features.createTicket(pid, { title: 'changed kind', status: 'review' }, 'claude')
     expect(features.setVerdict(t.id, 'approved', 'enrique').status).toBe('approved')
     stages.updateStage(pid, approved.id, { kind: 'active' }, 'enrique')
+    expect(features.setVerdict(t.id, null, 'enrique')).toMatchObject({ status: 'approved', approvedAt: null })
+  })
+})
+
+describe('the approved kind and the last done stage', () => {
+  async function project(name: string, layout: { key: string; name: string; kind: string }[]) {
+    const { db, schema } = await import('#/db')
+    const pid = db.insert(schema.projects).values({ name }).returning().get().id
+    db.insert(schema.repos)
+      .values({ projectId: pid, name: 'app', repoPath: `/r/${name}` })
+      .run()
+    // The stages are written before anything reads them, so the default ones are never made.
+    db.insert(schema.stages)
+      .values(
+        layout.map((l, position) => ({
+          ...l,
+          kind: l.kind as never,
+          color: 'gray' as const,
+          projectId: pid,
+          position,
+        })),
+      )
+      .run()
+    return pid
+  }
+
+  it('approves into the first approved-kind stage whatever its key, and takes the call back out of it', async () => {
+    const pid = await project('approved-key', [
+      { key: 'todo', name: 'To do', kind: 'open' },
+      { key: 'review', name: 'In review', kind: 'review' },
+      { key: 'go', name: 'Go ahead', kind: 'approved' },
+      { key: 'done', name: 'Done', kind: 'done' },
+    ])
+    const t = features.createTicket(pid, { title: 'ship it', status: 'review' }, 'claude')
+    const go = features.setVerdict(t.id, 'approved', 'enrique')
+    expect(go.status).toBe('go')
+    // Moved out by hand, approving again puts it back; taking the call back returns it to review.
+    features.updateTicket(t.id, { status: 'review' }, 'enrique')
+    expect(features.setVerdict(t.id, 'approved', 'enrique').status).toBe('go')
     expect(features.setVerdict(t.id, null, 'enrique')).toMatchObject({ status: 'review', approvedAt: null })
+  })
+
+  it('finishes a PR review in the last done stage, while a status of done is the first', async () => {
+    const { stageOf } = await import('./stages')
+    const stages = await import('./stages')
+    const pid = await project('last-done', [
+      { key: 'todo', name: 'To do', kind: 'open' },
+      { key: 'review', name: 'In review', kind: 'review' },
+      { key: 'approved', name: 'Approved', kind: 'approved' },
+      { key: 'release', name: 'Release', kind: 'done' },
+      { key: 'shipped', name: 'Shipped', kind: 'done' },
+    ])
+    const said = features.createTicket(pid, { title: 'merged', status: 'done' }, 'claude')
+    expect(said.status).toBe('release')
+    const pr = features.createTicket(pid, { title: 'PR review', status: 'review', tags: ['PR'] }, 'claude')
+    const closed = features.setVerdict(pr.id, 'approved', 'enrique')
+    expect(closed.status).toBe('shipped')
+    expect(stageOf(stages.listStages(pid), closed.status).kind).toBe('done')
+    // Taking it back reopens it into the first review stage.
+    expect(features.setVerdict(pr.id, null, 'enrique').status).toBe('review')
+  })
+
+  it("puts a PR's own ticket in the first review stage and, once merged, in the last done stage", async () => {
+    const { prTicketStage } = await import('./prTickets')
+    const stages = await import('./stages')
+    const pid = await project('pr-tickets', [
+      { key: 'todo', name: 'To do', kind: 'open' },
+      { key: 'approved', name: 'Approved', kind: 'approved' },
+      { key: 'review', name: 'In review', kind: 'review' },
+      { key: 'release', name: 'Release', kind: 'done' },
+      { key: 'done', name: 'Done', kind: 'done' },
+    ])
+    const all = stages.listStages(pid)
+    // Approved before In review (a reorder) is never where a review lands: it is not of kind review.
+    expect(prTicketStage(all, 'reviewed')!.key).toBe('review')
+    expect(prTicketStage(all, 'done')!.key).toBe('done')
+  })
+
+  it('lists only review-kind tickets for a status of review, and Approved ones for approved', async () => {
+    const pid = await project('status-filter', [
+      { key: 'todo', name: 'To do', kind: 'open' },
+      { key: 'review', name: 'In review', kind: 'review' },
+      { key: 'approved', name: 'Approved', kind: 'approved' },
+    ])
+    const waiting = features.createTicket(pid, { title: 'waiting', status: 'review' }, 'claude')
+    const go = features.createTicket(pid, { title: 'go', status: 'approved' }, 'claude')
+    expect(features.listTickets(pid, { status: ['review'] }).map((t) => t.id)).toEqual([waiting.id])
+    expect(features.listTickets(pid, { status: ['approved'] }).map((t) => t.id)).toEqual([go.id])
   })
 })

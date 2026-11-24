@@ -56,6 +56,7 @@ const PROJECT_PATHS = {
   previews: '/projects/$id/previews',
   gallery: '/projects/$id/gallery',
   team: '/projects/$id/agents',
+  workflow: '/projects/$id/workflow',
   daily: '/projects/$id/daily',
   cleanup: '/projects/$id/cleanup',
   repositories: '/projects/$id/repositories',
@@ -77,6 +78,7 @@ type PageText =
   | 'previews'
   | 'gallery'
   | 'team'
+  | 'workflow'
   | 'daily'
   | 'cleanup'
   | 'repositories'
@@ -148,6 +150,11 @@ const PROJECT_PAGES: { key: string; to: ProjectPath; id: PageText }[] = [
     key: 'team',
     to: PROJECT_PATHS.team,
     id: 'team',
+  },
+  {
+    key: 'workflow',
+    to: PROJECT_PATHS.workflow,
+    id: 'workflow',
   },
   {
     key: 'daily',

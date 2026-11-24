@@ -134,9 +134,9 @@ test('the chart scrolls under the ticket’s sticky header: its labels never pai
   await page.evaluate((y) => window.scrollTo(0, y), top)
   await page.waitForTimeout(200)
 
-  // The ticket header is the one that says who opened the ticket; it is sticky and opaque.
+  // The ticket header is the one with the line of who opened the ticket and when; it is sticky and opaque.
   const hit = await page.evaluate(() => {
-    const header = [...document.querySelectorAll('header')].find((h) => h.textContent?.includes('opened by'))!
+    const header = [...document.querySelectorAll('header')].find((h) => h.querySelector('[data-fact]'))!
     const hr = header.getBoundingClientRect()
     const under = [...document.querySelectorAll('[data-testid="agent-label"]')]
       .filter((el) => {
@@ -233,7 +233,7 @@ test('a human wait is amber and filled on the waiting agent’s row, not hatched
   await expect(bar.locator('[data-kind="human-overlay"]')).toHaveCount(0)
 })
 
-test('a segment opens its details in a popover by click, and by Enter from the keyboard', async ({
+test('a span without a report opens its facts and says so, by click and by Enter from the keyboard', async ({
   page,
   project,
   human,
@@ -259,6 +259,8 @@ test('a segment opens its details in a popover by click, and by Enter from the k
   await expect(details).toContainText('reviewer-sub-1')
   await expect(details).toContainText('via')
   await expect(details).toContainText('review round 2')
+  await expect(details).toContainText('Duration')
+  await expect(details).toContainText('No report for this run.')
   await page.keyboard.press('Escape')
   await expect(details).toHaveCount(0)
 

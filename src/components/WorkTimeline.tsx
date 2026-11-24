@@ -1,12 +1,19 @@
+import { useQuery } from '@tanstack/react-query'
 import type { TFunction } from 'i18next'
-import { useEffect, useId, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { DelayedLoading, SkeletonText } from '#/components/Loading'
+import { RunReportView, runReportLabel } from '#/components/RunReport'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '#/components/ui/dialog'
 import { shared } from '#/i18n'
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
 import { Tip } from '#/components/ui/tooltip'
 import { nameParts, parentName, shortName } from '#/lib/actorName'
+import { get } from '#/lib/api'
 import { clock, stamp } from '#/lib/format'
+import type { RunReport } from '#/lib/runReports'
+import { reportsForSpans } from '#/lib/spanReport'
 import {
   buildChart,
   longDuration,
@@ -54,7 +61,8 @@ export { spokenDuration }
  * and filled on the human, a thin connector where it delegated), the hand-offs between rows, the board's
  * events on a rail on top, the blocked stages as bands behind the rows. Layout is in src/lib/timelineRows.ts,
  * the shared classes in WorkTimelineStyle.tsx. Every segment and marker is a button, with its story as its name and
- * tooltip, and its details in a popover on click, tap or Enter.
+ * tooltip, and its details in a popover on click, tap or Enter; a work span instead opens, in a dialog, the run
+ * report written for that run (src/lib/spanReport.ts), or its facts and that it has none.
  */
 
 const phaseName = (s: Pick<TimelineSpan, 'phase' | 'round'>, tr: TFunction) =>
@@ -334,50 +342,137 @@ function WaitSegment({
   )
 }
 
+/** What a span bar opens: where the ticket's run reports come from. */
+export type SpanReports = {
+  projectId: number
+  ticketId: number
+  /** The ticket's reports when the page already has them; otherwise they are fetched when a bar is opened. */
+  known?: RunReport[]
+}
+
+/** A work span's bar: a button named for the report it opens and the story of the span, opening the chart's dialog. */
 function SpanSegment({
   item,
   chart,
   compact,
+  onOpen,
 }: {
   item: Extract<RowItem, { kind: 'span' }>
   chart: Chart
   compact: boolean
+  onOpen: (spanId: number) => void
 }) {
   const { t: tr } = useTranslation()
   const { span: s, seg, lane } = item
   const h = lanePx(compact)
   const text = compact ? 'text-[10px]' : 'text-[11px]'
+  const label = spanLabel(s, chart.going, tr)
   return (
-    <Segment
-      label={spanLabel(s, chart.going, tr)}
-      details={
-        <Facts
-          items={[
-            [
-              tr('workTimeline.fact.who'),
-              s.by !== s.agent ? `${s.agent}${tr('workTimeline.label.via', { by: s.by })}` : s.agent,
-            ],
-            [tr('workTimeline.fact.work'), phaseName(s, tr)],
-            [tr('workTimeline.fact.started'), stamp(s.start)],
-            [tr('workTimeline.fact.ended'), endedWhen(s, chart.going, tr)],
-            [tr('workTimeline.fact.duration'), spokenDuration(Date.parse(s.end) - Date.parse(s.start), tr)],
-          ]}
-        />
-      }
-      className={`${SEG_BASE} ${text} ${PHASE[s.phase] ?? OTHER_PHASE} ${s.open ? 'rounded-r-none' : ''}`}
-      style={{
-        ...boxStyle(seg.left, seg.width, lane * h + 1, h - 2),
-        ...(s.open && !seg.narrow ? { maskImage: 'linear-gradient(to right, #000 85%, transparent)' } : {}),
-      }}
-      attrs={{
-        'data-kind': 'span',
-        'data-phase': s.phase,
-        'data-open': s.open ? 'true' : 'false',
-        'data-narrow': seg.narrow ? 'true' : undefined,
-      }}
-    >
-      {!seg.narrow && <span className="min-w-0 truncate">{phaseShort(s, tr)}</span>}
-    </Segment>
+    <Tip content={label}>
+      <button
+        type="button"
+        aria-label={
+          s.round !== null
+            ? tr('workTimeline.openReportRound', { agent: shortName(s.agent), round: s.round, label })
+            : tr('workTimeline.openReport', { agent: shortName(s.agent), label })
+        }
+        onClick={() => onOpen(s.id)}
+        className={`${SEG_BASE} cursor-pointer ${text} ${PHASE[s.phase] ?? OTHER_PHASE} ${s.open ? 'rounded-r-none' : ''}`}
+        style={{
+          ...boxStyle(seg.left, seg.width, lane * h + 1, h - 2),
+          ...(s.open && !seg.narrow ? { maskImage: 'linear-gradient(to right, #000 85%, transparent)' } : {}),
+        }}
+        data-kind="span"
+        data-phase={s.phase}
+        data-open={s.open ? 'true' : 'false'}
+        data-narrow={seg.narrow ? 'true' : undefined}
+      >
+        {!seg.narrow && <span className="min-w-0 truncate">{phaseShort(s, tr)}</span>}
+      </button>
+    </Tip>
+  )
+}
+
+/**
+ * The dialog a span bar opens: the run report written for the run, or when there is none the span's own
+ * facts and a line saying so. It is mounted only while open, so the reports are fetched (when the chart was
+ * not given them) on the first click.
+ */
+function SpanDialog({
+  span: s,
+  spans,
+  reports: source,
+  now,
+  live,
+  onClose,
+}: {
+  span: TimelineSpan
+  spans: TimelineSpan[]
+  reports: SpanReports | undefined
+  now: number
+  live: boolean
+  onClose: () => void
+}) {
+  const { t: tr } = useTranslation()
+  const fetched = useQuery({
+    queryKey: ['span-reports', source?.projectId, source?.ticketId],
+    queryFn: () =>
+      get<RunReport[]>(
+        `/api/projects/${source!.projectId}/run-reports?ticketId=${source!.ticketId}&limit=200`,
+      ),
+    enabled: Boolean(source) && !source!.known,
+  })
+  const list = source?.known ?? fetched.data
+  const report = useMemo(
+    () => (list ? (reportsForSpans(spans, list, now).get(s.id) ?? null) : null),
+    [list, spans, now, s.id],
+  )
+  const loading = Boolean(source) && !list && !fetched.error
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>
+            {report ? tr('runReport.dialogTitle', { label: runReportLabel(report, tr) }) : phaseName(s, tr)}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            {report ? tr('workTimeline.reportDescription') : tr('workTimeline.factsDescription')}
+          </DialogDescription>
+        </DialogHeader>
+        {report ? (
+          <RunReportView r={report} />
+        ) : (
+          <div className="space-y-3">
+            <Facts
+              items={[
+                [
+                  tr('workTimeline.fact.who'),
+                  s.by !== s.agent ? `${s.agent}${tr('workTimeline.label.via', { by: s.by })}` : s.agent,
+                ],
+                [tr('workTimeline.fact.work'), phaseName(s, tr)],
+                [tr('workTimeline.fact.started'), stamp(s.start)],
+                [tr('workTimeline.fact.ended'), endedWhen(s, live, tr)],
+                [
+                  tr('workTimeline.fact.duration'),
+                  spokenDuration(Date.parse(s.end) - Date.parse(s.start), tr),
+                ],
+              ]}
+            />
+            {loading ? (
+              <DelayedLoading label={tr('workTimeline.loadingReport')}>
+                <SkeletonText lines={1} />
+              </DelayedLoading>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {fetched.error
+                  ? tr('workTimeline.reportsFailed')
+                  : tr(s.open ? 'workTimeline.noReportYet' : 'workTimeline.noReport')}
+              </p>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -424,16 +519,20 @@ export function WorkTimelineBar({
   timeline,
   compact = false,
   window: win,
+  reports,
 }: {
   timeline: WorkTimeline
   compact?: boolean
   /** Fixes the axis to this window (the Roadmap's), instead of the ticket's own first event to its end. */
   window?: Window
+  /** The ticket the chart draws, for a span bar to open its run report; without it a bar opens its facts only. */
+  reports?: SpanReports
 }) {
   const { t: tr } = useTranslation()
   // The axis's now is the server's, so a browser clock behind it does not cut the live segments short.
   const now = onServerClock(useNow(30_000), useServerOffset(timeline.now))
   const summaryId = useId()
+  const [opened, setOpened] = useState<number | null>(null)
   // The track's own width, so the chart is drawn to it: measured when it is there and as it changes.
   const [track, setTrack] = useState<HTMLDivElement | null>(null)
   const [width, setWidth] = useState(FIRST_WIDTH)
@@ -456,6 +555,7 @@ export function WorkTimelineBar({
 
   const chart = buildChart(timeline, now, win, width, tr)
   const { axis, rows, marks, bands } = chart
+  const openedSpan = timeline.spans.find((x) => x.id === opened) ?? null
   const h = lanePx(compact)
   // Where now is on the track: its right end, or earlier when the axis ends in empty track (nothing but collapsed blocks).
   const nowLeft = share(axis, axis.end)
@@ -617,7 +717,7 @@ export function WorkTimelineBar({
             ))}
             {row.items.map((item) =>
               item.kind === 'span' ? (
-                <SpanSegment key={item.key} item={item} chart={chart} compact={compact} />
+                <SpanSegment key={item.key} item={item} chart={chart} compact={compact} onOpen={setOpened} />
               ) : (
                 <WaitSegment key={item.key} item={item} chart={chart} compact={compact} />
               ),
@@ -668,6 +768,16 @@ export function WorkTimelineBar({
         <p className="text-[10.5px] text-muted-foreground">
           {tr('workTimeline.created', { count: chart.created.minutes })}
         </p>
+      )}
+      {openedSpan && (
+        <SpanDialog
+          span={openedSpan}
+          spans={timeline.spans}
+          reports={reports}
+          now={now}
+          live={chart.going}
+          onClose={() => setOpened(null)}
+        />
       )}
     </div>
   )

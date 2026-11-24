@@ -35,7 +35,6 @@
     "previews": "正在加载Previews…",
     "repositories": "正在加载仓库…",
     "roadmap": "正在加载路线图…",
-    "runReports": "正在加载运行报告…",
     "earlierVersions": "正在加载更早的版本…",
     "workspaces": "正在加载Workspace…"
   },
@@ -46,7 +45,8 @@
     "settings": "设置",
     "testMode": "测试模式",
     "authOff": "登录已关闭",
-    "authOffTip": "BOARD_ENV={{env}}，登录已关闭：以{{actor}}身份登录。这不是正式看板。"
+    "authOffTip": "BOARD_ENV={{env}}，登录已关闭：以{{actor}}身份登录。这不是正式看板。",
+    "connectAgent": "连接智能体"
   },
   "time": {
     "never": "—",
@@ -471,7 +471,8 @@
       "blocked": "已阻塞",
       "review": "评审",
       "done": "已完成",
-      "cancelled": "已取消"
+      "cancelled": "已取消",
+      "approved": "已批准"
     },
     "hint": {
       "open": "等待被认领；认领会把它移到开始工作的阶段",
@@ -479,7 +480,8 @@
       "blocked": "等你处理",
       "review": "已交接等待评审",
       "done": "已完成；无法认领",
-      "cancelled": "已放弃；驳回会把 ticket 移到这里，其任务不计入进度"
+      "cancelled": "已放弃；驳回会把 ticket 移到这里，其任务不计入进度",
+      "approved": "你同意合并；没有智能体会把 ticket 移到这里"
     },
     "color": {
       "gray": "灰色",
@@ -600,20 +602,20 @@
         "previews": "Preview",
         "gallery": "图库",
         "agents": "团队",
-        "runReports": "运行报告",
         "daily": "日报",
         "cleanup": "清理",
         "repositories": "仓库",
-        "instructions": "说明"
+        "instructions": "说明",
+        "workflow": "工作流"
       },
       "overview": {
         "needsYou": "待你处理",
         "inProgress": "进行中",
         "doneToday": "今日完成",
-        "next": "接下来",
         "carryingOver": "遗留",
         "notes": "笔记",
-        "agents": "工作中的智能体"
+        "agents": "工作中的智能体",
+        "lostContact": "失联"
       },
       "ticket": {
         "instructions": "说明",
@@ -624,7 +626,8 @@
         "runs": "运行项",
         "details": "详情",
         "branch": "分支",
-        "workspaces": "Workspace"
+        "workspaces": "Workspace",
+        "resume": "恢复"
       }
     },
     "locked": {
@@ -1434,20 +1437,7 @@
     "dialogTitleEmpty": "运行报告",
     "round": "第{{round}}轮",
     "difficultyShort": "难度{{n}}/5",
-    "confidenceShort": "信心{{n}}/5",
-    "panelTitle": "运行报告",
-    "panelHeading_other": "运行报告 · {{count}}次运行",
-    "pageTitle": "运行报告",
-    "pageText": "每次子智能体运行的情况，用它自己的话讲述。每次运行一份报告；一轮评审里每个智能体各有一份。",
-    "allAgents": "所有智能体",
-    "agent": "智能体",
-    "ticketPlaceholder": "Ticket #",
-    "ticketNumber": "Ticket 编号",
-    "filter": "筛选",
-    "clear": "清除",
-    "emptyFiltered": "没有符合该筛选的运行报告。",
-    "empty": "还没有运行报告。",
-    "openTicket": "打开 ticket"
+    "confidenceShort": "信心{{n}}/5"
   },
   "projectAgents": {
     "title": "团队",
@@ -1581,7 +1571,8 @@
     "tagsPlaceholder": "高优先级, 表单",
     "branchesOff": "在同一仓库时，从 <branch>{{branch}}</branch> 分出分支。",
     "uploading": "上传中…",
-    "create": "创建"
+    "create": "创建",
+    "workflow": "工作流"
   },
   "notes": {
     "title": "笔记",
@@ -1830,6 +1821,11 @@
         "title": "设置",
         "subtitle": "全看板的偏好",
         "keywords": "偏好, 主题, preview, 设备, preferences, theme"
+      },
+      "workflow": {
+        "title": "工作流",
+        "subtitle": "智能体处理 ticket 的步骤，以树状图显示",
+        "keywords": "步骤, 预设, 评审轮, 交接, 委派, 顺序, steps, presets, review rounds, hand-off, order"
       }
     },
     "setting": {
@@ -1993,7 +1989,6 @@
   },
   "ticketBoard": {
     "stage": "阶段",
-    "mergeAfter": "在 {{list}} 之后 merge",
     "archiveTip_other": "归档 {{stage}} 中的{{count}}个 ticket",
     "archiveAll": "全部归档",
     "archiveTitle_other": "归档{{count}}个 ticket？",
@@ -2013,8 +2008,7 @@
     "nothingArchived": "没有已归档的内容。",
     "archived": "归档于{{when}}",
     "archivedBy": "{{when}}由 <actor/> 归档",
-    "restore": "恢复",
-    "laneApproved_other": "已批准{{count}}个"
+    "restore": "恢复"
   },
   "ticketList": {
     "archivedToast_other": "已归档{{count}}个 ticket",
@@ -2056,8 +2050,10 @@
     "addPlaceholder": "添加需要先合并的 ticket…",
     "noOthers": "没有其他 ticket",
     "includes": "包含来自 <goto>{{ref}}</goto> 的未合并工作",
-    "cannotBeDone": "在 #{{need}} 的分支合并到其基础分支之前，#{{id}} 无法完成",
-    "addAsNeed": "添加为依赖"
+    "addAsNeed": "添加为依赖",
+    "autoTitle": "由看板添加：此 ticket 的分支包含那个 ticket 尚未合并的 commit。分支不再包含时它会自动消失；在这里移除后不会再因同样的 commit 重新添加。",
+    "addedByBoard": "由看板添加",
+    "cannotBeDoneUnsure": "看板无法确定这些 commit 属于谁，所以没有添加依赖。在 #{{need}} 的分支合并到其基础分支之前，#{{id}} 无法完成。"
   },
   "verdict": {
     "approve": "批准",
@@ -2096,11 +2092,15 @@
       "others": {
         "label": "等待他人",
         "title": "你的 PR（智能体的也算）：等待批准、已被所有评审者批准，或因他们的评论而暂停"
+      },
+      "all": {
+        "label": "所有 PR",
+        "title": "这些仓库中所有未关闭的 PR，无论谁写的，也无论是否与你有关"
       }
     },
     "reviewers": {
-      "all": "所有 PR",
-      "mine": "仅我是评审者"
+      "mine": "仅我是评审者",
+      "involving": "与我有关"
     },
     "tabs": {
       "pending": "待处理",
@@ -2110,7 +2110,8 @@
     },
     "empty": {
       "me": "没有{{stage}}的待评审 PR。",
-      "others": "没有{{stage}}的等待他人项。"
+      "others": "没有{{stage}}的等待他人项。",
+      "all": "未关闭的 PR 中没有{{stage}}的。"
     },
     "refresh": "刷新",
     "mergeAfterTip": "它的 ticket 需要先合并这些：\n{{list}}",
@@ -2137,7 +2138,8 @@
     "holdTitle": "暂停 #{{number}}",
     "holdText": "给你和智能体的备注。不会动 GitHub。",
     "holdPlaceholder": "为什么要等…",
-    "holdConfirm": "暂停"
+    "holdConfirm": "暂停",
+    "notInvolvingYou": "与你无关"
   },
   "workStatus": {
     "state": {
@@ -2318,7 +2320,15 @@
       "human": "等待人工处理{{duration}}",
       "review": "评审中{{duration}}",
       "merge": "等待合并{{duration}}"
-    }
+    },
+    "openReport": "打开 {{agent}} 的报告：{{label}}",
+    "openReportRound": "打开 {{agent}} 第{{round}}轮的报告：{{label}}",
+    "reportDescription": "为这次运行撰写的报告",
+    "factsDescription": "这次运行的详情",
+    "loadingReport": "正在加载运行报告…",
+    "reportsFailed": "无法加载报告。",
+    "noReport": "这次运行没有报告。",
+    "noReportYet": "这次运行还没有报告。"
   },
   "roadmap": {
     "title": "路线图",
@@ -2407,8 +2417,9 @@
     },
     "lost": {
       "title": "失联",
-      "link": "失联：<id>#{{id}}</id> {{title}}",
-      "detail": "{{agent}} · {{phase}} · {{since}} · {{minutes}}分钟前有消息"
+      "empty": "没有失联。",
+      "lastHeardTip": "最近消息 {{when}}",
+      "lastHeard": "{{duration}}前有过消息"
     },
     "inProgress": {
       "title": "进行中",
@@ -2421,22 +2432,11 @@
       "closed": "{{time}}关闭",
       "activity_other": "今天发生了{{count}}件事：日报"
     },
-    "next": {
-      "title": "接下来",
-      "titleStage": "接下来：{{stage}}",
-      "empty": "没有排好的事项。",
-      "emptyStage": "{{stage}} 中没有排好的事项。",
-      "tasks": "{{done}}/{{total}}项任务",
-      "more": "另有{{count}}项",
-      "blocked": "{{count}}项被阻塞",
-      "backlog": "{{count}}项在 backlog 中",
-      "board": "看板"
-    },
     "carryingOver": {
       "title": "遗留",
-      "empty": "没有从今天之前遗留的事项。",
       "startedTip": "于{{when}}开始处理",
-      "days_other": "已进行{{count}}天"
+      "days_other": "已进行{{count}}天",
+      "emptyShown": "今天之前没有遗留的已阻塞或评审中的内容。"
     }
   },
   "notifications": {
@@ -2483,17 +2483,13 @@
     "restoredToast": "已恢复到看板",
     "disapprovedToast": "#{{id}} 已驳回并取消",
     "undo": "撤销会收回驳回，并把它放回 {{stage}}。",
-    "undoMoved": "撤销会收回驳回，并把它放回 {{stage}}。已转到 #{{next}}。",
     "undoAction": "撤销",
     "summary": "摘要",
-    "openedBy": "{{when}}由 <actor/> 创建",
     "updated": "更新于{{when}}",
     "archivedBy": "{{when}}由 {{name}} 归档",
     "archivedByLane": "{{when}}由 {{name}} 归档，随它所属 lane 的 ticket 一起",
     "someone": "某人",
     "archivedBadge": "已归档",
-    "lanesWarningTip": "此 ticket 的状态比其 lane 更靠后",
-    "lanesNotDone_other": "{{count}}个 lane 未完成",
     "decisionNeeded": "待决定",
     "archiveTip": "把它连同其 lane 移出看板；功能页的“已归档”可将其找回",
     "deleteTitle": "删除此 ticket？",
@@ -2557,7 +2553,6 @@
     "newSubtaskOf": "{{name}} 的新子任务",
     "add": "添加",
     "addPhase": "添加环节：Implementation、Pushed、PR…",
-    "noCall": "未裁决",
     "all": "全部",
     "nounLane": "lane",
     "laneOf": "lane {{n}}/{{count}}",
@@ -2567,13 +2562,10 @@
     "previousNoun": "上一个 {{noun}}",
     "nextNoun": "下一个 {{noun}}",
     "stepKeysTip": "[ 和 ] 后退和前进",
-    "lanesDone": "已完成{{done}}/{{total}} · 已批准 {{approved}}",
-    "lanesDisapproved": "已驳回{{count}}个",
     "lanesCancelled": "已取消{{count}}个",
     "allTasks": "全部任务{{done}}/{{total}}",
     "noLanes": "没有 lane。当 ticket 的各部分并行进行时，把它拆成 lane：每个 lane 有自己的分支、负责人、任务和更新。",
     "filterStage": "阶段",
-    "filterVerdict": "裁决",
     "filterTags": "标签",
     "showing": "显示{{shown}}/{{total}}",
     "clearFilters": "清除筛选",
@@ -2643,7 +2635,14 @@
     "workspacesDesc": "智能体为此 ticket 打开的 worktree、子分支和子智能体沙箱。",
     "workspacesDescLanes": "智能体为此 ticket 及其 lane 打开的 worktree、子分支和子智能体沙箱。",
     "noneYet": "暂无。",
-    "updatedLabel": "更新"
+    "breadcrumb": "路径导航",
+    "scrollSideUp": "向上滚动侧栏",
+    "scrollSideDown": "向下滚动侧栏",
+    "workflow": "工作流",
+    "workflowOwn": "遵循{{workflow}}工作流，已在此 ticket 上设定。",
+    "workflowProject": "遵循项目的工作流（{{workflow}}）。",
+    "workflowSteps": "查看步骤",
+    "lanesProgress": "已完成 {{done}}/{{total}}"
   },
   "complexity": {
     "label": {
@@ -2652,12 +2651,12 @@
       "high": "高",
       "max": "极高"
     },
-    "selectHint": "低：不评审。中：一轮评审。高：最多三轮。极高：最多十轮，用于从零构建的工作；已有代码库中的功能无论多难都不算极高。",
-    "hint": {
-      "low": "低：不评审。builder 自行验证。",
-      "mid": "中：一轮评审。",
-      "high": "高：最多三轮评审。",
-      "max": "极高：最多十轮评审，用于从零构建的整个网站或应用、新产品或独立服务，在第一个通过的轮次即停止。已有代码库中的功能最高为“高”，无论多难。"
+    "workflowHint": "低：标准工作流中不做 spec 和评审。中、高和极高：按项目工作流设定的评审轮数（标准：一轮、三轮、最多十轮）。极高用于从零开始构建的工作；在已有代码库中的功能无论多难，都不算极高。",
+    "levelHint": {
+      "low": "低：按项目工作流设定的评审轮数（标准：无）。由 builder 自己验证。",
+      "mid": "中：按项目工作流设定的评审轮数（标准：一轮）。",
+      "high": "高：按项目工作流设定的评审轮数（标准：最多三轮）。",
+      "max": "极高：按项目工作流设定的评审轮数（标准：最多十轮），用于从零开始构建的整个网站或应用、新产品或独立服务，并在第一个通过的轮次停止。在已有代码库中的功能最多算高，无论多难。"
     }
   },
   "agentsAtWork": {
@@ -2695,6 +2694,266 @@
       "minutes_other": "{{count}}分钟",
       "hours_other": "{{count}}小时",
       "days_other": "{{count}}天"
+    }
+  },
+  "workflowChips": {
+    "selfTip": "由 ticket 的智能体自己完成",
+    "agentTip": {
+      "picked": "为它选定的团队智能体。其指令写在团队页面。角色（{{agent}}）决定其 span 和运行报告的名称。",
+      "role": "与其角色（{{agent}}）同名的团队智能体。其指令写在团队页面。角色（{{agent}}）决定其 span 和运行报告的名称。",
+      "default": "团队中没有名为 {{agent}} 的智能体：它以内置的 {{agent}} 角色运行。其指令写在团队页面。角色（{{agent}}）决定其 span 和运行报告的名称。"
+    },
+    "agentMissing": "智能体缺失",
+    "missingTip": "已为它选定 {{picked}}，但团队中现在没有这个名字的智能体：在该智能体回来或选定其他智能体之前，它以 {{name}} 运行。",
+    "locked": "已锁定",
+    "lockedAboveLow": "低以上已锁定",
+    "skippedOnLow": "低时跳过",
+    "changed": "已更改",
+    "changedTip": "与预设不同：{{what}}"
+  },
+  "workflowGraph": {
+    "label": "复杂度为{{complexity}}的 ticket 的{{label}}工作流",
+    "complexity": {
+      "low": "低",
+      "mid": "中",
+      "high": "高",
+      "max": "极高"
+    },
+    "roundSurvives": "该轮通过",
+    "roundFails": "该轮未通过",
+    "inParallel": "并行",
+    "reviewRound": "评审轮",
+    "noRoundsOn": "复杂度{{complexity}}时没有评审轮"
+  },
+  "workflowPanel": {
+    "idle": "在图中选择一个步骤，查看它做什么，并更改由谁运行、强度、是否运行以及它在顺序中的位置。",
+    "runnerAgents": "ticket 的智能体自己运行 /feature-review。它的各环节运行各自的团队智能体，在环节节点上选择。",
+    "selfAgent": "由 ticket 的智能体自己完成：无需选择团队智能体。",
+    "whatItDoes": "作用",
+    "handoffTo": "交接给 {{next}}",
+    "result": "结果",
+    "team": {
+      "title": "团队智能体",
+      "default": "默认（{{name}}）",
+      "notInTeam": "{{name}}（不在团队中）",
+      "missing": "已为它选定 {{picked}}，但团队中现在没有这个名字的智能体。在该智能体回来或选定其他智能体之前，它以 {{name}} 运行。选择“默认”可清除所选。",
+      "runsAs": "以 {{name}} 运行。其指令写在团队页面；角色（{{role}}）决定其 span 和运行报告的名称。",
+      "runsAsDefault": "以 {{name}} 运行（内置智能体：团队中没有这个名字的智能体）。其指令写在团队页面；角色（{{role}}）决定其 span 和运行报告的名称。"
+    },
+    "placeInOrder": "在顺序中的位置",
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "moveUpTip": "上移：{{step}}更早运行",
+    "moveDownTip": "下移：{{step}}更晚运行",
+    "runs": "运行",
+    "run": "运行{{step}}",
+    "alsoRunOnLow": "低复杂度的 ticket 也运行{{step}}",
+    "aboveLowNote": "此开关只决定低复杂度的 ticket 是否也运行它。",
+    "effort": "强度",
+    "effortHint": "作为 Agent 工具的 effort 传递。{{hint}}。",
+    "reviewRuns": "每轮运行 {{total}} 次独立的 /feature-review：{{runs}}，各用自己的智能体名称，互相看不到对方的发现。",
+    "survival": "<strong>该轮通过的条件：</strong>{{survival}}。"
+  },
+  "workflowPage": {
+    "title": "工作流",
+    "intro": "ticket 从待办到交接的过程：其智能体按顺序运行的步骤、各步由谁运行，以及各步交给下一步什么。项目遵循一个工作流；ticket 可以在自己的页面上指定另一个。智能体从看板读取它，所以这里的更改从它们的下一次运行起生效。",
+    "graphShows": "图中显示的是复杂度为{{complexity}}的 ticket。",
+    "projectFollows": "项目遵循此工作流",
+    "use": "使用此工作流",
+    "resetThis": "重置此工作流",
+    "resetTitle": "重置{{label}}工作流？",
+    "resetBody": "它的顺序、开关、强度、团队智能体和评审轮数会恢复为{{label}}预设的出厂设置。其他预设保留其中所做的更改。",
+    "cancel": "取消",
+    "reset": "重置",
+    "sectionLabel": "{{label}}工作流",
+    "projects": "项目的",
+    "summary_other": "复杂度为{{complexity}}的 ticket 共{{count}}步 · 评审：{{rounds}}"
+  },
+  "workflowPresets": {
+    "group": "工作流预设",
+    "active": "使用中",
+    "tweaked": "已调整",
+    "complexity": "复杂度",
+    "stats_other": "{{count}}步 · 评审轮数 {{rounds}}",
+    "light": {
+      "label": "精简",
+      "description": "构建、把关、一名评审者、intent 检查和交接：没有 spec 智能体，没有 env，也没有单独的 hunt。"
+    },
+    "standard": {
+      "label": "标准",
+      "description": "完整流程：spec、构建、把关，评审轮含 spec、env、verify、两个独立的 hunt、refute 和 merge 检查，然后是 intent 检查、PR、CI、preview 和交接。"
+    },
+    "thorough": {
+      "label": "严格",
+      "description": "标准流程，外加专门的编写测试环节、使用安全清单的第三个 hunt、每个评审轮末尾的 intent 检查，以及在低以上的每个复杂度多一轮评审。"
+    },
+    "maximum": {
+      "label": "最高",
+      "description": "严格流程，外加第二份独立的 spec、由另一个看不到第一份的智能体对每一轮做第二次完整评审，以及每个智能体都使用高强度。"
+    }
+  },
+  "workflowReview": {
+    "legend": "各复杂度的评审轮数",
+    "changed": "已更改",
+    "notSaved": "未保存：{{reason}}",
+    "default": "默认 {{value}}"
+  },
+  "workflowReads": {
+    "title": "智能体读到的内容",
+    "hint": "get_workflow 为此工作流返回的文本",
+    "textLabel": "工作流文本"
+  },
+  "workflowSelect": {
+    "project": "项目的工作流（{{label}}）",
+    "hint": "其智能体遵循的工作流：项目自己的，或仅用于此 ticket 的四个预设之一。更改项目的工作流不会影响已指定工作流的 ticket。"
+  },
+  "workflowView": {
+    "noRounds": "没有评审轮",
+    "rounds_other": "{{count}}轮",
+    "complexity": {
+      "low": "低",
+      "mid": "中",
+      "high": "高",
+      "max": "极高"
+    },
+    "effort": {
+      "auto": "自动",
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "effortLevel": {
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "autoLevel": "自动：{{level}}",
+    "autoEffortHint": "自动跟随 ticket：低复杂度用低，中和高用中，极高用高",
+    "separator": "、",
+    "you": "你",
+    "skippedNoRounds": "没有评审轮",
+    "skippedOff": "已关闭",
+    "changed": {
+      "moved": "它在顺序中的位置",
+      "off": "已关闭",
+      "effort": "它的强度",
+      "agent": "它的团队智能体"
+    },
+    "name": {
+      "agent": "智能体 {{name}}",
+      "locked": "已锁定",
+      "skipsOnLow": "低复杂度的 ticket 跳过"
+    },
+    "lockReason": {
+      "claim": "已锁定：ticket 被读取并认领之前，什么都不能开始。",
+      "build": "已锁定：没有构建出更改，就不会交付任何东西。",
+      "gate": "已锁定：任何更改都不会未经检查就继续。",
+      "intent": "低以上已锁定：低以上的每个 ticket 在交接前，都会对照人自己的原话进行检查。",
+      "always": "已锁定：没有它，ticket 无法交接。"
+    },
+    "survival": {
+      "light": "评审者没有复现出任何发现，且 builder 的证据覆盖了每条验收标准",
+      "standard": "结论是 SHIP，works 检查为 YES，base 检查为 NO，且每条验收标准都通过实际执行得到 PASS（仅在遇到升级规则所列、无法绕过的原因时才可为 UNVERIFIED）",
+      "thoroughIntent": "结论是 SHIP，works 检查为 YES，base 检查为 NO，每条验收标准都通过实际执行得到 PASS（仅在遇到升级规则所列、无法绕过的原因时才可为 UNVERIFIED），且该轮末尾的 intent 检查相符",
+      "maximum": "两次评审都通过（{{standard}}），且核对后没有未解决的发现",
+      "maximumIntent": "两次评审都通过（{{standard}}），核对后没有未解决的发现，且该轮末尾的 intent 检查相符"
+    },
+    "move": {
+      "after": "{{step}}必须排在{{other}}之后",
+      "stayFirst": "{{step}}必须保持在第一位",
+      "stayLast": "{{step}}必须保持在最后一位",
+      "alreadyFirst": "{{step}}已在第一位",
+      "alreadyLast": "{{step}}已在最后一位"
+    }
+  },
+  "backToModule": {
+    "back": "返回{{label}}",
+    "home": "首页"
+  },
+  "ticketLine": {
+    "openedBy": "{{name}}（{{role}}）创建于{{when}}",
+    "updated": "更新于{{when}}",
+    "opened": "创建于{{when}}"
+  },
+  "resumeSettings": {
+    "title": "恢复",
+    "intro": "提出问题的智能体会结束它的这一轮。在这里设置命令后，当你回答看板上的决定卡片，或把 ticket 从已阻塞或评审阶段移回进行中的阶段时，看板会自己继续工作：它在这台电脑上、ticket 的 worktree 中运行该命令，问题和你的回答（或你最新的话）通过标准输入以及 <code>BOARD_RESUME_PROMPT_FILE</code> 指定的文件传入；同时设置了 <code>BOARD_URL</code>、<code>BOARD_PROJECT_ID</code>、<code>BOARD_TICKET_ID</code> 和 <code>BOARD_AGENT_NAME</code>。已有智能体在工作或已在恢复中的 ticket 不会启动。它以看板用户的权限运行，且只有你能设置。留空即关闭。",
+    "presets": "预设",
+    "found": "已找到",
+    "notFound": "未找到",
+    "command": "恢复命令",
+    "commandPlaceholder": "claude -p（留空：关闭）",
+    "timeout": "多少分钟后停止",
+    "save": "保存",
+    "saving": "保存中…",
+    "timeoutProblem": "{{min}} 到 {{max}} 之间的整数。",
+    "unsaved": "有未保存的更改。",
+    "noChanges": "没有更改。",
+    "off": "恢复已关闭。"
+  },
+  "resumeCard": {
+    "title": "恢复",
+    "resume": "恢复",
+    "retry": "重试",
+    "started": "看板已重新开始工作",
+    "empty": "还没有任何东西恢复过此 ticket。",
+    "setInSettings": "由人在项目设置中设定。",
+    "failed": "看板无法恢复：{{reason}}",
+    "log": "日志",
+    "state": {
+      "queued": "启动中",
+      "running": "运行中",
+      "succeeded": "已完成",
+      "failed": "失败",
+      "skipped": "未启动"
+    }
+  },
+  "runReportsWindow": {
+    "reports": "报告",
+    "reportsCount": "报告（{{n}}）",
+    "title": "运行报告",
+    "description": "此 ticket 的运行报告，可筛选和排序。打开一份可查看全文。",
+    "back": "返回报告",
+    "none": "还没有运行报告。",
+    "noMatch": "没有符合这些筛选条件的报告。",
+    "count_other": "{{count}}份报告中的{{shown}}份",
+    "clearFilters": "清除筛选",
+    "filter": {
+      "agent": "智能体",
+      "round": "轮次",
+      "time": "时间",
+      "difficulty": "难度",
+      "confidence": "信心",
+      "duration": "时长",
+      "sortBy": "排序"
+    },
+    "items": {
+      "allAgents": "所有智能体",
+      "allRounds": "所有轮次",
+      "round": "第{{n}}轮",
+      "noRound": "无轮次"
+    },
+    "time": {
+      "any": "不限时间",
+      "hour": "最近一小时",
+      "today": "今天",
+      "week": "最近 7 天"
+    },
+    "duration": {
+      "any": "不限",
+      "reported": "已报告",
+      "unreported": "未报告"
+    },
+    "rating": {
+      "any": "不限",
+      "unrated": "未评分"
+    },
+    "sort": {
+      "newest": "最新",
+      "oldest": "最早",
+      "longest": "最长",
+      "difficulty": "难度最高",
+      "confidence": "信心最高"
     }
   }
 }

@@ -1,4 +1,4 @@
-import { Link, Outlet, createFileRoute, useRouterState } from '@tanstack/react-router'
+import { Link, Outlet, createFileRoute, useRouter, useRouterState } from '@tanstack/react-router'
 import { PanelLeft, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -10,7 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#
 import { Tip } from '#/components/ui/tooltip'
 import { visibleNavPages } from '#/lib/kinds'
 import { type AreaId, defaultLayout, layoutLabel, shownIn } from '#/lib/layout'
+import { LAST_MODULE, encodeModule } from '#/lib/lastModule'
 import { rememberCurrentProject, useProject } from '#/lib/project'
+import { remember } from '#/lib/remembered'
 import { nextSidebarMode, sidebarToggleLabel, useSidebarMode } from '#/lib/sidebar'
 import { useHydrated } from '#/lib/useHydrated'
 
@@ -28,7 +30,7 @@ const MODULES = {
   'nav.previews': '/projects/$id/previews',
   'nav.gallery': '/projects/$id/gallery',
   'nav.agents': '/projects/$id/agents',
-  'nav.runReports': '/projects/$id/run-reports',
+  'nav.workflow': '/projects/$id/workflow',
   'nav.daily': '/projects/$id/daily',
   'nav.cleanup': '/projects/$id/cleanup',
   'nav.repositories': '/projects/$id/repositories',
@@ -70,6 +72,17 @@ function ProjectLayout() {
   const project = hydrated ? data : undefined
   // A link that names no project (the old `/daily`) opens this one.
   useEffect(() => rememberCurrentProject(id), [id])
+  // The page the project is on now, for the back button of Settings and Connect an agent.
+  const router = useRouter()
+  useEffect(() => {
+    const keep = () => {
+      const { pathname, search, hash } = router.state.location
+      const saved = encodeModule({ pathname, search: search as Record<string, unknown>, hash })
+      if (saved) remember(LAST_MODULE, saved)
+    }
+    keep()
+    return router.subscribe('onResolved', keep)
+  }, [router])
   const [mode, chooseMode, modeReady] = useSidebarMode()
   // Slides are on once the remembered mode is showing (and two frames have painted): a returning visitor
   // whose sidebar is hidden sees it hidden, not sliding away.

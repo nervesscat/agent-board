@@ -76,7 +76,8 @@ export function timelineFromActivity(
 }
 
 /** Whether a stage's kind has work to show: open, done and cancelled stages have none. */
-export const hasWork = (kind: StageKind) => kind === 'active' || kind === 'blocked' || kind === 'review'
+export const hasWork = (kind: StageKind) =>
+  kind === 'active' || kind === 'blocked' || kind === 'review' || kind === 'approved'
 
 /**
  * A board row's work-state line (its state is what the State filter matches), built the way the card or

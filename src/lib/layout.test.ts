@@ -32,7 +32,7 @@ describe('the catalogue', () => {
     expect(allowedAreas('ticket.lanes')).toEqual(['ticket.main', 'ticket.side'])
     expect(allowedAreas('ticket.details')).toEqual(['ticket.main', 'ticket.side'])
     expect(allowedAreas('nav.gallery')).toEqual(['nav'])
-    expect(allowedAreas('overview.next')).toEqual(['overview'])
+    expect(allowedAreas('overview.lostContact')).toEqual(['overview'])
   })
 
   it('locks the landing page, the board and the deep-link targets of a ticket', () => {
@@ -100,7 +100,7 @@ describe('mergeLayout', () => {
       'nav.roadmap',
       'nav.previews',
       'nav.agents',
-      'nav.runReports',
+      'nav.workflow',
       'nav.daily',
       'nav.cleanup',
       'nav.repositories',
@@ -135,7 +135,7 @@ describe('mergeLayout', () => {
       'nav.previews',
       'nav.gallery',
       'nav.agents',
-      'nav.runReports',
+      'nav.workflow',
       'nav.cleanup',
       'nav.repositories',
       'nav.instructions',
@@ -173,7 +173,7 @@ describe('mergeLayout', () => {
       'overview.needsYou',
       'overview.notes',
       'overview.carryingOver',
-      'overview.next',
+      'overview.lostContact',
       'overview.doneToday',
       'overview.inProgress',
       'overview.agents',
@@ -205,6 +205,14 @@ describe('mergeLayout', () => {
     expect(mergeLayout(saved)).toEqual(defaultLayout())
   })
 
+  it('merges a layout saved with the removed Run reports page as one saved without it', () => {
+    const without = defaultLayout()
+    const at = without.findIndex((it) => it.id === 'nav.agents') + 1
+    const saved = [...without.slice(0, at), { id: 'nav.runReports', area: 'nav' }, ...without.slice(at)]
+    expect(mergeLayout(saved)).toEqual(mergeLayout(without))
+    expect(mergeLayout(saved).map((it) => String(it.id))).not.toContain('nav.runReports')
+  })
+
   it('keeps the first of a repeated id', () => {
     const saved = [
       { id: 'nav.daily', area: 'nav', hidden: true },
@@ -225,7 +233,7 @@ describe('mergeLayout', () => {
         ? { ...it, area: 'overview' }
         : it.id === 'ticket.tasks'
           ? { ...it, area: 'nowhere' }
-          : it.id === 'overview.next'
+          : it.id === 'overview.lostContact'
             ? { ...it, area: 'ticket.side' }
             : it,
     )

@@ -35,7 +35,6 @@
     "previews": "Chargement des previews…",
     "repositories": "Chargement des dépôts…",
     "roadmap": "Chargement de la roadmap…",
-    "runReports": "Chargement des rapports d’exécution…",
     "earlierVersions": "Chargement des versions antérieures…",
     "workspaces": "Chargement des workspaces…"
   },
@@ -46,7 +45,8 @@
     "settings": "Paramètres",
     "testMode": "mode test",
     "authOff": "sans auth",
-    "authOffTip": "BOARD_ENV={{env}}, connexion désactivée : connecté en tant que {{actor}}. Ce n’est pas le tableau réel."
+    "authOffTip": "BOARD_ENV={{env}}, connexion désactivée : connecté en tant que {{actor}}. Ce n’est pas le tableau réel.",
+    "connectAgent": "Connecter un agent"
   },
   "time": {
     "never": "—",
@@ -480,7 +480,8 @@
       "blocked": "Bloquée",
       "review": "Revue",
       "done": "Terminée",
-      "cancelled": "Annulée"
+      "cancelled": "Annulée",
+      "approved": "Approuvée"
     },
     "hint": {
       "open": "en attente de prise en charge ; la prise en charge le place dans l’étape où le travail démarre",
@@ -488,7 +489,8 @@
       "blocked": "vous attend",
       "review": "remis pour revue",
       "done": "terminé ; ne peut pas être pris en charge",
-      "cancelled": "abandonné ; la désapprobation y place un ticket, et ses tâches sortent de la progression"
+      "cancelled": "abandonné ; la désapprobation y place un ticket, et ses tâches sortent de la progression",
+      "approved": "votre feu vert pour fusionner ; aucun agent n’y déplace un ticket"
     },
     "color": {
       "gray": "gris",
@@ -611,20 +613,20 @@
         "previews": "Previews",
         "gallery": "Galerie",
         "agents": "Équipe",
-        "runReports": "Rapports d’exécution",
         "daily": "Quotidien",
         "cleanup": "Nettoyage",
         "repositories": "Dépôts",
-        "instructions": "Instructions"
+        "instructions": "Instructions",
+        "workflow": "Workflow"
       },
       "overview": {
         "needsYou": "À traiter",
         "inProgress": "En cours",
         "doneToday": "Terminé aujourd’hui",
-        "next": "Suite",
         "carryingOver": "Reporté",
         "notes": "Notes",
-        "agents": "Agents au travail"
+        "agents": "Agents au travail",
+        "lostContact": "Contact perdu"
       },
       "ticket": {
         "instructions": "Instructions",
@@ -635,7 +637,8 @@
         "runs": "Exécutions",
         "details": "Détails",
         "branch": "Branche",
-        "workspaces": "Workspaces"
+        "workspaces": "Workspaces",
+        "resume": "Reprise"
       }
     },
     "locked": {
@@ -1478,21 +1481,7 @@
     "dialogTitleEmpty": "Rapport d’exécution",
     "round": "tour {{round}}",
     "difficultyShort": "difficulté {{n}}/5",
-    "confidenceShort": "confiance {{n}}/5",
-    "panelTitle": "Rapports d’exécution",
-    "panelHeading_one": "Rapports d’exécution · {{count}} exécution",
-    "panelHeading_other": "Rapports d’exécution · {{count}} exécutions",
-    "pageTitle": "Rapports d’exécution",
-    "pageText": "Comment chaque exécution de sous-agent s’est passée, dans ses propres mots. Un rapport par exécution ; un tour de revue en a un pour chacun de ses agents.",
-    "allAgents": "Tous les agents",
-    "agent": "Agent",
-    "ticketPlaceholder": "Ticket n°",
-    "ticketNumber": "Numéro du ticket",
-    "filter": "Filtrer",
-    "clear": "Effacer",
-    "emptyFiltered": "Aucun rapport d’exécution pour ce filtre.",
-    "empty": "Aucun rapport d’exécution pour l’instant.",
-    "openTicket": "Ouvrir le ticket"
+    "confidenceShort": "confiance {{n}}/5"
   },
   "projectAgents": {
     "title": "Équipe",
@@ -1631,7 +1620,8 @@
     "tagsPlaceholder": "High, Forms",
     "branchesOff": "Part de <branch>{{branch}}</branch> quand c’est le même dépôt.",
     "uploading": "Envoi en cours…",
-    "create": "Créer"
+    "create": "Créer",
+    "workflow": "Workflow"
   },
   "notes": {
     "title": "Notes",
@@ -1885,6 +1875,11 @@
         "title": "Paramètres",
         "subtitle": "Préférences de tout le tableau",
         "keywords": "préférences, thème, previews, appareils, settings"
+      },
+      "workflow": {
+        "title": "Workflow",
+        "subtitle": "Les étapes que suivent les agents pour un ticket, sous forme d’arbre",
+        "keywords": "étapes, préréglages, tours de revue, remise, délégation, ordre, workflow, steps, presets"
       }
     },
     "setting": {
@@ -2050,7 +2045,6 @@
   },
   "ticketBoard": {
     "stage": "Étape",
-    "mergeAfter": "à fusionner après {{list}}",
     "archiveTip_one": "Archiver le {{count}} ticket de {{stage}}",
     "archiveTip_other": "Archiver les {{count}} tickets de {{stage}}",
     "archiveAll": "Tout archiver",
@@ -2075,9 +2069,7 @@
     "nothingArchived": "Rien d’archivé.",
     "archived": "archivé {{when}}",
     "archivedBy": "archivé {{when}} par <actor/>",
-    "restore": "Restaurer",
-    "laneApproved_one": "{{count}} approuvée",
-    "laneApproved_other": "{{count}} approuvées"
+    "restore": "Restaurer"
   },
   "ticketList": {
     "archivedToast_one": "{{count}} ticket archivé",
@@ -2121,8 +2113,10 @@
     "addPlaceholder": "Ajouter un ticket…",
     "noOthers": "Aucun autre ticket",
     "includes": "Inclut du travail non fusionné de <goto>{{ref}}</goto>",
-    "cannotBeDone": "#{{id}} ne peut pas être terminé tant que la branche de #{{need}} n’est pas fusionnée dans sa base",
-    "addAsNeed": "Ajouter comme dépendance"
+    "addAsNeed": "Ajouter comme dépendance",
+    "autoTitle": "Ajoutée par le tableau : la branche de ce ticket contient des commits non fusionnés de l’autre ticket. Elle disparaît quand ce n’est plus le cas, et la retirer ici est définitif (elle n’est pas rajoutée pour les mêmes commits).",
+    "addedByBoard": "Ajoutée par le tableau",
+    "cannotBeDoneUnsure": "Le tableau ne peut pas déterminer avec certitude à qui sont ces commits : il n’a donc ajouté aucune dépendance. #{{id}} ne peut pas être terminé tant que la branche de #{{need}} n’est pas fusionnée dans sa base."
   },
   "verdict": {
     "approve": "Approuver",
@@ -2161,11 +2155,15 @@
       "others": {
         "label": "En attente d’autres",
         "title": "Vos PR (celles des agents aussi) : approbations en attente, approuvées par chaque relecteur, ou en pause sur leurs commentaires"
+      },
+      "all": {
+        "label": "Toutes les PR",
+        "title": "Toutes les PR ouvertes des dépôts, quel qu’en soit l’auteur et qu’elles vous concernent ou non"
       }
     },
     "reviewers": {
-      "all": "Toutes les PR",
-      "mine": "Moi seul comme relecteur"
+      "mine": "Moi seul comme relecteur",
+      "involving": "Me concernant"
     },
     "tabs": {
       "pending": "En attente",
@@ -2175,7 +2173,8 @@
     },
     "empty": {
       "me": "Aucune PR à revoir ({{stage}}).",
-      "others": "Aucune PR en attente d’autres personnes ({{stage}})."
+      "others": "Aucune PR en attente d’autres personnes ({{stage}}).",
+      "all": "Aucune PR ({{stage}}) parmi les PR ouvertes."
     },
     "refresh": "Actualiser",
     "mergeAfterTip": "Son ticket a besoin que celles-ci soient d’abord fusionnées :\n{{list}}",
@@ -2202,7 +2201,8 @@
     "holdTitle": "Mettre #{{number}} en pause",
     "holdText": "Une note pour vous et les agents. GitHub n’est pas touché.",
     "holdPlaceholder": "Pourquoi elle attend…",
-    "holdConfirm": "Mettre en pause"
+    "holdConfirm": "Mettre en pause",
+    "notInvolvingYou": "ne vous concerne pas"
   },
   "workStatus": {
     "state": {
@@ -2385,7 +2385,15 @@
       "human": "en attente de l’humain {{duration}}",
       "review": "en revue {{duration}}",
       "merge": "en attente de merge {{duration}}"
-    }
+    },
+    "openReport": "Ouvrir le rapport {{agent}} : {{label}}",
+    "openReportRound": "Ouvrir le rapport {{agent}}, tour {{round}} : {{label}}",
+    "reportDescription": "Le rapport écrit pour cette exécution",
+    "factsDescription": "Les faits de cette exécution",
+    "loadingReport": "Chargement du rapport d’exécution…",
+    "reportsFailed": "Impossible de charger les rapports.",
+    "noReport": "Aucun rapport pour cette exécution.",
+    "noReportYet": "Pas encore de rapport pour cette exécution."
   },
   "roadmap": {
     "title": "Roadmap",
@@ -2481,8 +2489,9 @@
     },
     "lost": {
       "title": "Contact perdu",
-      "link": "Contact perdu : <id>#{{id}}</id> {{title}}",
-      "detail": "{{agent}} · {{phase}} · {{since}} · dernier signe il y a {{minutes}} min"
+      "empty": "Aucun contact perdu.",
+      "lastHeardTip": "Dernier signe {{when}}",
+      "lastHeard": "dernier signe il y a {{duration}}"
     },
     "inProgress": {
       "title": "En cours",
@@ -2496,24 +2505,12 @@
       "activity_one": "{{count}} événement aujourd’hui : Quotidien",
       "activity_other": "{{count}} événements aujourd’hui : Quotidien"
     },
-    "next": {
-      "title": "Suite",
-      "titleStage": "Suite : {{stage}}",
-      "empty": "Rien de prévu.",
-      "emptyStage": "Rien de prévu dans {{stage}}.",
-      "tasks": "{{done}}/{{total}} tâches",
-      "more": "{{count}} de plus",
-      "blocked_one": "{{count}} bloqué",
-      "blocked_other": "{{count}} bloqués",
-      "backlog": "{{count}} dans le backlog",
-      "board": "Tableau"
-    },
     "carryingOver": {
       "title": "Reporté",
-      "empty": "Rien de reporté d’avant aujourd’hui.",
       "startedTip": "Le travail a démarré {{when}}",
       "days_one": "{{count}} jour en cours",
-      "days_other": "{{count}} jours en cours"
+      "days_other": "{{count}} jours en cours",
+      "emptyShown": "Rien de bloqué ni en revue d’avant aujourd’hui."
     }
   },
   "notifications": {
@@ -2560,18 +2557,13 @@
     "restoredToast": "Remis sur le tableau",
     "disapprovedToast": "#{{id}} désapprouvé et annulé",
     "undo": "Annuler retire la désapprobation et le remet dans {{stage}}.",
-    "undoMoved": "Annuler retire la désapprobation et le remet dans {{stage}}. Passage à #{{next}}.",
     "undoAction": "Annuler",
     "summary": "Résumé",
-    "openedBy": "ouvert par <actor/> {{when}}",
     "updated": "mis à jour {{when}}",
     "archivedBy": "Archivé par {{name}} {{when}}",
     "archivedByLane": "Archivée par {{name}} {{when}}, avec le ticket dont elle est une lane",
     "someone": "quelqu’un",
     "archivedBadge": "Archivé",
-    "lanesWarningTip": "Ce ticket est marqué plus avancé que ses lanes",
-    "lanesNotDone_one": "{{count}} lane non terminée",
-    "lanesNotDone_other": "{{count}} lanes non terminées",
     "decisionNeeded": "décision attendue",
     "archiveTip": "Le retirer du tableau, avec ses lanes ; Archivés, sur la page des fonctionnalités, le ramène",
     "deleteTitle": "Supprimer ce ticket ?",
@@ -2637,7 +2629,6 @@
     "newSubtaskOf": "Nouvelle sous-tâche de {{name}}",
     "add": "Ajouter",
     "addPhase": "Ajouter une phase : Implementation, Pushed, PR…",
-    "noCall": "Pas d’appel",
     "all": "Tous",
     "nounLane": "lane",
     "laneOf": "lane {{n}} sur {{count}}",
@@ -2647,13 +2638,10 @@
     "previousNoun": "Précédent : {{noun}}",
     "nextNoun": "Suivant : {{noun}}",
     "stepKeysTip": "[ et ] pour reculer et avancer",
-    "lanesDone": "{{done}}/{{total}} terminées · {{approved}} approuvées",
-    "lanesDisapproved": "{{count}} désapprouvées",
     "lanesCancelled": "{{count}} annulées",
     "allTasks": "toutes les tâches {{done}}/{{total}}",
     "noLanes": "Aucune lane. Découpez ce ticket en lanes quand certaines parties tournent en parallèle : chaque lane a sa propre branche, son assigné, ses tâches et ses mises à jour.",
     "filterStage": "Étape",
-    "filterVerdict": "Verdict",
     "filterTags": "Tags",
     "showing": "{{shown}} affichés sur {{total}}",
     "clearFilters": "effacer les filtres",
@@ -2725,7 +2713,14 @@
     "workspacesDesc": "Worktrees, sous-branches et bacs à sable de sous-agents que les agents ont ouverts pour ce ticket.",
     "workspacesDescLanes": "Worktrees, sous-branches et bacs à sable de sous-agents que les agents ont ouverts pour ce ticket et ses lanes.",
     "noneYet": "Aucun pour l’instant.",
-    "updatedLabel": "mis à jour"
+    "breadcrumb": "Fil d’Ariane",
+    "scrollSideUp": "Faire défiler la colonne latérale vers le haut",
+    "scrollSideDown": "Faire défiler la colonne latérale vers le bas",
+    "workflow": "Workflow",
+    "workflowOwn": "Suit le workflow {{workflow}}, défini sur ce ticket.",
+    "workflowProject": "Suit le workflow du projet ({{workflow}}).",
+    "workflowSteps": "Voir les étapes",
+    "lanesProgress": "{{done}}/{{total}} terminées"
   },
   "complexity": {
     "label": {
@@ -2734,12 +2729,12 @@
       "high": "Élevée",
       "max": "Max"
     },
-    "selectHint": "Faible : pas de revue. Moyenne : un tour de revue. Élevée : jusqu’à trois. Max : jusqu’à dix tours, pour du travail construit de zéro ; une fonctionnalité dans une base de code existante n’est jamais Max, aussi difficile soit-elle.",
-    "hint": {
-      "low": "Faible : pas de revue. Le builder la vérifie lui-même.",
-      "mid": "Moyenne : un tour de revue.",
-      "high": "Élevée : jusqu’à trois tours de revue.",
-      "max": "Max : jusqu’à dix tours de revue, pour un site ou une application entiers construits de zéro, un nouveau produit ou un service autonome, et il s’arrête au premier tour qui tient. Une fonctionnalité dans une base de code existante est au plus Élevée, aussi difficile soit-elle."
+    "workflowHint": "Faible : ni spec ni revue dans le workflow Standard. Moyenne, Élevée et Max : les tours de revue que fixe le workflow du projet (Standard : un, trois, jusqu’à dix). Max est pour du travail construit de zéro ; une fonctionnalité dans une base de code existante n’est jamais max, quelle que soit sa difficulté.",
+    "levelHint": {
+      "low": "Faible : les tours de revue que fixe le workflow du projet (Standard : aucun). Le builder la vérifie lui-même.",
+      "mid": "Moyenne : les tours de revue que fixe le workflow du projet (Standard : un).",
+      "high": "Élevée : les tours de revue que fixe le workflow du projet (Standard : jusqu’à trois).",
+      "max": "Max : les tours de revue que fixe le workflow du projet (Standard : jusqu’à dix), pour un site ou une appli entiers construits de zéro, un nouveau produit ou un service autonome, et elle s’arrête au premier tour validé. Une fonctionnalité dans une base de code existante est au plus élevée, quelle que soit sa difficulté."
     }
   },
   "agentsAtWork": {
@@ -2781,6 +2776,270 @@
       "hours_other": "{{count}} heures",
       "days_one": "{{count}} jour",
       "days_other": "{{count}} jours"
+    }
+  },
+  "workflowChips": {
+    "selfTip": "L’agent du ticket s’en charge lui-même",
+    "agentTip": {
+      "picked": "L’agent de l’Équipe choisi pour cette étape. Ses instructions sont écrites sur la page Équipe. Le rôle ({{agent}}) nomme ses spans et ses rapports d’exécution.",
+      "role": "L’agent de l’Équipe nommé comme son rôle ({{agent}}). Ses instructions sont écrites sur la page Équipe. Le rôle ({{agent}}) nomme ses spans et ses rapports d’exécution.",
+      "default": "Aucun agent de l’Équipe ne s’appelle {{agent}} : l’étape s’exécute avec le rôle intégré {{agent}}. Ses instructions sont écrites sur la page Équipe. Le rôle ({{agent}}) nomme ses spans et ses rapports d’exécution."
+    },
+    "agentMissing": "agent absent",
+    "missingTip": "{{picked}} avait été choisi pour cette étape, mais l’Équipe n’a plus d’agent de ce nom : elle s’exécute comme {{name}} jusqu’au retour de l’agent ou jusqu’à ce qu’un autre soit choisi.",
+    "locked": "Verrouillée",
+    "lockedAboveLow": "Verrouillée au-dessus de faible",
+    "skippedOnLow": "Ignorée en faible",
+    "changed": "modifiée",
+    "changedTip": "Modifiée par rapport au préréglage : {{what}}"
+  },
+  "workflowGraph": {
+    "label": "Workflow {{label}} pour un ticket de complexité {{complexity}}",
+    "complexity": {
+      "low": "faible",
+      "mid": "moyenne",
+      "high": "élevée",
+      "max": "max"
+    },
+    "roundSurvives": "tour validé",
+    "roundFails": "tour en échec",
+    "inParallel": "En parallèle",
+    "reviewRound": "Tour de revue",
+    "noRoundsOn": "Aucun tour de revue en complexité {{complexity}}"
+  },
+  "workflowPanel": {
+    "idle": "Sélectionnez une étape du graphe pour voir ce qu’elle fait et modifier qui l’exécute, son effort, si elle s’exécute et sa place dans l’ordre.",
+    "runnerAgents": "L’agent du ticket exécute /feature-review lui-même. Ses phases font tourner leurs propres agents de l’Équipe, choisis sur les nœuds de phase.",
+    "selfAgent": "L’agent du ticket s’en charge lui-même : il n’y a pas d’agent de l’Équipe à choisir.",
+    "whatItDoes": "Ce qu’elle fait",
+    "handoffTo": "Remise à {{next}}",
+    "result": "Résultat",
+    "team": {
+      "title": "Agent de l’Équipe",
+      "default": "Par défaut ({{name}})",
+      "notInTeam": "{{name}} (pas dans l’Équipe)",
+      "missing": "{{picked}} avait été choisi pour cette étape, mais l’Équipe n’a plus d’agent de ce nom. Elle s’exécute comme {{name}} jusqu’au retour de l’agent ou jusqu’à ce qu’un autre soit choisi. Choisissez Par défaut pour effacer le choix.",
+      "runsAs": "S’exécute comme {{name}}. Ses instructions sont écrites sur la page Équipe ; le rôle ({{role}}) nomme ses spans et ses rapports d’exécution.",
+      "runsAsDefault": "S’exécute comme {{name}} (l’agent intégré : l’Équipe n’en a aucun de ce nom). Ses instructions sont écrites sur la page Équipe ; le rôle ({{role}}) nomme ses spans et ses rapports d’exécution."
+    },
+    "placeInOrder": "Place dans l’ordre",
+    "moveUp": "Monter",
+    "moveDown": "Descendre",
+    "moveUpTip": "Monter : {{step}} s’exécute plus tôt",
+    "moveDownTip": "Descendre : {{step}} s’exécute plus tard",
+    "runs": "Exécution",
+    "run": "Exécuter {{step}}",
+    "alsoRunOnLow": "Exécuter aussi {{step}} sur les tickets de complexité faible",
+    "aboveLowNote": "Cet interrupteur décide seulement si elle s’exécute aussi pour un ticket de complexité faible.",
+    "effort": "Effort",
+    "effortHint": "Transmis comme effort de l’outil Agent. {{hint}}.",
+    "reviewRuns": "Lance {{total}} exécutions /feature-review distinctes à chaque tour : {{runs}}, chacune sous son propre nom d’agent, sans jamais voir les constats de l’autre.",
+    "survival": "<strong>Un tour est validé quand</strong> {{survival}}."
+  },
+  "workflowPage": {
+    "title": "Workflow",
+    "intro": "Comment un ticket passe de À faire à la remise : les étapes que son agent exécute, dans l’ordre, qui exécute chacune et ce que chacune transmet à la suivante. Le projet suit un seul workflow ; un ticket peut en nommer un autre sur sa page. Les agents le lisent depuis le tableau : un changement ici est suivi dès leur prochaine exécution.",
+    "graphShows": "Le graphe montre un ticket de complexité {{complexity}}.",
+    "projectFollows": "Le projet suit ce workflow",
+    "use": "Utiliser ce workflow",
+    "resetThis": "Réinitialiser ce workflow",
+    "resetTitle": "Réinitialiser le workflow {{label}} ?",
+    "resetBody": "Son ordre, ses interrupteurs, ses efforts, ses agents de l’Équipe et ses tours de revue reviennent à ce que livre le préréglage {{label}}. Les autres préréglages gardent ce qui y a été modifié.",
+    "cancel": "Annuler",
+    "reset": "Réinitialiser",
+    "sectionLabel": "Workflow {{label}}",
+    "projects": "du projet",
+    "summary_one": "{{count}} étape pour un ticket de complexité {{complexity}} · revue : {{rounds}}",
+    "summary_other": "{{count}} étapes pour un ticket de complexité {{complexity}} · revue : {{rounds}}"
+  },
+  "workflowPresets": {
+    "group": "Préréglages de workflow",
+    "active": "Actif",
+    "tweaked": "Ajusté",
+    "complexity": "Complexité",
+    "stats_one": "{{count}} étape · tours de revue {{rounds}}",
+    "stats_other": "{{count}} étapes · tours de revue {{rounds}}",
+    "light": {
+      "label": "Léger",
+      "description": "Build, contrôle, un relecteur, la vérification de l’intention et la remise : pas d’agent spec, pas d’environnement, pas de hunts séparés."
+    },
+    "standard": {
+      "label": "Standard",
+      "description": "Le cycle complet : spec, build, contrôle, tours de revue avec spec, environnement, verify, deux hunts indépendants, refute et un contrôle de merge, puis la vérification de l’intention, la PR, la CI, la preview et la remise."
+    },
+    "thorough": {
+      "label": "Approfondi",
+      "description": "Standard plus une passe dédiée à l’écriture de tests, un troisième hunt avec la checklist de sécurité, la vérification de l’intention à la fin de chaque tour de revue, et un tour de revue de plus à chaque niveau au-dessus de faible."
+    },
+    "maximum": {
+      "label": "Maximum",
+      "description": "Approfondi plus une seconde spec indépendante, une seconde revue complète de chaque tour par un autre agent qui ne voit jamais la première, et un effort élevé sur chaque agent."
+    }
+  },
+  "workflowReview": {
+    "legend": "Tours de revue par complexité",
+    "changed": "modifié",
+    "notSaved": "Non enregistré : {{reason}}",
+    "default": "par défaut {{value}}"
+  },
+  "workflowReads": {
+    "title": "Ce que lisent les agents",
+    "hint": "le texte que renvoie get_workflow pour ce workflow",
+    "textLabel": "Texte du workflow"
+  },
+  "workflowSelect": {
+    "project": "Workflow du projet ({{label}})",
+    "hint": "Le workflow que suit son agent : celui du projet, ou l’un des quatre préréglages pour ce seul ticket. Changer le workflow du projet ne déplace pas un ticket qui en nomme un."
+  },
+  "workflowView": {
+    "noRounds": "aucun tour de revue",
+    "rounds_one": "{{count}} tour",
+    "rounds_other": "{{count}} tours",
+    "complexity": {
+      "low": "Faible",
+      "mid": "Moyenne",
+      "high": "Élevée",
+      "max": "Max"
+    },
+    "effort": {
+      "auto": "Auto",
+      "low": "Faible",
+      "medium": "Moyen",
+      "high": "Élevé"
+    },
+    "effortLevel": {
+      "low": "faible",
+      "medium": "moyen",
+      "high": "élevé"
+    },
+    "autoLevel": "Auto : {{level}}",
+    "autoEffortHint": "Auto suit le ticket : faible pour une complexité faible, moyen pour moyenne et élevée, élevé pour max",
+    "separator": ", ",
+    "you": "vous",
+    "skippedNoRounds": "Aucun tour de revue",
+    "skippedOff": "Désactivée",
+    "changed": {
+      "moved": "sa place dans l’ordre",
+      "off": "désactivée",
+      "effort": "son effort",
+      "agent": "son agent de l’Équipe"
+    },
+    "name": {
+      "agent": "agent {{name}}",
+      "locked": "verrouillée",
+      "skipsOnLow": "ignorée sur les tickets de complexité faible"
+    },
+    "lockReason": {
+      "claim": "Verrouillée : rien ne peut démarrer avant que le ticket soit lu et pris en charge.",
+      "build": "Verrouillée : rien n’est livré sans que le changement soit construit.",
+      "gate": "Verrouillée : aucun changement ne passe sans contrôle.",
+      "intent": "Verrouillée au-dessus de faible : tout ticket au-dessus de faible est comparé aux propres mots de l’humain avant sa remise.",
+      "always": "Verrouillée : le ticket ne peut pas être remis sans elle."
+    },
+    "survival": {
+      "light": "le relecteur n’a reproduit aucun constat et les preuves du builder couvrent chaque critère d’acceptation",
+      "standard": "le verdict est SHIP, le contrôle works est YES, le contrôle base est NO et chaque critère d’acceptation est PASS par exécution (UNVERIFIED seulement pour une raison que nomment les règles d’escalade et qu’on n’a pas pu lever)",
+      "thoroughIntent": "le verdict est SHIP, le contrôle works est YES, le contrôle base est NO et chaque critère d’acceptation est PASS par exécution (UNVERIFIED seulement pour une raison que nomment les règles d’escalade et qu’on n’a pas pu lever), et la vérification de l’intention en fin de tour concorde",
+      "maximum": "les deux revues sont validées ({{standard}}) et la réconciliation ne laisse aucun constat ouvert",
+      "maximumIntent": "les deux revues sont validées ({{standard}}), la réconciliation ne laisse aucun constat ouvert et la vérification de l’intention en fin de tour concorde"
+    },
+    "move": {
+      "after": "{{step}} doit venir après {{other}}",
+      "stayFirst": "{{step}} doit rester en premier",
+      "stayLast": "{{step}} doit rester en dernier",
+      "alreadyFirst": "{{step}} est déjà en premier",
+      "alreadyLast": "{{step}} est déjà en dernier"
+    }
+  },
+  "backToModule": {
+    "back": "Retour à {{label}}",
+    "home": "Accueil"
+  },
+  "ticketLine": {
+    "openedBy": "Ouvert par {{name}} ({{role}}) le {{when}}",
+    "updated": "Mis à jour le {{when}}",
+    "opened": "Ouvert le {{when}}"
+  },
+  "resumeSettings": {
+    "title": "Reprise",
+    "intro": "Un agent qui pose une question termine son tour. Avec une commande ici, le tableau reprend lui-même le travail quand vous répondez à une carte de décision sur le tableau, ou que vous remettez un ticket d’une étape bloquée ou de revue vers une étape active : il lance la commande sur cette machine, dans le worktree du ticket, avec la question et votre réponse (ou vos derniers mots) sur son entrée standard et dans le fichier désigné par <code>BOARD_RESUME_PROMPT_FILE</code> ; <code>BOARD_URL</code>, <code>BOARD_PROJECT_ID</code>, <code>BOARD_TICKET_ID</code> et <code>BOARD_AGENT_NAME</code> sont définis. Rien n’est lancé pour un ticket qui a un agent en vie ou qui reprend déjà. Elle s’exécute avec les droits de l’utilisateur du tableau, et vous seul pouvez la définir. Vide : désactivée.",
+    "presets": "Préréglages",
+    "found": "trouvé",
+    "notFound": "introuvable",
+    "command": "Commande de reprise",
+    "commandPlaceholder": "claude -p (vide : désactivé)",
+    "timeout": "L’arrêter après (minutes)",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "timeoutProblem": "Un nombre entier de {{min}} à {{max}}.",
+    "unsaved": "Modifications non enregistrées.",
+    "noChanges": "Aucune modification.",
+    "off": "La reprise est désactivée."
+  },
+  "resumeCard": {
+    "title": "Reprise",
+    "resume": "Reprendre",
+    "retry": "Réessayer",
+    "started": "Le tableau a relancé le travail",
+    "empty": "Rien n’a encore repris ce ticket.",
+    "setInSettings": "L’humain la définit dans les paramètres du projet.",
+    "failed": "Le tableau n’a pas pu reprendre : {{reason}}",
+    "log": "Journal",
+    "state": {
+      "queued": "Démarrage",
+      "running": "En cours",
+      "succeeded": "Terminée",
+      "failed": "Échec",
+      "skipped": "Non démarrée"
+    }
+  },
+  "runReportsWindow": {
+    "reports": "Rapports",
+    "reportsCount": "Rapports ({{n}})",
+    "title": "Rapports d’exécution",
+    "description": "Les rapports d’exécution de ce ticket, avec filtres et tri. En ouvrir un l’affiche en entier.",
+    "back": "Retour aux rapports",
+    "none": "Aucun rapport d’exécution pour l’instant.",
+    "noMatch": "Aucun rapport ne correspond à ces filtres.",
+    "count_one": "{{shown}} sur {{count}} rapport",
+    "count_other": "{{shown}} sur {{count}} rapports",
+    "clearFilters": "Effacer les filtres",
+    "filter": {
+      "agent": "Agent",
+      "round": "Tour",
+      "time": "Période",
+      "difficulty": "Difficulté",
+      "confidence": "Confiance",
+      "duration": "Durée",
+      "sortBy": "Trier par"
+    },
+    "items": {
+      "allAgents": "Tous les agents",
+      "allRounds": "Tous les tours",
+      "round": "Tour {{n}}",
+      "noRound": "Sans tour"
+    },
+    "time": {
+      "any": "Toute période",
+      "hour": "Dernière heure",
+      "today": "Aujourd’hui",
+      "week": "7 derniers jours"
+    },
+    "duration": {
+      "any": "Toutes",
+      "reported": "Indiquée",
+      "unreported": "Non indiquée"
+    },
+    "rating": {
+      "any": "Toutes",
+      "unrated": "Non évaluée"
+    },
+    "sort": {
+      "newest": "Plus récents d’abord",
+      "oldest": "Plus anciens d’abord",
+      "longest": "Plus longs d’abord",
+      "difficulty": "Difficulté décroissante",
+      "confidence": "Confiance décroissante"
     }
   }
 }

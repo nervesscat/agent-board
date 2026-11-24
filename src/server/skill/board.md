@@ -62,12 +62,16 @@ Then:
    comments yours, as a worker under the orchestrator.
 2. `get_project` with your `projectId`. Its `instructions` override
    your defaults for every repo in it. Its `stages` are the board's columns, each with a `key`, a
-   `name` and a `kind` (`open`, `active`, `blocked`, `review`, `done`, `cancelled`); a ticket's
+   `name` and a `kind` (`open`, `active`, `blocked`, `review`, `approved`, `done`, `cancelled`); a ticket's
    `status` is a stage key. Wherever a status is asked for you can also pass a kind, which means
    the project's stage of that kind: for `open` (`todo`) the start stage (the last open stage), for
    `active` (`in_progress`) the stage work starts in (the project's `workStage`, else the first
    active stage), for any other kind the first stage of that kind. Below, `todo`, `in_progress`,
-   `blocked`, `review`, `done` and `cancelled` mean exactly that. Its `agents` are the project's own agents (see
+   `blocked`, `review`, `approved`, `done` and `cancelled` mean exactly that. A stage's own key or
+   name wins over a kind: `done` is the stage keyed `done` when there is one (Done), and the first
+   done stage only when none is. A merged ticket goes to the project's first done stage by its key
+   (Release when the project has one); where the board itself finishes work for good (approving a PR
+   review, a merged PR's own ticket) it lands in the last done stage. Its `agents` are the project's own agents (see
    [The project's agents](#the-projects-agents)). Its `notes` are the project's short shared facts
    (a `label` and a `body`, one fact each): **read them before starting**, so you do not rediscover
    what someone already learned. When you learn something a future session must not rediscover — a
@@ -228,10 +232,10 @@ Lanes of a ticket you are working are yours to create (next section).
   their last update; `laneUpdates: true` folds their updates into the feed; `get_ticket_git` shows
   every workspace under the ticket.
 - The human's verdict: `approvedAt` / `approvedBy` (approved) or `disapprovedAt` /
-  `disapprovedBy` (disapproved, which also moves it to `cancelled`) on a lane or ticket; both null
-  means no call yet, and `lanes.approved` / `lanes.disapproved` count them. Read it, never set it:
-  an approved lane is settled and a disapproved one is dropped, so ask in its thread before
-  touching either.
+  `disapprovedBy` (disapproved, which also moves it to `cancelled`) on a top-level ticket; both
+  null means no call yet. Read it, never set it. A lane has no verdict: its stage is the call
+  (Approved or Done is accepted, Cancelled is dropped), and the parent's `lanes` counts are
+  `total` and `byStage`. Ask in a lane's thread before moving one of those.
 - The archive: the human takes finished tickets (done or cancelled) off the board, their lanes with
   them; `archivedAt` / `archivedBy` show it. `list_tickets` leaves them out unless `archived` is
   `"include"` (with the rest) or `"only"`; `get_ticket` still opens them. Only the human archives
@@ -390,16 +394,17 @@ name>"` (e.g. `orch/builder-1`) on every board tool call, so what it posts is fi
   difficulty and confidence, steps as `{name, done, note}`, counts) and its prose in named sections
   (`brief`, `readRan`, `problems`, `gaps`, `moreTime`, `improvements`, then the ones of that agent).
   One report per run: a ticket with three review rounds has three `hunt` reports, each with its
-  round. The ticket's Agents side shows them and `list_run_reports` reads one kind across tickets.
+  round. The ticket's Agents side shows them, a work bar on the timeline opens the report written for
+  that run (same ticket, agent and round), and `list_run_reports` reads one kind across tickets.
   Put this in every brief. `update_ticket` → `review` answers with `missingRunReports` for each run
   the work timeline records with no report — a span, a hand-off, or a second run of one agent and
   round that only one report covers: flagged, not refused; get them written before the hand-off.
-  It also answers with `missingReviewPhases` (the review phases the last round of a mid, high or max
-  ticket lacks; run them before the hand-off stands, except a round the build skipped because its head
+  It also answers with `missingReviewPhases` (the phases of the ticket's workflow its last review
+  round lacks; run them before the hand-off stands, except a round the build skipped because its head
   SHA's review had already survived: that one is reused and named in the summary). A phase counts only
   when its span or run report carries the round (and the last segment of the agent name names the
   phase agent): a run with no round is not counted. Moving the ticket out of a review stage, to any
-  other stage, restarts the count (only runs after the move count, from round 1): run a missing
+  other stage but Approved, restarts the count (only runs after the move count, from round 1): run a missing
   phase while the ticket stays in review.
 
 ### Watch for feedback
@@ -439,16 +444,26 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    (commits only here) or `local-only` (not on origin) is red: push, then check again. (`merged`:
    gone from origin because its PR was merged into the base.)
 4. `needs` declared for any unmerged branch it builds on. If your branch is built on another
-   ticket's open branch (stacked), or you merged one in to get past a conflict, declare it with
+   ticket's open branch (stacked), or you merged one in to get past a conflict, the board adds
+   that need itself once the commits are in the branches it looks at (after a push or a fetch, and
+   when a ticket is read; `get_ticket` → `needs[].auto` is true, and it drops the need again when
+   the branch no longer holds those commits or the other ticket was cancelled or archived without
+   landing). It sees only what git has, at its looks (a fresh listing, a ticket read, a status
+   change), and cannot prove who owns commits two branches share once they moved apart: when you
+   stack before your ticket's branch exists or the commits are in git, declare it with
    `update_ticket` → `needs: [<its ticket id>]` (or `needs` on `create_ticket`) instead of only
-   writing "builds on …" in the PR. `get_ticket_git` → `includes` lists the open tickets whose
-   unmerged work your branch holds: each one belongs in `needs`. The PR queue then marks your PR
+   writing "builds on …" in the PR; the board then confirms it, and a need you declared is yours,
+   never touched by the board. Your `needs` list never removes one the board added (only the
+   human does). `get_ticket_git` → `includes` (REST: `?includes=1`) lists only the open tickets whose unmerged work your
+   branch holds (commits of theirs, or a copy of them) but git cannot prove are theirs, so the board adds no need for
+   them (the human sees each as an amber "Includes unmerged work" row with "Add as a need"): each one that
+   is a real dependency belongs in `needs`. The PR queue then marks your PR
    "merge after #<its PR>", and the ticket cannot go to `done` until those branches are merged into
    its base: `update_ticket` to `done` is refused with which one (`get_ticket` → `needs[].merged`).
    Only the human can mark it done anyway; in Approved, where an orchestrator merges the PR without
    asking again, it moves the ticket to done after the merge (see
    [Approved](#approved-the-go-ahead-to-merge)).
-   `needs` is the enforced rule; the review column's order is the merge order the agents propose,
+   `needs` is the enforced rule; the order of the review and approved columns is the merge order the agents propose,
    read top to bottom (top merges first). Moving your ticket to review, place it with
    `update_ticket` → `position` (1 is the top of its stage's column; with `status`, in the new
    stage): below every open ticket it `needs`, otherwise where it should merge relative to the
@@ -471,8 +486,7 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    setup, or the change has nothing to try: docs only, a script), say why in the summary instead.
 7. The summary, up to date (`set_ticket_summary`, never a new hand-off post): the PR link, **the
    preview link and what to try there**, how it was tested, the e2e result (its summary, or its
-   report when something failed), each review round's verdict and, for a UI change, the latest
-   screenshots of what changed, in `files`. A new version replaces the previous one in wording,
+   report when something failed), each review round's verdict and, for a UI change, the latest screenshots of what changed (the preview's where the workflow lists the preview step, else the review's own), in `files`. A new version replaces the previous one in wording,
    never in facts: carry forward every section and fact that still holds (what the change does,
    where it stands, each review round's verdict, the PR, the preview and what to try there, how it
    was tested); keep the latest screenshots and recordings in `files`, and older proofs while they
@@ -481,24 +495,37 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    say what replaced it rather than silently removing the line. It is the ticket's one state card:
    the end of a session updates it rather than leaving a separate note.
 
+**The project's workflow decides which of these run.** When its workflow (`get_workflow`) lists a step as
+skipped because the human turned it off on the Workflow page (CI, or the preview), its items are not run
+and not required: no CI wait (the CI checks green on the head that item 2 still asks for, and item 5's CI comment; the local checks stay), no preview (item
+6), and the summary says that step was turned off on the Workflow page. With the preview turned off, the screenshots of a UI change are the review's own (`shots/`, the verify phase), required only where the review took them, and the summary says the preview was turned off on the Workflow page. The push, the pull request and the summary are locked: they are always done.
+
 **The intent check comes first, on every ticket of any complexity (low included).** When you
-orchestrate the cycle, the last review round (none for low) passes and then the project's **intent**
-agent compares what the human asked with what was built, before any item above stands (the preview
+orchestrate the cycle, the last review round (none for low) passes and then the intent step's Team agent (as the
+workflow names it: by default the project's agent named `intent`, else the built-in `feature-review-intent`)
+compares what the human asked with what was built, before any item above stands (the preview
 is started first, with its screenshots, and the check reads it at the current head; a commit after a
-`matches`, such as a CI fix, changes the head, so the check runs again on it): at `low`
-effort whatever the complexity, again after any human comment that sent the ticket back. It gets only
+`matches`, such as a CI fix, changes the head, so the check runs again on it): at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity, again after any human comment that sent the ticket back. It gets only
 the human's own words and attachments (the instructions, every post and reply by the human and the human's own answer on a decision card, newest
 last, the latest comment that sent the ticket back weighing most) and the result (the preview link,
 its screenshots or recordings, the diff at the current head), never the builder's plan, the spec, the review's findings or the options an agent put on a card. It
 returns one line per ask (`done as asked`, `done differently (how)` or `not done`, with its evidence)
 and a verdict, `matches` or `does not match`. `matches` hands off; `does not match` goes back to the
-builder with its lines as the brief, then the gate, then one more full review round (above low; the numbering continues, all six phases run again), then the intent check again. A `does not match` is outside the complexity's round budget; after the second one on a ticket the ticket agent stops and asks the human (`ask_decision`: keep going, ship as is, drop) with the intent check's lines and the human's words on the card. It never asks the human earlier: the human is asked (`ask_decision`, both readings on the card) only
+builder with its lines as the brief, then the gate, then one more review round of the project's workflow (the numbering continues), then the intent check again. A `does not match` is outside the workflow's round budget unless the workflow says it counts as a round; after the second one on a ticket the ticket agent stops and asks the human (`ask_decision`: keep going, ship as is, drop) with the intent check's lines and the human's words on the card. It never asks the human earlier: the human is asked (`ask_decision`, both readings on the card) only
 when two readings of their words are both plausible and give visibly different results.
+**When the workflow lists the intent step as skipped for the ticket** (a low ticket with the check turned off on the
+Workflow page; above low it is locked and always runs), no intent check is run and none is required before the
+hand-off or the push, and the summary says it was turned off on the Workflow page.
 
-**Above low, the full cycle is mandatory.** For `mid`, `high` and `max` every review round runs spec,
-env, verify, two independent hunts, refute and the merge check. None is skipped because findings look
-obvious, the change looks small or a finding was already reproduced; each phase posts its result, so a
-skipped phase is visible.
+**The project's workflow sets the cycle.** The order of the work (spec, build, the gate, the review
+rounds and their phases, the intent check, the push, the PR, the hand-off), the review rounds a ticket
+gets for its complexity and each step's effort are the project's workflow, which the board serves:
+`get_workflow` with the ticket's id. The human sets it on the project's Workflow page; a ticket may
+name its own preset (`workflowPreset`); an agent changes neither. Run exactly the steps it lists, in
+its order, each as its text says; a workflow change made while you work is read at your next
+relaunch. Each step that runs an agent names the Team agent that runs it: brief it with that agent's
+instructions from `get_project` (written on the Team page, never in the workflow). None is skipped because findings look obvious, the change looks small or a finding was
+already reproduced; each phase posts its result, so a skipped phase is visible.
 
 `update_ticket` → `review` then answers with `open`: every task and subtask still open, the
 ticket's and its lanes' that are not cancelled, in tree order, each `{taskId, ticketId, text, auto}`.
@@ -509,24 +536,23 @@ green, start the preview, rewrite the summary after your last commit), never by 
 through anyway: fix each one; `open: []` means nothing is left. `get_ticket` returns the same `open`
 while the ticket is in review, and its page shows them on the Tasks card.
 
-`update_ticket` → `review` also answers with `missingReviewPhases` for a mid, high or max ticket
-whose project has a software kind and whose timeline records work: each phase its last review round
-lacks (a phase counts only when its span or run report carries the round and the last segment of the
-agent name names the phase agent, so a run with no round is not counted), as `{round, phase, expected, found}` (the hunt expects two; a span or a run report of that kind
+`update_ticket` → `review` also answers with `missingReviewPhases` for a ticket whose project has a
+software kind, whose workflow lists a review for it and whose timeline records work: the phases of the
+ticket's workflow its last review round lacks (a phase counts only when its span or run report carries the round and the last segment of the
+agent name names the phase agent, so a run with no round is not counted), as `{round, phase, expected, found}` (`expected` is how many runs of that phase the workflow's round needs; a span or a run report of that kind
 and round counts as a run). It is a flag, not a refusal: run each missing phase (with a fix round if it
 needs code) before the hand-off stands, except a round the build skipped because its head SHA's review
 had already survived (reused, named in the summary). Moving the ticket out of a review stage, to any other
-stage, restarts the count (only runs after the move count, from round 1): run a missing phase while the
-ticket stays in review. `get_ticket` shows it in review too; it is `[]` for a low ticket.
+stage but Approved, restarts the count (only runs after the move count, from round 1): run a missing phase while the
+ticket stays in review. `get_ticket` shows it in review too; it is `[]` for a ticket whose workflow lists no review (a low ticket).
 
 After that:
 
 1. `done` is the human's call unless the project instructions say otherwise, or the ticket is in
    Approved, where an orchestrator merges the PR and then moves it: see
    [Approved](#approved-the-go-ahead-to-merge).
-2. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the
-   board flags a ticket that is further along than its lanes. Say in the summary which lanes it
-   covers.
+2. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`. Say in the
+   summary which lanes it covers.
 3. Dropping work: `status: cancelled`, with a comment saying why. A cancelled or done lane's tasks
    leave the parent's progress.
 4. Clean up your lane before it goes to `done` (or when the human moves it there): see
@@ -657,21 +683,27 @@ that does not do the work itself but routes each step to the agent whose notes f
 subagent, and keeps the ticket's feed as the record. An agent without delegation notes is never
 delegated to.
 
-The project's Team page adds a default set, the build and review cycle of the
-`/feature-review` and `/review-queue` skills (installed from the same page): **spec** (acceptance
-criteria) → **builder** (the code) → **runner** (a `/feature-review` of the branch, whose phases
-**env**, **verify**, **hunt**, **refute** and **merge** try to break it) → (every round runs all of them, two independent hunts included; a fix pass by the
-**builder** on the confirmed findings, each with the project's checks and a new review, for as many
-review rounds as the ticket's complexity allows: none for low, one for mid, three for high, up to ten
-for max (for work built from scratch: a whole site or app, a new product or standalone service; a
-feature in an existing codebase is at most high, however difficult); round 1 is the first build and
-its review, so a mid ticket stops after its review, and a review that does not survive after the last
-round goes to a human decision; a high ticket gets two fix passes and a max ticket nine; a low ticket
-has no review, and its checks return the build at most twice; after the second return, when the checks
-still fail or a criterion still has no evidence, the human decides (keep going or drop), and the build goes
-to hand-off only with evidence for every criterion) → the **intent** check at `low` effort (every complexity) → hand off. The agents' thinking effort follows the complexity too: `low` for a low ticket, `medium` for mid and
-high, `high` for max; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket
-(the ticket agent, the spec agent, the builder and the review's phase agents; the intent agent always runs at `low`). `/todo-review` is that
+The project's Team page adds a default set of agents, the roles of the `/feature-review` and
+`/review-queue` skills (installed from the same page): **spec** (acceptance criteria), **builder** (the
+code), **runner** (a `/feature-review` of the branch, whose phases **env**, **verify**, **hunt**,
+**refute** and **merge** try to break it) and **intent** (the check against the human's own words).
+**Which of them run, in what order, how many review rounds a ticket gets and at what effort is the
+project's workflow** (`get_workflow` with the ticket's id: its steps in order, each with its agent, its
+effort, what it does and what it hands on), not this text. Run exactly the steps it lists. Each step that
+runs an agent names the **Team agent** that runs it (the human's pick on the Workflow page, else the Team
+agent named like the step's role, else the built-in role): brief that agent with the instructions it has
+in `get_project` -> `agents` (instructions are written on the Team page only; the workflow carries
+none), the project's instructions and the ticket, and name its span, run report and `agentName` by the
+step's role, never by the Team agent's name. The review step names none: you run it through the
+/feature-review Skill in your own session, and its phases name their own Team agents. Rules that
+hold in every workflow: a fix pass by the **builder** takes the review's confirmed findings, each with
+the project's checks and a new review; a review that does not survive after the workflow's last round
+goes to a human decision; the checks return the build at most twice, and after the second return,
+when the checks still fail or a criterion still has no evidence, the human decides (keep going or
+drop); the build goes to hand-off only with evidence for every criterion; the **intent** agent runs at its workflow step's effort (`low` by default in every preset) before the hand-off. Max is for work built from scratch (a whole site or app, a new product or standalone service); a feature in an existing codebase is at most high, however difficult. The agents' thinking effort is each workflow
+step's effort, `auto` unless the human set one: `low` for a low ticket, `medium` for mid and high,
+`high` for max; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket (the ticket agent, the
+spec agent, the builder and the review's phase agents; the intent agent too, at the effort its own step gives, `low` by default in every preset). `/todo-review` is that
 orchestrator for
 the To do tickets: one agent per ticket runs the cycle, checks the proof itself (criteria seen
 working, no weakened tests, screenshots) and blocks only for what only the human can give.
@@ -680,7 +712,8 @@ Without those skills, or for one ticket, orchestrate by hand:
 
 1. `get_project`: read every agent's `delegation` (your routing table) and `instructions` (its
    brief). Claim the ticket (with `as` when it is reserved), open its worktree, `add_workspace`.
-2. Per step: pick the agent whose notes match where the ticket is; run it as a subagent whose
+2. Per step: pick the agent the workflow names for the step (without one, the agent whose notes match
+   where the ticket is); run it as a subagent whose
    prompt is its `instructions`, the project's `instructions`, the ticket's context (`get_ticket`:
    its instructions, the human's posts and replies, the decisions and their answers, the attachments;
    the subagent may read the rest itself, except the intent agent: it gets only the human's own words and attachments (the instructions, every post and reply by the human, and the human's own answer on a decision card) and the result, never the spec, the plan, the review's findings or the options an agent put on a card, and it may not read the rest of the ticket's posts itself) and a brief in the five parts of
@@ -700,7 +733,7 @@ Without those skills, or for one ticket, orchestrate by hand:
    ticket, and never answers a decision.
 4. Hand off as in [Hand off](#4-hand-off), with the last review's summary as the PR's tests. Check
    every item of the checklist yourself before moving the ticket to `review` (`get_ticket`: `push`,
-   `pr`, the workspace's `managedPreview` `running`, the `summary` up to date): a subagent saying it is
+   `pr`, the workspace's `managedPreview` `running` unless the workflow turned the preview off, the `summary` up to date): a subagent saying it is
    done is not enough.
 
 Never two builders on one branch; when no agent's notes fit a step, ask in a post rather than
@@ -710,8 +743,9 @@ doing it yourself.
 
 Moving a ticket to **Approved** is the human's go-ahead to merge it. Only the human puts a ticket there:
 the approval verdict on a ticket in In review does it, or their move. An agent never does, and a worker
-(a sub-identity) never merges. Taking the approval back returns the ticket to In review. Approved is a
-review-kind stage, so no stage kind sends a ticket there.
+(a sub-identity) never merges. Taking the approval back returns the ticket to In review. Approved is a stage
+of its own kind, `approved` (after `review`): an agent may pass `approved` as a kind, but is refused a
+move or a new ticket there, by its kind whatever the stage's key.
 
 An orchestrator that finds a ticket in Approved merges its PR(s) without asking again, once the facts
 allow it:
@@ -723,7 +757,8 @@ allow it:
    or conflicts, that comes first. It is the ticket's own work, done by an agent on its branch: merge the
    base in, resolve the conflicts, push, and wait for CI green on the new head.
 4. **Merge the PR**, then **move the ticket to the project's first done stage** (the first stage of kind
-   done in `get_project`; Done in the default layout) and post on the ticket, naming the PR and the merge commit.
+   done in `get_project`: Release when the project has one, where a merged ticket waits for a release;
+   Done in the default layout) and post on the ticket, naming the PR and the merge commit.
 
 When something keeps it from merging (red checks, a conflict that needs a product call), say exactly
 what on the ticket, and leave it in Approved. It does not merge around it, and it does not ask whether

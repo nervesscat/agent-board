@@ -35,7 +35,6 @@
     "previews": "Loading previews…",
     "repositories": "Loading repositories…",
     "roadmap": "Loading roadmap…",
-    "runReports": "Loading run reports…",
     "earlierVersions": "Loading earlier versions…",
     "workspaces": "Loading workspaces…"
   },
@@ -46,7 +45,8 @@
     "settings": "Settings",
     "testMode": "test mode",
     "authOff": "auth off",
-    "authOffTip": "BOARD_ENV={{env}}, sign-in off: signed in as {{actor}}. Not the live board."
+    "authOffTip": "BOARD_ENV={{env}}, sign-in off: signed in as {{actor}}. Not the live board.",
+    "connectAgent": "Connect an agent"
   },
   "time": {
     "never": "—",
@@ -480,7 +480,8 @@
       "blocked": "Blocked",
       "review": "Review",
       "done": "Done",
-      "cancelled": "Cancelled"
+      "cancelled": "Cancelled",
+      "approved": "Approved"
     },
     "hint": {
       "open": "waiting to be picked up; claiming moves it to the stage work starts in",
@@ -488,7 +489,8 @@
       "blocked": "waiting on you",
       "review": "handed off for review",
       "done": "finished; cannot be claimed",
-      "cancelled": "dropped; disapproving moves a ticket here, and its tasks leave the progress"
+      "cancelled": "dropped; disapproving moves a ticket here, and its tasks leave the progress",
+      "approved": "your go-ahead to merge; no agent moves a ticket here"
     },
     "color": {
       "gray": "gray",
@@ -611,20 +613,20 @@
         "previews": "Previews",
         "gallery": "Gallery",
         "agents": "Team",
-        "runReports": "Run reports",
         "daily": "Daily",
         "cleanup": "Cleanup",
         "repositories": "Repositories",
-        "instructions": "Instructions"
+        "instructions": "Instructions",
+        "workflow": "Workflow"
       },
       "overview": {
         "needsYou": "Needs you",
         "inProgress": "In progress",
         "doneToday": "Done today",
-        "next": "Next",
         "carryingOver": "Carrying over",
         "notes": "Notes",
-        "agents": "Agents at work"
+        "agents": "Agents at work",
+        "lostContact": "Lost contact"
       },
       "ticket": {
         "instructions": "Instructions",
@@ -635,7 +637,8 @@
         "runs": "Runs",
         "details": "Details",
         "branch": "Branch",
-        "workspaces": "Workspaces"
+        "workspaces": "Workspaces",
+        "resume": "Resume"
       }
     },
     "locked": {
@@ -1478,21 +1481,7 @@
     "dialogTitleEmpty": "Run report",
     "round": "round {{round}}",
     "difficultyShort": "difficulty {{n}}/5",
-    "confidenceShort": "confidence {{n}}/5",
-    "panelTitle": "Run reports",
-    "panelHeading_one": "Run reports · {{count}} run",
-    "panelHeading_other": "Run reports · {{count}} runs",
-    "pageTitle": "Run reports",
-    "pageText": "How each subagent run went, in its own words. One report per run; a review round has one of each of its agents.",
-    "allAgents": "All agents",
-    "agent": "Agent",
-    "ticketPlaceholder": "Ticket #",
-    "ticketNumber": "Ticket number",
-    "filter": "Filter",
-    "clear": "Clear",
-    "emptyFiltered": "No run reports for that filter.",
-    "empty": "No run reports yet.",
-    "openTicket": "Open ticket"
+    "confidenceShort": "confidence {{n}}/5"
   },
   "projectAgents": {
     "title": "Team",
@@ -1631,7 +1620,8 @@
     "tagsPlaceholder": "High, Forms",
     "branchesOff": "Branches off <branch>{{branch}}</branch> when it is in the same repo.",
     "uploading": "Uploading…",
-    "create": "Create"
+    "create": "Create",
+    "workflow": "Workflow"
   },
   "notes": {
     "title": "Notes",
@@ -1885,6 +1875,11 @@
         "title": "Settings",
         "subtitle": "Board-wide preferences",
         "keywords": "preferences, theme, previews, devices"
+      },
+      "workflow": {
+        "title": "Workflow",
+        "subtitle": "The steps agents follow for a ticket, as a tree",
+        "keywords": "steps, presets, review rounds, hand-off, delegation, order"
       }
     },
     "setting": {
@@ -2050,7 +2045,6 @@
   },
   "ticketBoard": {
     "stage": "Stage",
-    "mergeAfter": "merge after {{list}}",
     "archiveTip_one": "Archive the {{count}} ticket in {{stage}}",
     "archiveTip_other": "Archive the {{count}} tickets in {{stage}}",
     "archiveAll": "Archive all",
@@ -2075,9 +2069,7 @@
     "nothingArchived": "Nothing archived.",
     "archived": "archived {{when}}",
     "archivedBy": "archived {{when}} by <actor/>",
-    "restore": "Restore",
-    "laneApproved_one": "{{count}} approved",
-    "laneApproved_other": "{{count}} approved"
+    "restore": "Restore"
   },
   "ticketList": {
     "archivedToast_one": "Archived {{count}} ticket",
@@ -2121,8 +2113,10 @@
     "addPlaceholder": "Add a ticket it needs merged first…",
     "noOthers": "No other tickets",
     "includes": "Includes unmerged work from <goto>{{ref}}</goto>",
-    "cannotBeDone": "#{{id}} cannot be done until #{{need}}'s branch is merged into its base",
-    "addAsNeed": "Add as a need"
+    "addAsNeed": "Add as a need",
+    "autoTitle": "Added by the board: this ticket's branch holds that ticket's unmerged commits. It goes when the branch no longer does, and removing it here sticks (it is not added again for the same commits).",
+    "addedByBoard": "Added by the board",
+    "cannotBeDoneUnsure": "The board cannot tell for sure whose these commits are, so it added no need. #{{id}} cannot be done until #{{need}}'s branch is merged into its base."
   },
   "verdict": {
     "approve": "Approve",
@@ -2161,11 +2155,15 @@
       "others": {
         "label": "Waiting on others",
         "title": "Your PRs (agents' too): pending approvals, approved by every reviewer, or on hold on their comments"
+      },
+      "all": {
+        "label": "All PRs",
+        "title": "Every open PR of the repos, whoever wrote it and whether or not it involves you"
       }
     },
     "reviewers": {
-      "all": "All PRs",
-      "mine": "Just me as reviewer"
+      "mine": "Just me as reviewer",
+      "involving": "Involving me"
     },
     "tabs": {
       "pending": "Pending",
@@ -2175,7 +2173,8 @@
     },
     "empty": {
       "me": "Nothing {{stage}} to review.",
-      "others": "Nothing {{stage}} waiting on others."
+      "others": "Nothing {{stage}} waiting on others.",
+      "all": "Nothing {{stage}} among the open PRs."
     },
     "refresh": "Refresh",
     "mergeAfterTip": "Its ticket needs these merged first:\n{{list}}",
@@ -2202,7 +2201,8 @@
     "holdTitle": "Put #{{number}} on hold",
     "holdText": "A note for you and the agents. GitHub is not touched.",
     "holdPlaceholder": "Why it waits…",
-    "holdConfirm": "Hold"
+    "holdConfirm": "Hold",
+    "notInvolvingYou": "not involving you"
   },
   "workStatus": {
     "state": {
@@ -2385,7 +2385,15 @@
       "human": "waiting on the human {{duration}}",
       "review": "in review {{duration}}",
       "merge": "waiting to merge {{duration}}"
-    }
+    },
+    "openReport": "Open the {{agent}} report: {{label}}",
+    "openReportRound": "Open the {{agent}} report, round {{round}}: {{label}}",
+    "reportDescription": "The report written for this run",
+    "factsDescription": "The facts of this run",
+    "loadingReport": "Loading run report…",
+    "reportsFailed": "The reports could not be loaded.",
+    "noReport": "No report for this run.",
+    "noReportYet": "No report for this run yet."
   },
   "roadmap": {
     "title": "Roadmap",
@@ -2479,8 +2487,9 @@
     },
     "lost": {
       "title": "Lost contact",
-      "link": "Lost contact: <id>#{{id}}</id> {{title}}",
-      "detail": "{{agent}} · {{phase}} · {{since}} · last word {{minutes}} min ago"
+      "empty": "No lost contact.",
+      "lastHeardTip": "Last heard {{when}}",
+      "lastHeard": "last heard {{duration}} ago"
     },
     "inProgress": {
       "title": "In progress",
@@ -2494,23 +2503,12 @@
       "activity_one": "{{count}} thing happened today: Daily",
       "activity_other": "{{count}} things happened today: Daily"
     },
-    "next": {
-      "title": "Next",
-      "titleStage": "Next: {{stage}}",
-      "empty": "Nothing lined up.",
-      "emptyStage": "Nothing lined up in {{stage}}.",
-      "tasks": "{{done}}/{{total}} tasks",
-      "more": "{{count}} more",
-      "blocked": "{{count}} blocked",
-      "backlog": "{{count}} in the backlog",
-      "board": "Board"
-    },
     "carryingOver": {
       "title": "Carrying over",
-      "empty": "Nothing carried over from before today.",
       "startedTip": "Work on it started {{when}}",
       "days_one": "{{count}} day in progress",
-      "days_other": "{{count}} days in progress"
+      "days_other": "{{count}} days in progress",
+      "emptyShown": "Nothing blocked or in review from before today."
     }
   },
   "notifications": {
@@ -2557,18 +2555,13 @@
     "restoredToast": "Restored to the board",
     "disapprovedToast": "#{{id}} disapproved and cancelled",
     "undo": "Undo takes back the disapproval and returns it to {{stage}}.",
-    "undoMoved": "Undo takes back the disapproval and returns it to {{stage}}. Moved on to #{{next}}.",
     "undoAction": "Undo",
     "summary": "Summary",
-    "openedBy": "opened by <actor/> {{when}}",
     "updated": "updated {{when}}",
     "archivedBy": "Archived by {{name}} {{when}}",
     "archivedByLane": "Archived by {{name}} {{when}}, with the ticket it is a lane of",
     "someone": "someone",
     "archivedBadge": "Archived",
-    "lanesWarningTip": "This ticket is marked further along than its lanes",
-    "lanesNotDone_one": "{{count}} lane not done",
-    "lanesNotDone_other": "{{count}} lanes not done",
     "decisionNeeded": "decision needed",
     "archiveTip": "Take it off the board, with its lanes; Archived on the features page brings it back",
     "deleteTitle": "Delete this ticket?",
@@ -2634,7 +2627,6 @@
     "newSubtaskOf": "New subtask of {{name}}",
     "add": "Add",
     "addPhase": "Add a phase: Implementation, Pushed, PR…",
-    "noCall": "No call",
     "all": "All",
     "nounLane": "lane",
     "laneOf": "lane {{n}} of {{count}}",
@@ -2644,13 +2636,10 @@
     "previousNoun": "Previous {{noun}}",
     "nextNoun": "Next {{noun}}",
     "stepKeysTip": "[ and ] step back and forward",
-    "lanesDone": "{{done}}/{{total}} done · {{approved}} approved",
-    "lanesDisapproved": "{{count}} disapproved",
     "lanesCancelled": "{{count}} cancelled",
     "allTasks": "all tasks {{done}}/{{total}}",
     "noLanes": "No lanes. Split this ticket into lanes when parts of it run in parallel: each lane gets its own branch, assignee, tasks and updates.",
     "filterStage": "Stage",
-    "filterVerdict": "Verdict",
     "filterTags": "Tags",
     "showing": "showing {{shown}} of {{total}}",
     "clearFilters": "clear filters",
@@ -2722,7 +2711,14 @@
     "workspacesDesc": "Worktrees, sub-branches and subagent sandboxes the agents opened for this ticket.",
     "workspacesDescLanes": "Worktrees, sub-branches and subagent sandboxes the agents opened for this ticket and its lanes.",
     "noneYet": "None yet.",
-    "updatedLabel": "updated"
+    "breadcrumb": "Breadcrumb",
+    "scrollSideUp": "Scroll the side column up",
+    "scrollSideDown": "Scroll the side column down",
+    "workflow": "Workflow",
+    "workflowOwn": "Follows the {{workflow}} workflow, set on this ticket.",
+    "workflowProject": "Follows the project's workflow ({{workflow}}).",
+    "workflowSteps": "See the steps",
+    "lanesProgress": "{{done}}/{{total}} done"
   },
   "complexity": {
     "label": {
@@ -2731,12 +2727,12 @@
       "high": "High",
       "max": "Max"
     },
-    "selectHint": "Low: no review. Mid: one review round. High: up to three. Max: up to ten rounds, for work built from scratch; a feature in an existing codebase is never max, however difficult.",
-    "hint": {
-      "low": "Low: no review. The builder verifies it itself.",
-      "mid": "Mid: one review round.",
-      "high": "High: up to three review rounds.",
-      "max": "Max: up to ten review rounds, for a whole site or app built from scratch, a new product or a standalone service, and it stops at the first round that survives. A feature in an existing codebase is at most high, however difficult."
+    "workflowHint": "Low: no spec or review in the Standard workflow. Mid, High and Max: the review rounds the project's workflow sets (Standard: one, three, up to ten). Max is for work built from scratch; a feature in an existing codebase is never max, however difficult.",
+    "levelHint": {
+      "low": "Low: the review rounds the project's workflow sets (Standard: none). The builder verifies it itself.",
+      "mid": "Mid: the review rounds the project's workflow sets (Standard: one).",
+      "high": "High: the review rounds the project's workflow sets (Standard: up to three).",
+      "max": "Max: the review rounds the project's workflow sets (Standard: up to ten), for a whole site or app built from scratch, a new product or a standalone service, and it stops at the first round that survives. A feature in an existing codebase is at most high, however difficult."
     }
   },
   "agentsAtWork": {
@@ -2778,6 +2774,270 @@
       "hours_other": "{{count}} hours",
       "days_one": "{{count}} day",
       "days_other": "{{count}} days"
+    }
+  },
+  "workflowChips": {
+    "selfTip": "The ticket agent does this itself",
+    "agentTip": {
+      "picked": "The Team agent picked for it. Its instructions are written on the Team page. The role ({{agent}}) names its spans and run reports.",
+      "role": "The Team agent named like its role ({{agent}}). Its instructions are written on the Team page. The role ({{agent}}) names its spans and run reports.",
+      "default": "No Team agent is named {{agent}}: it runs as the built-in {{agent}} role. Its instructions are written on the Team page. The role ({{agent}}) names its spans and run reports."
+    },
+    "agentMissing": "agent missing",
+    "missingTip": "{{picked}} was picked for it but the Team has no agent of that name now: it runs as {{name}} until the agent is back or another is picked.",
+    "locked": "Locked",
+    "lockedAboveLow": "Locked above low",
+    "skippedOnLow": "Skipped on low",
+    "changed": "changed",
+    "changedTip": "Changed from the preset: {{what}}"
+  },
+  "workflowGraph": {
+    "label": "{{label}} workflow for a {{complexity}} ticket",
+    "complexity": {
+      "low": "low",
+      "mid": "mid",
+      "high": "high",
+      "max": "max"
+    },
+    "roundSurvives": "round survives",
+    "roundFails": "round fails",
+    "inParallel": "In parallel",
+    "reviewRound": "Review round",
+    "noRoundsOn": "No review rounds on {{complexity}}"
+  },
+  "workflowPanel": {
+    "idle": "Select a step in the graph to see what it does and to change who runs it, its effort, whether it runs and its place in the order.",
+    "runnerAgents": "The ticket agent runs /feature-review itself. Its phases run their own Team agents, picked on the phase nodes.",
+    "selfAgent": "The ticket agent does this itself: there is no Team agent to pick.",
+    "whatItDoes": "What it does",
+    "handoffTo": "Hand-off to {{next}}",
+    "result": "Result",
+    "team": {
+      "title": "Team agent",
+      "default": "Default ({{name}})",
+      "notInTeam": "{{name}} (not in the Team)",
+      "missing": "{{picked}} was picked for it, but the Team has no agent of that name now. It runs as {{name}} until the agent is back or another is picked. Choose Default to clear the pick.",
+      "runsAs": "Runs as {{name}}. Its instructions are written on the Team page; the role ({{role}}) names its spans and run reports.",
+      "runsAsDefault": "Runs as {{name}} (the built-in agent: the Team has none of that name). Its instructions are written on the Team page; the role ({{role}}) names its spans and run reports."
+    },
+    "placeInOrder": "Place in the order",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "moveUpTip": "Move up: {{step}} runs earlier",
+    "moveDownTip": "Move down: {{step}} runs later",
+    "runs": "Runs",
+    "run": "Run {{step}}",
+    "alsoRunOnLow": "Also run {{step}} on low tickets",
+    "aboveLowNote": "This switch only decides whether it also runs for a low ticket.",
+    "effort": "Effort",
+    "effortHint": "Passed on as the Agent tool's effort. {{hint}}.",
+    "reviewRuns": "Runs {{total}} separate /feature-review runs each round: {{runs}}, each under its own agent name and never shown the other's findings.",
+    "survival": "<strong>A round survives when</strong> {{survival}}."
+  },
+  "workflowPage": {
+    "title": "Workflow",
+    "intro": "How a ticket goes from To do to hand-off: the steps its agent runs, in order, who runs each and what each hands to the next. The project follows one workflow; a ticket can name another on its page. The agents read it from the board, so a change here is followed from their next run.",
+    "graphShows": "The graph shows a {{complexity}} ticket.",
+    "projectFollows": "The project follows this workflow",
+    "use": "Use this workflow",
+    "resetThis": "Reset this workflow",
+    "resetTitle": "Reset the {{label}} workflow?",
+    "resetBody": "Its order, switches, efforts, Team agents and review rounds go back to what the {{label}} preset ships with. The other presets keep what was changed in them.",
+    "cancel": "Cancel",
+    "reset": "Reset",
+    "sectionLabel": "{{label}} workflow",
+    "projects": "the project's",
+    "summary_one": "{{count}} step for a {{complexity}} ticket · review: {{rounds}}",
+    "summary_other": "{{count}} steps for a {{complexity}} ticket · review: {{rounds}}"
+  },
+  "workflowPresets": {
+    "group": "Workflow presets",
+    "active": "Active",
+    "tweaked": "Tweaked",
+    "complexity": "Complexity",
+    "stats_one": "{{count}} step · review rounds {{rounds}}",
+    "stats_other": "{{count}} steps · review rounds {{rounds}}",
+    "light": {
+      "label": "Light",
+      "description": "Build, gate, one reviewer, the intent check and the hand-off: no spec agent, no environment, no separate hunts."
+    },
+    "standard": {
+      "label": "Standard",
+      "description": "The full cycle: spec, build, gate, review rounds with spec, environment, verify, two independent hunts, refute and a merge check, then the intent check, PR, CI, preview and hand-off."
+    },
+    "thorough": {
+      "label": "Thorough",
+      "description": "Standard plus a dedicated test-writing pass, a third hunt with the security checklist, the intent check at the end of every review round, and one more review round at every level above low."
+    },
+    "maximum": {
+      "label": "Maximum",
+      "description": "Thorough plus a second, independent spec, a second full review of every round by a different agent that never sees the first, and high effort on every agent."
+    }
+  },
+  "workflowReview": {
+    "legend": "Review rounds per complexity",
+    "changed": "changed",
+    "notSaved": "Not saved: {{reason}}",
+    "default": "default {{value}}"
+  },
+  "workflowReads": {
+    "title": "What agents read",
+    "hint": "the text get_workflow serves for this workflow",
+    "textLabel": "Workflow text"
+  },
+  "workflowSelect": {
+    "project": "Project's workflow ({{label}})",
+    "hint": "The workflow its agent follows: the project's own, or one of the four presets for this ticket alone. Changing the project's workflow does not move a ticket that names one."
+  },
+  "workflowView": {
+    "noRounds": "no review rounds",
+    "rounds_one": "{{count}} round",
+    "rounds_other": "{{count}} rounds",
+    "complexity": {
+      "low": "Low",
+      "mid": "Mid",
+      "high": "High",
+      "max": "Max"
+    },
+    "effort": {
+      "auto": "Auto",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "effortLevel": {
+      "low": "low",
+      "medium": "medium",
+      "high": "high"
+    },
+    "autoLevel": "Auto: {{level}}",
+    "autoEffortHint": "Auto follows the ticket: low for a low ticket, medium for mid and high, high for max",
+    "separator": ", ",
+    "you": "you",
+    "skippedNoRounds": "No review rounds",
+    "skippedOff": "Off",
+    "changed": {
+      "moved": "its place in the order",
+      "off": "turned off",
+      "effort": "its effort",
+      "agent": "its Team agent"
+    },
+    "name": {
+      "agent": "agent {{name}}",
+      "locked": "locked",
+      "skipsOnLow": "skipped on low tickets"
+    },
+    "lockReason": {
+      "claim": "Locked: nothing can start before the ticket is read and claimed.",
+      "build": "Locked: nothing is delivered without the change being built.",
+      "gate": "Locked: no change moves on unchecked.",
+      "intent": "Locked above low: every ticket above low is checked against the human's own words before it is handed off.",
+      "always": "Locked: the ticket cannot be handed off without it."
+    },
+    "survival": {
+      "light": "the reviewer reproduced no finding and the builder's evidence covers every acceptance criterion",
+      "standard": "the verdict is SHIP, the works check is YES, the base check is NO and every acceptance criterion is PASS by execution (UNVERIFIED only for a reason the escalation rules name that could not be got past)",
+      "thoroughIntent": "the verdict is SHIP, the works check is YES, the base check is NO and every acceptance criterion is PASS by execution (UNVERIFIED only for a reason the escalation rules name that could not be got past), and the intent check at the end of the round matches",
+      "maximum": "both reviews survive ({{standard}}) and the reconciliation leaves no finding open",
+      "maximumIntent": "both reviews survive ({{standard}}), the reconciliation leaves no finding open and the intent check at the end of the round matches"
+    },
+    "move": {
+      "after": "{{step}} must come after {{other}}",
+      "stayFirst": "{{step}} must stay first",
+      "stayLast": "{{step}} must stay last",
+      "alreadyFirst": "{{step}} is already first",
+      "alreadyLast": "{{step}} is already last"
+    }
+  },
+  "backToModule": {
+    "back": "Back to {{label}}",
+    "home": "Home"
+  },
+  "ticketLine": {
+    "openedBy": "Opened by {{name}} ({{role}}) on {{when}}",
+    "updated": "Updated on {{when}}",
+    "opened": "Opened on {{when}}"
+  },
+  "resumeSettings": {
+    "title": "Resume",
+    "intro": "An agent that asks a question ends its turn. With a command here, the board continues the work itself when you answer a decision card on the board, or move a ticket from a blocked or review stage back to an active one: it runs the command on this machine, in the ticket's worktree, with the question and your answer (or your latest words) on its standard input and in the file named by <code>BOARD_RESUME_PROMPT_FILE</code>; <code>BOARD_URL</code>, <code>BOARD_PROJECT_ID</code>, <code>BOARD_TICKET_ID</code> and <code>BOARD_AGENT_NAME</code> are set. Nothing is started for a ticket with a live agent or one already resuming. It runs with the board user's rights, and only you can set it. Empty is off.",
+    "presets": "Presets",
+    "found": "found",
+    "notFound": "not found",
+    "command": "Resume command",
+    "commandPlaceholder": "claude -p (empty: off)",
+    "timeout": "Stop it after (minutes)",
+    "save": "Save",
+    "saving": "Saving…",
+    "timeoutProblem": "A whole number from {{min}} to {{max}}.",
+    "unsaved": "Unsaved changes.",
+    "noChanges": "No changes.",
+    "off": "Resuming is off."
+  },
+  "resumeCard": {
+    "title": "Resume",
+    "resume": "Resume",
+    "retry": "Retry",
+    "started": "The board started the work again",
+    "empty": "Nothing has resumed this ticket yet.",
+    "setInSettings": "The human sets it in the project’s settings.",
+    "failed": "The board could not resume: {{reason}}",
+    "log": "Log",
+    "state": {
+      "queued": "Starting",
+      "running": "Running",
+      "succeeded": "Finished",
+      "failed": "Failed",
+      "skipped": "Not started"
+    }
+  },
+  "runReportsWindow": {
+    "reports": "Reports",
+    "reportsCount": "Reports ({{n}})",
+    "title": "Run reports",
+    "description": "The run reports of this ticket, with filters and a sort. Opening one shows it in full.",
+    "back": "Back to reports",
+    "none": "No run reports yet.",
+    "noMatch": "No report matches these filters.",
+    "count_one": "{{shown}} of {{count}} report",
+    "count_other": "{{shown}} of {{count}} reports",
+    "clearFilters": "Clear filters",
+    "filter": {
+      "agent": "Agent",
+      "round": "Round",
+      "time": "Time",
+      "difficulty": "Difficulty",
+      "confidence": "Confidence",
+      "duration": "Duration",
+      "sortBy": "Sort by"
+    },
+    "items": {
+      "allAgents": "All agents",
+      "allRounds": "All rounds",
+      "round": "Round {{n}}",
+      "noRound": "No round"
+    },
+    "time": {
+      "any": "Any time",
+      "hour": "Last hour",
+      "today": "Today",
+      "week": "Last 7 days"
+    },
+    "duration": {
+      "any": "Any",
+      "reported": "Reported",
+      "unreported": "Not reported"
+    },
+    "rating": {
+      "any": "Any",
+      "unrated": "Unrated"
+    },
+    "sort": {
+      "newest": "Newest",
+      "oldest": "Oldest",
+      "longest": "Longest",
+      "difficulty": "Highest difficulty",
+      "confidence": "Highest confidence"
     }
   }
 }

@@ -13,7 +13,6 @@ import {
   Hourglass,
   Inbox,
   Layers,
-  ListTodo,
   MessageSquare,
   Play,
   Scale,
@@ -47,12 +46,12 @@ import {
   type SummaryPayload as Payload,
 } from '#/lib/api'
 import { currentLocale, shared } from '#/i18n'
-import { ago, clock } from '#/lib/format'
+import { ago, clock, stamp } from '#/lib/format'
 import { needKeys, undismissed, useDismissedNeeds } from '#/lib/needsYou'
 import { projectTabSearch } from '#/lib/settingsTabs'
-import { stageBadge, stageOf } from '#/lib/stages'
+import { carryingOverStages, stageBadge, stageOf } from '#/lib/stages'
 import { useServerOffset } from '#/lib/useNow'
-import { lastHeard, onServerClock, type WorkTimelineLike } from '#/lib/workStatus'
+import { lastHeard, onServerClock, workDuration, type WorkTimelineLike } from '#/lib/workStatus'
 import type { Stalled } from '#/lib/workTimeline'
 
 /**
@@ -129,7 +128,7 @@ const CARDS: Record<AreaId<'overview'>, (props: CardProps) => ReactNode> = {
   'overview.agents': Agents,
   'overview.inProgress': InProgress,
   'overview.doneToday': DoneToday,
-  'overview.next': Next,
+  'overview.lostContact': LostContact,
   'overview.carryingOver': CarryingOver,
   'overview.notes': Notes,
 }
@@ -154,15 +153,14 @@ function ProjectBlock({ p, now, dismiss }: CardProps) {
       </Empty>
     )
   return (
-    // On a desktop the first row is Needs you alone, the second Next, In progress and Done today in
-    // that order, and Carrying over closes the block full width. A phone keeps the layout's order,
+    // On a desktop the first row is Needs you alone, the second Lost contact, In progress and Done today
+    // in that order, and Carrying over closes the block full width. A phone keeps the layout's order,
     // stacked, so the order classes start at `lg`.
     <div className="grid gap-4 lg:grid-cols-3">
       {p.project.overview.map((card) => {
         const Shown = CARDS[card]
         return <Shown key={card} p={p} now={now} dismiss={dismiss} />
       })}
-      {p.lostContact.length > 0 && <LostContactCard p={p} />}
     </div>
   )
 }
@@ -712,10 +710,11 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
 }
 
 /**
- * Lost contact: the agents whose lease expired with their span still open. Its own block, outside
- * Needs you (that is the human's turn), naming each agent, its phase, since when and its last word.
+ * Lost contact: the tickets whose agent's lease expired with its span still open, so the agent is
+ * likely gone. Its own card, outside Needs you (that is the human's turn), longest silent first: the
+ * server sorts them by their last signal, oldest first.
  */
-function LostContactCard({ p }: { p: ProjectSummary }) {
+function LostContact({ p, now }: CardProps) {
   const { t: tr } = useTranslation()
   const rows = p.lostContact
   return (
@@ -724,43 +723,42 @@ function LostContactCard({ p }: { p: ProjectSummary }) {
       title={tr('overview.lost.title')}
       count={rows.length}
       scroll
-      className="lg:order-2 lg:col-span-full"
+      className="lg:order-2"
     >
-      <Rows>
-        {rows.map((l) => (
-          <Row
-            key={l.ticketId}
-            icon={<AlertTriangle className="text-rose-600 dark:text-rose-400" />}
-            title={
-              <Link
-                to="/projects/$id/features/$ticketId"
-                params={{ id: String(p.project.id), ticketId: String(l.ticketId) }}
-                className="hover:underline"
-              >
-                <Trans
-                  i18nKey="overview.lost.link"
-                  values={{ id: l.ticketId, title: l.title }}
-                  components={{ id: <span className="text-muted-foreground" /> }}
-                />
-              </Link>
-            }
-            meta={
-              <>
-                <StageBadge p={p} status={l.status} />
-                {l.parent && <span className="truncate">{tr('overview.laneOf', { id: l.parent.id })}</span>}
-                <span className="min-w-0 wrap-anywhere">
-                  {tr('overview.lost.detail', {
-                    agent: l.agent,
-                    phase: l.phase,
-                    since: since(l.since),
-                    minutes: l.silentMinutes,
-                  })}
-                </span>
-              </>
-            }
-          />
-        ))}
-      </Rows>
+      {!rows.length ? (
+        <Quiet>{tr('overview.lost.empty')}</Quiet>
+      ) : (
+        <Rows>
+          {rows.map((l) => {
+            const heard = l.lastWordAt ?? l.lastSignalAt
+            return (
+              <Row
+                key={l.ticketId}
+                icon={<AlertTriangle className="text-rose-600 dark:text-rose-400" />}
+                title={<TicketLink p={p} id={l.ticketId} title={l.title} />}
+                side={<StageBadge p={p} status={l.status} />}
+                meta={
+                  <>
+                    {l.parent && (
+                      <span className="truncate">{tr('overview.laneOf', { id: l.parent.id })}</span>
+                    )}
+                    <span className="min-w-0 wrap-anywhere">
+                      {l.agent} · {l.phase} · {since(l.since)}
+                    </span>
+                    <Tip content={tr('overview.lost.lastHeardTip', { when: stamp(heard) })}>
+                      <span className="tabular-nums">
+                        {tr('overview.lost.lastHeard', {
+                          duration: workDuration(now - Date.parse(heard), tr),
+                        })}
+                      </span>
+                    </Tip>
+                  </>
+                }
+              />
+            )
+          })}
+        </Rows>
+      )}
     </Section>
   )
 }
@@ -894,68 +892,11 @@ function DoneToday({ p }: { p: ProjectSummary }) {
   )
 }
 
-function Next({ p }: { p: ProjectSummary }) {
-  const { t: tr } = useTranslation()
-  const { stage, tickets, total, blocked, backlog } = p.next
-  const pid = String(p.project.id)
-  return (
-    <Section
-      icon={ListTodo}
-      title={stage ? tr('overview.next.titleStage', { stage: stage.name }) : tr('overview.next.title')}
-      count={total}
-      rows={tickets.length}
-      scroll
-      className="lg:order-2"
-    >
-      {!tickets.length ? (
-        <Quiet>
-          {stage ? tr('overview.next.emptyStage', { stage: stage.name }) : tr('overview.next.empty')}
-        </Quiet>
-      ) : (
-        <Rows>
-          {tickets.map((t) => (
-            <Row
-              key={t.id}
-              title={<TicketLink p={p} id={t.id} title={t.title} />}
-              meta={
-                (t.assignee || t.rollup.total > 0) && (
-                  <>
-                    {t.assignee && <Who p={p} name={t.assignee} />}
-                    {t.rollup.total > 0 && (
-                      <span className="tabular-nums">
-                        {tr('overview.next.tasks', { done: t.rollup.done, total: t.rollup.total })}
-                      </span>
-                    )}
-                  </>
-                )
-              }
-            />
-          ))}
-        </Rows>
-      )}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        {total > tickets.length && <span>{tr('overview.next.more', { count: total - tickets.length })}</span>}
-        {blocked > 0 && (
-          <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400">
-            <AlertTriangle className="size-3" /> {tr('overview.next.blocked', { count: blocked })}
-          </span>
-        )}
-        <span>{tr('overview.next.backlog', { count: backlog })}</span>
-        <Link
-          to="/projects/$id/features"
-          params={{ id: pid }}
-          className="ml-auto inline-flex items-center gap-1 hover:text-foreground"
-        >
-          {tr('overview.next.board')} <ArrowRight className="size-3" />
-        </Link>
-      </div>
-    </Section>
-  )
-}
-
 function CarryingOver({ p, now }: CardProps) {
   const { t: tr } = useTranslation()
-  const items = p.carryingOver
+  // The summary carries every ticket from before today; Overview lists the Blocked and In review ones.
+  const shown = carryingOverStages(p.stages)
+  const items = p.carryingOver.filter((t) => shown.has(t.status))
   return (
     <Section
       icon={Clock}
@@ -965,7 +906,7 @@ function CarryingOver({ p, now }: CardProps) {
       scroll
     >
       {!items.length ? (
-        <Quiet>{tr('overview.carryingOver.empty')}</Quiet>
+        <Quiet>{tr('overview.carryingOver.emptyShown')}</Quiet>
       ) : (
         <Rows>
           {items.map((t) => {
