@@ -134,10 +134,22 @@ export function compareLocales(en, other, name, language = name) {
             `${lang}: ${key} uses <${tag}>, an HTML void element that loses its text: pick another tag name`,
           )
   const { required, allowed } = pluralForms(language)
+  // The plural keys of each base, indexed once: a scan of every key for each base is quadratic.
+  const pluralsByBase = (flat) => {
+    const index = new Map()
+    for (const x of Object.keys(flat)) {
+      if (!PLURAL.test(x)) continue
+      const b = base(x)
+      if (!index.has(b)) index.set(b, [])
+      index.get(b).push(x)
+    }
+    return index
+  }
+  const aPlurals = pluralsByBase(a)
+  const bPlurals = pluralsByBase(b)
   for (const k of aBases) {
-    const pluralOf = (flat) => Object.keys(flat).filter((x) => base(x) === k && PLURAL.test(x))
-    const model = pluralOf(a)
-    const forms = pluralOf(b).map((x) => x.match(PLURAL)[1])
+    const model = aPlurals.get(k) ?? []
+    const forms = (bPlurals.get(k) ?? []).map((x) => x.match(PLURAL)[1])
     if (!bBases.has(k)) continue
     if (!model.length) {
       // English says the same for every count ("{{count}} blocked"): a language that inflects it has its forms.
