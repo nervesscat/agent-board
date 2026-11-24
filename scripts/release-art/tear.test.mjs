@@ -24,7 +24,7 @@ import {
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const SCRIPT = join(ROOT, 'scripts/release-art/tear.mjs')
 const COMMITTED = join(ROOT, 'src/assets/release-art/tear')
-const REAL = ['v0.2.2', 'v0.2.3', 'v0.2.4', 'v0.2.5', 'v0.2.6']
+const REAL = ['v0.2.2', 'v0.2.3', 'v0.2.4', 'v0.2.5', 'v0.2.6', 'v0.2.7']
 const MATRIX = ['v0.1.0', 'v0.2.0', 'v0.3.0', 'v1.1.0', 'v1.2.0', 'v1.3.0']
 const STAND_INS = ['v0.1.0', 'v0.3.0', 'v1.1.0', 'v1.2.0', 'v1.3.0']
 const VERSIONS = ['v0.1.0', 'v0.2.0', ...REAL, 'v0.3.0', 'v1.1.0', 'v1.2.0', 'v1.3.0']
@@ -142,7 +142,14 @@ describe('release artwork: tear', () => {
     expect(manifest.madeBy).toBe('Claude Fable 5.2')
     expect(manifest.releases.map((release) => release.version)).toEqual(VERSIONS)
     const real = manifest.releases.filter((release) => REAL.includes(release.version))
-    expect(real.map((release) => release.lay.name)).toEqual(['gather', 'hold', 'clear', 'run', 'gather'])
+    expect(real.map((release) => release.lay.name)).toEqual([
+      'gather',
+      'hold',
+      'clear',
+      'run',
+      'gather',
+      'gather',
+    ])
     for (const release of manifest.releases) {
       // The accent scrap lies on the canvas, clear of its edge.
       expect(release.accent[0]).toBeGreaterThan(80)

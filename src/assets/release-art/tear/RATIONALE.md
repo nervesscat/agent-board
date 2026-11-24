@@ -129,9 +129,14 @@ Loose, minor 2: the reference shade and no turn, so these are the approved piece
   the last one saffron, over one large sheet and a second from the corner because the release is
   crowded. Work in motion, reported step by step.
 - **v0.2.6** (the Approved stage, protected branches, the sidebar that shrinks to icons, the update
-  card, the intent check, one Settings page, and a dozen smaller fixes; 21 lines of notes, twenty
-  pull requests): _gather_. Seven slabs piled from every side over a bare corner of the ground,
-  the accent laid in the middle of the heap, the tear rough. Many hands again, and a crowded table.
+  card, the intent check, one Settings page, and a dozen smaller fixes; 21 lines of notes):
+  _gather_. Seven slabs piled from every side over a bare corner of the ground, the accent laid in
+  the middle of the heap, the tear rough. Many hands again, and a crowded table.
+- **v0.2.7** (the notification center and its 33 alert types, agents that add their own repos, the
+  Workflow presets, English and Spanish, loading placeholders, and the end-to-end specs made
+  steady; 36 lines of notes): _gather_. Seven slabs again, from every side, two of them standing
+  nearly upright through the heap, the accent caught under their crossing; the tear as rough as
+  0.2.6's, and the longest notes of the series, so the fullest table.
 
 ## What it handles worst
 

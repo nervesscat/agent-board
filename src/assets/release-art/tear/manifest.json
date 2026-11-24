@@ -449,6 +449,53 @@
       }
     },
     {
+      "version": "v0.2.7",
+      "seed": 2459785440,
+      "notes": "scripts/release-art/notes/v0.2.7.md",
+      "standIn": false,
+      "thematic": "Loose",
+      "variation": {
+        "minor": 2,
+        "bath": 2,
+        "bearing": 0,
+        "pale": {
+          "light": "#9CB7A6",
+          "dark": "#638A79"
+        }
+      },
+      "themes": {
+        "lines": 36,
+        "lead": "hands",
+        "density": 1,
+        "hands": 1,
+        "precision": 0.056,
+        "wayfinding": 0.5,
+        "pulse": 0.444
+      },
+      "lay": {
+        "name": "gather",
+        "sheets": 7,
+        "focus": [770.9, 490.3],
+        "grammar": "loose"
+      },
+      "tear": {
+        "amp": 12.81,
+        "core": 16.83
+      },
+      "accent": [730.1, 462.3],
+      "fibres": 246,
+      "files": {
+        "light": {
+          "file": "v0.2.7-light.svg",
+          "bytes": 33328
+        },
+        "dark": {
+          "file": "v0.2.7-dark.svg",
+          "bytes": 33328
+        }
+      }
+    },
+    {
       "version": "v0.3.0",
       "seed": 841063230,
       "notes": "scripts/release-art/notes/v0.3.0.md",
