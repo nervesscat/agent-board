@@ -25,7 +25,7 @@ const MATRIX = [
   ['v0.1.0', 'v0.2.0', 'v0.3.0'],
   ['v1.1.0', 'v1.2.0', 'v1.3.0'],
 ]
-const REAL = ['v0.2.2', 'v0.2.3', 'v0.2.4', 'v0.2.5']
+const REAL = ['v0.2.2', 'v0.2.3', 'v0.2.4', 'v0.2.5', 'v0.2.6', 'v0.2.7']
 const CARDS = [
   {
     version: 'v0.2.5',
@@ -109,7 +109,12 @@ if (MATRIX.flat().every(has)) {
 if (REAL.every(has)) {
   shots.push([
     'tear-real-0.2.png',
-    gridPage([REAL], ['light', 'dark'], 560, () => '0.2.x<br><span style="font-weight:400">real</span>'),
+    gridPage(
+      [REAL],
+      ['light', 'dark'],
+      Math.round(2240 / REAL.length),
+      () => '0.2.x<br><span style="font-weight:400">real</span>',
+    ),
     1,
   ])
 }
