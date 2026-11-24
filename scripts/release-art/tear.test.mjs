@@ -24,6 +24,7 @@ import {
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const SCRIPT = join(ROOT, 'scripts/release-art/tear.mjs')
 const COMMITTED = join(ROOT, 'src/assets/release-art/tear')
+const SERVED = join(ROOT, 'public/release-art')
 const REAL = ['v0.2.2', 'v0.2.3', 'v0.2.4', 'v0.2.5', 'v0.2.6', 'v0.2.7']
 const MATRIX = ['v0.1.0', 'v0.2.0', 'v0.3.0', 'v1.1.0', 'v1.2.0', 'v1.3.0']
 const STAND_INS = ['v0.1.0', 'v0.3.0', 'v1.1.0', 'v1.2.0', 'v1.3.0']
@@ -156,6 +157,16 @@ describe('release artwork: tear', () => {
       expect(release.accent[0]).toBeLessThan(1520)
       expect(release.accent[1]).toBeGreaterThan(60)
       expect(release.accent[1]).toBeLessThan(840)
+    }
+  })
+
+  it('serves the update card the same pieces: public copies of a release match its generated ones', () => {
+    // The card reads /release-art/<version without v>-<theme>.svg from public/ (docs/releasing.md).
+    const served = readdirSync(SERVED).filter((file) => file.endsWith('.svg'))
+    expect(served.length).toBeGreaterThan(0)
+    for (const file of served) {
+      const piece = readFileSync(join(COMMITTED, `v${file}`))
+      expect(readFileSync(join(SERVED, file)).equals(piece), file).toBe(true)
     }
   })
 
