@@ -502,7 +502,9 @@ plan first, then the result with its proofs.
    to Main (no summary, no new top-level post for the human), and the ticket's summary is the
    job of whoever hands the ticket off. Every phase agent also fills in its run report with
    `write_run_report` before it hands back: one report per run, from its own template,
-   `run-reports/<agent>.md` in this skill's bundle. Put that in its brief. Each phase agent's span
+   `run-reports/<agent>.md` in the review bundle, beside `agents/` and `skills/` where they are
+   installed (`~/.claude/run-reports/<agent>.md` by default; not inside this skill's folder). Put
+   that full path in its brief. Each phase agent's span
    (`start_span`, with the phase's agent name and `round`) and its report carry `ROUND`: the board
    counts a phase only when its span or report carries the round and the last segment of its agent
    name names the phase. When a phase agent cannot reach the board tools, the orchestrator of the
