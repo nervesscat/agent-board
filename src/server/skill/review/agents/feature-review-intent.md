@@ -1,7 +1,7 @@
 ---
 name: feature-review-intent
 description: "Compares what the human asked with what was built, from the human's own words and attachments and the result alone (never the plan, the spec or the review's findings; the human's own answers on decision cards are part of their words), and says per ask whether it was done as asked, done differently or not done, then whether it matches. Runs at low effort after the last review round and before every hand-off, on every ticket. Used by the todo-review ticket agent."
-tools: Read, Glob, Grep, Bash, Write
+tools: Read, Glob, Grep, Bash, Write, ToolSearch, mcp__board__write_run_report
 ---
 
 # Feature Review: Intent Agent

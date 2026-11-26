@@ -1,7 +1,7 @@
 ---
 name: feature-review-spec
 description: "Restates the intent of one change as a testable spec (acceptance criteria, classification, surfaces, out-of-scope, runbook) from the author's own words. Used by the /feature-review skill as Phase 1."
-tools: Read, Glob, Grep, Bash, Write
+tools: Read, Glob, Grep, Bash, Write, ToolSearch, mcp__board__write_run_report
 ---
 
 # Feature Review: Spec Agent
