@@ -4,15 +4,19 @@
 //   pnpm check:migrations            # ./drizzle
 //   node scripts/check-migrations.mjs <folder>
 //
-// - every NNNN_name.sql has a number of its own;
+// - new migrations are named YYYYMMDDHHMMSS_slug.sql (UTC, as drizzle-kit's timestamp prefix writes them), so
+//   branches that add one at the same time do not pick the same name. The NNNN_name.sql files that predate
+//   that are frozen at 0000..0066: each has a number of its own, and an entry's idx is its number and its
+//   place in the journal;
 // - every journal entry has its .sql file, and every .sql file its journal entry;
-// - an entry's idx is its file's number, and its place in the journal;
-// - `when` grows strictly down the journal. Drizzle applies only the migrations newer than the last
-//   one applied, by `when`: one dated before it (a branch merged after a later migration) is skipped
-//   on every database that already has the later one, without an error.
+// - idx is unique across the journal, and `when` is an integer unique across it: the loader (src/db/migrate.ts)
+//   applies by `when` and records it as the migration's key, so two entries sharing one would be told apart by nothing.
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+/** The last migration numbered NNNN_name.sql; new ones are named by timestamp. */
+const LAST_NUMBERED = 66
 
 /** The problems in a migrations folder (its .sql files and meta/_journal.json); empty when it is sound. */
 export function checkMigrations(dir) {
@@ -23,12 +27,19 @@ export function checkMigrations(dir) {
     .sort()
   const byNumber = new Map()
   for (const file of sql) {
+    if (/^\d{14}_[\w-]+\.sql$/.test(file)) continue
     const m = /^(\d{4})_[\w-]+\.sql$/.exec(file)
     if (!m) {
-      problems.push(`${file}: not named NNNN_name.sql`)
+      problems.push(
+        /^\d/.test(file) ? `${file}: not named YYYYMMDDHHMMSS_slug.sql` : `${file}: not named NNNN_name.sql`,
+      )
       continue
     }
     const number = Number(m[1])
+    if (number > LAST_NUMBERED) {
+      problems.push(`${file}: new migrations are named YYYYMMDDHHMMSS_slug.sql`)
+      continue
+    }
     if (byNumber.has(number)) problems.push(`${file}: number ${m[1]} is also ${byNumber.get(number)}`)
     else byNumber.set(number, file)
   }
@@ -44,6 +55,8 @@ export function checkMigrations(dir) {
   if (!Array.isArray(entries)) return [...problems, 'meta/_journal.json: no entries list']
 
   const tags = new Set()
+  const idxOf = new Map()
+  const whenOf = new Map()
   entries.forEach((entry, i) => {
     const { tag, idx, when } = entry ?? {}
     const name = `journal entry ${i} (${tag ?? 'no tag'})`
@@ -52,13 +65,18 @@ export function checkMigrations(dir) {
     const number = /^(\d{4})_/.exec(tag ?? '')?.[1]
     if (number !== undefined && idx !== Number(number))
       problems.push(`${name}: idx ${idx} is not the file's number ${number}`)
-    if (idx !== i) problems.push(`${name}: idx ${idx} is not its place in the journal (${i})`)
+    if (number !== undefined && idx !== i)
+      problems.push(`${name}: idx ${idx} is not its place in the journal (${i})`)
+    if (!Number.isInteger(idx)) problems.push(`${name}: idx ${idx} is not an integer`)
+    else if (idxOf.has(idx)) problems.push(`${name}: idx ${idx} is also used by ${idxOf.get(idx)}`)
+    else idxOf.set(idx, name)
     if (typeof when !== 'number') problems.push(`${name}: when is not a number`)
-    else if (i > 0 && typeof entries[i - 1]?.when === 'number' && when <= entries[i - 1].when)
+    else if (!Number.isInteger(when)) problems.push(`${name}: when ${when} is not an integer`)
+    else if (whenOf.has(when))
       problems.push(
-        `${name}: when ${when} is not after the entry before it (${entries[i - 1].when}); ` +
-          'drizzle would skip it on a database that has the earlier one',
+        `${name}: when ${when} is also used by ${whenOf.get(when)}; the loader keys each migration by it`,
       )
+    else whenOf.set(when, name)
   })
   for (const file of sql)
     if (!tags.has(file.replace(/\.sql$/, ''))) problems.push(`${file}: no journal entry`)

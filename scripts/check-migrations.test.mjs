@@ -86,7 +86,7 @@ describe('checkMigrations', () => {
     ])
   })
 
-  it('finds a `when` that does not grow, which drizzle would skip', () => {
+  it('finds two entries with one `when`, because the loader keys each applied migration by it', () => {
     const dir = fixture(
       ['0000_init.sql', '0001_repos.sql', '0002_tags.sql'],
       [
@@ -95,11 +95,93 @@ describe('checkMigrations', () => {
         ['0002_tags', 2, 300],
       ],
     )
-    const problems = checkMigrations(dir)
-    expect(problems).toHaveLength(1)
-    expect(problems[0]).toMatch(
-      /^journal entry 2 \(0002_tags\): when 300 is not after the entry before it \(300\)/,
+    expect(checkMigrations(dir)).toEqual([
+      'journal entry 2 (0002_tags): when 300 is also used by journal entry 1 (0001_repos); the loader keys each migration by it',
+    ])
+  })
+
+  it('finds two entries with one idx', () => {
+    const dir = fixture(
+      ['0000_init.sql', '20261127093012_a.sql', '20261127093100_b.sql'],
+      [
+        ['0000_init', 0, 100],
+        ['20261127093012_a', 3, 200],
+        ['20261127093100_b', 3, 300],
+      ],
     )
+    expect(checkMigrations(dir)).toEqual([
+      'journal entry 2 (20261127093100_b): idx 3 is also used by journal entry 1 (20261127093012_a)',
+    ])
+  })
+
+  it('accepts a timestamp entry whose `when` is older than the entry before it, a branch merged late', () => {
+    const dir = fixture(
+      ['0000_init.sql', '0001_repos.sql', '20261127093012_a.sql'],
+      [
+        ['0000_init', 0, 100],
+        ['0001_repos', 1, 300],
+        ['20261127093012_a', 2, 200],
+      ],
+    )
+    expect(checkMigrations(dir)).toEqual([])
+  })
+
+  it('accepts timestamp names, and refuses a timestamp-like name that is not one', () => {
+    const dir = fixture(
+      ['0000_init.sql', '20261127093012_add_x.sql'],
+      [
+        ['0000_init', 0, 100],
+        ['20261127093012_add_x', 1, 200],
+      ],
+    )
+    expect(checkMigrations(dir)).toEqual([])
+    for (const bad of ['20261127_x', '20261127093012', '2026-11-27_x']) {
+      const dir = fixture(['0000_init.sql', `${bad}.sql`], [['0000_init', 0, 100]])
+      expect(checkMigrations(dir)).toEqual([
+        `${bad}.sql: not named YYYYMMDDHHMMSS_slug.sql`,
+        `${bad}.sql: no journal entry`,
+      ])
+    }
+  })
+
+  it('refuses a new numbered migration above 0066, which the timestamp name replaces', () => {
+    const dir = fixture(
+      ['0000_init.sql', '0067_x.sql'],
+      [
+        ['0000_init', 0, 100],
+        ['0067_x', 67, 200],
+      ],
+    )
+    // The fixture puts 0067 second, so it is also out of its place: that problem is reported too.
+    expect(checkMigrations(dir)).toContain('0067_x.sql: new migrations are named YYYYMMDDHHMMSS_slug.sql')
+  })
+
+  it('accepts timestamp and numbered migrations in one journal', () => {
+    const dir = fixture(
+      ['0000_init.sql', '0001_repos.sql', '20261127093012_a.sql', '20261127093100_b.sql'],
+      [
+        ['0000_init', 0, 100],
+        ['0001_repos', 1, 200],
+        ['20261127093012_a', 2, 300],
+        ['20261127093100_b', 3, 400],
+      ],
+    )
+    expect(checkMigrations(dir)).toEqual([])
+  })
+
+  it('accepts two branches that each add a migration, merged in either order', () => {
+    const base = [
+      ['0000_init', 0, 100],
+      ['0001_repos', 1, 200],
+    ]
+    const files = ['0000_init.sql', '0001_repos.sql', '20261127093012_a.sql', '20261127093100_b.sql']
+    // Each branch's entry is numbered after the base; merged in the other order, the two swap places.
+    expect(
+      checkMigrations(fixture(files, [...base, ['20261127093012_a', 2, 300], ['20261127093100_b', 3, 400]])),
+    ).toEqual([])
+    expect(
+      checkMigrations(fixture(files, [...base, ['20261127093100_b', 2, 400], ['20261127093012_a', 3, 300]])),
+    ).toEqual([])
   })
 
   it('finds a file not named NNNN_name.sql, and an unreadable journal', () => {

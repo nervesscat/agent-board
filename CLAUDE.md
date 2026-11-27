@@ -104,6 +104,7 @@ Unattached uploads older than a day are deleted hourly: a new reference to an up
 
 ## Database
 
-Edit `src/db/schema.ts`, then `pnpm db:generate`. Give the generated migration a descriptive name
-(`drizzle/00NN_what_it_does.sql`) and update its `tag` in `drizzle/meta/_journal.json` to match.
-Migrations run when the server starts.
+Edit `src/db/schema.ts`, then `pnpm db:generate`. It writes `drizzle/YYYYMMDDHHMMSS_slug.sql` (UTC time,
+then a slug), its journal entry and its snapshot: commit all of them, and do not rename or renumber them.
+`pnpm check:migrations` runs before the PR (it refuses a non-timestamp new name, and duplicate `when` or
+`idx` in the journal). Migrations run when the server starts, in journal order.

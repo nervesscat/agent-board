@@ -85,9 +85,13 @@ a person does in the browser. Do not skip, delete or loosen a test to make it pa
 
 ## Database changes
 
-Edit `src/db/schema.ts`, then `pnpm db:generate`. Give the generated migration a descriptive name,
-`drizzle/00NN_what_it_does.sql`, and update its `tag` in `drizzle/meta/_journal.json` to match.
-`pnpm check:migrations` checks the folder and the journal agree. Migrations run when the server starts.
+Edit `src/db/schema.ts`, then `pnpm db:generate`. It writes `drizzle/YYYYMMDDHHMMSS_slug.sql` (the UTC
+time, then a slug such as `add_x`), a journal entry with the same tag and a snapshot in `drizzle/meta/`.
+Commit all of them. Do not rename the file or give it a number: the name is what keeps two branches from
+picking the same one. `pnpm check:migrations` runs before the PR. It refuses a name that is not that form
+(a new `NNNN_` file included), a `when` or `idx` used twice in the journal, and a journal entry without its
+file or the reverse. After a merge, keep both entries in journal order; if they share an `idx`, give the
+later one the next free integer. Migrations run when the server starts, each once, in journal order.
 
 ## Pull requests
 

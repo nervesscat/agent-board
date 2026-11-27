@@ -1509,10 +1509,10 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
   screenshot and a trace under `test-results/`, and `playwright-report/` has the HTML report
   (`pnpm exec playwright show-report`). First run: `pnpm exec playwright install chromium`.
   `E2E_SKIP_BUILD=1` reuses the last build; `E2E_PORT` picks the port.
-- **Migrations** (`pnpm check:migrations`): every `drizzle/NNNN_*.sql` has a number of its own and
-  a journal entry, every entry its file, `idx` matches, and `when` grows down the journal. Drizzle
-  applies only migrations dated after the last one applied, so one merged with an older `when`
-  would be skipped on every existing database without an error.
+- **Migrations** (`pnpm check:migrations`): new files are `drizzle/YYYYMMDDHHMMSS_slug.sql`, written by
+  `pnpm db:generate` (the older `NNNN_*.sql` files stay as they are, up to 0066). Every file has a journal
+  entry and every entry its file; `when` and `idx` are unique across the journal. The server applies every
+  entry it has not applied, in journal order, so a migration merged after a later one still runs.
 - **Desktop app** (`pnpm desktop:smoke`, after `pnpm desktop:package`; `--app <folder>`, `--port`,
   `--screenshot <png>`, `--busy-screenshot <png>`, `--data-dir-screenshot <png>`,
   `--app-folder-screenshot <png>`, `--unwritable-screenshot <png>`): copies the unpacked app (or

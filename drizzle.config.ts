@@ -6,4 +6,6 @@ export default defineConfig({
   schema: './src/db/schema.ts',
   dialect: 'sqlite',
   dbCredentials: { url: './data/board.db' },
+  // Names new migrations drizzle/YYYYMMDDHHMMSS_slug.sql (UTC), so branches cannot pick the same number.
+  migrations: { prefix: 'timestamp' },
 })
