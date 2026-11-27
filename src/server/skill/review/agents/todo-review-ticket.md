@@ -296,7 +296,8 @@ depth.
 You pick it, after each build and your gate, before each review (the gate step says when). When `DEPTH` is given,
 the human chose it: use it for every round and skip the rest of this section.
 
-Measure the branch against the base:
+Measure the branch against the base (round 1; a full round after the first measures the fix diff
+instead, by the review step's "Rounds after the first", and a delta round has no depth):
 - **Lines** and **files**: `git diff --numstat origin/BASE...<branch>`, leaving out lockfiles
   (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `*.lock`, `go.sum`) and generated files
   (`*.gen.*`, files `.gitattributes` marks `linguist-generated`, and what the repo's tools write
@@ -312,11 +313,12 @@ Then the first row that matches, from the top:
 | `light` | a tiny change: at most 50 lines in at most 3 files, and none of the classes `auth`, `data-model`, `background-job`, `dependency`, `config-infra` | with `light`: the same phases the workflow lists, none dropped |
 | `standard` | everything else | every phase the workflow lists |
 
-The depth only moves up. A later round, and a `RETRY` run (it reads `WORKDIR/depth.md`), never
-runs below the deepest depth an earlier round ran, even when the fixes made the diff smaller. The
+A `RETRY` run (it reads `WORKDIR/depth.md`) never runs below the depth recorded for its round; a
+later round takes the depth the review step's rule gives from its fix diff. The
 round budget is the workflow's rounds for the complexity, at every depth.
 
-Every depth runs every phase the workflow lists for the round, every round. The depths differ only
+Every depth runs every phase the workflow lists for the round's shape (the review step's "Rounds after
+the first"), every round. The depths differ only
 in how hard the hunts look and whether each finding's stability is reported. The depth changes only
 how hard `/feature-review` hunts. Your gate, the survival rule, the evidence and screenshots, and the
 push, the CI wait and the preview are the same at every depth. The depth is the review's measure;

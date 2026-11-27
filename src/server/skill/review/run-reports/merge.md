@@ -60,6 +60,10 @@ or counted has its own field; only what needs a sentence goes in a section.
   merged tree was checked with.
 - **counts**: `counts` with `conflicts`, `testsRun` and `newFailures`.
 
+A merge agent runs only when the base moved: a round whose base check passed (`origin/<base>`
+already in the head) spawns none and has no merge report, and the orchestrator records it as
+`base unchanged` instead.
+
 ## Where it goes
 
 `write_run_report` stores it on the board against the ticket and this run: the ticket's Agents side

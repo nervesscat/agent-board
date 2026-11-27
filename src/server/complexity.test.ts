@@ -582,7 +582,7 @@ describe('the review texts the board ships', () => {
       )
     })
 
-    it('every phase the workflow lists runs, in every text that describes a round, and the cycle is no longer copied into the skills', async () => {
+    it("every phase the round's shape lists runs, in every text that describes a round, and the cycle is no longer copied into the skills", async () => {
       // The delegation order and the round counts moved out of the skills into the project's workflow
       // (`get_workflow`): the old copies of the cycle are gone, and what replaces them says no listed phase is skipped.
       const full =
@@ -595,18 +595,23 @@ describe('the review texts the board ships', () => {
       ] as const)
         expect(flat(text).toLowerCase(), name).not.toContain(full)
       const wf = await workflowText('standard', 'mid')
+      // The rule moved from "every phase in every round" to "every phase the round's shape lists": round 1 every
+      // phase, a later round every phase but the spec, a delta round what the written rule gives.
+      expect(wf).not.toContain('Every phase this workflow lists for a round runs in every round.')
       expect(wf).toContain(
-        'Every phase this workflow lists for a round runs in every round.** None is skipped because the findings look obvious, the change looks small or a finding was already reproduced, and each phase posts its result, so a skipped phase is visible',
+        "Every phase the round's shape lists runs.** None is skipped because the findings look obvious, the change looks small or a finding was already reproduced, and each phase posts its result, so a skipped phase is visible",
       )
+      expect(wf).toContain('you may not widen a round, narrow one or skip a phase on your own')
       const fr = flat(featureReview)
+      expect(fr).not.toContain('Every phase the plan lists runs in every review round')
       expect(fr).toContain(
-        'Every phase the plan lists runs in every review round; none is skipped because the findings look obvious, the change looks small or a finding was already reproduced, and each phase posts its result, so a skipped phase is visible',
+        "Every phase the round's plan lists runs (round 1 every phase, a later round every phase but the spec, a delta round only what **Rounds after the first** gives); none is skipped because the findings look obvious, the change looks small or a finding was already reproduced, no round is widened or narrowed beyond what that rule gives, and each phase posts its result, so a skipped phase is visible",
       )
       expect(flat(ticketAgent)).toContain(
         'No listed step or phase is skipped on your own judgement**, not because the findings look obvious, the change looks small, a finding was already reproduced',
       )
       expect(flat(todoReview)).toContain(
-        "The depth never drops a phase: every round runs every phase the ticket's workflow lists, `light` included",
+        "The depth never drops a phase: every round runs every phase the ticket's workflow lists for the round's shape, `light` included",
       )
       expect(flat(boardSkill)).toContain(
         'None is skipped because findings look obvious, the change looks small or a finding was already reproduced',
@@ -650,7 +655,7 @@ describe('the review texts the board ships', () => {
       expect(notes).toContain('As many independent hunts run as the workflow lists')
       expect(notes).toContain('a hunt is never skipped because another found nothing')
       expect(notes).toContain('every round, also when there is no candidate or FAIL')
-      const depths = flat(between(ticketAgent, '| Depth | When |', 'The depth only moves up'))
+      const depths = flat(between(ticketAgent, '| Depth | When |', 'A `RETRY` run (it reads'))
       expect(depths).toContain('with `light`: the same phases the workflow lists, none dropped')
       expect(depths).not.toContain('one hunt')
     })
@@ -683,6 +688,18 @@ describe('the review texts the board ships', () => {
       const { tools } = await served()
       for (const name of ['update_ticket', 'get_ticket'])
         expect(tools.find((x) => x.name === name)!.description, name).toContain('missingReviewPhases')
+      // They say what the check accepts after round 1: no spec, a delta round, a merge skipped as base unchanged.
+      const update = tools.find((x) => x.name === 'update_ticket')!.description
+      expect(update).toContain('a later round every phase but the spec (written once, in round 1)')
+      expect(update).toContain(
+        'a later round recorded as a delta round (a `review` span of the round whose note is `delta round`) one verify and one hunt per review of the round',
+      )
+      expect(update).toContain(
+        'a `merge` span of the round whose note is `base unchanged` counts as its merge check',
+      )
+      expect(tools.find((x) => x.name === 'get_ticket')!.description).toContain(
+        'a later round has no spec, a delta round needs verify and one hunt, a merge recorded as base unchanged counts',
+      )
     })
 
     it('every text that describes the flag says a move out of review restarts the count', async () => {
@@ -871,7 +888,9 @@ describe('the review texts the board ships', () => {
   it('Review depth keeps the size rule for max, and nothing claims max forces a deeper review', () => {
     const depth = flat(between(ticketAgent, '## Review depth', '## Escalation'))
     expect(depth).toContain('When the workflow lists no review for the ticket there is no depth')
-    expect(depth).toContain('The depth only moves up')
+    // A later round's depth comes from its fix diff (the review step's rule), so it no longer only moves up.
+    expect(depth).not.toContain('The depth only moves up')
+    expect(depth).toContain("a later round takes the depth the review step's rule gives from its fix diff")
     expect(depth).toContain("The round budget is the workflow's rounds for the complexity, at every depth.")
     for (const claim of ['forces deep', 'always deep', 'deep on every round', 'max runs at deep']) {
       expect(depth, claim).not.toContain(claim)

@@ -29,6 +29,7 @@ export const TOOL_ROUTES: Record<string, string> = {
   post_review_result: 'POST /api/projects/:id/reviews/results',
   list_review_results: 'GET /api/projects/:id/reviews/results?pr=&sha=&repoId=',
   get_review_result: 'GET /api/reviews/results/:id',
+  set_finding_fixed: 'PATCH /api/projects/:id/reviews/results/:resultId/findings/:findingId `{fixedIn}`',
   write_run_report:
     'POST /api/projects/:id/run-reports `{ticketId, agent, round?, branch?, headSha?, model?, effort?, briefedBy?, startedAt?, endedAt?, durationMs?, time?, difficulty?, confidence?, steps?, counts?, sections?}`',
   get_run_report: 'GET /api/projects/:id/run-reports/:reportId',

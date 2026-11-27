@@ -59,6 +59,9 @@ or counted has its own field; only what needs a sentence goes in a section.
 - **evidence** (`evidence`): for each acceptance criterion, how you checked it — test, HTTP, browser,
   and a traced read only as a last resort — and what evidence you accepted.
 - **unexercised** (`unexercised`): criteria you could not exercise, and why.
+- **scope** (`scope`): in a delta round, the criteria you ran: the fixed findings' ones only (a criterion
+  outside those stands only because an earlier round's verify recorded it `PASS`); otherwise
+  `every criterion`.
 - **counts**: `counts` with `criteria`, `passed`, `failed`, `unverified`.
 
 ## Where it goes

@@ -570,10 +570,30 @@ export const reviewResults = sqliteTable(
     counts: text({ mode: 'json' }).$type<Record<string, number>>().notNull().default({}),
     summaryMd: text('summary_md').notNull().default(''),
     author: text().notNull(),
+    // The review round this result is (1, 2, ...; reviews.ts checks it) and the findings it recorded in
+    // that round; null and none for a result posted without them, as every row written before rounds.
+    round: integer(),
+    findings: text({ mode: 'json' })
+      .$type<ReviewFinding[]>()
+      .notNull()
+      .default(sql`'[]'`),
     createdAt: now(),
   },
   (t) => [index('review_results_pr').on(t.projectId, t.prNumber)],
 )
+
+/** A confirmed or plausible finding a review round recorded (refuted candidates are not stored). */
+export type ReviewFinding = {
+  id: string
+  title: string
+  severity: 'major' | 'medium' | 'minor'
+  verdict: 'confirmed' | 'plausible'
+  origin: 'original-build' | 'previous-fix' | 'pre-existing'
+  finder: 'hunt-a' | 'hunt-b' | 'verify'
+  round: number
+  // The SHA of the commit that fixed it, set later; null until then.
+  fixedIn: string | null
+}
 
 // One run report: how one execution of a subagent went — its identity, its measured or self-reported
 // time, the steps of its instructions it did and skipped, its ratings, and named prose sections

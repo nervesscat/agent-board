@@ -19,4 +19,6 @@ it is not shown a spec file (its only environment file is the small one below).
   **Escalation**). This replaces the survival rule above: there is no verdict, works check or base check
   in this review. A finding it reproduced goes back to the builder as the next round's fix pass.
 - The board's check at the hand-off (`missingReviewPhases`) expects one `hunt` run in the last round and
-  nothing else.
+  nothing else, in every round. The reviewer rates no severity and there is no refute, so this review has
+  no delta round and no merge check: every round is the one reviewer, and "Rounds after the first" above
+  changes nothing here but the diff the reviewer is given.

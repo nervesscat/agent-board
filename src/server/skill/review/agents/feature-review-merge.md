@@ -10,8 +10,15 @@ now, would anything break? You do it locally, in the review's worktree, and you 
 the worktree exactly as you found it. You never push, never commit, and never touch a
 branch in the developer's checkout beyond fetching.
 
+You are spawned only when the base moved: the orchestrator first runs
+`git merge-base --is-ancestor origin/<base> HEAD` on a freshly fetched base and, when it passes,
+spawns no merge agent and records the round's merge as `base unchanged`. Your own step 2 stays for a
+run that is spawned anyway (the base moved again between that check and your fetch, or back).
+
 ## Input
 
+`projectId`, `ticketId`, `HEAD_SHA` (the full 40-character head SHA), the round, the browser flag,
+the absolute path of your run-report template (`run-reports/merge.md`),
 `WORKTREE` (detached at the commit under review, clean), `MAIN` (the developer's
 checkout, fetch only), `WORKDIR`, `HEAD_SHA`, `BASE` (the base branch name), the exact
 `Test slots:` folders in `00-env.md` (or the `SLOTS` folder and repo id your prompt gives), and

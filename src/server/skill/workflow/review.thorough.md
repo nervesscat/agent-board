@@ -6,7 +6,9 @@
   input, secrets and tokens in code, logs or responses, data exposed to the wrong caller, and a weaker
   default than before. Like the other hunts it is independent (never shown their findings), reports
   candidates with a concrete failure scenario and goes through the refute phase with the rest. The board
-  counts it as a `hunt`: the last round needs three.
+  counts it as a `hunt`: the last round needs three. A delta round runs no security hunt: its one hunt
+  is the delta arguments' (the board then needs one verify and one hunt){{if roundIntent}}, and the
+  round-end intent check below still runs{{end}}.
 {{if roundIntent}}- **The intent check at the end of every round**, not only before the hand-off. After the round's review
   returns, run the intent step's check on the head as it stands, by the agent the review's `intent` phase line names, and post it `as` that agent, none for a built-in one ({{if preview}}the preview and screenshots of that head,
   the diff, the human's own words; nothing else{{else}}the review's own screenshots, the diff, the human's own words;
@@ -17,7 +19,8 @@
   preview running and reuses it: a head is never built twice for the preview, and a new commit (a fix round) is
   the only thing that starts a new one.{{else}}The preview step is skipped for this ticket, so there is no preview.{{end}} A `does not match` makes the
   round not survive: its lines go to the builder as the round's findings, and the next round is an
-  ordinary round of the budget. **This is the budget rule in this workflow**: it replaces the intent step's
+  ordinary round of the budget and always a full round, never a delta round (the review step's "Rounds
+  after the first"). **This is the budget rule in this workflow**: it replaces the intent step's
   rule that a `does not match` is outside the budget (and the review step's sentence about an intent
   return); the intent step's second-`does not match` rule still holds. The round survives only when the
   review's survival rule holds and the intent check matches.{{end}}

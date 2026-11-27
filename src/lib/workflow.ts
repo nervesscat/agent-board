@@ -78,6 +78,24 @@ export type WorkflowAgent =
 export const REVIEW_PHASE_KINDS = ['spec', 'env', 'verify', 'hunt', 'refute', 'merge'] as const
 export type ReviewPhaseKind = (typeof REVIEW_PHASE_KINDS)[number]
 
+/**
+ * What a review round is: `first` (round 1, every phase, the spec included), `later` (a full round after the
+ * first: every phase but the spec, which round 1 wrote once) or `delta` (after a round whose confirmed
+ * findings were all `minor`: verify of the fixed findings' criteria and one hunt on the fix commits' diff).
+ */
+export type ReviewRoundShape = 'first' | 'later' | 'delta'
+
+/**
+ * The records the review's orchestrator writes on the ticket's work timeline (`start_span` with this `phase`,
+ * the round and this `note`, under its own agent name) and the board's check reads: `delta` marks a round as a
+ * delta round (it counts from round 2 on), `baseUnchanged` marks a round's merge check as skipped because
+ * `origin/<base>` is already in the head. The review skill gives the same calls word for word.
+ */
+export const REVIEW_ROUND_RECORDS = {
+  delta: { phase: 'review', note: 'delta round' },
+  baseUnchanged: { phase: 'merge', note: 'base unchanged' },
+} as const
+
 // --- the catalogue ---
 
 /** Why a step cannot be turned off: always, or on every ticket above low (low may still drop it). */
@@ -1272,9 +1290,20 @@ export interface ResolvedReview {
    * it in the same order, the Team agent that briefs the phase (`agents=`: the role's name where the Team has
    * no agent for it).
    */
-  runs: (ReviewRunDef & { phasesArg: string; agentsArg: string })[]
-  /** The kind of run each round needs and how many of each: what the hand-off checks. */
+  runs: (ReviewRunDef & {
+    phasesArg: string
+    agentsArg: string
+    /** The same run in a full round after the first: no `spec` token (round 1 wrote the spec). */
+    later: { phasesArg: string; agentsArg: string }
+    /** The same run in a delta round (`verify`, one `hunt`, `refute`, `merge`); null when the review has no refute. */
+    delta: { phasesArg: string; agentsArg: string } | null
+  })[]
+  /** The kind of run round 1 needs and how many of each: what the hand-off checks. */
   perRound: { phase: ReviewPhaseKind; expected: number }[]
+  /** What a full round after the first needs: `perRound` without the spec. */
+  perLaterRound: { phase: ReviewPhaseKind; expected: number }[]
+  /** What a delta round needs: one `verify` and one `hunt` per run of the round; null when there is no delta round. */
+  perDeltaRound: { phase: ReviewPhaseKind; expected: number }[] | null
 }
 
 export interface ResolvedStep {
@@ -1391,6 +1420,13 @@ function resolveReview(
   const defs = preset.review.phases.filter((d) => intentRuns || d.id !== ROUND_INTENT_ID)
   const counts = phaseCounts(defs)
   const phases = defs.map((d, i) => resolveSub(d, at, i, teamOf))
+  const perRound = REVIEW_PHASE_KINDS.flatMap((phase) => {
+    const expected = counts.get(phase)
+    return expected ? [{ phase, expected }] : []
+  })
+  // A delta round follows a round whose findings refute rated all `minor`: a review with no refute (Light's
+  // single reviewer) rates nothing, so it has none.
+  const hasDelta = counts.has('refute') && counts.has('verify')
   return {
     rounds: complexity ? rounds[complexity] : null,
     roundsByComplexity: rounds,
@@ -1404,14 +1440,38 @@ function resolveReview(
       // A run's phases are the top-level ones, or the children of its own full review (Maximum's two).
       const own = r.agentSuffix === null ? phases : (phases.find((p) => p.id === r.id)?.children ?? [])
       const names = own.filter((p) => p.phase !== null).map((p) => p.teamAgent?.name ?? '')
-      return { ...r, phasesArg: r.phases.join(','), agentsArg: names.join(',') }
+      // The tokens of a narrower round, with the Team agent at each token's place.
+      const keep = (wanted: (token: string, at: number) => boolean) => {
+        const at = r.phases.flatMap((token, i) => (wanted(token, i) ? [i] : []))
+        return {
+          phasesArg: at.map((i) => r.phases[i]).join(','),
+          agentsArg: at.map((i) => names[i] ?? '').join(','),
+        }
+      }
+      const firstHunt = r.phases.indexOf('hunt')
+      return {
+        ...r,
+        phasesArg: r.phases.join(','),
+        agentsArg: names.join(','),
+        later: keep((token) => token !== 'spec'),
+        delta: hasDelta
+          ? keep((token, i) => DELTA_TOKENS.has(token) || (token === 'hunt' && i === firstHunt))
+          : null,
+      }
     }),
-    perRound: REVIEW_PHASE_KINDS.flatMap((phase) => {
-      const expected = counts.get(phase)
-      return expected ? [{ phase, expected }] : []
-    }),
+    perRound,
+    perLaterRound: perRound.filter((p) => p.phase !== 'spec'),
+    perDeltaRound: hasDelta
+      ? [
+          { phase: 'verify', expected: preset.review.runs.length },
+          { phase: 'hunt', expected: preset.review.runs.length },
+        ]
+      : null,
   }
 }
+
+/** The tokens of a delta round besides its one hunt: refute rates what verify and the hunt raise, the merge check runs as in any round. */
+const DELTA_TOKENS = new Set(['verify', 'refute', 'merge'])
 
 /**
  * A preset and its saved tweaks as the graph a ticket of `complexity` goes through: every step in order
@@ -1539,12 +1599,20 @@ export function resolveWorkflow(
 
 /**
  * The runs of each kind one review round needs under this workflow, in the order the board's checks list
- * them (`spec`, `env`, `verify`, `hunt`, `refute`, `merge`): Standard one each and two hunts, Light one
- * hunt, Thorough three hunts, Maximum twice Thorough's. Empty when the workflow has no review for the
- * ticket (low, a review switched off, no rounds).
+ * them (`spec`, `env`, `verify`, `hunt`, `refute`, `merge`): in round 1 (`first`) Standard one each and two
+ * hunts, Light one hunt, Thorough three hunts, Maximum twice Thorough's; a full later round (`later`) the same
+ * without the spec; a delta round (`delta`) one `verify` and one `hunt` per run of the round (two of each under
+ * Maximum), or the full later round where the review has no delta round (Light). Empty when the workflow has no
+ * review for the ticket (low, a review switched off, no rounds).
  */
-export function reviewPhaseRuns(workflow: ResolvedWorkflow): { phase: ReviewPhaseKind; expected: number }[] {
+export function reviewPhaseRuns(
+  workflow: ResolvedWorkflow,
+  shape: ReviewRoundShape = 'first',
+): { phase: ReviewPhaseKind; expected: number }[] {
   const review = workflow.steps.find((s) => s.id === 'review')
   if (!review || review.skipped || !review.review) return []
-  return review.review.perRound.map((p) => ({ ...p }))
+  const r = review.review
+  const list =
+    shape === 'first' ? r.perRound : shape === 'delta' && r.perDeltaRound ? r.perDeltaRound : r.perLaterRound
+  return list.map((p) => ({ ...p }))
 }

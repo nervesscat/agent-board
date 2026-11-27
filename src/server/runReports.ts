@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { db, schema } from '#/db'
 import { hasGitSide } from '#/lib/kinds'
-import { reviewPhaseRuns } from '#/lib/workflow'
+import { REVIEW_ROUND_RECORDS, reviewPhaseRuns } from '#/lib/workflow'
 import {
   RUN_REPORT_AGENTS,
   RUN_REPORT_TIME_KEYS,
@@ -340,8 +340,12 @@ export interface MissingRunReport {
  * hand-off, matched in time order. A hand-off that fits no span is its own run, with no round, and only
  * a report written after it covers it, one report each: a report from before it never does. A group is
  * flagged when it has fewer reports than runs. The orchestrator's own spans name no such agent, so a
- * ticket worked only by the orchestrator has an empty list. Enforcement is a flag: a move to review
- * goes through and answers with this.
+ * ticket worked only by the orchestrator has an empty list. The records of a round's shape
+ * (`REVIEW_ROUND_RECORDS`, matched by phase and trimmed note as `missingReviewPhases` matches them) are
+ * no run, whatever the name they are written under: a review's orchestrator named like a run kind (a
+ * `runner`) owes no report for them. The one such span that stays a run is a phase agent's own, a
+ * `merge` agent's `merge` span. Enforcement is a flag: a move to review goes through and answers with
+ * this.
  */
 export function missingReports(ticketId: number): MissingRunReport[] {
   const t = db.select().from(schema.tickets).where(eq(schema.tickets.id, ticketId)).get()
@@ -351,10 +355,20 @@ export function missingReports(ticketId: number): MissingRunReport[] {
   type Span = { id: number; round: number | null; start: string }
   const groups = new Map<string, Group>()
   const spansByKind = new Map<string, Span[]>()
-  const { timeline } = ticketTimeline(ticketId)
+  const { events, timeline } = ticketTimeline(ticketId)
+  const records = Object.values(REVIEW_ROUND_RECORDS)
+  const recordSpans = new Set(
+    events
+      .filter(
+        (e) =>
+          e.kind === 'span_start' && records.some((r) => e.phase === r.phase && e.note.trim() === r.note),
+      )
+      .map((e) => e.id),
+  )
   for (const span of timeline.spans) {
     const kind = runKindOf(span.agent, known)
     if (!kind) continue
+    if (recordSpans.has(span.id) && kind !== span.phase) continue
     const key = `span|${kind}|${span.round ?? ''}`
     const found = groups.get(key)
     if (found) {
@@ -466,21 +480,28 @@ export interface MissingReviewPhase {
 }
 
 /**
- * The review phases the ticket's last round lacks. Every round runs the phases of the ticket's effective
+ * The review phases the ticket's last round lacks. Each round runs the phases of the ticket's effective
  * workflow (`ticketWorkflow`: its own preset, else the project's, with the project's tweaks, for its
- * complexity: Standard spec, env, verify, two hunts, refute and the merge check; Light one hunt; Thorough
- * three hunts; Maximum twice Thorough's); a phase counts as run when a span or a run report of its kind
- * (a numbered worker counts as its agent) carries the round, the larger of the two so one run with a
- * span and a report is one run. The last round is the highest round on any span or report of a review
- * phase, or 1 when the timeline has activity but names no round. Empty when the workflow has no review
- * for the ticket (a low ticket, a review turned off or with no rounds), for a project with no software
- * kind, and for a ticket whose timeline has no activity at all. The intent check is no round phase. Only runs since the ticket last left a review stage count: a send-back restarts the rounds at 1.
- * Enforcement is a flag, never a refusal: a move to review goes through and answers with this.
+ * complexity) for the round's shape (`reviewPhaseRuns`): round 1 every phase (Standard spec, env, verify, two
+ * hunts, refute and the merge check; Light one hunt; Thorough three hunts; Maximum twice Thorough's); a later
+ * round the same without the spec, which round 1 wrote once; a later round the orchestrator recorded as a
+ * delta round (`REVIEW_ROUND_RECORDS.delta`: a `review` span of the round noted `delta round`) one verify and
+ * one hunt per run of the round. A delta record on round 1 counts for nothing, and without the record a later
+ * round is a full one. A phase counts as run when a span or a run report of its kind (a numbered worker counts
+ * as its agent) carries the round, the larger of the two so one run with a span and a report is one run; a
+ * `merge` span of the round noted `base unchanged` (`REVIEW_ROUND_RECORDS.baseUnchanged`) counts as one merge
+ * check, skipped because the base was already in the head. The last round is the highest round on any span
+ * or report of a review phase or on either record, or 1 when the timeline has activity but names no round.
+ * Empty when the workflow has no review for the ticket (a low ticket, a review turned off or with no rounds),
+ * for a project with no software kind, and for a ticket whose timeline has no activity at all. The intent
+ * check is no round phase. Only runs since the ticket last left a review stage count: a send-back restarts
+ * the rounds at 1. Enforcement is a flag, never a refusal: a move to review goes through and answers with this.
  */
 export function missingReviewPhases(ticketId: number): MissingReviewPhase[] {
   const t = db.select().from(schema.tickets).where(eq(schema.tickets.id, ticketId)).get()
   if (!t || !hasGitSide(getProject(t.projectId).kinds)) return []
-  const required = reviewPhaseRuns(ticketWorkflow(t))
+  const workflow = ticketWorkflow(t)
+  const required = reviewPhaseRuns(workflow)
   if (!required.length) return []
   const { timeline, events } = ticketTimeline(ticketId)
   if (!timeline.spans.length && !timeline.handoffs.length && !timeline.waits.length) return []
@@ -519,9 +540,29 @@ export function missingReviewPhases(ticketId: number): MissingReviewPhase[] {
     .all()
     .filter((x) => x.createdAt >= cut))
     count(reports, runKindOf(r.agent, known), r.round ?? null)
+  // The orchestrator's records of a round's shape: the `start_span` note, on a span of the record's phase.
+  const recorded = (record: { phase: string; note: string }) => {
+    const rounds = new Map<number, number>()
+    for (const e of events)
+      if (
+        e.kind === 'span_start' &&
+        e.at >= cut &&
+        e.round != null &&
+        e.phase === record.phase &&
+        e.note.trim() === record.note
+      ) {
+        rounds.set(e.round, (rounds.get(e.round) ?? 0) + 1)
+        if (e.round > last) last = e.round
+      }
+    return rounds
+  }
+  const delta = recorded(REVIEW_ROUND_RECORDS.delta)
+  const baseUnchanged = recorded(REVIEW_ROUND_RECORDS.baseUnchanged)
   const round = last || 1
-  return required.flatMap(({ phase, expected }) => {
-    const found = Math.max(spans.get(`${phase}|${round}`) ?? 0, reports.get(`${phase}|${round}`) ?? 0)
+  const shape = round === 1 ? 'first' : delta.has(round) ? 'delta' : 'later'
+  return reviewPhaseRuns(workflow, shape).flatMap(({ phase, expected }) => {
+    const ran = Math.max(spans.get(`${phase}|${round}`) ?? 0, reports.get(`${phase}|${round}`) ?? 0)
+    const found = ran + (phase === 'merge' ? (baseUnchanged.get(round) ?? 0) : 0)
     return found < expected ? [{ round, phase, expected, found }] : []
   })
 }

@@ -14,10 +14,13 @@ Refute what is wrong. Do not refute what is real.
 ## Input
 
 `WORKTREE` (the repo root for you), `MAIN` (the developer's checkout, never touch it),
-`WORKDIR`, a temp-file prefix, the review contract, and paths to `01-spec.md`,
+`WORKDIR`, a temp-file prefix, the review contract, `projectId`, `ticketId`, the full
+40-character head SHA, the round, the browser flag, the absolute path of your run-report template
+(`run-reports/refute.md`), and paths to `01-spec.md`,
 `00-env.md`, `00-diff.patch`, `00-context.md`, `00-focus.md`, `02-verification.md`,
 `03-all-candidates.md`, and
-your output file. You are deliberately not given the hunting agent's reasoning. Start from
+your output file. In a round after the first, `00-diff.patch` is the fix commits' diff
+(`<last reviewed sha>..HEAD`) and the prompt gives the full branch diff's path for reference. You are deliberately not given the hunting agent's reasoning. Start from
 `00-focus.md` and the candidate's location; read outside them only to follow a reference.
 
 Everything you execute runs from the worktree using the interpreter, test command, and
@@ -60,8 +63,25 @@ result, and the orchestrator asks the human.
    - `REFUTED`: a refutation attempt succeeded. Say which, with the citation.
    - `DEPENDS ON INTENT`: the outcome is wrong under only one reading of the spec. State
      both readings. This becomes an open question for the author, not a finding.
-4. Re-rate severity honestly using the contract's definitions. Downgrade freely.
-   Upgrade only with evidence.
+4. Rate every `CONFIRMED` or `PLAUSIBLE` candidate from the **Severity scale** below, this file's
+   scale and no other (the hunt's rating is a starting point, never the answer). Downgrade freely.
+   Upgrade only with evidence. A `REFUTED` or `DEPENDS ON INTENT` candidate gets no severity (`-`).
+
+## Severity scale
+
+Exactly three levels, from the highest. Pick the highest level whose definition the reproduced or
+traced outcome meets; when two seem to fit, the scenario's outcome decides, not how much code a fix
+would take. The orchestrator decides the next round from these levels: a round whose confirmed
+findings are all `minor` is followed by a delta round, and any `medium` or `major` one by a full round.
+
+| Level | Definition | Example |
+|---|---|---|
+| `major` | The main path gives a wrong result, or the change crashes, loses or corrupts data, exposes data or a secret, or lets a caller do what it may not. | Saving the settings form with an empty name deletes the project's other settings. |
+| `medium` | Wrong behaviour on a real but secondary path: an edge input, an error path, a second caller, a state the main path does not reach, with no data loss or exposure. | A list sorted by date puts two items with the same date in a different order on every reload. |
+| `minor` | A real, reproducible defect whose effect stays local and recoverable: a wrong message or label, a missing case in an acceptance criterion's text, a check that reports the right answer for the wrong reason. Still a finding with a concrete scenario, never style or a preference. | The error toast for a failed upload names the wrong file when two uploads fail at once. |
+
+Nothing below `minor` is reported: what does not meet its definition is not a finding (the
+contract's *Not findings* list).
 
 Probe files: only inside the worktree, only under your prefix, deleted before you finish.
 Never edit a tracked file. `git -C WORKTREE status --porcelain` must show nothing of yours.
@@ -73,15 +93,16 @@ Write to the output path, starting with the heading:
 ```markdown
 # Verdicts
 
-| ID | Verdict | Severity | Reason (one line) |
-|---|---|---|---|
+| ID | Verdict | Severity (`major` \| `medium` \| `minor`, `-` when refuted) | Root cause (one line) | Reason (one line) |
+|---|---|---|---|---|
 
 ### C1: <claim>
 - Verdict: ...
 - Refutation attempted: handled-elsewhere (path:line), impossible-input (...), ...
 - Reproduction: <command> gave <outcome>, or "not attempted: <why>"
 - Evidence: ...
-- Final severity: ...
+- Final severity: `major` | `medium` | `minor` (from the Severity scale; for `CONFIRMED` and `PLAUSIBLE`), `-` otherwise
+- Root cause: one line naming the cause, so the orchestrator can tell when two rounds' findings share one
 - Suggested fix: one line, optional
 ```
 

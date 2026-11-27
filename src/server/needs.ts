@@ -26,7 +26,8 @@ import { type OpenTask, openTasks } from './openTasks'
 import { HttpError } from './http'
 import { getProject } from './projects'
 import { onRefsListed, readRefs } from './push'
-import { listRepos } from './repos'
+import { listRepos, ticketRepo } from './repos'
+import * as reviews from './reviews'
 import { missingReports, missingReviewPhases, ticketReports } from './runReports'
 import {
   deleteStage,
@@ -325,11 +326,14 @@ export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {
   const inReview = kindOf(ctx.stages, full.status) === 'review'
   const open: OpenTask[] | null = inReview && !full.prId ? openTasks(full.id) : null
   const { timeline } = timelinesFor([full]).get(full.id)!
+  // The PR's results per review round, each with its findings; empty without a PR.
+  const reviewRounds = full.pr ? reviews.listRounds(full.projectId, full.pr.number, ticketRepo(full)?.id) : []
   return {
     ...full,
     needs,
     neededBy,
     open,
+    reviewRounds,
     // The reports of each subagent run, newest first; in review, the runs the timeline records with none.
     runReports: ticketReports(full.id),
     missingRunReports: inReview && !full.prId ? missingReports(full.id) : [],

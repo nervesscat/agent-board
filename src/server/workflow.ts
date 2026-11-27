@@ -431,22 +431,40 @@ function reviewLines(step: ResolvedStep): string[] {
   const lines = [
     `   ${rounds}. Each round runs these phases, none skipped:`,
     ...subLines(review.phases, 1).map((l) => `   ${l}`),
+    ...(review.runs.some((r) => r.delta || r.later.phasesArg !== r.phasesArg)
+      ? [
+          `   That is round 1. A full round after the first runs them without the spec (round 1 wrote it once)${review.perDeltaRound ? ', and a delta round runs only the phases its line below gives' : ''}: the review step's "Rounds after the first" says which a round is.`,
+        ]
+      : []),
     `   Between rounds: ${review.between.map((b) => `${b.label.toLowerCase()} (${b.teamAgent ? teamWords(b.teamAgent, b.agent) : 'you'})`).join(' -> ')} -> the next round.`,
     `   Survives when: ${review.survival}.`,
     "   Each phase above runs the agent its line names, briefed with that agent's Team instructions (`get_project` -> `agents`), the project's `instructions` and the ticket's context; a built-in agent is a role the Team has no agent for, briefed as the review skill briefs a phase with no agent of its own. A phase's span, run report and `agentName` carry its role (`spec`, `env`, `verify`, `hunt`, `refute`, `merge`, `intent`), never the Team agent's name, so the board still counts every phase of the round.",
   ]
-  if (review.runs.length === 1)
-    lines.push(
-      `   Pass to /feature-review: phases=${review.runs[0]!.phasesArg} agents=${review.runs[0]!.agentsArg} effort=${effort} round=<n>.`,
-    )
-  else {
+  // Rounds after the first drop the spec, and a delta round is narrower still: each has its own arguments.
+  const shaped = review.runs.some((r) => r.delta || r.later.phasesArg !== r.phasesArg)
+  const args = (a: { phasesArg: string; agentsArg: string }, extra = '') =>
+    `phases=${a.phasesArg} agents=${a.agentsArg} effort=${effort} round=<n>${extra}`
+  if (review.runs.length === 1) {
+    const run = review.runs[0]!
+    if (!shaped) lines.push(`   Pass to /feature-review: ${args(run)}.`)
+    else {
+      lines.push(`   Pass to /feature-review in round 1: ${args(run)}.`)
+      lines.push(`   In a full round after the first: ${args(run.later)}.`)
+      if (run.delta) lines.push(`   In a delta round: ${args(run.delta, ' delta')}.`)
+    }
+  } else {
     lines.push(
       '   Run /feature-review once for each of these, as separate runs under their own agent names, neither shown the other:',
     )
-    for (const run of review.runs)
-      lines.push(
-        `   - ${run.label} (agent suffix \`${run.agentSuffix}\`): phases=${run.phasesArg} agents=${run.agentsArg} effort=${effort} round=<n>.`,
-      )
+    for (const run of review.runs) {
+      const head = `   - ${run.label} (agent suffix \`${run.agentSuffix}\`)`
+      if (!shaped) lines.push(`${head}: ${args(run)}.`)
+      else {
+        lines.push(
+          `${head}: in round 1 ${args(run)}; in a full round after the first ${args(run.later)}${run.delta ? `; in a delta round ${args(run.delta, ' delta')}` : ''}.`,
+        )
+      }
+    }
   }
   return lines
 }

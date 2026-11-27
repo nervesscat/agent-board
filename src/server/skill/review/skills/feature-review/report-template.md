@@ -18,6 +18,7 @@
 ## Confirmed findings
 
 ### F1: <claim> (<severity>)
+- Record: id `F1` · title `<claim>` · severity `major|medium|minor` · verdict `confirmed` · origin `original-build|previous-fix|pre-existing` · finder `hunt-a|hunt-b|verify` · round `<n>` · fixedIn `<sha, blank until fixed>`
 - Location: `path:line`
 - Scenario: <input/state> produces <wrong outcome>
 - Evidence: <test output excerpt, or repro command and output>
@@ -28,6 +29,7 @@
 ## Plausible findings (traced, not reproduced)
 
 ### P1: <claim> (<severity>)
+- Record: id `P1` · title `<claim>` · severity `major|medium|minor` · verdict `plausible` · origin `original-build|previous-fix|pre-existing` · finder `hunt-a|hunt-b|verify` · round `<n>` · fixedIn `<sha, blank until fixed>`
 - Location, Scenario, Evidence as above
 - Uncertain step: <which step in the trace could not be executed>
 
