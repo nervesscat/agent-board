@@ -6,13 +6,17 @@
 //   node scripts/merge-batch.mjs <batch.json> [--remote origin] [--base dev] [--train merge-train/<name>] [--push]
 //
 // batch.json lists the pull requests in the order of the approved column, top first:
-//   [{ "pr": 12, "branch": "fix-x", "needs": [], "adds_migration": false }, ...]
-// `needs` names the numbers of other entries that must merge first; the order is those, then the list's order.
-// Without --push nothing leaves this machine: the train is built, checked and reported, then discarded.
+//   [{ "pr": 12, "branch": "fix-x", "needs": [] }, ...]
+// `needs` names the numbers of other entries that must merge first; the order is those, then the list's
+// order. Each branch is merged into the train with --no-ff, in that order.
+// The default train name carries the head of the base it was built from, so a train rebuilt after the base
+// moved gets a new name and never has to replace the old branch. Without --push nothing leaves this machine:
+// the train is built, checked and reported, then discarded.
 //
-// Exit codes: 0 built (pushed with --push); 2 the input is wrong; 3 a pull request conflicts with the train
-// built so far (drop it, or rebase it onto the base, then run again); 4 the migrations do not check on the
-// train (drop the newest entry that adds a migration, then run again).
+// Exit codes: 0 built (pushed with --push); 1 anything else; 2 the input is wrong (also --help and an
+// unreadable batch file, which print the usage); 3 a pull request conflicts with the train built so far
+// (drop it, or rebase it onto the base, then run again); 4 the migrations do not check on the train (drop
+// the newest entry named in the message, then run again).
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -31,6 +35,8 @@ export class BatchError extends Error {
 }
 
 const EXIT_CODES = { input: 2, conflict: 3, migrations: 4 }
+const USAGE =
+  'usage: merge-batch.mjs <batch.json> [--remote <name>] [--base <branch>] [--train merge-train/<name>] [--push]'
 
 /** The batch in merge order: each entry after the entries it needs, otherwise in the list's order. */
 export function orderBatch(entries) {
@@ -43,12 +49,9 @@ export function orderBatch(entries) {
         code: 'input',
       })
     if (byPr.has(e.pr)) throw new BatchError(`PR #${e.pr} is listed twice`, { code: 'input', pr: e.pr })
-    byPr.set(e.pr, {
-      pr: e.pr,
-      branch: e.branch,
-      needs: e.needs ?? [],
-      adds_migration: e.adds_migration === true,
-    })
+    if (e.needs !== undefined && (!Array.isArray(e.needs) || !e.needs.every(Number.isInteger)))
+      throw new BatchError(`PR #${e.pr}: needs must be a list of PR numbers`, { code: 'input', pr: e.pr })
+    byPr.set(e.pr, { pr: e.pr, branch: e.branch, needs: e.needs ?? [] })
   }
   for (const e of byPr.values())
     for (const n of e.needs)
@@ -75,25 +78,55 @@ export function orderBatch(entries) {
   return ordered
 }
 
+/** The default train name for a batch built on `baseHead`: its PR numbers, then the base's short head. */
+export function trainName(ordered, baseHead) {
+  return `merge-train/prs-${ordered.map((e) => e.pr).join('-')}-${baseHead.slice(0, 7)}`
+}
+
+/** The batch file, read and parsed; an unreadable or malformed file is bad input. */
+export function readBatch(file) {
+  let text
+  try {
+    text = fs.readFileSync(file, 'utf8')
+  } catch (err) {
+    throw new BatchError(`cannot read the batch file ${file}: ${err instanceof Error ? err.message : err}`, {
+      code: 'input',
+    })
+  }
+  try {
+    return JSON.parse(text)
+  } catch (err) {
+    throw new BatchError(`the batch file ${file} is not JSON: ${err instanceof Error ? err.message : err}`, {
+      code: 'input',
+    })
+  }
+}
+
 function git(cwd, args) {
   return execFileSync(
     'git',
     ['-c', 'user.name=merge-batch', '-c', 'user.email=merge-batch@example.invalid', ...args],
-    { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
   ).trim()
 }
 
 /**
  * Build the train in a temporary worktree of `repo`: the base, then each entry's branch merged with
- * --no-ff in order. Returns the train's head and the merges. The worktree and its folder are removed.
+ * --no-ff in order. Returns the train's head, the base it was built on and the merges. The worktree and
+ * its folder are removed on every path.
  */
 export function buildTrain({ repo, remote = 'origin', base = 'dev', entries }) {
   const ordered = orderBatch(entries)
   git(repo, ['fetch', remote, `+refs/heads/${base}:refs/remotes/${remote}/${base}`])
+  const baseHead = git(repo, ['rev-parse', `${remote}/${base}`])
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'merge-batch-'))
   const tree = path.join(dir, 'train')
   try {
-    git(repo, ['worktree', 'add', '--detach', tree, `${remote}/${base}`])
+    git(repo, ['worktree', 'add', '--detach', tree, baseHead])
     const merged = []
     for (const e of ordered) {
       git(tree, ['fetch', remote, e.branch])
@@ -124,15 +157,15 @@ export function buildTrain({ repo, remote = 'origin', base = 'dev', entries }) {
     if (fs.existsSync(drizzle)) {
       const problems = checkMigrations(drizzle)
       if (problems.length > 0) {
-        const adders = ordered.filter((e) => addsMigration(tree, base, remote, e.branch))
-        const newest = adders.at(-1)
+        // Blame the newest entry that touches the migrations folder: it is the one to drop.
+        const touching = ordered.filter((e) => touchesMigrations(tree, baseHead, e.branch, remote))
         throw new BatchError(`the migrations do not check on the train: ${problems.join('; ')}`, {
           code: 'migrations',
-          pr: newest?.pr,
+          pr: touching.at(-1)?.pr,
         })
       }
     }
-    return { head: git(tree, ['rev-parse', 'HEAD']), merged }
+    return { head: git(tree, ['rev-parse', 'HEAD']), base: baseHead, merged }
   } finally {
     try {
       git(repo, ['worktree', 'remove', '--force', tree])
@@ -144,19 +177,11 @@ export function buildTrain({ repo, remote = 'origin', base = 'dev', entries }) {
   }
 }
 
-/** Whether a branch adds a migration file to the base (checked on the branch as fetched into the train). */
-function addsMigration(tree, base, remote, branch) {
+/** Whether a branch changes files in the migrations folder, against the base it was built on. */
+function touchesMigrations(tree, baseHead, branch, remote) {
   git(tree, ['fetch', remote, branch])
   const sha = git(tree, ['rev-parse', 'FETCH_HEAD'])
-  const added = git(tree, [
-    'diff',
-    '--name-only',
-    '--diff-filter=A',
-    `${remote}/${base}...${sha}`,
-    '--',
-    'drizzle',
-  ])
-  return added.length > 0
+  return git(tree, ['diff', '--name-only', `${baseHead}...${sha}`, '--', 'drizzle']).length > 0
 }
 
 /** Push the train's head to a branch of its own. Refuses the base and anything outside merge-train/. */
@@ -166,33 +191,45 @@ export function pushTrain({ repo, remote = 'origin', train, head }) {
   git(repo, ['push', remote, `${head}:refs/heads/${train}`])
 }
 
+/** Whether `argv1` (process.argv[1]) is this module's file, following symbolic links. */
+export function isEntrypoint(argv1, moduleUrl) {
+  if (!argv1) return false
+  try {
+    return fs.realpathSync(argv1) === fs.realpathSync(fileURLToPath(moduleUrl))
+  } catch {
+    return false
+  }
+}
+
 function parseArgs(argv) {
-  const opts = { remote: 'origin', base: 'dev', train: undefined, push: false, file: undefined }
+  const opts = { remote: 'origin', base: 'dev', train: undefined, push: false, file: undefined, help: false }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
-    if (a === '--push') opts.push = true
+    if (a === '--help' || a === '-h') opts.help = true
+    else if (a === '--push') opts.push = true
     else if (a === '--remote') opts.remote = argv[++i]
     else if (a === '--base') opts.base = argv[++i]
     else if (a === '--train') opts.train = argv[++i]
-    else if (opts.file === undefined) opts.file = a
-    else throw new BatchError(`unexpected argument ${a}`, { code: 'input' })
+    else if (opts.file === undefined && !a.startsWith('--')) opts.file = a
+    else throw new BatchError(`unexpected argument ${a}\n${USAGE}`, { code: 'input' })
   }
-  if (!opts.file)
-    throw new BatchError(
-      'usage: merge-batch.mjs <batch.json> [--remote r] [--base b] [--train name] [--push]',
-      { code: 'input' },
-    )
+  if (!opts.help && !opts.file) throw new BatchError(USAGE, { code: 'input' })
   return opts
 }
 
 function main(argv) {
   const opts = parseArgs(argv)
-  const entries = JSON.parse(fs.readFileSync(opts.file, 'utf8'))
-  const ordered = orderBatch(entries)
-  const train = opts.train ?? `merge-train/prs-${ordered.map((e) => e.pr).join('-')}`
+  if (opts.help) {
+    console.log(USAGE)
+    return
+  }
+  const entries = readBatch(opts.file)
   const repo = process.cwd()
   const built = buildTrain({ repo, remote: opts.remote, base: opts.base, entries })
-  console.log(`Train ${train} from ${opts.remote}/${opts.base}, head ${built.head}`)
+  const train = opts.train ?? trainName(orderBatch(entries), built.base)
+  console.log(
+    `Train ${train} from ${opts.remote}/${opts.base} at ${built.base.slice(0, 7)}, head ${built.head}`,
+  )
   for (const m of built.merged) console.log(`  merged PR #${m.pr} (${m.branch}) at ${m.sha}`)
   if (opts.push) {
     pushTrain({ repo, remote: opts.remote, train, head: built.head })
@@ -204,7 +241,7 @@ function main(argv) {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isEntrypoint(process.argv[1], import.meta.url)) {
   try {
     main(process.argv.slice(2))
   } catch (err) {

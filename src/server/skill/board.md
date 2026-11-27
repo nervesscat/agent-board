@@ -773,27 +773,28 @@ The order is the `needs` of each ticket first (a PR whose ticket needs another m
 after it), then the approved column's order, top first. A ticket whose needed work is neither merged nor in
 the batch stays in Approved and is left out. The orchestrator:
 
-1. Writes the batch file: one entry per ticket's PR in that order, with `pr`, `branch`, `needs` (the PR
-   numbers of the batch it needs first) and `adds_migration`.
+1. Writes the batch file: one entry per ticket's PR in that order, with `pr`, `branch` and `needs` (the PR
+   numbers of the batch it needs first).
 2. Runs `node scripts/merge-batch.mjs <batch file> --push` from any worktree of the repo, never by switching
    the main checkout's branch. The script builds the train from the base's current head and pushes it as
-   `merge-train/prs-<numbers>`. It never pushes the base or a branch outside `merge-train/`.
+   `merge-train/prs-<numbers>-<base head>`, so a train built on a new base has a new name. It never pushes
+   the base or a branch outside `merge-train/`.
 3. Opens one pull request from the train branch into the base, waits for its three checks green on the head,
    and merges that pull request. Then, for each PR of the batch: if GitHub still shows it open, its commits are
    in the base now, so it is closed with a comment naming the train pull request.
 4. Moves each ticket of the batch to the project's first done stage and posts on it, naming the train pull
    request and the merge commit.
 
-When the base moves while the train is open, the train is behind: run the script again (it builds from the
-base's new head), push the same train branch, and wait for the checks on the new head. Then merge.
+When the base moves while the train is open, the train is behind: run the script again. It builds from the
+base's new head and pushes under a new name, so the old train branch is left alone (delete it with the batch),
+and the checks run on the new train's head. Then merge that pull request.
 
-When the train's checks fail, read the failure first; a clear one-off flake gets one re-run. Otherwise bisect
-by dropping the newest entry (the last in the batch's order): run the script without it, push, and check the
-new head. Keep dropping until the checks are green. The dropped ticket stays in Approved, with the failing
+When the train's checks fail, read the failure first; a clear one-off flake gets one re-run. Otherwise bisect by dropping the newest entry
+(the last in the batch's order): run the script without it, push, and check the new head. Keep dropping until the checks are green. The dropped ticket stays in Approved, with the failing
 check named on it. When the script itself refuses a batch, the same rule applies to the entry it names: a
 PR that conflicts with the train built so far (exit code 3) is taken out and says on its ticket that it must
-be rebased on the base; a batch whose migrations do not check (exit code 4) drops the newest entry that adds a
-migration.
+be rebased on the base; a batch whose migrations do not check (exit code 4) drops the entry the script names,
+the newest one that touches the migrations folder.
 
 Migrations are not renumbered by the script. Two PRs that add a migration with the same number conflict in the
 journal or fail the migration check, and the newer one waits for the next batch, after its branch takes the next

@@ -2,10 +2,19 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { afterAll, describe, expect, it } from 'vitest'
 
-import { BatchError, buildTrain, orderBatch, pushTrain } from './merge-batch.mjs'
+import {
+  BatchError,
+  buildTrain,
+  isEntrypoint,
+  orderBatch,
+  pushTrain,
+  readBatch,
+  trainName,
+} from './merge-batch.mjs'
 
 const made = []
 afterAll(() => made.forEach((dir) => fs.rmSync(dir, { recursive: true, force: true })))
@@ -204,5 +213,91 @@ describe('pushTrain', () => {
 
     pushTrain({ repo: work, train: 'merge-train/prs-3', head: built.head })
     expect(git(remote, 'rev-parse', 'refs/heads/merge-train/prs-3')).toBe(built.head)
+  })
+})
+
+/** The error a call throws, or undefined when it returns. */
+function thrownBy(fn) {
+  try {
+    fn()
+  } catch (err) {
+    return err
+  }
+  return undefined
+}
+
+describe('bad input and migrations', () => {
+  it('reads an unreadable or malformed batch file, and needs that are not PR numbers, as bad input', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'merge-batch-input-'))
+    made.push(dir)
+    const broken = path.join(dir, 'broken.json')
+    fs.writeFileSync(broken, '[{"pr": 1,')
+
+    expect(thrownBy(() => readBatch(path.join(dir, 'missing.json')))).toMatchObject({ code: 'input' })
+    expect(thrownBy(() => readBatch(broken))).toMatchObject({ code: 'input' })
+    expect(thrownBy(() => orderBatch([{ pr: 1, branch: 'a', needs: 2 }]))).toMatchObject({ code: 'input' })
+    expect(thrownBy(() => orderBatch([{ pr: 1, branch: 'a', needs: ['2'] }]))).toMatchObject({
+      code: 'input',
+    })
+    expect(thrownBy(() => orderBatch([{ pr: 1, branch: 'a', needs: ['2'] }])).message).toContain(
+      'needs must be a list',
+    )
+  })
+
+  it('names the newest PR whose branch deletes a migration, not an empty PR', () => {
+    const { work } = fixture()
+    git(work, 'checkout', '-q', '-b', 'drops-migration', 'dev')
+    fs.rmSync(path.join(work, 'drizzle', '0000_init.sql'))
+    git(work, 'add', '-A')
+    git(work, 'commit', '-q', '-m', 'delete the migration file')
+    git(work, 'push', '-q', 'origin', 'drops-migration')
+    git(work, 'checkout', '-q', 'dev')
+
+    const err = thrownBy(() => buildTrain({ repo: work, entries: [{ pr: 9, branch: 'drops-migration' }] }))
+    expect(err).toMatchObject({ code: 'migrations', pr: 9 })
+  })
+})
+
+describe('train names and reruns', () => {
+  it('names the train after its PR numbers and the base head it was built on', () => {
+    const { work } = fixture()
+    branch(work, 'feature-d', { 'd.txt': 'd\n' })
+    const built = buildTrain({ repo: work, entries: [{ pr: 4, branch: 'feature-d' }] })
+    expect(trainName(orderBatch([{ pr: 4, branch: 'feature-d' }]), built.base)).toBe(
+      `merge-train/prs-4-${built.base.slice(0, 7)}`,
+    )
+  })
+
+  it('rebuilt after the base moved, the train gets a new name and pushes without a rejection', () => {
+    const { work, remote } = fixture()
+    branch(work, 'feature-e', { 'e.txt': 'e\n' })
+    const entries = [{ pr: 10, branch: 'feature-e' }]
+    const first = buildTrain({ repo: work, entries })
+    const firstName = trainName(orderBatch(entries), first.base)
+    pushTrain({ repo: work, train: firstName, head: first.head })
+
+    fs.writeFileSync(path.join(work, 'moved.txt'), 'moved\n')
+    git(work, 'add', '-A')
+    git(work, 'commit', '-q', '-m', 'base moves on')
+    git(work, 'push', '-q', 'origin', 'dev')
+
+    const second = buildTrain({ repo: work, entries })
+    const secondName = trainName(orderBatch(entries), second.base)
+    expect(secondName).not.toBe(firstName)
+    pushTrain({ repo: work, train: secondName, head: second.head })
+    expect(git(remote, 'rev-parse', `refs/heads/${secondName}`)).toBe(second.head)
+  })
+})
+
+describe('entrypoint', () => {
+  it('recognises this module through a symbolic link, and nothing else', () => {
+    const moduleUrl = new URL('./merge-batch.mjs', import.meta.url)
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'merge-batch-link-'))
+    made.push(dir)
+    const link = path.join(dir, 'merge-batch-link.mjs')
+    fs.symlinkSync(fileURLToPath(moduleUrl), link)
+    expect(isEntrypoint(link, moduleUrl)).toBe(true)
+    expect(isEntrypoint(path.join(dir, 'missing.mjs'), moduleUrl)).toBe(false)
+    expect(isEntrypoint(undefined, moduleUrl)).toBe(false)
   })
 })
