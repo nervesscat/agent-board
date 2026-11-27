@@ -627,22 +627,37 @@ const migrationsSeen = (): MigrationsSeen | null => {
   }
 }
 
-const markMigrationsSeen = (applied: { at: number }[]) => {
-  const newest = applied.at(-1)
-  if (!newest) return
-  const value = { at: newest.at, announced: applied.map((m) => m.at) }
+const writeMigrationsSeen = (at: number, announced: number[]) => {
+  const value = { at, announced }
   db.insert(schema.settings)
     .values({ key: MIGRATIONS_SEEN, value })
     .onConflictDoUpdate({ target: schema.settings.key, set: { value } })
     .run()
 }
 
+const markMigrationsSeen = (applied: { at: number }[]) => {
+  const newest = applied.at(-1)
+  if (!newest) return
+  writeMigrationsSeen(
+    newest.at,
+    applied.map((m) => m.at),
+  )
+}
+
 /**
- * A migration is announced when the marker names it. An old marker only has the newest one, so an older
- * `when` counts as announced, unless this boot applied it: then it was applied late and is new to the human.
+ * An old marker only has the newest `at`, so every migration up to it was announced, except the ones this
+ * boot applied late: those are new to the human. The marker is written back in the new shape, so a restart
+ * keeps them unannounced until "Got it".
  */
-const wasAnnounced = (at: number, seen: MigrationsSeen, bootApplied: ReadonlySet<number>) =>
-  seen.announced ? seen.announced.has(at) : at <= seen.at && !bootApplied.has(at)
+function upgradeLegacyMarker(
+  seen: MigrationsSeen,
+  applied: { at: number }[],
+  bootApplied: ReadonlySet<number>,
+): Set<number> {
+  const announced = applied.filter((m) => m.at <= seen.at && !bootApplied.has(m.at)).map((m) => m.at)
+  writeMigrationsSeen(seen.at, announced)
+  return new Set(announced)
+}
 
 function migrationAlerts(): AlertCandidate[] {
   const applied = edges.migrations()
@@ -657,7 +672,8 @@ function migrationAlerts(): AlertCandidate[] {
   // A migration can be applied late, from a merged branch, with an older `when` than the newest: it
   // is fresh too, so the set of announced ones is checked, not only the watermark.
   const bootApplied = new Set(edges.migrationsAtBoot())
-  const fresh = applied.filter((m) => !wasAnnounced(m.at, seen, bootApplied))
+  const announced = seen.announced ?? upgradeLegacyMarker(seen, applied, bootApplied)
+  const fresh = applied.filter((m) => !announced.has(m.at))
   if (!fresh.length) return []
   return [
     {

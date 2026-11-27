@@ -111,6 +111,7 @@ then a slug), its journal entry and its snapshot: commit all of them, and do not
 If a merge forks the snapshot chain (`pnpm check:migrations` names two snapshots that follow one, or `pnpm db:generate`
 reports a snapshot collision), delete the later branch's migration file, its journal entry and its snapshot (the one
 whose journal entry comes last), keep its schema change, run `pnpm db:generate` again, check and commit
-(CONTRIBUTING.md, Database changes). That repair is only safe before the migration has run on any database:
-if a `data/dev` or `data/preview` folder ran it, reset that folder with `pnpm dev --fresh`; if the live board
-ran it, do not delete it, stop and ask the person who runs the board.
+(CONTRIBUTING.md, Database changes). That repair is only safe before the migration has run on any database.
+Your own `data/dev` or a preview copy that ran it: reset it (`pnpm dev --fresh` resets `data/dev`; restart the
+preview for a fresh `data/preview`), then repair. Any other database that ran it (a desktop install's data, the
+live board): do not delete the migration; stop and ask the person who runs that database.

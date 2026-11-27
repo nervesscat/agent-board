@@ -848,6 +848,68 @@ describe('13 a migration applied', () => {
     expect(await check('migration-applied')).toEqual([])
   })
 
+  it('a late migration under a legacy marker stays announced after a restart, until Got it', async () => {
+    const applied = machine.edges.migrations()
+    await check('migration-applied')
+    db.update(schema.settings)
+      .set({ value: { at: applied.at(-1)!.at } })
+      .where(eq(schema.settings.key, 'alertMigrationsSeen'))
+      .run()
+    const late = { at: applied[0]!.at - 1000, name: '0000_late_merge' }
+    machine.edges.migrations = () => [late, ...applied]
+    // Boot 1 applied the late migration: it is announced.
+    machine.edges.migrationsAtBoot = () => [late.at]
+    expect(await check('migration-applied')).toMatchObject([{ details: [late.name] }])
+    // Boot 2 applied nothing: the restart does not resolve it.
+    machine.edges.migrationsAtBoot = () => []
+    expect(await check('migration-applied')).toMatchObject([{ details: [late.name] }])
+  })
+
+  it('Got it clears a late migration under a legacy marker, and the marker takes the new shape', async () => {
+    const applied = machine.edges.migrations()
+    await check('migration-applied')
+    db.update(schema.settings)
+      .set({ value: { at: applied.at(-1)!.at } })
+      .where(eq(schema.settings.key, 'alertMigrationsSeen'))
+      .run()
+    const late = { at: applied[0]!.at - 1000, name: '0000_late_merge' }
+    machine.edges.migrations = () => [late, ...applied]
+    machine.edges.migrationsAtBoot = () => [late.at]
+    const [row] = await raise('migration-applied')
+    expect(await press(row!.id, 'seen')).toMatchObject({ resolved: true })
+    const marker = db
+      .select()
+      .from(schema.settings)
+      .where(eq(schema.settings.key, 'alertMigrationsSeen'))
+      .get()
+    expect(marker?.value).toEqual({
+      at: applied.at(-1)!.at,
+      announced: [late.at, ...applied.map((m) => m.at)],
+    })
+    expect(await check('migration-applied')).toEqual([])
+  })
+
+  it('a legacy marker with no migration applied at boot treats every migration up to its at as announced', async () => {
+    const applied = machine.edges.migrations()
+    await check('migration-applied')
+    db.update(schema.settings)
+      .set({ value: { at: applied.at(-1)!.at } })
+      .where(eq(schema.settings.key, 'alertMigrationsSeen'))
+      .run()
+    const late = { at: applied[0]!.at - 1000, name: '0000_late_merge' }
+    machine.edges.migrations = () => [late, ...applied]
+    expect(await check('migration-applied')).toEqual([])
+    const marker = db
+      .select()
+      .from(schema.settings)
+      .where(eq(schema.settings.key, 'alertMigrationsSeen'))
+      .get()
+    expect(marker?.value).toEqual({
+      at: applied.at(-1)!.at,
+      announced: [late.at, ...applied.map((m) => m.at)],
+    })
+  })
+
   it('Got it on a migration this boot applied late, under a legacy marker, is not raised again', async () => {
     const applied = machine.edges.migrations()
     await check('migration-applied')
