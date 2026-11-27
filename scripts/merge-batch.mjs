@@ -160,10 +160,14 @@ export function buildTrain({ repo, remote = 'origin', base = 'dev', entries }) {
       if (problems.length > 0) {
         // Blame the newest entry that touches the migrations folder: it is the one to drop.
         const touching = ordered.filter((e) => touchesMigrations(tree, baseHead, e.branch, remote))
-        throw new BatchError(`the migrations do not check on the train: ${problems.join('; ')}`, {
-          code: 'migrations',
-          pr: touching.at(-1)?.pr,
-        })
+        const blame = touching.at(-1)
+        throw new BatchError(
+          `the migrations do not check on the train: ${problems.join('; ')}` +
+            (blame
+              ? `; drop PR #${blame.pr} (${blame.branch}), the newest entry that touches the migrations`
+              : ''),
+          { code: 'migrations', pr: blame?.pr },
+        )
       }
     }
     return { head: git(tree, ['rev-parse', 'HEAD']), base: baseHead, merged }
@@ -189,6 +193,11 @@ function touchesMigrations(tree, baseHead, branch, remote) {
 export function pushTrain({ repo, remote = 'origin', train, head }) {
   if (!/^merge-train\/[\w./-]+$/.test(train) || train.includes('..'))
     throw new BatchError(`the train branch must be merge-train/<name>, not ${train}`, { code: 'input' })
+  if (git(repo, ['ls-remote', '--heads', remote, `refs/heads/${train}`]) !== '')
+    throw new BatchError(
+      `${train} is already on ${remote}: a train is never replaced. Delete that branch to rebuild it, or give this batch another name with --train`,
+      { code: 'input' },
+    )
   git(repo, ['push', remote, `${head}:refs/heads/${train}`])
 }
 
@@ -202,15 +211,21 @@ export function isEntrypoint(argv1, moduleUrl) {
   }
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const opts = { remote: 'origin', base: 'dev', train: undefined, push: false, file: undefined, help: false }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
+    const value = () => {
+      const v = argv[++i]
+      if (v === undefined || v.startsWith('--'))
+        throw new BatchError(`${a} needs a value\n${USAGE}`, { code: 'input' })
+      return v
+    }
     if (a === '--help' || a === '-h') opts.help = true
     else if (a === '--push') opts.push = true
-    else if (a === '--remote') opts.remote = argv[++i]
-    else if (a === '--base') opts.base = argv[++i]
-    else if (a === '--train') opts.train = argv[++i]
+    else if (a === '--remote') opts.remote = value()
+    else if (a === '--base') opts.base = value()
+    else if (a === '--train') opts.train = value()
     else if (opts.file === undefined && !a.startsWith('--')) opts.file = a
     else throw new BatchError(`unexpected argument ${a}\n${USAGE}`, { code: 'input' })
   }

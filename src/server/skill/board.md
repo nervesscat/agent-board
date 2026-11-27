@@ -787,7 +787,9 @@ the batch stays in Approved and is left out. The orchestrator:
 
 When the base moves while the train is open, the train is behind: run the script again. It builds from the
 base's new head and pushes under a new name, so the old train branch is left alone (delete it with the batch),
-and the checks run on the new train's head. Then merge that pull request.
+and the checks run on the new train's head. Then merge that pull request. The script never replaces a train:
+a name already on the remote is refused (exit code 2), so running the same batch again on the same base means
+deleting that train branch first, or giving the batch another name with `--train`.
 
 When the train's checks fail, read the failure first; a clear one-off flake gets one re-run. Otherwise bisect by dropping the newest entry
 (the last in the batch's order): run the script without it, push, and check the new head. Keep dropping until the checks are green. The dropped ticket stays in Approved, with the failing

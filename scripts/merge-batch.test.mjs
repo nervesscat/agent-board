@@ -11,6 +11,7 @@ import {
   buildTrain,
   isEntrypoint,
   orderBatch,
+  parseArgs,
   pushTrain,
   readBatch,
   trainName,
@@ -299,5 +300,46 @@ describe('entrypoint', () => {
     expect(isEntrypoint(link, moduleUrl)).toBe(true)
     expect(isEntrypoint(path.join(dir, 'missing.mjs'), moduleUrl)).toBe(false)
     expect(isEntrypoint(undefined, moduleUrl)).toBe(false)
+  })
+})
+
+describe('command line', () => {
+  it('reads each flag with its value, and refuses a flag with no value or a flag taken as one', () => {
+    expect(
+      parseArgs(['batch.json', '--remote', 'up', '--base', 'main', '--train', 'merge-train/x', '--push']),
+    ).toMatchObject({
+      file: 'batch.json',
+      remote: 'up',
+      base: 'main',
+      train: 'merge-train/x',
+      push: true,
+    })
+    expect(thrownBy(() => parseArgs(['batch.json', '--remote']))).toMatchObject({ code: 'input' })
+    expect(thrownBy(() => parseArgs(['batch.json', '--train', '--push']))).toMatchObject({ code: 'input' })
+    expect(thrownBy(() => parseArgs(['batch.json', '--base', '--push']))).toMatchObject({ code: 'input' })
+    expect(thrownBy(() => parseArgs([]))).toMatchObject({ code: 'input' })
+    expect(parseArgs(['--help']).help).toBe(true)
+  })
+})
+
+describe('pushes never replace a train', () => {
+  it('refuses to push a train name that is already on the remote, and says what to do', () => {
+    const { work } = fixture()
+    branch(work, 'feature-f', { 'f.txt': 'f\n' })
+    const built = buildTrain({ repo: work, entries: [{ pr: 11, branch: 'feature-f' }] })
+    pushTrain({ repo: work, train: 'merge-train/prs-11-x', head: built.head })
+
+    const err = thrownBy(() => pushTrain({ repo: work, train: 'merge-train/prs-11-x', head: built.head }))
+    expect(err).toMatchObject({ code: 'input' })
+    expect(err.message).toContain('is already on origin')
+  })
+
+  it('names the PR to drop in the migrations refusal', () => {
+    const { work } = fixture()
+    branch(work, 'adds-bad-migration', { 'drizzle/0001_c.sql': 'select 4;\n' })
+    const err = thrownBy(() =>
+      buildTrain({ repo: work, entries: [{ pr: 12, branch: 'adds-bad-migration' }] }),
+    )
+    expect(err.message).toContain('drop PR #12 (adds-bad-migration)')
   })
 })
