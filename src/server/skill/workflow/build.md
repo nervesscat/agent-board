@@ -21,7 +21,9 @@ checks run with their results.
 On a later round{{if review}} (the fix pass, after a review round or after an intent return: run by the agent the review's
 `Between rounds` line names for it, which may be another Team agent than this step's){{end}} the brief carries the findings and failed criteria to fix, each with its scenario, and
 the Focus is only their `path:line` and their tests: the builder does not re-read or rework the rest of
-the change. A fix pass reruns only what its findings touch: the failed end-to-end spec file(s) and the
+the change. {{if review}}{{if preview}}A reply under the early look's "Direction OK?" post that changes the
+ask goes in it first, as the human's words. {{end}}It names the review's kept probe scripts (`probes/` in
+the review folder), which the builder reruns on its fix. {{end}}A fix pass reruns only what its findings touch: the failed end-to-end spec file(s) and the
 unit files related to the changed files (`vitest related <changed files>`, or the project's equivalent),
 not the whole gate; the full unit and end-to-end suites stay in CI, where CI runs them. When it returns,
 release any slot it left behind if `holder.txt` still names your ticket. Post its summary `as` the agent this step names (the Agent line){{if review}}, except a fix pass (after a review round or after an intent return): that summary goes `as` the agent the review's `Between rounds` line names for the fix pass, with no `as` when that line names a built-in agent (it is no Team agent), the same as the Agent line says for a built-in role{{end}}.

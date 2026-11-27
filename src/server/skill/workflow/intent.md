@@ -1,6 +1,21 @@
 After the last review round passes (a ticket with no review: after its gate and evidence) and before
 every hand-off. It runs again after any human comment that sent the ticket back (a `RETRY` or a re-run
 that finds one among the ticket's posts, newest last).
+{{if review}}
+{{if roundIntent}}
+
+For an early-look ticket (the claim step's item 5), round 1's round-end intent check is its early check:
+no second run in round 1.
+{{else}}
+
+For an early-look ticket (the claim step's item 5) it also runs once alongside review round 1: start it as
+round 1 starts, on the head the first gate passed, briefed with the human's own words (below) and only the
+diff at that head{{if preview}} and the screenshots the gate took for the early look{{end}}. Its `does not match` lines go
+to the builder with round 1's findings, in the one fix pass after round 1; when round 1 survived or no
+round is left, it is an intent return as below. It counts toward the SECOND `does not match`. The run
+after the last review round and before the hand-off still runs.
+{{end}}
+{{end}}
 
 It is the agent this step names (its Agent line: a Team agent of the project, else the built-in `intent`
 role, whose agent file is `feature-review-intent`), started with the Agent tool at this step's effort

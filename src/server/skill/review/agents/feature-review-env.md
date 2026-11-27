@@ -93,7 +93,10 @@ result, and the orchestrator asks the human.
 1. Read the runbook. List the services, ports, env vars, install command, test command,
    and start command it names. Start only what the criteria's methods need: no app server
    when no criterion uses `run+http` or `browser`, no frontend when none uses `browser`, and
-   only the data services the app or the tests need. Say in `00-env.md` what you left out.
+   only the data services the app or the tests need. The exception: in round 1 (the prompt's
+   `ROUND` is 1) when the spec's Classification has `ui` and the browser flag is `yes`, also start
+   the app (and the frontend when `FRONTEND` is given), so `00-env.md` lists a base URL for the
+   hunts' browser probes. Say in `00-env.md` what you left out.
 2. Establish the dependency environment (invariant 1) and the import proof (2).
 3. **The build, once for this commit.** With `BUILD` given, read its head SHA: when it is the
    commit under review, copy its `.output-e2e` in with `cp -al` and record `E2E_SKIP_BUILD=1` in

@@ -1110,3 +1110,335 @@ describe('a step runs the Team agent the workflow names (B9, B11, B14)', () => {
     )
   })
 })
+
+describe('the early look and the browser probes for a ticket that touches UI or starts from the human’s words', () => {
+  /** One step of a served workflow text, by its label, flattened; empty when the text has no such step. */
+  const step = (text: string, label: string) =>
+    flat(text.split(/^## \d+\. /m).find((part) => part.startsWith(`${label} `)) ?? '')
+  const project = (
+    preset: 'light' | 'standard' | 'thorough' | 'maximum',
+    complexity: 'low' | 'mid',
+    tweak: object,
+  ) =>
+    import('./workflow').then(({ renderWorkflowText }) =>
+      renderWorkflowText(resolveWorkflow(preset, tweak, complexity), {
+        source: 'project',
+        projectPreset: preset,
+        ticketId: null,
+      }),
+    )
+  const PROBES = [
+    '390 px width',
+    'Long unbroken strings',
+    'Dark mode',
+    'Keyboard focus',
+    'Slow or failed saves',
+  ]
+
+  it('defines the two kinds of ticket once, in the claim step, and the later steps point at it', async () => {
+    const text = await workflowText('standard', 'mid')
+    const definition = "**An early-look ticket** is one that touches UI or starts from the human's own words."
+    expect(flat(text).split(definition)).toHaveLength(2)
+    const claim = step(text, 'Read and claim')
+    expect(claim).toContain(definition)
+    expect(claim).toContain(
+      "It touches UI when the spec's Classification has `ui`, or, with no spec, when the diff changes what a browser renders",
+    )
+    expect(claim).toContain(
+      "It starts from the human's own words when the human wrote it, or posted or replied on it before this claim",
+    )
+    expect(claim).toContain('not when an agent created it from its own finding')
+    for (const label of ['Gate', 'Intent check'])
+      expect(step(text, label), label).toContain("an early-look ticket (the claim step's item 5)")
+  })
+
+  it('starts the preview after the first gate and before round 1, and the preview step reuses it', async () => {
+    for (const preset of WORKFLOW_PRESETS)
+      for (const complexity of ['mid', 'high'] as const) {
+        const text = await workflowText(preset, complexity)
+        const at = `${preset}/${complexity}`
+        expect(step(text, 'Gate'), at).toContain(
+          "4. **The early look**, for an early-look ticket (the claim step's item 5): once, after the first gate passes and before review round 1 starts. Start the preview of this head now, as the preview step says (its one build of this head: the preview step finds it running and reuses it)",
+        )
+        const preview = step(text, 'Preview')
+        expect(preview, at).toContain(
+          'When the gate already started it for this head (the early look, after the first gate and before round 1: the gate step says when), it runs: reuse it, take only the screenshots still missing and build nothing.',
+        )
+        expect(preview, at).toContain('never build the head twice for the preview')
+      }
+  })
+
+  it('posts the preview and screenshots on Main as a plain "Direction OK?" post, never a decision card', async () => {
+    for (const preset of WORKFLOW_PRESETS) {
+      const gate = step(await workflowText(preset, 'mid'), 'Gate')
+      expect(gate, preset).toContain(
+        'Then post them on Main as a plain post, not a decision card (an open card, even with `block: false`, reads as waiting on the human for the whole review): `post_update` with `tab: main`, `progress: false` and the screenshots in `files`, whose body opens with "Direction OK?", says what changed, gives the preview link and says that a reply under this post changes the ask.',
+      )
+      expect(gate, preset).toContain(
+        'Do not wait for an answer: the ticket stays in progress and round 1 starts at once.',
+      )
+      // An open card holds the ticket as waiting on the human, the merge and the pick-up.
+      expect(gate, preset).not.toContain('Post on Main an `ask_decision`')
+      expect(gate, preset).not.toContain('Looks right')
+      expect(gate, preset).not.toContain('reply under this card')
+    }
+    // The ticket agent's own rule that every question blocks names this post as an exception.
+    expect(flat(review('agents/todo-review-ticket.md'))).toContain(
+      'A `request_archive` card, an `ask_decision` with `block: false`, or the gate\'s early-look "Direction OK?" post on Main, is not a question you wait on: the ticket stays where it is.',
+    )
+  })
+
+  it('answers every unanswered human post on the ticket before the early look, so the post never stands in for an answer', async () => {
+    for (const preset of WORKFLOW_PRESETS) {
+      const gate = step(await workflowText(preset, 'mid'), 'Gate')
+      const answer =
+        'First answer under every post by the human on the ticket that no agent has replied to yet (a reply with the plan: `comment` with `replyTo`), so the early look never stands in for an answer.'
+      expect(gate, preset).toContain(answer)
+      expect(gate.indexOf(answer), preset).toBeLessThan(gate.indexOf('Then post them on Main'))
+    }
+  })
+
+  it('has the board skill name the early-look post among the requests that do not block', async () => {
+    for (const [name, text] of Object.entries(await boardSkills()))
+      expect(flat(text), name).toContain(
+        'The requests that say they do not block (a `request_archive` card, an `ask_decision` posted with `block: false`, or the gate\'s early-look "Direction OK?" post on Main) are not questions you wait on',
+      )
+  })
+
+  it('reads the replies under the post before each next round and hands a changed ask to the fix pass and the intent check', async () => {
+    const text = await workflowText('standard', 'mid')
+    const gate = step(text, 'Gate')
+    expect(gate).toContain(
+      "Before each next round and before the hand-off, read every reply under the post: they are the human's words, like a decision answer.",
+    )
+    expect(gate).toContain(
+      "A reply that changes the ask is handled before that round: it goes to the fix pass's brief as the human's words and to the intent check's brief",
+    )
+    expect(gate).toContain(
+      'when round 1 survived and no round follows, it gets a fix pass, the gate and one more review round',
+    )
+    expect(step(text, 'Build')).toContain(
+      'A reply under the early look\'s "Direction OK?" post that changes the ask goes in it first, as the human\'s words.',
+    )
+  })
+
+  it('asks for no early preview or direction post with the preview off, nor for a ticket with no review', async () => {
+    for (const preset of WORKFLOW_PRESETS) {
+      const off = flat(await project(preset, 'mid', { steps: { preview: { enabled: false } } }))
+      expect(off, preset).not.toContain('Direction OK?')
+      expect(off, preset).not.toContain('Start the preview of this head now')
+      expect(off, preset).not.toContain('needs-browser')
+      expect(off, preset).not.toContain('the screenshots the gate took for the early look')
+      const low = flat(await workflowText(preset, 'low'))
+      expect(low, preset).not.toContain('Direction OK?')
+      expect(low, preset).not.toContain('**The early look**')
+      expect(low, preset).not.toContain('alongside review round 1')
+    }
+    // With the preview off the round-1 intent run still runs, on the diff alone.
+    const standardOff = await project('standard', 'mid', { steps: { preview: { enabled: false } } })
+    expect(step(standardOff, 'Gate')).toContain(
+      'The preview step is turned off, so there is no preview and no direction post.',
+    )
+    expect(step(standardOff, 'Intent check')).toContain('only the diff at that head.')
+  })
+
+  it('runs the intent check alongside round 1 on the diff and the gate’s screenshots, and keeps the run before the hand-off', async () => {
+    for (const preset of ['light', 'standard'] as const) {
+      const text = await workflowText(preset, 'mid')
+      const intent = step(text, 'Intent check')
+      expect(intent, preset).toContain(
+        "For an early-look ticket (the claim step's item 5) it also runs once alongside review round 1: start it as round 1 starts, on the head the first gate passed, briefed with the human's own words (below) and only the diff at that head and the screenshots the gate took for the early look.",
+      )
+      expect(intent, preset).toContain("Its `does not match` lines go to the builder with round 1's findings")
+      expect(intent, preset).toContain('It counts toward the SECOND `does not match`.')
+      expect(intent, preset).toContain(
+        'The run after the last review round and before the hand-off still runs.',
+      )
+      expect(intent, preset).toContain(
+        'After the last review round passes (a ticket with no review: after its gate and evidence) and before every hand-off',
+      )
+      expect(intent, preset).toContain(
+        "Never give it the builder's plan, the spec, the review's findings or the options an agent put on a card: it must not inherit their reading.",
+      )
+      expect(step(text, 'Gate'), preset).toContain(
+        "The intent step's round-1 run starts with it (that step says how).",
+      )
+    }
+    // Thorough and Maximum check intent at the end of every round already: round 1's is the early one.
+    for (const preset of ['thorough', 'maximum'] as const) {
+      const text = await workflowText(preset, 'mid')
+      expect(step(text, 'Intent check'), preset).toContain(
+        "For an early-look ticket (the claim step's item 5), round 1's round-end intent check is its early check: no second run in round 1.",
+      )
+      expect(flat(text), preset).not.toContain('alongside review round 1')
+      expect(step(text, 'Gate'), preset).not.toContain('round-1 run')
+    }
+  })
+
+  it('has the intent agent file name its run alongside round 1 and its inputs, and the round in its report', () => {
+    const file = review('agents/feature-review-intent.md')
+    expect(frontmatter(file, 'description')).toContain(
+      "Runs at low effort after the last review round and before every hand-off, on every ticket, and also alongside review round 1 for a ticket that touches UI or starts from the human's own words.",
+    )
+    const input = flat(file.split('## Input')[1]!.split('## Task')[0]!)
+    expect(input).toContain(
+      "A run alongside review round 1 (for a ticket that touches UI or starts from the human's own words) gets only the diff at the head the first gate passed and the screenshots the gate took then",
+    )
+    expect(input).toContain('the run before the hand-off gets the preview of the head being handed off')
+    expect(input).toContain('Your report carries the round.')
+    expect(flat(file)).toContain('open the preview (when you were given one)')
+  })
+
+  it('has a round-1 hunt on a UI change drive a browser through the fixed probe list', () => {
+    const file = review('agents/feature-review-hunt.md')
+    const section = file.split('## Browser probes on a UI change')[1]!.split('\n## ')[0]!
+    expect(flat(section)).toContain(
+      'In round 1 (`ROUND` 1), when your sections include `ui` (a change that touches UI',
+    )
+    expect(flat(section)).toContain('the browser flag is `yes`')
+    expect(flat(section)).toContain(
+      'drive a browser against the changed pages, not only the code and unit probes',
+    )
+    // All five in one numbered list, in order.
+    const list = [...section.matchAll(/^(\d)\. \*\*([^*]+)\*\*/gm)].map((m) => [m[1], m[2]])
+    expect(list).toEqual(PROBES.map((name, i) => [String(i + 1), name]))
+    expect(flat(section)).toContain(
+      'A probe you could not run (the flag `no`, no base URL, the page unreachable) goes in your report with why.',
+    )
+    expect(flat(file)).toContain('the round (`ROUND`)')
+  })
+
+  it('lets the single reviewer start the page for the round-1 browser probes on a UI change', async () => {
+    const allowed =
+      'in round 1 of a UI change with the browser flag `yes`, to run the browser probes on the changed pages'
+    const light = flat(await workflowText('light', 'mid'))
+    expect(light).toContain(
+      `The reviewer starts a server only when reproducing a finding needs one or, ${allowed}, from the worktree, on a free port it picks, and stops it by its PID before it returns.`,
+    )
+    expect(flat(review('skills/feature-review/SKILL.md'))).toContain(
+      `Starting a server is the reviewer's own call, only when reproducing a finding needs one or, ${allowed}: it starts it itself on a free port, from the worktree`,
+    )
+    const section = review('agents/feature-review-hunt.md')
+      .split('## Browser probes on a UI change')[1]!
+      .split('\n## ')[0]!
+    expect(flat(section)).toContain(
+      'the single reviewer, whose `00-env.md` starts no servers, starts the page itself for these probes: from the worktree, on a free port, stopped by its PID before it returns',
+    )
+  })
+
+  it('has the env phase start the app in round 1 of a UI change with the browser flag yes, so the hunts get a base URL', () => {
+    const skill = flat(review('skills/feature-review/SKILL.md'))
+    const phase = skill.split('## Phase 1b: Environment')[1]!.split('## Phase 2:')[0]!
+    expect(phase).toContain('the browser flag')
+    expect(phase).toContain(
+      "no frontend when none uses `browser`, except in round 1 (`ROUND` 1) when the spec's Classification has `ui` and the browser flag is `yes`: then it also starts the app (and the frontend when `FRONTEND` is given), so `00-env.md` lists a base URL for the hunts' browser probes.",
+    )
+    expect(flat(review('agents/feature-review-env.md'))).toContain(
+      "The exception: in round 1 (the prompt's `ROUND` is 1) when the spec's Classification has `ui` and the browser flag is `yes`, also start the app (and the frontend when `FRONTEND` is given), so `00-env.md` lists a base URL for the hunts' browser probes.",
+    )
+    // ROUND reaches every phase's prompt, the env agent's among them.
+    expect(skill).toContain('the review round (`ROUND`, from `round=`, 1 when not given)')
+  })
+
+  it('gives the single reviewer the browser flag its round-1 probes depend on', () => {
+    expect(flat(review('skills/feature-review/SKILL.md'))).toContain(
+      "with prefix `_frh_`, the context pack, the focus, the diff, the checklists, `00-env.md` and the browser flag, and tell it the test slots' rule",
+    )
+  })
+
+  it('has the ui checklist and the hunt report template agree with the probe list', () => {
+    const ui = flat(review('skills/feature-review/checklists.md').split('\n## ui\n')[1]!.split('\n## ')[0]!)
+    expect(ui).toContain(
+      'the hunt\'s fixed probe list (`feature-review-hunt.md`, "Browser probes on a UI change")',
+    )
+    for (const name of PROBES) expect(ui.toLowerCase(), name).toContain(name.toLowerCase())
+    const template = flat(review('run-reports/hunt.md'))
+    expect(template).toContain('- **probes** (`probes`): on a UI change, each of the fixed browser probes')
+    for (const name of PROBES) expect(template.toLowerCase(), name).toContain(name.toLowerCase())
+    expect(template).toContain('run in a browser or not, and for each one not run, why')
+  })
+
+  it('gives a UI ticket with no review a five-minute browser probe in the gate, and no review round', async () => {
+    for (const preset of ['light', 'standard'] as const) {
+      const text = await workflowText(preset, 'low')
+      const gate = step(text, 'Gate')
+      expect(gate, preset).toContain(
+        "**A browser probe for a ticket that touches UI** (the claim step's item 5), in this gate, about five minutes and no more: on the changed pages, hover what reacts to hover, scroll each page to its end, check that sticky elements (headers, bars, toolbars) stay put and cover nothing, and repeat it all at 390 px width.",
+      )
+      expect(gate, preset).toContain('What it finds wrong goes back to the builder as a gate return.')
+      expect(text, preset).toContain('- Review - skipped')
+      expect(text, preset).not.toContain('phases=')
+      // A ticket with a review gets the round-1 hunt's probes instead.
+      expect(flat(await workflowText(preset, 'mid')), preset).not.toContain('about five minutes')
+    }
+    // With the preview off the probe runs against the app started from the worktree.
+    const off = step(await project('standard', 'low', { steps: { preview: { enabled: false } } }), 'Gate')
+    expect(off).toContain('Run it against the app started from the worktree on a free port from `PORTS`')
+  })
+
+  it('keeps probe scripts in the review folder for the next round, and keeps the worktree clean', () => {
+    const hunt = flat(review('agents/feature-review-hunt.md'))
+    expect(hunt).toContain(
+      '**Kept probes.** `WORKDIR/probes/` keeps probe scripts from one round to the next',
+    )
+    expect(hunt).toContain('Look there first: rerun each script that fits the change at this head')
+    expect(hunt).toContain('write new ones only for what they miss')
+    expect(hunt).toContain('Save a copy of each probe worth rerunning')
+    expect(hunt).toContain(
+      'Probe files in the worktree: only under your prefix, deleted before you finish (the copies in `WORKDIR/probes/` stay).',
+    )
+    expect(hunt).toContain('`git -C WORKTREE status --porcelain` must show nothing of yours.')
+    expect(hunt).not.toContain(
+      'Probe files: only inside the worktree, only under your prefix, deleted before you finish.',
+    )
+  })
+
+  it('never deletes the kept probes between rounds: the setup that recreates the review folder keeps them', async () => {
+    const skill = flat(review('skills/feature-review/SKILL.md'))
+    const recreate = [...skill.matchAll(/recreate `WORKDIR`[^.]*/g)].map((m) => m[0])
+    expect(recreate.length).toBeGreaterThan(0)
+    for (const sentence of recreate) expect(sentence).toContain('keeping only its `probes/` folder')
+    expect(flat(review('agents/feature-review-hunt.md'))).toContain(
+      "the review's setup keeps that folder when it recreates `WORKDIR`",
+    )
+    // Nothing else in the bundle or the served text removes it.
+    const texts = [
+      ...agents
+        .reviewBundlePaths()
+        .filter((p) => p.endsWith('.md'))
+        .map((p) => flat(review(p))),
+      flat(await workflowText('standard', 'mid')),
+      flat(await workflowText('maximum', 'high')),
+    ]
+    for (const text of texts) expect(text).not.toMatch(/(rm|remove|delete)[^.]{0,40}probes\//i)
+    expect(flat(await workflowText('standard', 'mid'))).toContain(
+      "It names the review's kept probe scripts (`probes/` in the review folder), which the builder reruns on its fix.",
+    )
+  })
+
+  it('has the claim step reproduce or measure a symptom on the human’s machine before any lanes, in every workflow', async () => {
+    for (const preset of WORKFLOW_PRESETS)
+      for (const complexity of COMPLEXITIES)
+        expect(
+          step(await workflowText(preset, complexity), 'Read and claim'),
+          `${preset}/${complexity}`,
+        ).toContain(
+          "6. **A symptom on the human's machine** (slow, a device, a screen size): when the ticket reports one, reproduce or measure it on that machine first, or ask the human for the measurement, before you split the work into lanes or brief any builder.",
+        )
+  })
+
+  it('names no ticket, host or private path in the bundle files it changed', () => {
+    const banned = [
+      new RegExp(`#${'\\d'}{3,}\\b`),
+      new RegExp(`localhost:${'47'}100`),
+      new RegExp(`/${'home'}/`),
+    ]
+    for (const file of [
+      'agents/feature-review-hunt.md',
+      'agents/feature-review-intent.md',
+      'skills/feature-review/checklists.md',
+      'run-reports/hunt.md',
+    ])
+      for (const pattern of banned) expect(review(file), `${file}: ${pattern}`).not.toMatch(pattern)
+  })
+})

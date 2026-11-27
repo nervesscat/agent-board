@@ -145,11 +145,12 @@ Phase 1b does for a hunt: install or reuse the dependencies inside the worktree 
 the project's own install), and write a small `00-env.md` with the test command that runs from the
 worktree (the project's own, from its runbook or scripts), the repo's `Test slots:` folders when `slots=`
 was given, and `Servers: none started`. Spawn one `feature-review-hunt` agent (the Team agent the hunt phase names in the
-project's workflow, `agents=`: by default the project's agent named `hunt`, else the built-in role) with prefix `_frh_`, the context pack, the focus, the diff, the checklists and
-`00-env.md`, and tell it the test slots' rule (a heavy run, such as an end-to-end spec, takes the first
+project's workflow, `agents=`: by default the project's agent named `hunt`, else the built-in role) with prefix `_frh_`, the context pack, the focus, the diff, the checklists,
+`00-env.md` and the browser flag, and tell it the test slots' rule (a heavy run, such as an end-to-end spec, takes the first
 free slot and releases it right after; a targeted unit test or probe takes none). It runs only targeted
 tests and probes from the worktree. Starting a server is the reviewer's own call, only when reproducing
-a finding needs one: it starts it itself on a free port, from the worktree, calls only that port, and
+a finding needs one or, in round 1 of a UI change with the browser flag `yes`, to run the browser probes
+on the changed pages: it starts it itself on a free port, from the worktree, calls only that port, and
 stops it by the PID it recorded before it returns (this replaces the hunt agent's rule that it never
 starts a server, for this plan only). Its candidates (`03-candidates.md`) are the findings: `confirmed`
 only when it reproduced one by execution, else `plausible`. The report is `review.md` in the same
@@ -176,8 +177,8 @@ checks each read `not run: single-reviewer plan`.
    Teardown step 2 does, then delete `LEFTOVER.md`; still locked, stop with the error
    "git lock on MAIN: <path>". If the claim
    is live, or `git -C MAIN worktree list` already registers `WORKTREE`, stop with the
-   error "review of <target> already in flight (see WORKDIR/CLAIM.md)" and do nothing else. Otherwise remove and recreate `WORKDIR`
-   and write `WORKDIR/CLAIM.md` with the target, the start time, and the session or
+   error "review of <target> already in flight (see WORKDIR/CLAIM.md)" and do nothing else. Otherwise remove and recreate `WORKDIR`,
+   keeping only its `probes/` folder (the hunt's kept probe scripts, rerun in the next round), and write `WORKDIR/CLAIM.md` with the target, the start time, and the session or
    runner identity. Teardown deletes the claim file last.
 2. Resolve the **commit under review** and the **base**. Run every `git fetch` here and
    in the agents with `GIT_TERMINAL_PROMPT=0` and a timeout of about two minutes: an
@@ -294,7 +295,10 @@ range, the browser flag, `FRONTEND` if given, the build record's path when `buil
 the `slots=` directory when it was given, the repo id (`repoId`) the slot folders are named with,
 the services the strategy table allows, and the output path
 `00-env.md`, with this rule: start only what the criteria's methods need: no app server when no
-criterion uses `run+http` or `browser`, no frontend when none uses `browser`. Wait for it. It
+criterion uses `run+http` or `browser`, no frontend when none uses `browser`, except in round 1
+(`ROUND` 1) when the spec's Classification has `ui` and the browser flag is `yes`: then it also
+starts the app (and the frontend when `FRONTEND` is given), so `00-env.md` lists a base URL for the
+hunts' browser probes. Wait for it. It
 installs or reuses dependencies inside the worktree (a prepared `node_modules` copied by hardlink
 with `cp -al` into a real directory, never a symlink or a junction), proves imports resolve to
 the worktree,

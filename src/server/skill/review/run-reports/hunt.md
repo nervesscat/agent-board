@@ -61,6 +61,9 @@ or counted has its own field; only what needs a sentence goes in a section.
 - **surfaces** (`surfaces`): what you covered (routes, files, layers) and what you did not, and why.
 - **candidates** (`candidates`): how each candidate was produced — a read, a probe, a test — and how
   many candidates you dropped and why each was dropped.
+- **probes** (`probes`): on a UI change, each of the fixed browser probes (390 px width, long unbroken
+  strings, dark mode, keyboard focus, slow or failed saves): run in a browser or not, and for each one
+  not run, why; and which kept probes from `WORKDIR/probes/` you reran and which you added.
 - **counts**: `counts` with `candidates` produced, `dropped`, and `kept`.
 
 ## Where it goes

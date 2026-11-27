@@ -672,6 +672,48 @@ describe('the stalled flag', () => {
     expect(summary.lostContact).toEqual([])
   })
 
+  it('keeps working past a plain post on Main, and waits on a card even with block: false', async () => {
+    const pid = newProject()
+    const post = activeTicket(pid, 'look-post')
+    const card = activeTicket(pid, 'look-card')
+    for (const t of [post, card])
+      await tool('start_span', { projectId: pid, ticketId: t.id, phase: 'review', round: 1 })
+    expect(
+      await tool('post_update', {
+        ticketId: post.id,
+        body: 'Direction OK? The list now groups by stage. A reply under this post changes the ask.',
+        tab: 'main',
+        progress: false,
+      }),
+    ).not.toHaveProperty('error')
+    expect(
+      await tool('ask_decision', {
+        ticketId: card.id,
+        body: 'Direction OK? The list now groups by stage.',
+        options: [{ label: 'Looks right' }, { label: 'Change it' }],
+        block: false,
+      }),
+    ).not.toHaveProperty('error')
+
+    const rows = (await tool('list_tickets', { projectId: pid })) as {
+      id: number
+      status: string
+      decisions: number
+      liveness: { state: string } | null
+    }[]
+    const row = (id: number) => rows.find((r) => r.id === id)!
+    expect(row(post.id)).toMatchObject({
+      status: 'in_progress',
+      decisions: 0,
+      liveness: { state: 'working' },
+    })
+    expect(row(card.id)).toMatchObject({
+      status: 'in_progress',
+      decisions: 1,
+      liveness: { state: 'waiting' },
+    })
+  })
+
   it('waits on a blocked step of its own, never on its parent’s, and says so on both reads', async () => {
     const pid = newProject()
     const parent = activeTicket(pid, 'parent')

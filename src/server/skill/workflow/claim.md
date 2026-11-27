@@ -44,3 +44,12 @@
    board's preview install, which cannot purge through one), then `pnpm install --offline` (or the
    project's offline install) only when the lockfile differs from that copy. `add_workspace` with its
    `path` and `branch` at once.
+5. **An early-look ticket** is one that touches UI or starts from the human's own words. It touches UI
+   when the spec's Classification has `ui`, or, with no spec, when the diff changes what a browser
+   renders (components, pages, routes, styles). It starts from the human's own words when the human
+   wrote it, or posted or replied on it before this claim (a `RETRY` after their comment too), not when
+   an agent created it from its own finding. Tell the second from what item 2 read, the first once the
+   spec or the diff shows it; the later steps say what such a ticket gets.
+6. **A symptom on the human's machine** (slow, a device, a screen size): when the ticket reports one,
+   reproduce or measure it on that machine first, or ask the human for the measurement, before you split
+   the work into lanes or brief any builder. Put the numbers in the brief.
