@@ -292,7 +292,7 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
 
   tool(
     'set_resume_template',
-    "Turn on, change or turn off the resume template the board runs to continue a ticket's work: when the human answers a decision card on the board or moves a ticket from blocked or review back to an active stage, the board starts one of its own templates with this project's instructions and the ticket's workflow (get_workflow). template: claude-code (Claude Code), codex-exec (Codex) or opencode-run (OpenCode); null turns it off. The board fixes the command line: there is no command to send, and the model and effort are chosen for each run (the asking run's, else the ticket's complexity). A free-text command the human set in Settings wins over the template. Returns the project's resumeTemplate, resumeTemplateBy (your name) and resumeTemplateAt.",
+    "Turn on, change or turn off the resume template the board runs to continue a ticket's work: when the human answers a decision card on the board or moves a ticket from blocked or review back to an active stage, the board starts one of its own templates with this project's instructions and the steps of the ticket. template: claude-code (Claude Code), codex-exec (Codex) or opencode-run (OpenCode); null turns it off. The board fixes the command line: there is no command to send, and the model and effort are chosen for each run (the asking run's, else the ticket's complexity). A free-text command the human set in Settings wins over the template. Returns the project's resumeTemplate, resumeTemplateBy (your name) and resumeTemplateAt.",
     {
       projectId: z.number().int(),
       template: TemplateChoice,
