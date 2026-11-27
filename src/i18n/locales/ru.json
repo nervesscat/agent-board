@@ -2233,7 +2233,6 @@
     "markDoneAnyway": "Всё равно отметить готовым",
     "mergeFirst": "Сначала влейте:\n{{list}}",
     "badge": "требует {{list}}",
-    "statusMerged": "Требует #{{id}} · влит",
     "statusNotMerged": "Требует #{{id}} · ещё не влит",
     "removeNeed": "Убрать зависимость от #{{id}}",
     "addPlaceholder": "Добавить тикет…",

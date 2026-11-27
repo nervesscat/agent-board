@@ -2044,7 +2044,6 @@
     "markDoneAnyway": "Tandai selesai saja",
     "mergeFirst": "Merge dulu:\n{{list}}",
     "badge": "butuh {{list}}",
-    "statusMerged": "Butuh #{{id}} · di-merge",
     "statusNotMerged": "Butuh #{{id}} · belum di-merge",
     "removeNeed": "Hapus kebutuhan akan #{{id}}",
     "addPlaceholder": "Tambah tiket…",

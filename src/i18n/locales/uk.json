@@ -2233,7 +2233,6 @@
     "markDoneAnyway": "Усе одно позначити готовим",
     "mergeFirst": "Спершу злийте:\n{{list}}",
     "badge": "потрібно {{list}}",
-    "statusMerged": "Потрібен #{{id}} · злито",
     "statusNotMerged": "Потрібен #{{id}} · ще не злито",
     "removeNeed": "Прибрати залежність від #{{id}}",
     "addPlaceholder": "Додати тікет…",

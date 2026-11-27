@@ -2107,7 +2107,6 @@
     "markDoneAnyway": "எப்படியும் முடிந்ததாகக் குறி",
     "mergeFirst": "முதலில் merge செய்:\n{{list}}",
     "badge": "தேவை: {{list}}",
-    "statusMerged": "தேவை #{{id}} · merge ஆனது",
     "statusNotMerged": "தேவை #{{id}} · இன்னும் merge ஆகவில்லை",
     "removeNeed": "#{{id}} தேவையை நீக்கு",
     "addPlaceholder": "ticket சேர்…",

@@ -2107,7 +2107,6 @@
     "markDoneAnyway": "फिर भी पूर्ण चिह्नित करें",
     "mergeFirst": "पहले merge करें:\n{{list}}",
     "badge": "{{list}} पर निर्भर",
-    "statusMerged": "#{{id}} पर निर्भर · merge हुआ",
     "statusNotMerged": "#{{id}} पर निर्भर · अभी merge नहीं",
     "removeNeed": "#{{id}} की निर्भरता हटाएँ",
     "addPlaceholder": "ticket जोड़ें…",

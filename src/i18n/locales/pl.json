@@ -2233,7 +2233,6 @@
     "markDoneAnyway": "Oznacz jako gotowe mimo to",
     "mergeFirst": "Najpierw scal:\n{{list}}",
     "badge": "wymaga {{list}}",
-    "statusMerged": "Wymaga #{{id}} · scalone",
     "statusNotMerged": "Wymaga #{{id}} · jeszcze nie scalone",
     "removeNeed": "Usuń zależność od #{{id}}",
     "addPlaceholder": "Dodaj zgłoszenie…",

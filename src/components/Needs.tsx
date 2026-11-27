@@ -64,24 +64,25 @@ export function NeedsBadge({ needs, className }: { needs: Need[]; className?: st
   )
 }
 
-/** The ticket page's header: each need, "not merged yet" (amber) or "merged" (green), linking to it. */
+/**
+ * The ticket page's header: each need not merged yet, in amber, linking to it. A merged need shows
+ * nothing here: the warning is the only thing the header says.
+ */
 export function NeedsStatus({ t }: { t: TicketFull }) {
   const { t: tr } = useTranslation()
-  return t.needs.map((n) => (
-    <Tip key={n.id} content={needTitle(n)}>
-      <Link
-        to="/projects/$id/features/$ticketId"
-        params={{ id: String(t.projectId), ticketId: String(n.id) }}
-        className={cn(
-          'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs hover:underline',
-          n.merged ? GREEN : AMBER,
-        )}
-      >
-        <GitMerge className="size-3.5" />{' '}
-        {tr(n.merged ? 'needs.statusMerged' : 'needs.statusNotMerged', { id: n.id })}
-      </Link>
-    </Tip>
-  ))
+  return t.needs
+    .filter((n) => !n.merged)
+    .map((n) => (
+      <Tip key={n.id} content={needTitle(n)}>
+        <Link
+          to="/projects/$id/features/$ticketId"
+          params={{ id: String(t.projectId), ticketId: String(n.id) }}
+          className={cn('inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs hover:underline', AMBER)}
+        >
+          <GitMerge className="size-3.5" /> {tr('needs.statusNotMerged', { id: n.id })}
+        </Link>
+      </Tip>
+    ))
 }
 
 /**

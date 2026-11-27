@@ -2107,7 +2107,6 @@
     "markDoneAnyway": "तरीही पूर्ण करा",
     "mergeFirst": "आधी merge करा:\n{{list}}",
     "badge": "हवे {{list}}",
-    "statusMerged": "#{{id}} हवा · merge झाला",
     "statusNotMerged": "#{{id}} हवा · अजून merge नाही",
     "removeNeed": "#{{id}} ची गरज काढा",
     "addPlaceholder": "ticket जोडा…",

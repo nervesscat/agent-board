@@ -2107,7 +2107,6 @@
     "markDoneAnyway": "Yine de bitti olarak işaretle",
     "mergeFirst": "Önce merge et:\n{{list}}",
     "badge": "bağımlı: {{list}}",
-    "statusMerged": "Bağımlı #{{id}} · merge edildi",
     "statusNotMerged": "Bağımlı #{{id}} · henüz merge edilmedi",
     "removeNeed": "#{{id}} bağımlılığını kaldır",
     "addPlaceholder": "Ticket ekle…",
