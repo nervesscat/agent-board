@@ -46,7 +46,7 @@ export function orderBatch(entries) {
     throw new BatchError('the batch is empty', { code: 'input' })
   const byPr = new Map()
   for (const e of entries) {
-    if (!e || !Number.isInteger(e.pr) || typeof e.branch !== 'string' || !/^\w[\w./-]*$/.test(e.branch))
+    if (!e || !Number.isInteger(e.pr) || typeof e.branch !== 'string' || !/^\w[\w./+@#%-]*$/.test(e.branch))
       throw new BatchError(`an entry needs an integer pr and a branch: ${JSON.stringify(e)}`, {
         code: 'input',
       })

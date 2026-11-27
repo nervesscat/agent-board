@@ -422,4 +422,17 @@ describe('hardening', () => {
     expect(thrownBy(() => orderBatch([{ pr: 1, branch: '-x' }]))).toMatchObject({ code: 'input' })
     expect(thrownBy(() => parseArgs(['batch.json', '--remote', '-x']))).toMatchObject({ code: 'input' })
   })
+
+  it('accepts the branch names git accepts that a branch commonly has, such as + @ # and %', () => {
+    const names = ['feat+x', 'x@y', 'fix#1', 'a%b', 'fix/x', 'dependabot/npm_and_yarn/x']
+    const ordered = orderBatch(names.map((branch, i) => ({ pr: i + 1, branch })))
+    expect(ordered.map((e) => e.branch)).toEqual(names)
+  })
+
+  it('merges a branch whose name carries a + into the train', () => {
+    const { work } = fixture()
+    branch(work, 'feat+x', { 'plus.txt': 'x\n' })
+    const built = buildTrain({ repo: work, entries: [{ pr: 15, branch: 'feat+x' }] })
+    expect(built.merged).toEqual([expect.objectContaining({ pr: 15, branch: 'feat+x' })])
+  })
 })
