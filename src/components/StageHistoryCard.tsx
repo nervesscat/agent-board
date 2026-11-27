@@ -72,14 +72,16 @@ export function StageHistoryCard({ t, onChange }: { t: TicketFull; onChange: () 
       {t.stageHistory.length === 0 && unmatched.length === 0 ? (
         <p className="text-sm text-muted-foreground">{tr('stageHistory.empty')}</p>
       ) : (
+        // Each row's time sits in a span of its own: the Activity feed's rows are the page's lists whose
+        // items start with a <time>, and these are not rows of it.
         <ol className="space-y-1.5 text-xs" aria-label={tr('stageHistory.moves')}>
           {t.stageHistory.map((e) => {
             const back = sendBackOf.get(e.id)
             return (
               <li key={e.id} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                <time dateTime={e.at} className="shrink-0 font-mono text-muted-foreground tabular-nums">
-                  {stamp(e.at)}
-                </time>
+                <span className="shrink-0 font-mono text-muted-foreground tabular-nums">
+                  <time dateTime={e.at}>{stamp(e.at)}</time>
+                </span>
                 <span className="min-w-0 break-words">
                   {e.from
                     ? tr('stageHistory.moved', { from: stageName(e.from), to: stageName(e.to) })
@@ -103,9 +105,9 @@ export function StageHistoryCard({ t, onChange }: { t: TicketFull; onChange: () 
           })}
           {unmatched.map((b) => (
             <li key={`b${b.id}`} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              <time dateTime={b.at} className="shrink-0 font-mono text-muted-foreground tabular-nums">
-                {stamp(b.at)}
-              </time>
+              <span className="shrink-0 font-mono text-muted-foreground tabular-nums">
+                <time dateTime={b.at}>{stamp(b.at)}</time>
+              </span>
               <span className="min-w-0 break-words">
                 {tr('stageHistory.moved', { from: stageName(b.from), to: stageName(b.to) })}
               </span>
