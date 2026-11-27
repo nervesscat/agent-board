@@ -1308,7 +1308,9 @@ api.get('/api/resume/templates', () => json(templateTools()))
 // a template is fixed code, and only free text stays the human's (PATCH /api/projects/:id refuses it to them).
 api.put('/api/projects/:id/resume-template', async ({ request, params, actor }) => {
   const body = await readJson(request, ResumeTemplateBody)
-  return json(projects.seenBy(projects.setResumeTemplate(id(params), body.template, actor), isAgent(request)))
+  const projectId = id(params)
+  projects.assertMayPickTemplate(projectId, actor, isAgent(request))
+  return json(projects.seenBy(projects.setResumeTemplate(projectId, body.template, actor), isAgent(request)))
 })
 // Every run of every repo of the ticket, each with the workspace it runs from, its state and why it
 // would not start; Start all and Stop all (repoId: one repo's only) answer each run's outcome.

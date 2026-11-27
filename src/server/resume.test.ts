@@ -1252,6 +1252,36 @@ describe('resume templates: the command the board runs', () => {
     })
   })
 
+  it('an agent turns a template on only for a project it has a ticket in; the human may on any', async () => {
+    const other = dbm.db.insert(dbm.schema.projects).values({ name: 'elsewhere' }).returning().get().id
+    dbm.db
+      .insert(dbm.schema.repos)
+      .values({ projectId: other, name: 'elsewhere', repoPath: path.join(tmp, 'repo') })
+      .run()
+    const put = (as: 'human' | 'agent', template: string | null) =>
+      call('PUT', `/api/projects/${other}/resume-template`, { template }, as)
+    const templateOf = async () => (await call('GET', `/api/projects/${other}`)).body.resumeTemplate
+
+    // (c) the human, with no ticket of anyone's there yet
+    expect((await put('human', 'opencode-run')).status).toBe(200)
+    expect(await templateOf()).toBe('opencode-run')
+
+    // (b) an agent with no ticket in the project: refused, and nothing changes
+    const refused = await put('agent', 'codex-exec')
+    expect(refused.status).toBe(403)
+    expect(refused.body).toMatchObject({
+      error: 'an agent may turn resume on only for a project it works on',
+    })
+    expect(await templateOf()).toBe('opencode-run')
+
+    // (a) once a ticket of the project is assigned to the agent, the agent may
+    features.createTicket(other, { title: 'Work here', status: 'in_progress', assignee: AGENT }, AGENT)
+    const allowed = await put('agent', 'codex-exec')
+    expect(allowed.status).toBe(200)
+    expect(allowed.body).toMatchObject({ resumeTemplate: 'codex-exec', resumeTemplateBy: AGENT })
+    expect(await templateOf()).toBe('codex-exec')
+  })
+
   it("an agent never reads the human's free-text command, and learns only that one is set", async () => {
     const secret = 'deploy-tool --token=SECRET_VALUE_1'
     setCommand(secret)

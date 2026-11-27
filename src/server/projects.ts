@@ -357,6 +357,20 @@ export function updateProject(
  * Picks the resume template the board runs for the project (`null` or '' is off), and records who picked it
  * and when. Free text (resumeCommand) is not touched: a command set by the human wins over the template.
  */
+/**
+ * An agent turns resume on only for a project it works on: one with a ticket assigned to it. The human is
+ * not limited. Called before setResumeTemplate by the REST route and the MCP tool, which know the caller.
+ */
+export function assertMayPickTemplate(projectId: number, actor: string, agent: boolean) {
+  if (!agent) return
+  const mine = db
+    .select({ id: schema.tickets.id })
+    .from(schema.tickets)
+    .where(and(eq(schema.tickets.projectId, projectId), eq(schema.tickets.assignee, actor)))
+    .get()
+  if (!mine) throw new HttpError(403, 'an agent may turn resume on only for a project it works on')
+}
+
 export function setResumeTemplate(id: number, template: string | null, actor: string) {
   return updateProject(
     id,
