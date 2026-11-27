@@ -350,14 +350,55 @@ describe('pushes never replace a train', () => {
     git(work, 'add', '-A')
     git(work, 'commit', '-q', '-m', 'dev adds a migration with no journal entry')
     git(work, 'push', '-q', 'origin', 'dev')
-    branch(work, 'adds-migration', { 'drizzle/0002_a.sql': 'select 2;\n' })
+    // The entry changes a migration's text and adds no failure of its own.
+    branch(work, 'edits-migration', { 'drizzle/0000_init.sql': 'select 1; -- reviewed\n' })
 
-    const err = thrownBy(() => buildTrain({ repo: work, entries: [{ pr: 13, branch: 'adds-migration' }] }))
+    const err = thrownBy(() => buildTrain({ repo: work, entries: [{ pr: 13, branch: 'edits-migration' }] }))
     expect(err).toMatchObject({ code: 'migrations' })
     expect(err.pr).toBeUndefined()
     expect(err.message).toContain('dev itself does not check')
     expect(err.message).toContain('0001_base.sql: no journal entry')
     expect(err.message).not.toContain('drop PR')
+  })
+
+  it('names the entry that adds a failure when the base already fails, even after an entry repairs the base', () => {
+    const { work } = fixture()
+    fs.writeFileSync(path.join(work, 'drizzle', '0001_base.sql'), 'select 3;\n')
+    git(work, 'add', '-A')
+    git(work, 'commit', '-q', '-m', 'dev adds a migration with no journal entry')
+    git(work, 'push', '-q', 'origin', 'dev')
+    branch(work, 'journals-base-migration', {
+      'drizzle/meta/_journal.json': journal([
+        ['0000_init', 0, 1],
+        ['0001_base', 1, 2],
+      ]),
+    })
+    branch(work, 'adds-bad-migration', { 'drizzle/0002_a.sql': 'select 2;\n' })
+
+    const err = thrownBy(() =>
+      buildTrain({
+        repo: work,
+        entries: [
+          { pr: 14, branch: 'journals-base-migration' },
+          { pr: 15, branch: 'adds-bad-migration' },
+        ],
+      }),
+    )
+    expect(err).toMatchObject({ code: 'migrations', pr: 15 })
+    expect(err.message).toContain('drop PR #15 (adds-bad-migration)')
+  })
+
+  it('names the entry that deletes the migrations folder', () => {
+    const { work } = fixture()
+    git(work, 'checkout', '-q', '-b', 'removes-drizzle', 'dev')
+    git(work, 'rm', '-q', '-r', 'drizzle')
+    git(work, 'commit', '-q', '-m', 'remove the migrations folder')
+    git(work, 'push', '-q', 'origin', 'removes-drizzle')
+    git(work, 'checkout', '-q', 'dev')
+
+    const err = thrownBy(() => buildTrain({ repo: work, entries: [{ pr: 16, branch: 'removes-drizzle' }] }))
+    expect(err).toMatchObject({ code: 'migrations', pr: 16 })
+    expect(err.message).toContain('the batch removes the migrations folder')
   })
 
   it('accepts a batch whose migrations repair a base that does not check', () => {

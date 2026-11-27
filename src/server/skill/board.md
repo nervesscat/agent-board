@@ -800,7 +800,7 @@ check named on it. When the script itself refuses a batch, the same rule applies
 PR that conflicts with the train built so far (exit code 3) is taken out and says on its ticket that it must
 be rebased on the base. Exit code 1 is not a refusal of the batch: git or the environment failed, so the message
 is read and the batch is not bisected. A batch whose migrations do not check (exit code 4) drops the entry the script names,
-the newest one that touches the migrations folder. When the script names no entry, the base itself fails the check:
+the newest one that touches the migrations folder. A batch that removes the migrations folder is named the same way. When the script names no entry, the base itself fails the check and the batch adds no failure of its own:
 no entry of the batch can be dropped, so the batch stops and the ticket says so for the human.
 
 Migrations are not renumbered by the script. Two PRs that add a migration with the same number conflict in the

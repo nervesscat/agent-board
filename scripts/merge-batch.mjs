@@ -17,8 +17,8 @@
 // is wrong (an unreadable or malformed batch file, a missing file name, a bad needs list); 3 a pull request
 // conflicts with the train built so far
 // (drop it, or rebase it onto the base, then run again); 4 the migrations do not check on the train (drop
-// the newest entry named in the message, then run again; when the base itself fails its migration check,
-// no entry is named and the base must be fixed first).
+// the newest entry named in the message, then run again; when the base itself fails its migration check and
+// the batch adds no failure of its own, no entry is named and the base must be fixed first).
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -131,9 +131,10 @@ export function buildTrain({ repo, remote = 'origin', base = 'dev', entries }) {
   try {
     git(repo, ['worktree', 'add', '--detach', tree, baseHead])
     const drizzle = path.join(tree, 'drizzle')
-    // The base's own migrations, read before anything is merged. When the train fails as well, the base is at
-    // fault and no entry of the batch is named to drop.
-    const baseProblems = fs.existsSync(drizzle) ? checkMigrations(drizzle) : []
+    const hadMigrations = fs.existsSync(drizzle)
+    // The base's own migrations, read before anything is merged, so a failure the base already has can be told
+    // apart from one a batch entry adds.
+    const baseProblems = hadMigrations ? checkMigrations(drizzle) : []
     const merged = []
     for (const e of ordered) {
       git(tree, ['fetch', remote, `refs/heads/${e.branch}`])
@@ -164,27 +165,32 @@ export function buildTrain({ repo, remote = 'origin', base = 'dev', entries }) {
       }
       merged.push({ pr: e.pr, branch: e.branch, sha })
     }
-    if (fs.existsSync(drizzle)) {
-      const problems = checkMigrations(drizzle)
-      if (problems.length > 0) {
-        if (baseProblems.length > 0) {
-          throw new BatchError(
-            `the migrations do not check on the train: ${problems.join('; ')}; ${base} itself does not check ` +
-              `(${baseProblems.join('; ')}), so no entry of the batch is named: fix ${base} first`,
-            { code: 'migrations' },
-          )
-        }
-        // Blame the newest entry that touches the migrations folder: it is the one to drop.
-        const touching = ordered.filter((e) => touchesMigrations(tree, baseHead, e.branch, remote))
-        const blame = touching.at(-1)
+    // A batch that removes the migrations folder fails the check too: the folder's absence is a problem.
+    const problems = fs.existsSync(drizzle)
+      ? checkMigrations(drizzle)
+      : hadMigrations
+        ? ['drizzle/ is missing from the train (the batch removes the migrations folder)']
+        : []
+    if (problems.length > 0) {
+      const inBase = new Set(baseProblems)
+      if (problems.every((p) => inBase.has(p))) {
+        // The batch adds no failure of its own: the base is at fault, and no entry is named to drop.
         throw new BatchError(
-          `the migrations do not check on the train: ${problems.join('; ')}` +
-            (blame
-              ? `; drop PR #${blame.pr} (${blame.branch}), the newest entry that touches the migrations`
-              : `; no entry of the batch touches the migrations, so nothing in the batch can be dropped`),
-          { code: 'migrations', pr: blame?.pr },
+          `the migrations do not check on the train: ${problems.join('; ')}; ${base} itself does not check ` +
+            `and the batch adds no failure to that, so no entry of the batch is named: fix ${base} first`,
+          { code: 'migrations' },
         )
       }
+      // Blame the newest entry that touches the migrations folder: it is the one to drop.
+      const touching = ordered.filter((e) => touchesMigrations(tree, baseHead, e.branch, remote))
+      const blame = touching.at(-1)
+      throw new BatchError(
+        `the migrations do not check on the train: ${problems.join('; ')}` +
+          (blame
+            ? `; drop PR #${blame.pr} (${blame.branch}), the newest entry that touches the migrations`
+            : `; no entry of the batch touches the migrations, so nothing in the batch can be dropped`),
+        { code: 'migrations', pr: blame?.pr },
+      )
     }
     return { head: git(tree, ['rev-parse', 'HEAD']), base: baseHead, merged }
   } finally {
