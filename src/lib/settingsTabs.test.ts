@@ -32,6 +32,10 @@ describe('tabOwning', () => {
     expect(tabOwning('post-12')).toBeUndefined()
   })
 
+  it('places the waiting-too-long setting on the project tab, so its link opens there', () => {
+    expect(tabOwning('waiting-too-long')).toBe('project')
+  })
+
   it('has no section on both tabs', () => {
     const all = [...SETTINGS_SECTIONS.board, ...SETTINGS_SECTIONS.project]
     expect(new Set(all).size).toBe(all.length)
