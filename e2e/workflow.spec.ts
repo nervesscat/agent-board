@@ -110,16 +110,16 @@ test('Workflow is a menu page like the others: hideable in the layout, not locke
   await open(page, project.id)
 })
 
-test('the page offers the four presets with their descriptions, and picking one shows its graph without making it active (F2)', async ({
+test('the page offers the five presets with their descriptions, and picking one shows its graph without making it active (F2)', async ({
   page,
   project,
   human,
 }) => {
   await open(page, project.id)
   const presets = page.getByRole('group', { name: 'Workflow presets' })
-  await expect(presets.getByRole('button')).toHaveCount(4)
+  await expect(presets.getByRole('button')).toHaveCount(5)
   const buttons = presets.getByRole('button')
-  for (const [i, name] of ['Light', 'Standard', 'Thorough', 'Maximum'].entries())
+  for (const [i, name] of ['Light', 'Standard', 'Thorough', 'Maximum', 'Content'].entries())
     await expect(buttons.nth(i)).toContainText(name)
   await expect(buttons.nth(0)).toContainText('no spec agent, no environment, no separate hunts')
   await expect(buttons.nth(1)).toContainText('The full cycle')

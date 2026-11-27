@@ -12,7 +12,7 @@ import { cn } from '#/lib/utils'
 type Preset = WorkflowOverview['presets'][number]
 
 /**
- * The four presets, lightest to heaviest, then the project's own workflows, as a row of cards: its name, a line
+ * The presets, the four built-in ones lightest to heaviest and then Content, then the project's own workflows, as a row of cards: its name, a line
  * on what it is (a custom one says which preset it was copied from), whether it is the project's Active one and
  * whether the human Tweaked it. Picking one shows its graph; it does not make it active. `extra` (the "New
  * workflow" button) sits under the cards.

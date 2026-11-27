@@ -15,7 +15,7 @@ const HINT =
 
 /**
  * The workflows a project offers, as the Workflow page's overview lists them (the same query, so a change on
- * the page shows here): the four presets, then the project's own. Before it loads, the four presets.
+ * the page shows here): the presets, then the project's own. Before it loads, the presets.
  */
 export function useWorkflowChoices(projectId: number | string) {
   const { data } = useQuery({
@@ -23,8 +23,8 @@ export function useWorkflowChoices(projectId: number | string) {
     queryFn: () => get<WorkflowOverview>(`/api/projects/${projectId}/workflow`),
   })
   const choices = data
-    ? data.presets.map((p) => ({ id: p.id, label: p.label, custom: p.custom !== null }))
-    : WORKFLOW_PRESET_LIST.map((p) => ({ id: p.id, label: p.label, custom: false }))
+    ? data.presets.map((p) => ({ id: p.id, label: p.label, custom: p.custom !== null, pickable: p.pickable }))
+    : WORKFLOW_PRESET_LIST.map((p) => ({ id: p.id, label: p.label, custom: false, pickable: p.pickable }))
   const active = data?.active ?? DEFAULT_WORKFLOW_PRESET
   const labelOf = (id: string) => choices.find((c) => c.id === id)?.label ?? null
   return {
@@ -45,9 +45,10 @@ export function useWorkflowChoices(projectId: number | string) {
 }
 
 /**
- * A ticket's workflow, picked: the project's own first (named with the workflow it is now), then the four
- * presets and the project's own workflows. `value` is the ticket's own workflow, null when it follows the
- * project's (or when the one it named was deleted, which shows as such); `onChange` gets the same.
+ * A ticket's workflow, picked: the project's own first (named with the workflow it is now), then the presets
+ * a ticket can pick and the project's own workflows. A preset that is not pickable (Content) is offered only
+ * as the ticket's current pick. `value` is the ticket's own workflow, null when it follows the project's (or
+ * when the one it named was deleted, which shows as such); `onChange` gets the same.
  */
 export function WorkflowSelect({
   id,
@@ -68,7 +69,7 @@ export function WorkflowSelect({
   const pick = pickOf(value)
   const items: Record<string, string> = {
     [PROJECT]: `Project's workflow (${activeLabel})`,
-    ...Object.fromEntries(choices.map((c) => [c.id, c.label])),
+    ...Object.fromEntries(choices.filter((c) => c.pickable || c.id === value).map((c) => [c.id, c.label])),
     // A workflow that was deleted stays in the list so the ticket's pick can be read, and shows what it does now.
     ...(pick.kind === 'deleted' ? { [DELETED]: "Deleted workflow (follows the project's)" } : {}),
   }

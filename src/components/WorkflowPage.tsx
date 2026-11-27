@@ -11,6 +11,7 @@ import {
   RenameWorkflowDialog,
 } from '#/components/WorkflowCustom'
 import { ComplexityPicker, PresetSwitcher } from '#/components/WorkflowPresets'
+import { TagMap } from '#/components/WorkflowTags'
 import { WhatAgentsRead, readsKey } from '#/components/WorkflowReads'
 import { WorkflowGraph } from '#/components/WorkflowGraph'
 import { IdlePanel, SheetPanel, SidePanel, type WorkflowEdits } from '#/components/WorkflowPanel'
@@ -84,7 +85,7 @@ function useWide(): boolean {
 }
 
 /**
- * The Workflow page: the four presets, and the one shown as a vertical graph of the steps a ticket's agent runs.
+ * The Workflow page: the presets, and the one shown as a vertical graph of the steps a ticket's agent runs.
  * A node opens its settings beside the graph (a sheet on a phone): the Team agent of each node, and of a step
  * its effort, switch and place in the order, of the review its round counts. The complexity picked decides what
  * the graph shows (a low ticket skips steps and gets no review). Every change saves at once, one after another,
@@ -307,6 +308,8 @@ export function WorkflowPage({
           />
         }
       />
+
+      <TagMap tags={data.tags} presets={data.presets} />
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <ComplexityPicker value={complexity} onChange={onComplexity} />

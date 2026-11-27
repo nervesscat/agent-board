@@ -51,14 +51,14 @@ test('a workflow made from a preset sits after the four cards, with its steps an
   human,
 }) => {
   await open(page, project.id)
-  await expect(cards(page).getByRole('button')).toHaveCount(4)
+  await expect(cards(page).getByRole('button')).toHaveCount(5)
   const id = await create(page, 'Our flow', 'Light')
   const buttons = cards(page).getByRole('button')
-  await expect(buttons).toHaveCount(5)
-  await expect(buttons.nth(4)).toContainText('Our flow')
-  await expect(buttons.nth(4)).toContainText('Custom')
-  await expect(buttons.nth(4)).toContainText('copied from Light')
-  await expect(buttons.nth(4)).toHaveAttribute('aria-pressed', 'true')
+  await expect(buttons).toHaveCount(6)
+  await expect(buttons.nth(5)).toContainText('Our flow')
+  await expect(buttons.nth(5)).toContainText('Custom')
+  await expect(buttons.nth(5)).toContainText('copied from Light')
+  await expect(buttons.nth(5)).toHaveAttribute('aria-pressed', 'true')
   // Its graph is Light's: no spec step, one reviewer.
   expect(await labels(page)).toEqual([
     'Read and claim',
@@ -347,7 +347,7 @@ test('the project follows a workflow of its own, a ticket names one, and deletin
   await page.getByRole('alertdialog').getByRole('button', { name: 'Delete workflow' }).click()
   await expect(page.locator('[data-workflow-notice]')).toContainText('was deleted')
   await expect(page.locator('[data-workflow-notice]')).toContainText('Standard')
-  await expect(cards(page).getByRole('button')).toHaveCount(4)
+  await expect(cards(page).getByRole('button')).toHaveCount(5)
   await expect(cards(page).locator('[data-preset="standard"]')).toContainText('Active')
   const after = await overview(human, project.id)
   expect([after.active, after.fellBack]).toEqual(['standard', { id }])
