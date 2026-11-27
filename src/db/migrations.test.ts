@@ -7,6 +7,8 @@ import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { afterAll, describe, expect, it } from 'vitest'
 
+import { applyMigrations, MIGRATIONS_SEEN, upgradeLegacyMarker } from './migrate'
+
 /**
  * Migrations that move data, run against a database that has rows: migrate a fresh one up to the
  * migration before, write rows the way the board wrote them then, and apply the rest.
@@ -2395,5 +2397,287 @@ describe('0064_approved_kind', () => {
     expect(changed(3)).toEqual([])
     // A ticket keeps its stage.
     expect(sqlite.prepare('SELECT status FROM tickets').all()).toEqual([{ status: 'release' }])
+  })
+})
+
+/**
+ * The loader (./migrate.ts) on folders of its own: ./drizzle copied to a temp folder, with entries added after
+ * it. A new entry is a file and a journal entry; its `when` is given, not the generate time.
+ */
+interface Extra {
+  tag: string
+  when: number
+  sql: string
+}
+
+/** A copy of ./drizzle up to `lastTag`, with `extra` appended to its journal in the given order. */
+function folderWith(lastTag: string, extra: Extra[] = []) {
+  const dir = migrationsUpTo(lastTag)
+  const journalPath = path.join(dir, 'meta', '_journal.json')
+  const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8')) as {
+    entries: { idx: number; version: string; when: number; tag: string; breakpoints: boolean }[]
+  }
+  for (const e of extra) {
+    fs.writeFileSync(path.join(dir, `${e.tag}.sql`), e.sql)
+    journal.entries.push({
+      idx: journal.entries.length,
+      version: '6',
+      when: e.when,
+      tag: e.tag,
+      breakpoints: true,
+    })
+  }
+  fs.writeFileSync(journalPath, JSON.stringify(journal))
+  return dir
+}
+
+const journalOf = (dir: string) =>
+  (
+    JSON.parse(fs.readFileSync(path.join(dir, 'meta', '_journal.json'), 'utf8')) as {
+      entries: { tag: string; when: number }[]
+    }
+  ).entries
+
+/** The `when` values recorded as applied, in the order they were recorded. */
+const recorded = (sqlite: Database.Database) =>
+  (
+    sqlite.prepare('SELECT created_at FROM __drizzle_migrations ORDER BY rowid').all() as {
+      created_at: number
+    }[]
+  ).map((r) => Number(r.created_at))
+
+const userTables = (sqlite: Database.Database) =>
+  (
+    sqlite
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != '__drizzle_migrations' ORDER BY name",
+      )
+      .all() as { name: string }[]
+  ).map((t) => t.name)
+
+const rowCounts = (sqlite: Database.Database, tables: string[]) =>
+  Object.fromEntries(
+    tables.map((t) => [t, (sqlite.prepare(`SELECT count(*) AS n FROM "${t}"`).get() as { n: number }).n]),
+  )
+
+const lastWhen = () => journalOf(folder).at(-1)!.when
+const LAST = '0066_drop_workflow_instruction_edits'
+
+describe('applyMigrations on a database at 0056', () => {
+  it('applies the entries it does not have, once each, and keeps the rows of the tables it had', () => {
+    const dir = folderWith(LAST)
+    const sqlite = databaseAt('0056_closed_by_approval')
+    sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('kept')
+    const tables = userTables(sqlite)
+    const before = rowCounts(sqlite, tables)
+    expect(recorded(sqlite)).toHaveLength(57)
+
+    const applied = applyMigrations(sqlite, dir)
+
+    expect(applied.map((m) => m.tag)).toEqual(
+      journalOf(dir)
+        .slice(57)
+        .map((e) => e.tag),
+    )
+    expect(applied.map((m) => m.when)).toEqual(
+      journalOf(dir)
+        .slice(57)
+        .map((e) => e.when),
+    )
+    expect(applied).toHaveLength(10)
+    expect(recorded(sqlite)).toEqual(journalOf(dir).map((e) => e.when))
+    const afterFirst = rowCounts(sqlite, tables)
+    expect(afterFirst.projects).toBe(before.projects)
+    expect(sqlite.prepare('SELECT name FROM projects').all()).toEqual([{ name: 'kept' }])
+
+    // A second run applies nothing: no statement runs again, so no table's row count changes.
+    expect(applyMigrations(sqlite, dir)).toEqual([])
+    expect(recorded(sqlite)).toHaveLength(journalOf(dir).length)
+    expect(rowCounts(sqlite, tables)).toEqual(afterFirst)
+  })
+
+  it('leaves a database drizzle migrated to 0056 readable by the loader without a change to its table', () => {
+    const dir = folderWith(LAST)
+    const sqlite = databaseAt('0056_closed_by_approval')
+    const columnsBefore = columns(sqlite, '__drizzle_migrations')
+    applyMigrations(sqlite, dir)
+    expect(columns(sqlite, '__drizzle_migrations')).toEqual(columnsBefore)
+    expect(columnsBefore).toEqual(['id', 'hash', 'created_at'])
+  })
+})
+
+describe('upgradeLegacyMarker', () => {
+  const TAG_0055 = '0055_project_kinds'
+  const TAG_0056 = '0056_closed_by_approval'
+
+  const markerOf = (sqlite: Database.Database) =>
+    JSON.parse(
+      (sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(MIGRATIONS_SEEN) as { value: string })
+        .value,
+    )
+
+  it('turns an old alert marker into the new shape before the loader, so the migrations it applies stay unannounced', () => {
+    const dir = folderWith(LAST)
+    const sqlite = databaseAt(TAG_0056)
+    // The marker is the 0055 time: 0056 is newer than what the old build had announced, so it is not announced either.
+    const at = journalOf(dir).find((e) => e.tag === TAG_0055)!.when
+    sqlite
+      .prepare('INSERT INTO settings (key, value) VALUES (?, ?)')
+      .run(MIGRATIONS_SEEN, JSON.stringify({ at }))
+    const beforeLoader = recorded(sqlite)
+    const announced = beforeLoader.filter((when) => when <= at)
+    expect(announced.length).toBeGreaterThan(0)
+    expect(announced.length).toBeLessThan(beforeLoader.length)
+
+    upgradeLegacyMarker(sqlite)
+    expect(markerOf(sqlite)).toEqual({ at, announced })
+
+    applyMigrations(sqlite, dir)
+    expect(recorded(sqlite)).toEqual(journalOf(dir).map((e) => e.when))
+    // 0056 to 0066 were applied by the boot after the marker: none of them is announced.
+    expect(markerOf(sqlite)).toEqual({ at, announced })
+    // A second upgrade leaves the new shape alone.
+    upgradeLegacyMarker(sqlite)
+    expect(markerOf(sqlite)).toEqual({ at, announced })
+  })
+
+  it('announces only the migrations at or before the marker time, so a newer row keeps its alert', () => {
+    const sqlite = new Database(':memory:')
+    sqlite.exec(
+      'CREATE TABLE settings (key text PRIMARY KEY, value text NOT NULL); CREATE TABLE "__drizzle_migrations" (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric);',
+    )
+    for (const when of [100, 200, 300]) {
+      sqlite.prepare('INSERT INTO "__drizzle_migrations" (hash, created_at) VALUES (?, ?)').run('h', when)
+    }
+    sqlite
+      .prepare('INSERT INTO settings (key, value) VALUES (?, ?)')
+      .run(MIGRATIONS_SEEN, JSON.stringify({ at: 200 }))
+
+    upgradeLegacyMarker(sqlite)
+    expect(markerOf(sqlite)).toEqual({ at: 200, announced: [100, 200] })
+  })
+
+  it('leaves a marker whose value is not JSON as it is, and does not throw', () => {
+    const sqlite = new Database(':memory:')
+    sqlite.exec(
+      'CREATE TABLE settings (key text PRIMARY KEY, value text NOT NULL); CREATE TABLE "__drizzle_migrations" (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric);',
+    )
+    sqlite.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(MIGRATIONS_SEEN, 'not json')
+
+    expect(() => upgradeLegacyMarker(sqlite)).not.toThrow()
+    expect(sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(MIGRATIONS_SEEN)).toEqual({
+      value: 'not json',
+    })
+  })
+
+  it('does nothing and does not throw on a fresh database with no settings table', () => {
+    const sqlite = new Database(':memory:')
+    expect(() => upgradeLegacyMarker(sqlite)).not.toThrow()
+    expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all()).toEqual([])
+  })
+})
+
+describe('applyMigrations order', () => {
+  it('applies in journal order, whatever the names sort to and the order the files were written in', () => {
+    const base = Number(lastWhen())
+    const extra: Extra[] = [
+      { tag: '20261127093100_z_first', when: base + 3000, sql: 'CREATE TABLE step_one (n INTEGER);' },
+      { tag: '20261127093012_a_second', when: base + 2000, sql: 'CREATE TABLE step_two (n INTEGER);' },
+      { tag: '20261127093050_m_third', when: base + 1000, sql: 'CREATE TABLE step_three (n INTEGER);' },
+    ]
+    const dir = folderWith(LAST, extra)
+    const sqlite = databaseAt(LAST)
+    expect(applyMigrations(sqlite, dir).map((m) => m.tag)).toEqual(extra.map((e) => e.tag))
+    expect(recorded(sqlite).slice(-3)).toEqual(extra.map((e) => e.when))
+    expect(userTables(sqlite)).toEqual(expect.arrayContaining(['step_one', 'step_two', 'step_three']))
+  })
+
+  it('gives the same result on two runs over the same folder', () => {
+    const base = Number(lastWhen())
+    const extra: Extra[] = [
+      { tag: '20261127093100_b', when: base + 2000, sql: 'CREATE TABLE twice_b (n INTEGER);' },
+      { tag: '20261127093012_a', when: base + 1000, sql: 'CREATE TABLE twice_a (n INTEGER);' },
+    ]
+    const dir = folderWith(LAST, extra)
+    const first = databaseAt(LAST)
+    const second = databaseAt(LAST)
+    expect(applyMigrations(first, dir)).toEqual(applyMigrations(second, dir))
+    expect(recorded(first)).toEqual(recorded(second))
+  })
+})
+
+describe('applyMigrations with a `when` older than the newest applied', () => {
+  it('applies it, where drizzle would skip it, and records it', () => {
+    const base = Number(lastWhen())
+    // Between 0065's `when` and 0066's: older than the newest applied, and no entry's own.
+    const older = base - 500
+    const newer = base + 1000
+    const extra: Extra[] = [
+      { tag: '20261127093012_a', when: older, sql: 'CREATE TABLE late_a (n INTEGER);' },
+      { tag: '20261127093100_b', when: newer, sql: 'CREATE TABLE late_b (n INTEGER);' },
+    ]
+    const dir = folderWith(LAST, extra)
+
+    // drizzle's own migrate() on a database at 0066: the older entry is skipped without an error.
+    const drizzleDb = databaseAt(LAST)
+    migrate(drizzle(drizzleDb), { migrationsFolder: dir })
+    expect(recorded(drizzleDb)).not.toContain(older)
+    expect(userTables(drizzleDb)).not.toContain('late_a')
+
+    const sqlite = databaseAt(LAST)
+    expect(applyMigrations(sqlite, dir).map((m) => m.tag)).toEqual(['20261127093012_a', '20261127093100_b'])
+    expect(recorded(sqlite)).toContain(older)
+    expect(userTables(sqlite)).toEqual(expect.arrayContaining(['late_a', 'late_b']))
+  })
+})
+
+describe('applyMigrations with timestamp and numbered names together', () => {
+  const extra = (base: number): Extra[] => [
+    { tag: '20261127093012_add_x', when: base + 1000, sql: 'CREATE TABLE mixed_x (n INTEGER);' },
+    { tag: '20261127093100_add_y', when: base + 2000, sql: 'CREATE TABLE mixed_y (n INTEGER);' },
+  ]
+
+  it('applies every entry in journal order on a fresh database', () => {
+    const dir = folderWith(LAST, extra(Number(lastWhen())))
+    const sqlite = new Database(':memory:')
+    expect(applyMigrations(sqlite, dir).map((m) => m.tag)).toEqual(journalOf(dir).map((e) => e.tag))
+    expect(recorded(sqlite)).toEqual(journalOf(dir).map((e) => e.when))
+  })
+
+  it('applies only the two timestamp entries on a database at 0066', () => {
+    const dir = folderWith(LAST, extra(Number(lastWhen())))
+    const sqlite = databaseAt(LAST)
+    expect(applyMigrations(sqlite, dir).map((m) => m.tag)).toEqual([
+      '20261127093012_add_x',
+      '20261127093100_add_y',
+    ])
+    expect(recorded(sqlite)).toEqual(journalOf(dir).map((e) => e.when))
+  })
+})
+
+describe('two branches each adding one migration', () => {
+  const base = Number(lastWhen())
+  const branchA: Extra = {
+    tag: '20261127093012_branch_a',
+    when: base + 1000,
+    sql: 'CREATE TABLE from_a (n INTEGER);',
+  }
+  const branchB: Extra = {
+    tag: '20261127093100_branch_b',
+    when: base + 2000,
+    sql: 'CREATE TABLE from_b (n INTEGER);',
+  }
+
+  it.each([
+    ['A then B', [branchA, branchB]],
+    ['B then A', [branchB, branchA]],
+  ])('applies both on a database at 0066, merged %s', (_order, merged) => {
+    const dir = folderWith(LAST, merged)
+    const sqlite = databaseAt(LAST)
+    expect(applyMigrations(sqlite, dir).map((m) => m.tag)).toEqual(merged.map((e) => e.tag))
+    expect(userTables(sqlite)).toEqual(expect.arrayContaining(['from_a', 'from_b']))
+    const whens = journalOf(dir).map((e) => e.when)
+    expect(new Set(whens).size).toBe(whens.length)
+    expect(recorded(sqlite)).toEqual(whens)
   })
 })

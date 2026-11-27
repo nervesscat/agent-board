@@ -104,6 +104,14 @@ Unattached uploads older than a day are deleted hourly: a new reference to an up
 
 ## Database
 
-Edit `src/db/schema.ts`, then `pnpm db:generate`. Give the generated migration a descriptive name
-(`drizzle/00NN_what_it_does.sql`) and update its `tag` in `drizzle/meta/_journal.json` to match.
-Migrations run when the server starts.
+Edit `src/db/schema.ts`, then `pnpm db:generate`. It writes `drizzle/YYYYMMDDHHMMSS_slug.sql` (UTC time,
+then a slug), its journal entry and its snapshot: commit all of them, and do not rename or renumber them.
+`pnpm check:migrations` runs before the PR (it refuses a non-timestamp new name, a duplicate `when` or tag
+in the journal, and two snapshots that follow one). Migrations run when the server starts, in journal order.
+If a merge forks the snapshot chain (`pnpm check:migrations` names two snapshots that follow one, or `pnpm db:generate`
+reports a snapshot collision), delete the later branch's migration file, its journal entry and its snapshot (the one
+whose journal entry comes last), keep its schema change, run `pnpm db:generate` again, check and commit
+(CONTRIBUTING.md, Database changes). That repair is only safe before the migration has run on any database.
+Your own `data/dev` or a preview copy that ran it: reset it (`pnpm dev --fresh` resets `data/dev`; restart the
+preview for a fresh `data/preview`), then repair. Any other database that ran it (a desktop install's data, the
+live board): do not delete the migration; stop and ask the person who runs that database.

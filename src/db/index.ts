@@ -2,9 +2,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 
 import { cacheDir, config, logsDir, uploadsDir } from '#/server/config'
+import { applyMigrations, upgradeLegacyMarker } from './migrate'
 import * as schema from './schema'
 
 for (const dir of [config.dataDir, uploadsDir, cacheDir, logsDir]) fs.mkdirSync(dir, { recursive: true })
@@ -20,6 +20,8 @@ sqlite.pragma('busy_timeout = 5000')
 export const db = drizzle(sqlite, { schema })
 
 // Migrations are committed in ./drizzle (drizzle-kit generate); applying them at boot keeps `pnpm dev` zero-setup.
-migrate(db, { migrationsFolder: path.resolve(process.cwd(), 'drizzle') })
+// The alert marker is upgraded first, so the migrations this boot applies are not in its announced list.
+upgradeLegacyMarker(sqlite)
+applyMigrations(sqlite, path.resolve(process.cwd(), 'drizzle'))
 
 export { schema }

@@ -747,7 +747,7 @@ describe('13 a migration applied', () => {
     expect(await check('migration-applied')).toEqual([])
     const marker = () =>
       db.select().from(schema.settings).where(eq(schema.settings.key, 'alertMigrationsSeen')).get()?.value
-    expect(marker()).toEqual({ at: applied.at(-1)!.at })
+    expect(marker()).toEqual({ at: applied.at(-1)!.at, announced: applied.map((m) => m.at) })
     expect(await check('migration-applied')).toEqual([])
 
     // The marker from before the last two migrations: they are what changed.
@@ -782,6 +782,95 @@ describe('13 a migration applied', () => {
     expect(await check('migration-applied')).toMatchObject([
       { subject: `migrated:${newer.at}`, details: ['0099_something_new'] },
     ])
+  })
+
+  it('announces a migration applied late, with a when older than the marker', async () => {
+    const applied = machine.edges.migrations()
+    await check('migration-applied')
+    const late = { at: applied[0]!.at - 1000, name: '0000_late_merge' }
+    machine.edges.migrations = () => [late, ...applied]
+    expect(await check('migration-applied')).toMatchObject([
+      { subject: `migrated:${applied.at(-1)!.at}`, details: [late.name] },
+    ])
+  })
+
+  it('an old marker row with only at raises nothing it covers', async () => {
+    const applied = machine.edges.migrations()
+    db.insert(schema.settings)
+      .values({ key: 'alertMigrationsSeen', value: { at: applied.at(-1)!.at } })
+      .run()
+    expect(await check('migration-applied')).toEqual([])
+    db.update(schema.settings)
+      .set({ value: { at: applied.at(-3)!.at } })
+      .where(eq(schema.settings.key, 'alertMigrationsSeen'))
+      .run()
+    expect(await check('migration-applied')).toMatchObject([
+      { details: applied.slice(-2).map((m) => m.name) },
+    ])
+  })
+
+  it('Got it on a late migration marks it announced, so it is not raised again', async () => {
+    const applied = machine.edges.migrations()
+    await check('migration-applied')
+    const late = { at: applied[0]!.at - 1000, name: '0000_late_merge' }
+    machine.edges.migrations = () => [late, ...applied]
+    const [row] = await raise('migration-applied')
+    expect(await press(row!.id, 'seen')).toMatchObject({ resolved: true })
+    expect(await check('migration-applied')).toEqual([])
+  })
+
+  it('a legacy marker covers the migrations up to its at, so an older one is not raised', async () => {
+    const applied = machine.edges.migrations()
+    await check('migration-applied')
+    db.update(schema.settings)
+      .set({ value: { at: applied.at(-1)!.at } })
+      .where(eq(schema.settings.key, 'alertMigrationsSeen'))
+      .run()
+    const late = { at: applied[0]!.at - 1000, name: '0000_late_merge' }
+    machine.edges.migrations = () => [late, ...applied]
+    expect(await check('migration-applied')).toEqual([])
+  })
+
+  it('a late migration under the new marker stays announced after a restart, until Got it', async () => {
+    const applied = machine.edges.migrations()
+    await check('migration-applied')
+    // The marker a boot leaves after converting an old one: every migration applied so far is announced.
+    db.update(schema.settings)
+      .set({ value: { at: applied.at(-1)!.at, announced: applied.map((m) => m.at) } })
+      .where(eq(schema.settings.key, 'alertMigrationsSeen'))
+      .run()
+    const late = { at: applied[0]!.at - 1000, name: '0000_late_merge' }
+    machine.edges.migrations = () => [late, ...applied]
+    // The boot that applied the late migration exited before its first check: the next process only has the marker.
+    expect(await check('migration-applied')).toMatchObject([{ details: [late.name] }])
+    // A restart does not resolve it.
+    expect(await check('migration-applied')).toMatchObject([{ details: [late.name] }])
+    const [row] = await raise('migration-applied')
+    expect(await press(row!.id, 'seen')).toMatchObject({ resolved: true })
+    expect(await check('migration-applied')).toEqual([])
+  })
+
+  it('Got it on a late migration writes the new shape, announcing every migration', async () => {
+    const applied = machine.edges.migrations()
+    await check('migration-applied')
+    db.update(schema.settings)
+      .set({ value: { at: applied.at(-1)!.at, announced: applied.map((m) => m.at) } })
+      .where(eq(schema.settings.key, 'alertMigrationsSeen'))
+      .run()
+    const late = { at: applied[0]!.at - 1000, name: '0000_late_merge' }
+    machine.edges.migrations = () => [late, ...applied]
+    const [row] = await raise('migration-applied')
+    expect(await press(row!.id, 'seen')).toMatchObject({ resolved: true })
+    const marker = db
+      .select()
+      .from(schema.settings)
+      .where(eq(schema.settings.key, 'alertMigrationsSeen'))
+      .get()
+    expect(marker?.value).toEqual({
+      at: applied.at(-1)!.at,
+      announced: [late.at, ...applied.map((m) => m.at)],
+    })
+    expect(await check('migration-applied')).toEqual([])
   })
 
   it('says nothing of a backup: the board makes none', () => {
