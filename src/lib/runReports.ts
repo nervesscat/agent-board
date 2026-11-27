@@ -1,3 +1,7 @@
+import type { TFunction } from 'i18next'
+
+import { shared } from '#/i18n'
+
 /**
  * Run reports: what a subagent records about how it did its run, before it hands back
  * (src/server/runReports.ts stores them; the templates ship under src/server/skill/review/run-reports).
@@ -63,39 +67,41 @@ export const AGENT_SECTIONS: Record<RunReportAgent, readonly string[]> = {
   intent: ['asked', 'compared'],
 }
 
-const COMMON_LABELS: Record<string, string> = {
-  brief: 'The brief, and whether it was enough',
-  readRan: 'What it read and ran',
-  problems: 'Problems on the way',
-  gaps: 'What it could not check, and its assumptions',
-  moreTime: 'What it would do with more time',
-  improvements: 'What would have made the run better',
-  intent: 'Where the intent came from',
-  inferences: 'What it had to infer',
-  questions: 'Questions the ticket could not answer',
-  approach: 'The approach, and alternatives rejected',
-  alternatives: 'Alternatives considered and rejected',
-  selfTests: 'What it tested itself, and how',
-  fixPass: 'What the fix pass changed, and why the first one missed it',
-  scheduling: 'How it scheduled the phases it ran',
-  judging: 'How it judged what the phases returned',
-  provisioning: 'How the runtime was provisioned, and what failed',
-  freshness: 'How freshness was proved',
-  evidence: 'How each acceptance criterion was checked',
-  unexercised: 'Criteria it could not exercise',
-  techniques: 'Techniques used to look for defects',
-  surfaces: 'Surfaces covered, and not covered',
-  candidates: 'How candidates were produced, and what was dropped',
-  disproof: 'How it tried to disprove each finding',
-  unsettled: 'Findings it could not settle, and why',
-  asked: 'What the human asked, in their words',
-  compared: 'How each ask was compared with the result',
-  conflicts: 'The merge, its conflicts, and how they were read',
-}
+const SECTION_KEYS = [
+  'brief',
+  'readRan',
+  'problems',
+  'gaps',
+  'moreTime',
+  'improvements',
+  'intent',
+  'inferences',
+  'questions',
+  'approach',
+  'alternatives',
+  'selfTests',
+  'fixPass',
+  'scheduling',
+  'judging',
+  'provisioning',
+  'freshness',
+  'evidence',
+  'unexercised',
+  'techniques',
+  'surfaces',
+  'candidates',
+  'disproof',
+  'unsettled',
+  'asked',
+  'compared',
+  'conflicts',
+] as const
 
 /** A section key as the board shows it. An unknown key is spelled out as it is. */
-export const runReportSectionLabel = (key: string): string =>
-  COMMON_LABELS[key] ??
+export const runReportSectionLabel = (key: string, t: TFunction = shared.t): string =>
+  ((SECTION_KEYS as readonly string[]).includes(key)
+    ? t(`runReport.section.${key as (typeof SECTION_KEYS)[number]}`)
+    : undefined) ??
   key
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/[-_]/g, ' ')

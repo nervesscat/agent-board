@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, MinusCircle, MousePointerClick, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 
 import { ChangedChip, Chip } from '#/components/WorkflowChips'
 import { RoundsEditor, type RoundsFlight } from '#/components/WorkflowReview'
@@ -7,6 +8,7 @@ import { Dialog, DialogContent, DialogTitle } from '#/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Switch } from '#/components/ui/switch'
 import { Tip } from '#/components/ui/tooltip'
+import { currentLocale } from '#/i18n'
 import type { Complexity } from '#/lib/constants'
 import {
   WORKFLOW_EFFORTS,
@@ -17,7 +19,14 @@ import {
   type WorkflowStepId,
 } from '#/lib/workflow'
 import { defaultAgentName, nodeView, type GraphNode, type NodeView } from '#/lib/workflowGraph'
-import { AUTO_EFFORT_HINT, EFFORT_NAMES, effortText, moveReason } from '#/lib/workflowView'
+import {
+  EFFORT_NAMES,
+  autoEffortHint,
+  effortText,
+  lockReasonText,
+  moveReason,
+  survivalText,
+} from '#/lib/workflowView'
 import { cn } from '#/lib/utils'
 
 /** What the human can change in the panel: each call saves at once (the page owns the saving). */
@@ -101,16 +110,14 @@ export function SheetPanel({ node, onClose, ...rest }: PanelProps) {
 
 /** What the panel's closed state shows on a wide screen: where the settings will be. */
 export function IdlePanel() {
+  const { t } = useTranslation()
   return (
     <div
       data-panel="idle"
       className="flex flex-col items-start gap-2 rounded-xl border border-dashed p-4 text-sm text-muted-foreground"
     >
       <MousePointerClick className="size-5" aria-hidden />
-      <p>
-        Select a step in the graph to see what it does and to change who runs it, its effort, whether it runs
-        and its place in the order.
-      </p>
+      <p>{t('workflowPanel.idle')}</p>
     </div>
   )
 }
@@ -139,6 +146,7 @@ function PanelBody({
 }: PanelProps & {
   heading: ReactNode
 }) {
+  const { t } = useTranslation()
   const view = nodeView(node)
   const step = node.kind === 'step' ? node.step : null
   const complexity = workflow.complexity ?? 'mid'
@@ -148,9 +156,15 @@ function PanelBody({
         <div className="min-w-0 flex-1 space-y-1.5">
           {heading}
           <div className="flex flex-wrap items-center gap-1">
-            {view.lock && <Chip tone="lock">{view.lock === 'always' ? 'Locked' : 'Locked above low'}</Chip>}
+            {view.lock && (
+              <Chip tone="lock">
+                {view.lock === 'always' ? t('workflowChips.locked') : t('workflowChips.lockedAboveLow')}
+              </Chip>
+            )}
             {view.skipped && <Chip tone="skipped">{view.skipped}</Chip>}
-            {!view.skipped && view.skipsOnLow && <Chip tone="skipped">Skipped on low</Chip>}
+            {!view.skipped && view.skipsOnLow && (
+              <Chip tone="skipped">{t('workflowChips.skippedOnLow')}</Chip>
+            )}
             {view.changed && <ChangedChip what={view.changed} />}
           </div>
         </div>
@@ -161,19 +175,16 @@ function PanelBody({
         <TeamPicker view={view} team={team} onPick={(name) => edits.setAgent(node.id, name)} />
       ) : step?.agent === 'runner' ? (
         <p data-review-agents className="text-sm text-muted-foreground">
-          The ticket agent runs /feature-review itself. Its phases run their own Team agents, picked on the
-          phase nodes.
+          {t('workflowPanel.runnerAgents')}
         </p>
       ) : (
-        <p className="text-sm text-muted-foreground">
-          The ticket agent does this itself: there is no Team agent to pick.
-        </p>
+        <p className="text-sm text-muted-foreground">{t('workflowPanel.selfAgent')}</p>
       )}
 
       {step && <StepSettings step={step} edits={edits} workflow={workflow} />}
 
       <section className="space-y-1">
-        <h3 className="text-xs font-medium text-muted-foreground">What it does</h3>
+        <h3 className="text-xs font-medium text-muted-foreground">{t('workflowPanel.whatItDoes')}</h3>
         <p data-what className="text-sm leading-relaxed">
           {node.step.what}
         </p>
@@ -182,7 +193,7 @@ function PanelBody({
       {node.kind === 'step' && (
         <section className="space-y-1">
           <h3 className="text-xs font-medium text-muted-foreground">
-            {node.next ? `Hand-off to ${node.next}` : 'Result'}
+            {node.next ? t('workflowPanel.handoffTo', { next: node.next }) : t('workflowPanel.result')}
           </h3>
           <p
             data-handoff-text
@@ -207,10 +218,11 @@ function PanelBody({
 }
 
 function CloseButton({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation()
   return (
     <button
       type="button"
-      aria-label="Close"
+      aria-label={t('common.close')}
       data-close
       onClick={onClose}
       className="-mt-1 -mr-1 inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 max-sm:absolute max-sm:top-2 max-sm:right-2"
@@ -231,22 +243,26 @@ function TeamPicker({
   /** The Team agent's name, or null for the default. */
   onPick: (name: string | null) => void
 }) {
+  const { t } = useTranslation()
   const ref = view.team!
   const fallback = defaultAgentName(view.role, team)
   const value = ref.picked ?? DEFAULT_PICK
-  const items: Record<string, string> = { [DEFAULT_PICK]: `Default (${fallback})` }
+  const items: Record<string, string> = {
+    [DEFAULT_PICK]: t('workflowPanel.team.default', { name: fallback }),
+  }
   for (const name of team) items[name] = name
   // A pick the Team lost stays in the list: it can be seen, and cleared by choosing the default.
-  if (ref.missing && ref.picked !== null) items[ref.picked] = `${ref.picked} (not in the Team)`
+  if (ref.missing && ref.picked !== null)
+    items[ref.picked] = t('workflowPanel.team.notInTeam', { name: ref.picked })
   return (
     <section className="space-y-1.5">
-      <h3 className="text-xs font-medium text-muted-foreground">Team agent</h3>
+      <h3 className="text-xs font-medium text-muted-foreground">{t('workflowPanel.team.title')}</h3>
       <Select
         value={value}
         items={items}
         onValueChange={(v) => v && v !== value && onPick(v === DEFAULT_PICK ? null : v)}
       >
-        <SelectTrigger aria-label="Team agent" className="w-full">
+        <SelectTrigger aria-label={t('workflowPanel.team.title')} className="w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent alignItemWithTrigger={false}>
@@ -259,14 +275,14 @@ function TeamPicker({
       </Select>
       {ref.missing ? (
         <p data-missing role="status" className="text-xs wrap-anywhere text-amber-700 dark:text-amber-400">
-          {ref.picked} was picked for it, but the Team has no agent of that name now. It runs as {ref.name}{' '}
-          until the agent is back or another is picked. Choose Default to clear the pick.
+          {t('workflowPanel.team.missing', { picked: ref.picked, name: ref.name })}
         </p>
       ) : (
         <p className="text-xs wrap-anywhere text-muted-foreground">
-          Runs as {ref.name}
-          {ref.source === 'default' && ' (the built-in agent: the Team has none of that name)'}. Its
-          instructions are written on the Team page; the role ({view.role}) names its spans and run reports.
+          {t(ref.source === 'default' ? 'workflowPanel.team.runsAsDefault' : 'workflowPanel.team.runsAs', {
+            name: ref.name,
+            role: view.role,
+          })}
         </p>
       )}
     </section>
@@ -286,6 +302,7 @@ function StepSettings({
   edits: WorkflowEdits
   workflow: ResolvedWorkflow
 }) {
+  const { t } = useTranslation()
   const body = useRef<HTMLDivElement>(null)
   // After a move the step is somewhere else in the list: the keyboard stays on the button that moved it.
   const moved = useRef<{ id: string; direction: 'up' | 'down'; preset: string } | null>(null)
@@ -326,7 +343,7 @@ function StepSettings({
       )}
       <EnabledSwitch step={step} onChange={(enabled) => edits.setEnabled(step.id, enabled)} />
       <section className="space-y-1.5">
-        <h3 className="text-xs font-medium text-muted-foreground">Place in the order</h3>
+        <h3 className="text-xs font-medium text-muted-foreground">{t('workflowPanel.placeInOrder')}</h3>
         <div className="flex flex-wrap gap-2">
           <MoveButton step={step} direction="up" onMove={move} />
           <MoveButton step={step} direction="down" onMove={move} />
@@ -351,28 +368,25 @@ function StepSettings({
  * already shown under its switch. The kind can be added again from the page's Add a step list.
  */
 function RemoveStep({ step, onRemove }: { step: ResolvedStep; onRemove: () => void }) {
+  const { t } = useTranslation()
   const removable = step.lock === null && step.id !== 'claim' && step.id !== 'handoff'
   return (
     <section className="space-y-1.5">
-      <h3 className="text-xs font-medium text-muted-foreground">In this workflow</h3>
+      <h3 className="text-xs font-medium text-muted-foreground">{t('workflowPanel.inThisWorkflow')}</h3>
       {removable ? (
         <>
           <button type="button" data-remove-step={step.id} className={MOVE_BUTTON} onClick={onRemove}>
-            <MinusCircle className="size-3.5" aria-hidden /> Remove step
+            <MinusCircle className="size-3.5" aria-hidden /> {t('workflowPanel.removeStep')}
           </button>
-          <p className="text-xs text-muted-foreground">
-            Takes {step.label} out of this workflow. Add it again from Add a step above the graph.
-          </p>
+          <p className="text-xs text-muted-foreground">{t('workflowPanel.takesOut', { step: step.label })}</p>
         </>
       ) : (
         <p data-remove-reason className="text-xs text-muted-foreground">
-          {step.label} is{' '}
           {step.id === 'claim'
-            ? 'always the first step'
+            ? t('workflowPanel.alwaysFirst', { step: step.label })
             : step.id === 'handoff'
-              ? 'always the last step'
-              : 'locked'}
-          , so it cannot be removed.
+              ? t('workflowPanel.alwaysLast', { step: step.label })
+              : t('workflowPanel.lockedStep', { step: step.label })}
         </p>
       )}
     </section>
@@ -389,14 +403,17 @@ function MoveButton({
   direction: 'up' | 'down'
   onMove: (direction: 'up' | 'down') => void
 }) {
+  const { t } = useTranslation()
   const reason = step.moveBlocked[direction]
-  const label = direction === 'up' ? 'Move up' : 'Move down'
+  const label = direction === 'up' ? t('workflowPanel.moveUp') : t('workflowPanel.moveDown')
   return (
     <Tip
       content={
         reason
           ? moveReason(reason)
-          : `${label}: ${step.label} runs ${direction === 'up' ? 'earlier' : 'later'}`
+          : t(direction === 'up' ? 'workflowPanel.moveUpTip' : 'workflowPanel.moveDownTip', {
+              step: step.label,
+            })
       }
     >
       <button
@@ -419,14 +436,17 @@ function MoveButton({
  * the intent check is locked only above low, so its switch says whether it also runs for a low ticket.
  */
 function EnabledSwitch({ step, onChange }: { step: ResolvedStep; onChange: (enabled: boolean) => void }) {
+  const { t } = useTranslation()
   const aboveLow = step.lock === 'above-low'
   const locked = step.lock === 'always'
-  const label = aboveLow ? `Also run ${step.label} on low tickets` : `Run ${step.label}`
+  const label = aboveLow
+    ? t('workflowPanel.alsoRunOnLow', { step: step.label })
+    : t('workflowPanel.run', { step: step.label })
   return (
     <section className="space-y-1.5">
-      <h3 className="text-xs font-medium text-muted-foreground">Runs</h3>
+      <h3 className="text-xs font-medium text-muted-foreground">{t('workflowPanel.runs')}</h3>
       <div className="flex items-center gap-2.5">
-        <Tip content={step.lockReason ?? undefined}>
+        <Tip content={lockReasonText(step) ?? undefined}>
           <span className={cn('inline-flex', locked && 'cursor-not-allowed')}>
             <Switch
               checked={locked ? true : step.enabled}
@@ -442,8 +462,8 @@ function EnabledSwitch({ step, onChange }: { step: ResolvedStep; onChange: (enab
       </div>
       {step.lockReason && (
         <p data-lock-reason className="text-xs text-muted-foreground">
-          {step.lockReason}
-          {aboveLow && ' This switch only decides whether it also runs for a low ticket.'}
+          {lockReasonText(step)}
+          {aboveLow && ` ${t('workflowPanel.aboveLowNote')}`}
         </p>
       )}
     </section>
@@ -460,16 +480,17 @@ function EffortSelect({
   text: string
   onChange: (effort: WorkflowEffort) => void
 }) {
+  const { t } = useTranslation()
   const value = step.effort ?? 'auto'
   return (
     <section className="space-y-1.5">
-      <h3 className="text-xs font-medium text-muted-foreground">Effort</h3>
+      <h3 className="text-xs font-medium text-muted-foreground">{t('workflowPanel.effort')}</h3>
       <Select
         value={value}
         onValueChange={(v) => v && v !== value && onChange(v as WorkflowEffort)}
         items={{ ...EFFORT_NAMES, [value]: text }}
       >
-        <SelectTrigger aria-label="Effort" className="w-full">
+        <SelectTrigger aria-label={t('workflowPanel.effort')} className="w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent alignItemWithTrigger={false}>
@@ -481,7 +502,7 @@ function EffortSelect({
         </SelectContent>
       </Select>
       <p className="text-xs text-muted-foreground">
-        Passed on as the Agent tool&apos;s effort. {AUTO_EFFORT_HINT}.
+        {t('workflowPanel.effortHint', { hint: autoEffortHint() })}
       </p>
     </section>
   )
@@ -501,6 +522,7 @@ function ReviewSettings({
   edits: WorkflowEdits
   flightOf: (level: Complexity) => RoundsFlight
 }) {
+  const { t } = useTranslation()
   return (
     <div className="flex flex-col gap-3 border-t pt-4">
       <RoundsEditor
@@ -513,13 +535,20 @@ function ReviewSettings({
       />
       {review.runs.length > 1 && (
         <p className="text-xs text-muted-foreground">
-          Runs {review.runs.length} separate /feature-review runs each round:{' '}
-          {review.runs.map((r) => r.label.toLowerCase()).join(' and ')}, each under its own agent name and
-          never shown the other&apos;s findings.
+          {t('workflowPanel.reviewRuns', {
+            total: review.runs.length,
+            runs: new Intl.ListFormat(currentLocale(), { type: 'conjunction' }).format(
+              review.runs.map((r) => r.label.toLowerCase()),
+            ),
+          })}
         </p>
       )}
       <p className="text-xs text-muted-foreground">
-        <span className="font-medium">A round survives when</span> {review.survival}.
+        <Trans
+          i18nKey="workflowPanel.survival"
+          values={{ survival: survivalText(workflow.base, review) }}
+          components={{ strong: <span className="font-medium" /> }}
+        />
       </p>
     </div>
   )

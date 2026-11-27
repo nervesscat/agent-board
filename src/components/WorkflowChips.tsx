@@ -1,5 +1,6 @@
 import { Bot, Lock, Pencil, User } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Tip } from '#/components/ui/tooltip'
 import type { TeamAgentRef } from '#/lib/workflow'
@@ -70,33 +71,17 @@ export function AgentChip({
   team: TeamAgentRef | null
   plain?: boolean
 }) {
+  const { t } = useTranslation()
   if (!team)
     return (
-      <Chip
-        tone="agent"
-        icon={<User aria-hidden />}
-        tip={plain ? undefined : 'The ticket agent does this itself'}
-      >
+      <Chip tone="agent" icon={<User aria-hidden />} tip={plain ? undefined : t('workflowChips.selfTip')}>
         {label}
       </Chip>
     )
-  const how =
-    team.source === 'picked'
-      ? 'The Team agent picked for it'
-      : team.source === 'role'
-        ? `The Team agent named like its role (${agent})`
-        : `No Team agent is named ${agent}: it runs as the built-in ${agent} role`
+  const tip = t(`workflowChips.agentTip.${team.source}`, { agent })
   return (
     <>
-      <Chip
-        tone="agent"
-        icon={<Bot aria-hidden />}
-        tip={
-          plain
-            ? undefined
-            : `${how}. Its instructions are written on the Team page. The role (${agent}) names its spans and run reports.`
-        }
-      >
+      <Chip tone="agent" icon={<Bot aria-hidden />} tip={plain ? undefined : tip}>
         <span className="min-w-0 truncate" data-agent-name>
           {team.name}
         </span>
@@ -109,13 +94,9 @@ export function AgentChip({
       {team.missing && (
         <Chip
           tone="lock"
-          tip={
-            plain
-              ? undefined
-              : `${team.picked} was picked for it but the Team has no agent of that name now: it runs as ${team.name} until the agent is back or another is picked.`
-          }
+          tip={plain ? undefined : t('workflowChips.missingTip', { picked: team.picked, name: team.name })}
         >
-          agent missing
+          {t('workflowChips.agentMissing')}
         </Chip>
       )}
     </>
@@ -124,22 +105,24 @@ export function AgentChip({
 
 /** A step the human cannot turn off, with why. */
 export function LockChip({ lock, reason }: { lock: 'always' | 'above-low'; reason: string | null }) {
+  const { t } = useTranslation()
   return (
     <Chip tone="lock" icon={<Lock aria-hidden />} tip={reason ?? undefined}>
-      {lock === 'always' ? 'Locked' : 'Locked above low'}
+      {lock === 'always' ? t('workflowChips.locked') : t('workflowChips.lockedAboveLow')}
     </Chip>
   )
 }
 
 /** A step the human changed: what exactly. */
 export function ChangedChip({ what, plain = false }: { what: string; plain?: boolean }) {
+  const { t } = useTranslation()
   return (
     <Chip
       tone="edited"
       icon={<Pencil aria-hidden />}
-      tip={plain ? undefined : `Changed from the preset: ${what}`}
+      tip={plain ? undefined : t('workflowChips.changedTip', { what })}
     >
-      changed
+      {t('workflowChips.changed')}
     </Chip>
   )
 }

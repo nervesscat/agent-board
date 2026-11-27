@@ -1,3 +1,7 @@
+import type { TFunction } from 'i18next'
+
+import { shared } from '#/i18n'
+
 import { clock } from './format'
 import {
   STALE_MS,
@@ -48,15 +52,22 @@ export const onServerClock = (browserNow: number, offset: number): number => bro
 /** The agent a wait is delegated to ('' when none). */
 const waitOn = (w: TimelineWait): string => w.on ?? ''
 
-export const GERUND: Record<string, string> = {
-  spec: 'Specifying',
-  build: 'Building',
-  review: 'Reviewing',
-  verify: 'Verifying',
-  pr: 'Opening PR',
-  preview: 'Previewing',
-  merge: 'Merging',
-}
+const GERUND = {
+  spec: 'workStatus.verb.spec',
+  build: 'workStatus.verb.build',
+  review: 'workStatus.verb.review',
+  verify: 'workStatus.verb.verify',
+  pr: 'workStatus.verb.pr',
+  preview: 'workStatus.verb.preview',
+  merge: 'workStatus.verb.merge',
+} as const
+/** The phase as a verb in the language shown ("Building"); `fallback` false: '' for a phase of no known verb. */
+export const gerund = (phase: string, tr: TFunction, fallback = true): string =>
+  Object.hasOwn(GERUND, phase)
+    ? tr(GERUND[phase as keyof typeof GERUND])
+    : fallback
+      ? tr('workStatus.verb.work')
+      : ''
 
 const ms = (iso: string) => Date.parse(iso)
 const latestFirst = <T extends { start: string }>(xs: T[]) =>
@@ -73,7 +84,11 @@ export type CurrentActivity =
  * (the earliest one, the longest). A wait delegated to an agent reads as that agent building, not as a
  * wait; then the latest open span; then any other open wait. A ticket that is not live has nothing open.
  */
-export function currentActivity(t: WorkTimelineLike, now: Date | number): CurrentActivity {
+export function currentActivity(
+  t: WorkTimelineLike,
+  now: Date | number,
+  tr: TFunction = shared.t,
+): CurrentActivity {
   if (!t.live) return { kind: 'nothing' }
   const n = +now
   // The clock here can run behind the server that stamped the spans: never show negative time.
@@ -93,7 +108,7 @@ export function currentActivity(t: WorkTimelineLike, now: Date | number): Curren
     const phase = enclosing?.phase ?? ''
     return {
       kind: 'building',
-      verb: GERUND[phase] ?? 'Working',
+      verb: gerund(phase, tr),
       phase,
       agent: waitOn(w),
       since: w.start,
@@ -104,7 +119,7 @@ export function currentActivity(t: WorkTimelineLike, now: Date | number): Curren
   if (span)
     return {
       kind: 'building',
-      verb: GERUND[span.phase] ?? 'Working',
+      verb: gerund(span.phase, tr),
       phase: span.phase,
       agent: span.agent,
       since: span.start,
@@ -170,12 +185,18 @@ export const minutesBetween = (from: string, now: Date | number) =>
  * The per-agent detail under the one work-state line, one per open span, opening with the agent:
  * `claude · build · 43 min · last word 20 min ago`.
  */
-export function livenessLines(l: Liveness | null | undefined, now: Date | number): string[] {
+export function livenessLines(
+  l: Liveness | null | undefined,
+  now: Date | number,
+  tr: TFunction = shared.t,
+): string[] {
   if (!l) return []
   return l.spans.map((s) => {
-    const word = s.lastWordAt ? `last word ${s.silentMinutes} min ago` : 'no word yet'
+    const word = s.lastWordAt
+      ? tr('workStatus.lastWord', { count: s.silentMinutes })
+      : tr('workStatus.noWordYet')
     const forSpan = minutesBetween(s.since, now)
-    return [s.agent, s.phase, `${forSpan} min`, word].filter(Boolean).join(' · ')
+    return [s.agent, s.phase, tr('workStatus.minutes', { count: forSpan }), word].filter(Boolean).join(' · ')
   })
 }
 
@@ -240,11 +261,14 @@ export function stallReason(t: WorkTimelineLike, stage: string | null = null): S
 }
 
 /** Why a ticket reads `No word`: the same why the stall has always given, in the human's words. */
-export function stallWhy(r: StallReason): string {
-  if (r.stage) return `in ${r.stage}, no agent heard from since ${clock(r.since)}`
-  if (r.kind === 'waiting') return `waiting on ${r.on}, nobody heard from since ${clock(r.since)}`
-  if (!r.endedAt) return `nothing open since ${clock(r.since)}`
-  return `nothing open since the ${r.phase || 'work'} ended at ${clock(r.endedAt)}${r.quote ? ` ('${r.quote}')` : ''}`
+export function stallWhy(r: StallReason, tr: TFunction = shared.t): string {
+  if (r.stage) return tr('workStatus.why.inStage', { stage: r.stage, time: clock(r.since) })
+  if (r.kind === 'waiting') return tr('workStatus.why.waitingOn', { on: r.on, time: clock(r.since) })
+  if (!r.endedAt) return tr('workStatus.why.nothingOpen', { time: clock(r.since) })
+  const phase = r.phase || tr('workStatus.why.work')
+  return r.quote
+    ? tr('workStatus.why.endedQuote', { phase, time: clock(r.endedAt), quote: r.quote })
+    : tr('workStatus.why.ended', { phase, time: clock(r.endedAt) })
 }
 
 /** The seven states a live ticket's one work-state line can say, in the order the State filter lists them. */
@@ -260,15 +284,24 @@ export const WORK_LINE_STATES = [
 export type WorkLineState = (typeof WORK_LINE_STATES)[number]
 
 /** Each state's name: the words its line starts with, and what the State filter calls it. */
-export const WORK_STATE_NAME: Record<WorkLineState, string> = {
-  waiting: 'Waiting on you',
-  'your-turn': 'Your turn',
-  lost: 'Lost contact',
-  'no-word': 'No word',
-  quiet: 'Quiet',
-  working: 'Working now',
-  nothing: 'Nothing open',
-}
+const STATE_NAME_KEY = {
+  waiting: 'workStatus.state.waiting',
+  'your-turn': 'workStatus.state.yourTurn',
+  lost: 'workStatus.state.lost',
+  'no-word': 'workStatus.state.noWord',
+  quiet: 'workStatus.state.quiet',
+  working: 'workStatus.state.working',
+  nothing: 'workStatus.state.nothing',
+} as const
+
+/** A state's name in the language the interface shows: pass the component's `t` where there is one. */
+export const workStateName = (state: WorkLineState, tr: TFunction = shared.t): string =>
+  tr(STATE_NAME_KEY[state])
+
+/** The names in English, for what matches the line's text without a language (tests, e2e). */
+export const WORK_STATE_NAME = Object.fromEntries(
+  WORK_LINE_STATES.map((s) => [s, workStateName(s, shared.getFixedT('en'))]),
+) as Record<WorkLineState, string>
 
 /**
  * The states a State filter keeps, from its URL value (`lost,waiting`): the known ones, once each, in
@@ -301,12 +334,12 @@ export type WorkLineAnswer = {
  * A duration in the line's units, whole and floored, never negative: `12m`, `0m` right after a heartbeat,
  * `5h` under a day and `2d` from it on.
  */
-export function workDuration(ms: number): string {
+export function workDuration(ms: number, tr: TFunction = shared.t): string {
   const minutes = Math.max(0, Math.floor(ms / 60_000))
-  if (minutes < 60) return `${minutes}m`
+  if (minutes < 60) return tr('workStatus.unit.m', { count: minutes })
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h`
-  return `${Math.floor(hours / 24)}d`
+  if (hours < 24) return tr('workStatus.unit.h', { count: hours })
+  return tr('workStatus.unit.d', { count: Math.floor(hours / 24) })
 }
 
 /**
@@ -323,32 +356,41 @@ export function workLine(
   t: WorkTimelineLike,
   now: Date | number,
   stageName: string | null = null,
+  tr: TFunction = shared.t,
 ): WorkLineAnswer | null {
   if (!t.live) return null
   const n = +now
   const l = livenessOf(t)
-  const detail = l ? livenessLines(l, n) : []
+  const detail = l ? livenessLines(l, n, tr) : []
   if (t.waitingOnHuman || t.stage?.kind === 'blocked') {
     // The line invents no measure; the surface keeps a "since" detail underneath where it has room.
     const since = t.waits.find((w) => w.open && w.reason === 'human')?.start ?? l?.since ?? null
     return {
       state: 'waiting',
-      text: 'Waiting on you',
-      detail: since ? [`since ${clock(since)}`] : [],
+      text: workStateName('waiting', tr),
+      detail: since ? [tr('workStatus.since', { time: clock(since) })] : [],
       why: '',
     }
   }
+  // Approved is the human's go-ahead, already given: nothing is waiting on them, only the merge.
+  if (t.stage?.kind === 'approved')
+    return {
+      state: 'nothing',
+      text: `Nothing open · approved, waiting to merge`,
+      detail,
+      why: '',
+    }
   if (t.stage?.kind === 'review')
     return {
       state: 'your-turn',
-      text: `Your turn · waiting ${workDuration(n - Date.parse(t.stage.since))}`,
+      text: tr('workStatus.line.yourTurn', { duration: workDuration(n - Date.parse(t.stage.since), tr) }),
       detail,
       why: '',
     }
   if (l?.state === 'lost')
     return {
       state: 'lost',
-      text: `Lost contact · ${workDuration(n - Date.parse(l.since))}`,
+      text: tr('workStatus.line.lost', { duration: workDuration(n - Date.parse(l.since), tr) }),
       detail,
       why: detail.join('\n'),
     }
@@ -356,29 +398,29 @@ export function workLine(
     const r = stallReason(t, stageName)
     return {
       state: 'no-word',
-      text: `No word ${workDuration(n - Date.parse(l.lastSignalAt))}`,
+      text: tr('workStatus.line.noWord', { duration: workDuration(n - Date.parse(l.lastSignalAt), tr) }),
       detail,
-      why: r ? stallWhy(r) : `nothing open since ${clock(l.lastSignalAt)}`,
+      why: r ? stallWhy(r, tr) : tr('workStatus.why.nothingOpen', { time: clock(l.lastSignalAt) }),
     }
   }
   const progressAt = t.progressAt ?? t.start ?? l?.lastSignalAt ?? null
   if (progressAt && n - Date.parse(progressAt) > STALE_MS)
     return {
       state: 'quiet',
-      text: `Quiet ${workDuration(n - Date.parse(progressAt))}`,
+      text: tr('workStatus.line.quiet', { duration: workDuration(n - Date.parse(progressAt), tr) }),
       detail,
-      why: `no progress post since ${clock(progressAt)}`,
+      why: tr('workStatus.why.noProgress', { time: clock(progressAt) }),
     }
   if (l?.state === 'working') {
     const wordAt = l.lastWordAt ?? l.lastSignalAt
     return {
       state: 'working',
-      text: `Working now · last word ${workDuration(n - Date.parse(wordAt))}`,
+      text: tr('workStatus.line.working', { duration: workDuration(n - Date.parse(wordAt), tr) }),
       detail,
       why: detail.join('\n'),
     }
   }
-  return { state: 'nothing', text: 'Nothing open', detail, why: '' }
+  return { state: 'nothing', text: workStateName('nothing', tr), detail, why: '' }
 }
 
 export type WorkShares = {

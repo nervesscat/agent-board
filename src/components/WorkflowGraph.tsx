@@ -1,5 +1,6 @@
 import { Lock } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { AgentChip, ChangedChip, Chip } from '#/components/WorkflowChips'
 import { Tip } from '#/components/ui/tooltip'
@@ -34,13 +35,17 @@ export function WorkflowGraph({
   /** Called with the node's id, and whether the keyboard did it (it moves the focus on to the settings). */
   onSelect: (id: string, byKeyboard: boolean) => void
 }) {
+  const { t } = useTranslation()
   const complexity = workflow.complexity ?? 'mid'
   const pick = { selected, onSelect }
   return (
     <div
       data-graph
       role="group"
-      aria-label={`${workflow.label} workflow for a ${complexity} ticket`}
+      aria-label={t('workflowGraph.label', {
+        label: workflow.label,
+        complexity: t(`workflowGraph.complexity.${complexity}`),
+      })}
       className="mx-auto w-full max-w-2xl"
     >
       <ol className="flex flex-col items-center">
@@ -60,7 +65,7 @@ export function WorkflowGraph({
                 <Edge
                   from={step.review ? `${step.id}.round` : step.id}
                   to={next.id}
-                  label={step.review && !dim ? 'round survives' : undefined}
+                  label={step.review && !dim ? t('workflowGraph.roundSurvives') : undefined}
                 />
               )}
             </li>
@@ -123,6 +128,7 @@ function Node({
   className?: string
   compact?: boolean
 }) {
+  const { t } = useTranslation()
   const on = selected === view.id
   const off = view.skipped !== null
   return (
@@ -170,7 +176,7 @@ function Node({
           <Tip content={view.lockReason ?? undefined}>
             <span
               role="img"
-              aria-label={view.lockReason ?? 'Locked'}
+              aria-label={view.lockReason ?? t('workflowChips.locked')}
               data-lock={view.lock}
               className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400"
             >
@@ -183,7 +189,7 @@ function Node({
         <AgentChip agent={view.role} label={view.agentLabel} team={view.team} plain />
         {view.effort !== null && <Chip tone="effort">{view.effort}</Chip>}
         {view.skipped && <Chip tone="skipped">{view.skipped}</Chip>}
-        {!view.skipped && view.skipsOnLow && <Chip tone="skipped">Skipped on low</Chip>}
+        {!view.skipped && view.skipsOnLow && <Chip tone="skipped">{t('workflowChips.skippedOnLow')}</Chip>}
         {view.changed && <ChangedChip what={view.changed} plain />}
       </span>
     </button>
@@ -196,21 +202,21 @@ const FAN = {
     grid: '@sm:grid-cols-2',
     show: 'hidden @sm:block',
     hide: '@sm:hidden',
-    label: '@sm:absolute @sm:top-1 @sm:left-1/2 @sm:mb-0 @sm:ml-4',
+    label: '@sm:absolute @sm:top-1 @sm:left-1/2 @sm:mb-0 @sm:ml-4', // i18n-ignore: CSS classes
     box: '@sm:gap-y-0 @sm:border-transparent @sm:p-0',
   },
   3: {
     grid: '@md:grid-cols-3',
     show: 'hidden @md:block',
     hide: '@md:hidden',
-    label: '@md:absolute @md:top-1 @md:left-1/2 @md:mb-0 @md:ml-4',
+    label: '@md:absolute @md:top-1 @md:left-1/2 @md:mb-0 @md:ml-4', // i18n-ignore: CSS classes
     box: '@md:gap-y-0 @md:border-transparent @md:p-0',
   },
   4: {
     grid: '@lg:grid-cols-4',
     show: 'hidden @lg:block',
     hide: '@lg:hidden',
-    label: '@lg:absolute @lg:top-1 @lg:left-1/2 @lg:mb-0 @lg:ml-4',
+    label: '@lg:absolute @lg:top-1 @lg:left-1/2 @lg:mb-0 @lg:ml-4', // i18n-ignore: CSS classes
     box: '@lg:gap-y-0 @lg:border-transparent @lg:p-0',
   },
 } as const
@@ -237,6 +243,7 @@ function Parallel({
   selected: string | null
   onSelect: (id: string, byKeyboard: boolean) => void
 }) {
+  const { t } = useTranslation()
   const n = steps.length
   const fan = FAN[parallelColumns(n)]
   const cells = steps.map((_, i) => i)
@@ -266,7 +273,7 @@ function Parallel({
           fan.label,
         )}
       >
-        In parallel
+        {t('workflowGraph.inParallel')}
       </p>
       <div
         className={cn(
@@ -386,19 +393,22 @@ function Round({
   selected: string | null
   onSelect: (id: string, byKeyboard: boolean) => void
 }) {
+  const { t } = useTranslation()
   const rows = roundRows(review.phases)
   const label = loopLabel(review.roundsByComplexity[complexity], complexity)
   const last = rows.at(-1)
   return (
     <section
       data-round={step.id}
-      aria-label="Review round"
+      aria-label={t('workflowGraph.reviewRound')}
       className={cn(
         'relative flex w-full flex-col items-center rounded-2xl border border-dashed bg-muted/30 px-6 pt-10 pb-9 sm:px-7',
         dim && 'opacity-60',
       )}
     >
-      <p className="absolute top-2.5 left-4 text-[11px] font-medium text-muted-foreground">Review round</p>
+      <p className="absolute top-2.5 left-4 text-[11px] font-medium text-muted-foreground">
+        {t('workflowGraph.reviewRound')}
+      </p>
       <div className={cn('pointer-events-none absolute top-7 right-3 bottom-5 left-1/2 sm:right-4', LINE)}>
         <div
           data-edge="loop"
@@ -417,7 +427,11 @@ function Round({
       </div>
       <Rows rows={rows} selected={selected} onSelect={onSelect} />
       {review.between[0] && (
-        <Edge from={last ? rowId(last, 'last') : 'round'} to={review.between[0].id} label="round fails" />
+        <Edge
+          from={last ? rowId(last, 'last') : 'round'}
+          to={review.between[0].id}
+          label={t('workflowGraph.roundFails')}
+        />
       )}
       {review.between.map((phase, i) => (
         <div key={phase.id} className="flex w-full flex-col items-center">

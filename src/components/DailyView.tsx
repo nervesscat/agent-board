@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { DatePicker } from '#/components/DatePicker'
 import { ActivityLog } from '#/components/daily/ActivityLog'
@@ -19,6 +20,7 @@ import { localDate, shiftDate } from '#/lib/format'
  * shift), then what got done that day, hour by hour.
  */
 export function DailyView({ projectId }: { projectId: number }) {
+  const { t } = useTranslation()
   const [date, setDate] = useState(localDate())
   const { data, error, isPlaceholderData } = useQuery({
     queryKey: ['daily', date, projectId],
@@ -33,10 +35,8 @@ export function DailyView({ projectId }: { projectId: number }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight">Daily</h1>
-          <p className="text-sm text-muted-foreground">
-            The period's report, and what got done hour by hour.
-          </p>
+          <h1 className="text-xl font-semibold tracking-tight">{t('daily.title')}</h1>
+          <p className="text-sm text-muted-foreground">{t('daily.subtitle')}</p>
           {projectId !== undefined && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <PushedTodayBadge projectId={projectId} />
@@ -48,7 +48,7 @@ export function DailyView({ projectId }: { projectId: number }) {
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Previous day"
+            aria-label={t('daily.previousDay')}
             onClick={() => setDate(shiftDate(date, -1))}
           >
             <ChevronLeft />
@@ -57,7 +57,7 @@ export function DailyView({ projectId }: { projectId: number }) {
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Next day"
+            aria-label={t('daily.nextDay')}
             onClick={() => setDate(shiftDate(date, 1))}
             disabled={date >= localDate()}
           >

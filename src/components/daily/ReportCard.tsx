@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { History, Paperclip, Pencil } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
@@ -11,7 +12,7 @@ import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { RichEditor } from '#/components/RichEditor'
 import { GenerateReportButton } from '#/components/daily/GenerateReportButton'
 import { refreshReports } from '#/components/daily/refresh'
-import { REPORT_STATUS } from '#/components/daily/status'
+import { REPORT_STATUS, statusLabel } from '#/components/daily/status'
 import { Button } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
 import {
@@ -26,7 +27,7 @@ import {
 } from '#/lib/api'
 import type { ReportFormat } from '#/lib/constants'
 import { stamp } from '#/lib/format'
-import { describeSchedule } from '#/lib/reports'
+import { describeSchedule, periodLabel, type TrackedCadence } from '#/lib/reports'
 import { cn } from '#/lib/utils'
 
 /**
@@ -34,6 +35,7 @@ import { cn } from '#/lib/utils'
  * gallery), the earlier ones on demand, and a form to post a new one; claude can write it too.
  */
 export function ReportCard({ projectId, date }: { projectId: number; date: string }) {
+  const { t } = useTranslation()
   const { data: settings, error: settingsError } = useQuery({
     queryKey: ['report-settings', projectId],
     queryFn: () => get<ReportSettingsView>(`/api/projects/${projectId}/report-settings`),
@@ -55,12 +57,12 @@ export function ReportCard({ projectId, date }: { projectId: number; date: strin
 
   if (!settings)
     return settingsError ? null : (
-      <DelayedLoading label="Loading report…">
+      <DelayedLoading label={t('loading.report')}>
         <SkeletonCard lines={5} className="min-w-0" />
       </DelayedLoading>
     )
-  const tracked = settings.cadence !== 'off'
-  const period = tracked ? (list?.periods[0] ?? null) : null
+  const cadence = settings.cadence === 'off' ? null : settings.cadence
+  const period = cadence ? (list?.periods[0] ?? null) : null
 
   return (
     <section
@@ -68,31 +70,35 @@ export function ReportCard({ projectId, date }: { projectId: number; date: strin
         'relative min-w-0 rounded-lg border p-4',
         isPlaceholderData && 'opacity-60 transition-opacity',
       )}
-      aria-label="Report"
+      aria-label={t('reportCard.region')}
       aria-busy={isPlaceholderData || undefined}
     >
       {/* pr-9 keeps the header's line clear of the history button, floating in the card's top-right. */}
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 pr-9">
-        <h2 className="text-sm font-medium">Report</h2>
-        <span className="text-xs text-muted-foreground">{describeSchedule(settings)}</span>
+        <h2 className="text-sm font-medium">{t('reportCard.title')}</h2>
+        <span className="text-xs text-muted-foreground">{describeSchedule(settings, t)}</span>
         <div className="ml-auto">
           <GenerateReportButton projectId={projectId} period={period?.period ?? null} list={list} />
         </div>
       </div>
-      {!tracked ? (
-        <p className="text-sm text-muted-foreground">
-          Reports are off for this project: choose how often one is due in the report settings.
-        </p>
+      {!cadence ? (
+        <p className="text-sm text-muted-foreground">{t('reportCard.off')}</p>
       ) : !list || (isPlaceholderData && !period) ? (
         !listError && (
-          <DelayedLoading label="Loading report…">
+          <DelayedLoading label={t('loading.report')}>
             <SkeletonText lines={4} />
           </DelayedLoading>
         )
       ) : period ? (
-        <PeriodReport key={period.period} projectId={projectId} period={period} format={settings.format} />
+        <PeriodReport
+          key={period.period}
+          projectId={projectId}
+          period={period}
+          cadence={cadence}
+          format={settings.format}
+        />
       ) : (
-        <p className="text-sm text-muted-foreground">No report is asked for on {date}.</p>
+        <p className="text-sm text-muted-foreground">{t('reportCard.notAsked', { date })}</p>
       )}
     </section>
   )
@@ -102,12 +108,16 @@ export function ReportCard({ projectId, date }: { projectId: number; date: strin
 function PeriodReport({
   projectId,
   period,
+  cadence,
   format,
 }: {
   projectId: number
   period: ReportPeriod
+  cadence: TrackedCadence
   format: ReportFormat
 }) {
+  const { t } = useTranslation()
+  const label = periodLabel(cadence, period.period, t)
   const qc = useQueryClient()
   const [writing, setWriting] = useState(false)
   const [history, setHistory] = useState(false)
@@ -122,9 +132,11 @@ function PeriodReport({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
-        <span className="font-medium">{period.label}</span>
-        <span className={cn('text-xs', status.text)}>{status.label}</span>
-        <span className="text-xs text-muted-foreground">due {stamp(period.due)}</span>
+        <span className="font-medium">{label}</span>
+        <span className={cn('text-xs', status.text)}>{statusLabel(period.status, t)}</span>
+        <span className="text-xs text-muted-foreground">
+          {t('reportCard.due', { date: stamp(period.due) })}
+        </span>
         {!writing && (
           <Button
             type="button"
@@ -133,36 +145,36 @@ function PeriodReport({
             className="ml-auto"
             onClick={() => setWriting(true)}
           >
-            <Pencil data-icon="inline-start" /> {report ? 'replace' : 'post the report'}
+            <Pencil data-icon="inline-start" /> {report ? t('reportCard.replace') : t('reportCard.post')}
           </Button>
         )}
       </div>
       {report ? (
-        <ReportBody report={report} note={`${period.versions} version${period.versions === 1 ? '' : 's'}`} />
+        <ReportBody report={report} note={t('reportCard.versions', { count: period.versions })} />
       ) : (
-        !writing && <p className="text-sm text-muted-foreground">No report for {period.label} yet.</p>
+        !writing && <p className="text-sm text-muted-foreground">{t('reportCard.none', { label })}</p>
       )}
       {period.versions > 1 && (
         <div>
           {/* The card's section is the positioned ancestor: it floats in the card's top-right. */}
-          <Tip content={`History (${period.versions - 1})`}>
+          <Tip content={t('reportCard.history', { count: period.versions - 1 })}>
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
               className="absolute top-2 right-2 text-muted-foreground"
               aria-expanded={history}
-              aria-label={`History (${period.versions - 1})`}
+              aria-label={t('reportCard.history', { count: period.versions - 1 })}
               onClick={() => setHistory(!history)}
             >
               <History />
             </Button>
           </Tip>
           {history && (
-            <ol className="mt-2 space-y-4 border-l pl-3" aria-label="Earlier versions">
+            <ol className="mt-2 space-y-4 border-l pl-3" aria-label={t('reportCard.earlier')}>
               {(versions ?? []).slice(1).map((v, i, earlier) => (
                 <li key={v.id}>
-                  <ReportBody report={v} note={`version ${earlier.length - i}`} />
+                  <ReportBody report={v} note={t('reportCard.version', { n: earlier.length - i })} />
                 </li>
               ))}
             </ol>
@@ -173,6 +185,7 @@ function PeriodReport({
         <PostReport
           projectId={projectId}
           period={period}
+          label={label}
           format={format}
           onCancel={() => setWriting(false)}
           onPosted={() => {
@@ -203,16 +216,19 @@ function ReportBody({ report, note }: { report: ReportView; note?: string }) {
 function PostReport({
   projectId,
   period,
+  label,
   format,
   onCancel,
   onPosted,
 }: {
   projectId: number
   period: ReportPeriod
+  label: string
   format: ReportFormat
   onCancel: () => void
   onPosted: () => void
 }) {
+  const { t } = useTranslation()
   const [body, setBody] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
@@ -244,12 +260,8 @@ function PostReport({
         onSubmit={submit}
         onCancel={onCancel}
         autoFocus
-        label={`Report for ${period.label}`}
-        placeholder={
-          format === 'file'
-            ? 'Attach the report file; a line about it is optional.'
-            : 'The report, as the prompt asks. Paste or drop files to attach them.'
-        }
+        label={t('reportCard.forLabel', { label })}
+        placeholder={format === 'file' ? t('reportCard.placeholderFile') : t('reportCard.placeholderText')}
       />
       <div className="flex flex-wrap items-center gap-2">
         <input
@@ -263,18 +275,22 @@ function PostReport({
           }}
         />
         <Button type="button" variant="ghost" size="sm" onClick={() => fileInput.current?.click()}>
-          <Paperclip data-icon="inline-start" /> attach
+          <Paperclip data-icon="inline-start" /> {t('reportCard.attach')}
         </Button>
         <PendingFiles files={files} onChange={setFiles} />
         <div className="ml-auto flex gap-2">
           <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-            Cancel
+            {t('reportCard.cancel')}
           </Button>
           {/* On a wrapper: without the file the button is disabled, and its tooltip says why. */}
-          <Tip content={format === 'file' && !files.length ? 'Attach the report file first' : undefined}>
+          <Tip content={format === 'file' && !files.length ? t('reportCard.attachFirst') : undefined}>
             <span className="inline-flex">
               <Button type="submit" size="sm" disabled={!ready || send.isPending}>
-                {send.isPending ? 'Posting…' : period.report ? 'Replace' : 'Post'}
+                {send.isPending
+                  ? t('reportCard.posting')
+                  : period.report
+                    ? t('reportCard.replaceButton')
+                    : t('reportCard.postButton')}
               </Button>
             </span>
           </Tip>

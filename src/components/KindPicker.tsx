@@ -1,4 +1,6 @@
-import { KIND_LABELS, KINDS, type Kind, toggleKind } from '#/lib/kinds'
+import { useTranslation } from 'react-i18next'
+
+import { KINDS, type Kind, toggleKind } from '#/lib/kinds'
 
 /** The kinds a project is for, one or more, as checkboxes. Software is the git side of the board. */
 export function KindPicker({
@@ -10,13 +12,11 @@ export function KindPicker({
   onChange: (kinds: Kind[]) => void
   name?: string
 }) {
+  const { t } = useTranslation()
   return (
     <fieldset className="space-y-2">
-      <legend className="text-sm font-medium">What the project is for</legend>
-      <p className="text-xs text-muted-foreground">
-        Software adds the repositories, branches, PRs, CI, previews and Cleanup. Other kinds keep their work
-        out of git: the board shows what they use.
-      </p>
+      <legend className="text-sm font-medium">{t('kinds.legend')}</legend>
+      <p className="text-xs text-muted-foreground">{t('kinds.hint')}</p>
       <div className="flex flex-wrap gap-2">
         {KINDS.map((kind) => (
           <label
@@ -30,7 +30,7 @@ export function KindPicker({
               checked={value.includes(kind)}
               onChange={() => onChange(toggleKind(value, kind))}
             />
-            {KIND_LABELS[kind]}
+            {t(`kinds.label.${kind}`)}
           </label>
         ))}
       </div>

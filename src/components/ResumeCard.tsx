@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Play, RotateCw } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Button } from '#/components/ui/button'
@@ -13,13 +14,16 @@ import { ago, stamp } from '#/lib/format'
  * log's last lines, and Retry. Left out while resuming is off and nothing was ever tried.
  */
 
-const STATE: Record<TicketResumeRow['state'], { label: string; className: string }> = {
-  queued: { label: 'Starting', className: 'bg-sky-500/15 text-sky-700 dark:text-sky-400' },
-  running: { label: 'Running', className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' },
-  succeeded: { label: 'Finished', className: 'bg-muted text-muted-foreground' },
-  failed: { label: 'Failed', className: 'bg-destructive/10 text-destructive' },
-  skipped: { label: 'Not started', className: 'bg-muted text-muted-foreground' },
-}
+const STATE = {
+  queued: { label: 'resumeCard.state.queued', className: 'bg-sky-500/15 text-sky-700 dark:text-sky-400' },
+  running: {
+    label: 'resumeCard.state.running',
+    className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+  },
+  succeeded: { label: 'resumeCard.state.succeeded', className: 'bg-muted text-muted-foreground' },
+  failed: { label: 'resumeCard.state.failed', className: 'bg-destructive/10 text-destructive' },
+  skipped: { label: 'resumeCard.state.skipped', className: 'bg-muted text-muted-foreground' },
+} as const satisfies Record<TicketResumeRow['state'], { label: string; className: string }>
 
 export function useTicketResume(t: TicketFull | undefined) {
   const { data, refetch } = useQuery({
@@ -35,13 +39,14 @@ export function useTicketResume(t: TicketFull | undefined) {
 }
 
 export function ResumeCard({ t, onChange }: { t: TicketFull; onChange: () => void }) {
+  const { t: tr } = useTranslation()
   const { data, refetch } = useTicketResume(t)
   const retry = useMutation({
     mutationFn: () => post<TicketResumeRow>(`/api/tickets/${t.id}/resume`),
     onSuccess: () => {
       void refetch()
       onChange()
-      toast.success('The board started the work again')
+      toast.success(tr('resumeCard.started'))
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
@@ -50,9 +55,9 @@ export function ResumeCard({ t, onChange }: { t: TicketFull; onChange: () => voi
   const running = row?.state === 'running' || row?.state === 'queued'
   const state = row ? STATE[row.state] : null
   return (
-    <section className="rounded-lg border p-3" aria-label="Resume">
+    <section className="rounded-lg border p-3" aria-label={tr('resumeCard.title')}>
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-medium">Resume</h2>
+        <h2 className="text-sm font-medium">{tr('resumeCard.title')}</h2>
         {data.enabled && (
           <Button
             className="ml-auto"
@@ -62,15 +67,17 @@ export function ResumeCard({ t, onChange }: { t: TicketFull; onChange: () => voi
             onClick={() => retry.mutate()}
           >
             {row?.state === 'failed' ? <RotateCw /> : <Play />}
-            {row?.state === 'failed' ? 'Retry' : 'Resume'}
+            {row?.state === 'failed' ? tr('resumeCard.retry') : tr('resumeCard.resume')}
           </Button>
         )}
       </div>
-      {!row && <p className="text-xs text-muted-foreground">Nothing has resumed this ticket yet.</p>}
+      {!row && <p className="text-xs text-muted-foreground">{tr('resumeCard.empty')}</p>}
       {row && state && (
         <div className="space-y-2 text-xs">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`rounded-full px-2 py-0.5 font-medium ${state.className}`}>{state.label}</span>
+            <span className={`rounded-full px-2 py-0.5 font-medium ${state.className}`}>
+              {tr(state.label)}
+            </span>
             {row.command && <span className="font-mono">{row.command}</span>}
             <Tip content={stamp(row.startedAt ?? row.createdAt)}>
               <span className="text-muted-foreground">{ago(row.startedAt ?? row.createdAt)}</span>
@@ -79,12 +86,12 @@ export function ResumeCard({ t, onChange }: { t: TicketFull; onChange: () => voi
           {row.state === 'skipped' && (
             <p className="text-muted-foreground [overflow-wrap:anywhere]">
               {row.reason}
-              {!data.enabled && ' The human sets it in the project’s settings.'}
+              {!data.enabled && ` ${tr('resumeCard.setInSettings')}`}
             </p>
           )}
           {row.state === 'failed' && (
             <p className="text-destructive [overflow-wrap:anywhere]">
-              The board could not resume: {row.reason}
+              {tr('resumeCard.failed', { reason: row.reason })}
             </p>
           )}
           {row.state === 'succeeded' && row.reason && (
@@ -93,7 +100,7 @@ export function ResumeCard({ t, onChange }: { t: TicketFull; onChange: () => voi
           {row.tail.length > 0 && (
             <pre
               className="max-h-48 overflow-auto rounded-md bg-muted p-2 font-mono text-[11px] leading-snug"
-              aria-label="Log"
+              aria-label={tr('resumeCard.log')}
             >
               {row.tail.join('\n')}
             </pre>

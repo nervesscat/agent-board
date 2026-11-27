@@ -1,34 +1,59 @@
+import { shared } from '#/i18n'
+
 import type { Complexity } from './constants'
 import {
+  ROUND_INTENT_ID,
   WORKFLOW_STEPS,
   isWorkflowStep,
+  type ResolvedReview,
   type ResolvedStep,
   type ResolvedSubStep,
   type WorkflowEffort,
+  type WorkflowPresetId,
 } from './workflow'
+
+/**
+ * The words below are read when they are drawn (a getter, not a constant), so they follow the language the
+ * interface is in at that moment.
+ */
 
 /** How the page writes each complexity (the picker and the rounds fields). */
 export const COMPLEXITY_NAMES: Record<Complexity, string> = {
-  low: 'Low',
-  mid: 'Mid',
-  high: 'High',
-  max: 'Max',
+  get low() {
+    return shared.t('workflowView.complexity.low')
+  },
+  get mid() {
+    return shared.t('workflowView.complexity.mid')
+  },
+  get high() {
+    return shared.t('workflowView.complexity.high')
+  },
+  get max() {
+    return shared.t('workflowView.complexity.max')
+  },
 }
 
 export const EFFORT_NAMES: Record<WorkflowEffort, string> = {
-  auto: 'Auto',
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
+  get auto() {
+    return shared.t('workflowView.effort.auto')
+  },
+  get low() {
+    return shared.t('workflowView.effort.low')
+  },
+  get medium() {
+    return shared.t('workflowView.effort.medium')
+  },
+  get high() {
+    return shared.t('workflowView.effort.high')
+  },
 }
 
 /** What `auto` follows, for the effort select's hint. */
-export const AUTO_EFFORT_HINT =
-  'Auto follows the ticket: low for a low ticket, medium for mid and high, high for max'
+export const autoEffortHint = (): string => shared.t('workflowView.autoEffortHint')
 
 /** `1 round`, `3 rounds`, `no review rounds`. */
 export const roundsText = (rounds: number): string =>
-  rounds === 0 ? 'no review rounds' : `${rounds} round${rounds === 1 ? '' : 's'}`
+  rounds === 0 ? shared.t('workflowView.noRounds') : shared.t('workflowView.rounds', { count: rounds })
 
 /** The card line's review part: the rounds per level, or that the workflow has no review step at all. */
 export const reviewRoundsLine = (order: readonly string[], rounds: readonly number[]): string =>
@@ -41,7 +66,12 @@ export const reviewHeaderText = (order: readonly string[], rounds: number): stri
 /** The effort chip of a step: what is set, and with `auto` the level it comes to for the complexity shown. */
 export function effortText(step: Pick<ResolvedStep, 'effort' | 'effortLevel'>): string | null {
   if (step.effort === null) return null
-  if (step.effort === 'auto') return step.effortLevel ? `Auto: ${step.effortLevel}` : 'Auto'
+  if (step.effort === 'auto')
+    return step.effortLevel
+      ? shared.t('workflowView.autoLevel', {
+          level: shared.t(`workflowView.effortLevel.${step.effortLevel}`),
+        })
+      : EFFORT_NAMES.auto
   return EFFORT_NAMES[step.effort]
 }
 
@@ -49,9 +79,47 @@ export function effortText(step: Pick<ResolvedStep, 'effort' | 'effortLevel'>): 
 export function skipText(step: Pick<ResolvedStep, 'skipped'>): string | null {
   const reason = step.skipped?.reason
   if (!reason) return null
-  if (reason === 'low') return 'Skipped on low'
-  if (reason === 'rounds') return 'No review rounds'
-  return 'Off'
+  if (reason === 'low') return shared.t('workflowChips.skippedOnLow')
+  if (reason === 'rounds') return shared.t('workflowView.skippedNoRounds')
+  return shared.t('workflowView.skippedOff')
+}
+
+/**
+ * Why a step cannot be turned off, for its tooltip. `ResolvedStep.lockReason` is the same sentence in English:
+ * the served text and the MCP answer keep it, and this one follows the interface's language.
+ */
+export function lockReasonText(step: Pick<ResolvedStep, 'id' | 'lock' | 'lockReason'>): string | null {
+  if (step.lockReason === null) return null
+  switch (step.id) {
+    case 'claim':
+      return shared.t('workflowView.lockReason.claim')
+    case 'build':
+      return shared.t('workflowView.lockReason.build')
+    case 'gate':
+      return shared.t('workflowView.lockReason.gate')
+    case 'intent':
+      return shared.t('workflowView.lockReason.intent')
+    case 'rounds':
+      return shared.t('workflowView.lockReason.rounds')
+    default:
+      return step.lock === 'always' ? shared.t('workflowView.lockReason.always') : step.lockReason
+  }
+}
+
+/**
+ * When a round of the review survives, in a sentence: the same rule as `ResolvedReview.survival` (which stays
+ * English, for the served text), in the interface's language. The round-end intent check is a clause of the
+ * rule only while the resolved review has it as a phase.
+ */
+export function survivalText(preset: WorkflowPresetId, review: Pick<ResolvedReview, 'phases'>): string {
+  const intent = review.phases.some((p) => p.id === ROUND_INTENT_ID)
+  const standard = shared.t('workflowView.survival.standard')
+  if (preset === 'light') return shared.t('workflowView.survival.light')
+  if (preset === 'maximum')
+    return shared.t(intent ? 'workflowView.survival.maximumIntent' : 'workflowView.survival.maximum', {
+      standard,
+    })
+  return intent ? shared.t('workflowView.survival.thoroughIntent') : standard
 }
 
 /** One entry of a review round's list: a phase, or phases that run side by side. */
@@ -79,11 +147,26 @@ export const domId = (prefix: string, id: string): string => `${prefix}-${id.rep
 
 /**
  * Why a move is refused, for a tooltip: the board's words name steps by id (`build must come after spec`), the
- * page names them as the graph does (`Build must come after Spec`).
+ * page names them as the graph does (`Build must come after Spec`) and in the interface's language. A reason
+ * this does not know is shown as the board wrote it, with the ids named.
  */
 export function moveReason(reason: string): string {
-  const named = reason.replace(/[a-z0-9]+/g, (word) =>
-    isWorkflowStep(word) ? WORKFLOW_STEPS[word].label : word,
-  )
+  const label = (id: string): string => (isWorkflowStep(id) ? WORKFLOW_STEPS[id].label : id)
+  const after = /^([a-z0-9]+) must come after ([a-z0-9]+)$/.exec(reason)
+  if (after) return shared.t('workflowView.move.after', { step: label(after[1]!), other: label(after[2]!) })
+  const stay = /^([a-z0-9]+) must stay (first|last)$/.exec(reason)
+  if (stay)
+    return shared.t(stay[2] === 'first' ? 'workflowView.move.stayFirst' : 'workflowView.move.stayLast', {
+      step: label(stay[1]!),
+    })
+  const already = /^([a-z0-9]+) is already (first|last)$/.exec(reason)
+  if (already)
+    return shared.t(
+      already[2] === 'first' ? 'workflowView.move.alreadyFirst' : 'workflowView.move.alreadyLast',
+      {
+        step: label(already[1]!),
+      },
+    )
+  const named = reason.replace(/[a-z0-9]+/g, (word) => label(word))
   return named.charAt(0).toUpperCase() + named.slice(1)
 }

@@ -1,0 +1,37 @@
+// The desktop app's own texts in ja (see ../strings.mjs). Every key of en.mjs, the same {{placeholders}} and <tags>.
+export default {
+  open: '開く',
+  openInBrowser: 'ブラウザーで開く',
+  retryNow: '今すぐ再試行',
+  startAtLogin: 'ログイン時に起動',
+  quit: '終了',
+  openSettings: '設定ファイルを開く',
+  openLogs: 'ログフォルダーを開く',
+  openHome: 'アプリのフォルダーを開く',
+  startAtLoginFailed: 'ログイン時の起動設定を変更できませんでした。',
+  cannotStart: 'ボードを起動できません。',
+  settingsInvalid: 'ボードの設定が正しくありません。',
+  homeUnusable:
+    'アプリのフォルダー {{home}} を使用できません: {{error}}\n\nAGENT_BOARD_HOME に書き込み可能なフォルダーを設定するか、削除して既定のフォルダーを使ってください。',
+  homeLine: '{{error}}\n\nアプリのフォルダー: {{home}}',
+  dataFolderUnusable:
+    'データフォルダー {{dir}} を使用できません: {{error}}\n\n{{file}} または環境変数で別の DATA_DIR を設定してから、アプリを再起動してください。',
+  logsLine: '{{detail}}\n\nログ: {{logs}}',
+  stopped: 'ボードが停止しました。',
+  restartedTimes_other: ' {{count}}回再起動されました。',
+  noOutput: '(出力なし)',
+  exitedSignal: '{{time}}に {{signal}} で強制終了されました。',
+  exitedCode: '{{time}}に終了コード {{code}} で終了しました。',
+  exited: '{{time}}に終了しました。',
+  reasonCode: '終了コード {{code}}',
+  reasonSignal: 'シグナル {{signal}}',
+  reasonNone: '終了コードなし',
+  tipRestarting: '{{name}}: ボードを再起動中({{reason}})',
+  tipRestarted: '{{name}}: {{url}}({{reason}}のため{{time}}に再起動)',
+  notifyRestarted: 'ボードが再起動しました({{reason}})。',
+  didNotStart: 'ボードが起動しませんでした。',
+  didNotAnswer: '1分以内に {{url}} で応答がありませんでした。',
+  unreachableHeading: '<code>{{address}}</code> のボードに接続できません。',
+  unreachableBody:
+    'ボードは別のマシンで動いています。このマシンがオンラインで、そちらでボードが動いているか確認してください。アプリは自動で再試行します。{{retry}}で今すぐ再試行できます。',
+}

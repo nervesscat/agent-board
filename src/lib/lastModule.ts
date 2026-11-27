@@ -1,4 +1,5 @@
-import { type AreaId, layoutElement } from '#/lib/layout'
+import { shared } from '#/i18n'
+import { type AreaId, layoutLabel } from '#/lib/layout'
 
 /**
  * Settings and Connect an agent are outside every project. The back button on them returns to the page
@@ -77,7 +78,7 @@ export interface BackTarget {
  * project selected, the board's start page.
  */
 export function backTarget(project: string | undefined, saved: string | null | undefined): BackTarget {
-  if (project === undefined) return { to: '/', label: 'Home' }
+  if (project === undefined) return { to: '/', label: shared.t('backToModule.home') }
   const last = decodeModule(saved)
   const at = last && moduleOf(last.pathname)
   if (last && at && at.project === project)
@@ -85,7 +86,7 @@ export function backTarget(project: string | undefined, saved: string | null | u
       to: last.pathname,
       search: last.search,
       hash: last.hash || undefined,
-      label: layoutElement(at.page).label,
+      label: layoutLabel(at.page),
     }
-  return { to: '/projects/$id', params: { id: project }, label: layoutElement('nav.overview').label }
+  return { to: '/projects/$id', params: { id: project }, label: layoutLabel('nav.overview') }
 }

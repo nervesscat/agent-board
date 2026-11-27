@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Fragment, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 
 import { DelayedLoading, SkeletonText } from '#/components/Loading'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '#/components/ui/dialog'
@@ -31,6 +32,7 @@ export function SkillFileDiffDialog({
   opened: number
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   // Keeps showing the last file while the dialog animates closed.
   const [last, setLast] = useState(file)
   if (file !== null && file !== last) setLast(file)
@@ -47,16 +49,14 @@ export function SkillFileDiffDialog({
     <Dialog open={file !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
         <DialogHeader>
+          {/* i18n-ignore: a path */}
           <DialogTitle className="pr-6 font-mono leading-snug break-all">.claude/{shown}</DialogTitle>
-          <DialogDescription className="text-xs">
-            What the install line would change: lines marked - are in the installed copy and go, lines marked
-            + come from the copy the board serves. Line endings aside.
-          </DialogDescription>
+          <DialogDescription className="text-xs">{t('skillDiff.description')}</DialogDescription>
         </DialogHeader>
         {error ? (
           <p className="text-sm text-destructive">{errorMessage(error)}</p>
         ) : !data ? (
-          <DelayedLoading label="Loading changes…">
+          <DelayedLoading label={t('loading.changes')}>
             <SkeletonText lines={8} />
           </DelayedLoading>
         ) : (
@@ -68,24 +68,23 @@ export function SkillFileDiffDialog({
 }
 
 function DiffView({ diff }: { diff: SkillFileDiff }) {
+  const { t } = useTranslation()
   if (diff.unreadable !== null)
     return (
       <p className="text-sm">
-        The installed copy can&apos;t be read as text ({diff.unreadable}):{' '}
-        <code className="rounded bg-muted px-1 text-xs break-all">{diff.installed}</code>
+        <Trans
+          i18nKey="skillDiff.unreadable"
+          values={{ reason: diff.unreadable, path: diff.installed }}
+          components={{ code: <code className="rounded bg-muted px-1 text-xs break-all" /> }}
+        />
       </p>
     )
-  if (!diff.hunks.length)
-    return (
-      <p className="text-sm text-muted-foreground">
-        No changes: the installed copy is up to date with the board&apos;s.
-      </p>
-    )
+  if (!diff.hunks.length) return <p className="text-sm text-muted-foreground">{t('skillDiff.noChanges')}</p>
   return (
     // Long lines scroll sideways in here, never the page.
     <div
       role="region"
-      aria-label="Changes"
+      aria-label={t('skillDiff.changes')}
       tabIndex={0}
       className="min-w-0 overflow-x-auto rounded-md border font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
     >
@@ -110,7 +109,7 @@ function DiffView({ diff }: { diff: SkillFileDiff }) {
                 </div>
                 {l.noNewline && (
                   <div data-line="note" className="pl-22 whitespace-pre text-muted-foreground">
-                    \ No newline at end of file
+                    {/* i18n-ignore: git's own marker */}\ No newline at end of file
                   </div>
                 )}
               </Fragment>

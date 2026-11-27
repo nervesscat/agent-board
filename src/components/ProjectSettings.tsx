@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { LayoutEditor } from '#/components/LayoutEditor'
@@ -23,6 +24,7 @@ import { addTasks } from '#/lib/tasks'
 
 /** One project's settings: the project tab of the Settings page. */
 export function ProjectSettings({ id }: { id: string }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { data: p } = useProject(id)
   const anchor = useAnchor()
@@ -44,11 +46,7 @@ export function ProjectSettings({ id }: { id: string }) {
   return (
     <div className="space-y-10">
       <div className="max-w-3xl space-y-2">
-        <p className="text-sm text-muted-foreground">
-          How this project works: what new tickets start with, the tags it offers, when a ticket counts as
-          stalled, the alerts it shows, its stages, its runs and what its pages show. Its agents&apos;
-          instructions are on their own page.
-        </p>
+        <p className="text-sm text-muted-foreground">{t('projectSettings.intro')}</p>
       </div>
       <ProjectKinds key={`kinds-${id}`} projectId={id} saved={p.kinds} />
       <DefaultPhases key={id} projectId={id} saved={p.defaultPhases} />
@@ -68,6 +66,7 @@ export function ProjectSettings({ id }: { id: string }) {
  * Cleanup); a project with none of software hides it. Changing a kind keeps its repos and PRs stored.
  */
 function ProjectKinds({ projectId, saved }: { projectId: string; saved: Kind[] }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [kinds, setKinds] = useState<Kind[]>(saved)
   const dirty = kinds.join(',') !== saved.join(',')
@@ -76,22 +75,23 @@ function ProjectKinds({ projectId, saved }: { projectId: string; saved: Kind[] }
     onSuccess: async (row) => {
       setKinds(row.kinds)
       await qc.invalidateQueries({ queryKey: ['project', projectId] })
-      toast.success('Saved')
+      toast.success(t('common.saved'))
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
   return (
-    <section id="kinds" aria-label="Kinds" className="max-w-3xl scroll-mt-16 space-y-3">
+    <section
+      id="kinds"
+      aria-label={t('projectSettings.kinds.title')}
+      className="max-w-3xl scroll-mt-16 space-y-3"
+    >
       <div>
-        <h2 className="text-xl font-semibold tracking-tight">Kinds</h2>
-        <p className="text-sm text-muted-foreground">
-          What the project is for. A project with no software kind hides its repositories, PRs, CI, previews
-          and Cleanup; its repos and PRs stay stored.
-        </p>
+        <h2 className="text-xl font-semibold tracking-tight">{t('projectSettings.kinds.title')}</h2>
+        <p className="text-sm text-muted-foreground">{t('projectSettings.kinds.description')}</p>
       </div>
       <KindPicker value={kinds} onChange={setKinds} />
       <Button type="button" size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate(kinds)}>
-        Save
+        {t('projectSettings.save')}
       </Button>
     </section>
   )
@@ -103,6 +103,7 @@ function ProjectKinds({ projectId, saved }: { projectId: string; saved: Kind[] }
  * Agents read it in `get_project` and change the phases per ticket.
  */
 function DefaultPhases({ projectId, saved }: { projectId: string; saved: string[] }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [items, setItems] = useState(saved)
   const [text, setText] = useState('')
@@ -116,19 +117,19 @@ function DefaultPhases({ projectId, saved }: { projectId: string; saved: string[
       setItems(row.defaultPhases)
       setText('')
       await qc.invalidateQueries({ queryKey: ['project', projectId] })
-      toast.success('Saved')
+      toast.success(t('common.saved'))
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
   return (
-    <section id="default-phases" aria-label="Default phases" className="max-w-3xl scroll-mt-16 space-y-3">
+    <section
+      id="default-phases"
+      aria-label={t('projectSettings.phases.title')}
+      className="max-w-3xl scroll-mt-16 space-y-3"
+    >
       <div>
-        <h2 className="text-xl font-semibold tracking-tight">Default phases</h2>
-        <p className="text-sm text-muted-foreground">
-          The top-level tasks every new ticket starts with, in order. The tasks given when it is created go
-          under the first; a lane starts without them. Agents tick each as they finish it, and remove or
-          reword the ones that do not fit. Leave it empty to start tickets with no tasks.
-        </p>
+        <h2 className="text-xl font-semibold tracking-tight">{t('projectSettings.phases.title')}</h2>
+        <p className="text-sm text-muted-foreground">{t('projectSettings.phases.description')}</p>
       </div>
       <form
         className="space-y-2"
@@ -138,10 +139,10 @@ function DefaultPhases({ projectId, saved }: { projectId: string; saved: string[
         }}
       >
         {items.length === 0 && (
-          <p className="text-sm text-muted-foreground">No phases: new tickets start with no tasks.</p>
+          <p className="text-sm text-muted-foreground">{t('projectSettings.phases.empty')}</p>
         )}
         <Label htmlFor="default-phases-new" className="sr-only">
-          New phase
+          {t('projectSettings.phases.new')}
         </Label>
         <ListInput
           id="default-phases-new"
@@ -149,14 +150,14 @@ function DefaultPhases({ projectId, saved }: { projectId: string; saved: string[
           onChange={setItems}
           text={text}
           onTextChange={setText}
-          label="Default phases"
-          placeholder="Add a phase"
-          addLabel="Add phase"
+          label={t('projectSettings.phases.list')}
+          placeholder={t('projectSettings.phases.placeholder')}
+          addLabel={t('projectSettings.phases.add')}
           reorderable
         />
         <div className="flex flex-wrap items-center justify-end gap-2">
           <span className="mr-auto text-xs text-muted-foreground" aria-live="polite">
-            {dirty ? 'Unsaved changes.' : 'No changes.'}
+            {dirty ? t('projectSettings.unsaved') : t('projectSettings.noChanges')}
           </span>
           <Button
             type="button"
@@ -165,10 +166,10 @@ function DefaultPhases({ projectId, saved }: { projectId: string; saved: string[
             disabled={save.isPending}
             onClick={() => save.mutate(null)}
           >
-            Use the built-in list
+            {t('projectSettings.phases.useBuiltIn')}
           </Button>
           <Button type="submit" size="sm" disabled={!dirty || save.isPending}>
-            {save.isPending ? 'Saving…' : 'Save'}
+            {save.isPending ? t('projectSettings.saving') : t('projectSettings.save')}
           </Button>
         </div>
       </form>
@@ -181,6 +182,7 @@ function DefaultPhases({ projectId, saved }: { projectId: string; saved: string[
  * project's tickets carry. Emptying it offers none of its own; the defaults can be had back.
  */
 function TagSuggestions({ projectId, saved }: { projectId: string; saved: string[] }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [items, setItems] = useState(saved)
   const [text, setText] = useState('')
@@ -194,18 +196,23 @@ function TagSuggestions({ projectId, saved }: { projectId: string; saved: string
       setItems(row.tagSuggestions)
       setText('')
       await qc.invalidateQueries({ queryKey: ['project', projectId] })
-      toast.success('Saved')
+      toast.success(t('common.saved'))
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
   return (
-    <section id="tag-suggestions" aria-label="Tag suggestions" className="max-w-3xl scroll-mt-16 space-y-3">
+    <section
+      id="tag-suggestions"
+      aria-label={t('projectSettings.tags.title')}
+      className="max-w-3xl scroll-mt-16 space-y-3"
+    >
       <div>
-        <h2 className="text-xl font-semibold tracking-tight">Tag suggestions</h2>
+        <h2 className="text-xl font-semibold tracking-tight">{t('projectSettings.tags.title')}</h2>
         <p className="text-sm text-muted-foreground">
-          The tags offered as chips under a ticket&apos;s tags, followed by the tags its tickets already
-          carry. Agents read them in <code className="rounded bg-muted px-1">get_project</code> and reuse
-          them. Leave it empty to offer only the tags in use.
+          <Trans
+            i18nKey="projectSettings.tags.description"
+            components={{ code: <code className="rounded bg-muted px-1" /> }}
+          />
         </p>
       </div>
       <form
@@ -216,10 +223,10 @@ function TagSuggestions({ projectId, saved }: { projectId: string; saved: string
         }}
       >
         {items.length === 0 && (
-          <p className="text-sm text-muted-foreground">No suggestions: only the tags in use are offered.</p>
+          <p className="text-sm text-muted-foreground">{t('projectSettings.tags.empty')}</p>
         )}
         <Label htmlFor="tag-suggestions-new" className="sr-only">
-          New tag
+          {t('projectSettings.tags.new')}
         </Label>
         <ListInput
           id="tag-suggestions-new"
@@ -227,13 +234,13 @@ function TagSuggestions({ projectId, saved }: { projectId: string; saved: string
           onChange={setItems}
           text={text}
           onTextChange={setText}
-          label="Tag suggestions"
-          placeholder="Add a tag"
-          addLabel="Add tag"
+          label={t('projectSettings.tags.title')}
+          placeholder={t('projectSettings.tags.placeholder')}
+          addLabel={t('projectSettings.tags.add')}
         />
         <div className="flex flex-wrap items-center justify-end gap-2">
           <span className="mr-auto text-xs text-muted-foreground" aria-live="polite">
-            {dirty ? 'Unsaved changes.' : 'No changes.'}
+            {dirty ? t('projectSettings.unsaved') : t('projectSettings.noChanges')}
           </span>
           <Button
             type="button"
@@ -242,10 +249,10 @@ function TagSuggestions({ projectId, saved }: { projectId: string; saved: string
             disabled={save.isPending}
             onClick={() => save.mutate([...DEFAULT_TAG_SUGGESTIONS])}
           >
-            Use the defaults
+            {t('projectSettings.tags.useDefaults')}
           </Button>
           <Button type="submit" size="sm" disabled={!dirty || save.isPending}>
-            {save.isPending ? 'Saving…' : 'Save'}
+            {save.isPending ? t('projectSettings.saving') : t('projectSettings.save')}
           </Button>
         </div>
       </form>
@@ -258,6 +265,7 @@ function TagSuggestions({ projectId, saved }: { projectId: string; saved: string
  * span, a wait, a push…) before it reads as stalled, on its card, on the Roadmap and in Needs you.
  */
 function StallMinutes({ projectId, saved }: { projectId: string; saved: number }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [text, setText] = useState(String(saved))
   const minutes = Number(text)
@@ -269,23 +277,23 @@ function StallMinutes({ projectId, saved }: { projectId: string; saved: number }
     onSuccess: async (row) => {
       setText(String(row.stallMinutes))
       await qc.invalidateQueries({ queryKey: ['project', projectId] })
-      toast.success('Saved')
+      toast.success(t('common.saved'))
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
   return (
-    <section id="stalled-tickets" aria-label="Stalled tickets" className="max-w-3xl scroll-mt-16 space-y-3">
+    <section
+      id="stalled-tickets"
+      aria-label={t('projectSettings.stall.title')}
+      className="max-w-3xl scroll-mt-16 space-y-3"
+    >
       <div>
-        <h2 className="text-xl font-semibold tracking-tight">Stalled tickets</h2>
+        <h2 className="text-xl font-semibold tracking-tight">{t('projectSettings.stall.title')}</h2>
         <p className="text-sm text-muted-foreground">
-          Two clocks decide how a ticket reads. The lease is what an agent's heartbeat or post keeps alive: it
-          lasts ten minutes, and when it runs out with a span still open the ticket reads as{' '}
-          <span className="font-medium">Lost contact</span> — the agent is gone, not waiting on you. A ticket
-          with nothing open reads as <span className="font-medium">Stalled</span> once no agent's word (a
-          heartbeat, a span, a wait, a hand-off) and nothing the board has seen of it (a push, its PR, its
-          preview) has come for this long. This dial sets that silence threshold, and it decides first: a
-          threshold under ten minutes flags a silent ticket before the lease runs out. The lease's ten minutes
-          stay fixed.
+          <Trans
+            i18nKey="projectSettings.stall.description"
+            components={{ lost: <span className="font-medium" />, stalled: <span className="font-medium" /> }}
+          />
         </p>
       </div>
       <form
@@ -296,7 +304,7 @@ function StallMinutes({ projectId, saved }: { projectId: string; saved: number }
         }}
       >
         <div className="space-y-1">
-          <Label htmlFor="stall-minutes">Stalled after (minutes)</Label>
+          <Label htmlFor="stall-minutes">{t('projectSettings.stall.label')}</Label>
           <Input
             id="stall-minutes"
             type="number"
@@ -311,14 +319,14 @@ function StallMinutes({ projectId, saved }: { projectId: string; saved: number }
           />
         </div>
         <Button type="submit" size="sm" disabled={!dirty || save.isPending}>
-          {save.isPending ? 'Saving…' : 'Save'}
+          {save.isPending ? t('projectSettings.saving') : t('projectSettings.save')}
         </Button>
         <span className="text-xs text-muted-foreground" aria-live="polite">
           {valid
             ? dirty
-              ? 'Unsaved changes.'
-              : 'No changes.'
-            : `A whole number from ${STALL_MINUTES.min} to ${STALL_MINUTES.max}.`}
+              ? t('projectSettings.unsaved')
+              : t('projectSettings.noChanges')
+            : t('projectSettings.stall.invalid', { min: STALL_MINUTES.min, max: STALL_MINUTES.max })}
         </span>
       </form>
     </section>

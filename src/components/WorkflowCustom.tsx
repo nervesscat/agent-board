@@ -1,5 +1,6 @@
 import { Pencil, Plus } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import {
   AlertDialog,
@@ -49,6 +50,7 @@ function NameForm({
   onSubmit: (name: string) => Promise<string | null>
   children?: ReactNode
 }) {
+  const { t } = useTranslation()
   const [name, setName] = useState(initial)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -64,7 +66,7 @@ function NameForm({
       }}
     >
       <div className="grid gap-1.5">
-        <Label htmlFor="workflow-name">Name</Label>
+        <Label htmlFor="workflow-name">{t('workflowCustom.name')}</Label>
         <Input
           id="workflow-name"
           value={name}
@@ -107,6 +109,7 @@ export function NewWorkflowDialog({
   onCreate: (name: string, from: string) => Promise<string | null>
 }) {
   const [open, setOpen] = useState(false)
+  const { t } = useTranslation()
   const [source, setSource] = useState(from)
   const items = Object.fromEntries(choices.map((c) => [c.id, c.label]))
   return (
@@ -118,19 +121,16 @@ export function NewWorkflowDialog({
       }}
     >
       <DialogTrigger render={<Button type="button" variant="outline" size="sm" data-new-workflow />}>
-        <Plus data-icon="inline-start" /> New workflow
+        <Plus data-icon="inline-start" /> {t('workflowCustom.new')}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New workflow</DialogTitle>
-          <DialogDescription>
-            A copy of a workflow of this project that you change on its own: add and remove steps, reorder
-            them, pick who runs each. The review inside it comes with the preset it was copied from.
-          </DialogDescription>
+          <DialogTitle>{t('workflowCustom.new')}</DialogTitle>
+          <DialogDescription>{t('workflowCustom.newDescription')}</DialogDescription>
         </DialogHeader>
         <NameForm
           initial=""
-          submit="Create workflow"
+          submit={t('workflowCustom.create')}
           onSubmit={async (name) => {
             const reason = await onCreate(name, source)
             if (reason === null) setOpen(false)
@@ -138,7 +138,7 @@ export function NewWorkflowDialog({
           }}
         >
           <div className="grid gap-1.5">
-            <Label htmlFor="workflow-from">Start from</Label>
+            <Label htmlFor="workflow-from">{t('workflowCustom.startFrom')}</Label>
             <Select value={source} items={items} onValueChange={(v) => v && setSource(v)}>
               <SelectTrigger id="workflow-from" className="w-full">
                 <SelectValue />
@@ -166,22 +166,23 @@ export function RenameWorkflowDialog({
   name: string
   onRename: (name: string) => Promise<string | null>
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button type="button" variant="outline" size="sm" data-rename-workflow />}>
-        <Pencil data-icon="inline-start" /> Rename
+        <Pencil data-icon="inline-start" /> {t('workflowCustom.rename')}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Rename workflow</DialogTitle>
-          <DialogDescription>Tickets and the project keep following it under its new name.</DialogDescription>
+          <DialogTitle>{t('workflowCustom.renameTitle')}</DialogTitle>
+          <DialogDescription>{t('workflowCustom.renameDescription')}</DialogDescription>
         </DialogHeader>
         <NameForm
           // A fresh form each time it opens: nothing typed before stays.
           key={String(open)}
           initial={name}
-          submit="Rename"
+          submit={t('workflowCustom.rename')}
           onSubmit={async (next) => {
             const reason = await onRename(next)
             if (reason === null) setOpen(false)
@@ -195,22 +196,24 @@ export function RenameWorkflowDialog({
 
 /** Delete one of the project's own workflows, after a confirmation that says what follows instead. */
 export function DeleteWorkflowButton({ name, onDelete }: { name: string; onDelete: () => void }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger render={<Button type="button" variant="outline" size="sm" data-delete-workflow />}>
-        <TrashIcon data-icon="inline-start" /> Delete
+        <TrashIcon data-icon="inline-start" /> {t('common.delete')}
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle className="wrap-anywhere">Delete the {name} workflow?</AlertDialogTitle>
+          <AlertDialogTitle className="wrap-anywhere">
+            {t('workflowCustom.deleteTitle', { name })}
+          </AlertDialogTitle>
           <AlertDialogDescription className="wrap-anywhere">
-            The project, if it follows it, goes back to Standard, and a ticket that names it follows the
-            project&apos;s workflow instead. The presets are not touched. This cannot be undone.
+            {t('workflowCustom.deleteDescription', { standard: t('workflowPresets.standard.label') })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             onClick={() => {
@@ -218,7 +221,7 @@ export function DeleteWorkflowButton({ name, onDelete }: { name: string; onDelet
               onDelete()
             }}
           >
-            Delete workflow
+            {t('workflowCustom.deleteWorkflow')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -234,6 +237,7 @@ export function AddStepSelect({
   kinds: readonly WorkflowStepId[]
   onAdd: (id: WorkflowStepId) => void
 }) {
+  const { t } = useTranslation()
   const items = Object.fromEntries(kinds.map((id) => [id, WORKFLOW_STEPS[id].label]))
   return (
     <Select
@@ -243,9 +247,9 @@ export function AddStepSelect({
       disabled={kinds.length === 0}
       onValueChange={(v) => v && onAdd(v as WorkflowStepId)}
     >
-      <SelectTrigger aria-label="Add a step" data-add-step className="w-full sm:w-52">
+      <SelectTrigger aria-label={t('workflowCustom.addStep')} data-add-step className="w-full sm:w-52">
         <Plus className="size-3.5" aria-hidden />
-        <SelectValue placeholder={kinds.length ? 'Add a step' : 'Every kind is in'} />
+        <SelectValue placeholder={kinds.length ? t('workflowCustom.addStep') : t('workflowCustom.allIn')} />
       </SelectTrigger>
       <SelectContent alignItemWithTrigger={false}>
         {kinds.map((id) => (

@@ -30,7 +30,7 @@ import { listRepos } from './repos'
 import { missingReports, missingReviewPhases, ticketReports } from './runReports'
 import {
   deleteStage,
-  firstOfKind,
+  lastOfKind,
   kindOf,
   listStages,
   projectWorkStage,
@@ -833,14 +833,14 @@ function logOverride(t: Ticket, unmet: Need[], actor: string) {
 }
 
 /**
- * Refuses an agent's move or create into Approved: only the human's verdict or a move puts a ticket
+ * Refuses an agent's move or create into an approved-kind stage (Approved): only the human's verdict or a move puts a ticket
  * there. In a project with no software kind the human's approval also closes the work, so an agent
  * never moves a ticket to done there either.
  */
 function refuseAgentApproved(projectId: number, status: string | undefined, from?: string) {
   if (status === undefined) return
   const to = resolveStage(listStages(projectId), status)
-  if (to.key === 'approved')
+  if (to.kind === 'approved')
     throw new HttpError(
       403,
       'only the human puts a ticket in Approved: a verdict or a move by the human does',
@@ -879,7 +879,7 @@ export async function changeTicket(
   const before = features.getTicket(id)
   if (position !== undefined) features.checkPlacement(before, position)
   // An agent never puts a ticket in Approved: the orchestrator reads that stage as the human's go-ahead.
-  if (opts.agent && before.status !== 'approved')
+  if (opts.agent && kindOf(listStages(before.projectId), before.status) !== 'approved')
     refuseAgentApproved(before.projectId, patch.status, before.status)
   // From Approved an agent may still not close the work of a project with no software kind.
   if (opts.agent) refuseAgentDone(before.projectId, patch.status, before.status)
@@ -984,7 +984,7 @@ export async function judgeTicket(
   const stages = listStages(t.projectId)
   const to =
     verdict === 'approved' && features.approvalCloses(t, stages)
-      ? firstOfKind(stages, 'done')?.key
+      ? lastOfKind(stages, 'done')?.key
       : verdict === null && opts.reopenTo
         ? resolveStage(stages, opts.reopenTo, projectWorkStage(t.projectId, stages)).key
         : undefined

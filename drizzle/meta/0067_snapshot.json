@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "586f91eb-9ca7-4e6a-8b00-668e35cf97fe",
-  "prevId": "bff7cd1c-427e-43a9-bc08-9284bf18af36",
+  "id": "bff7cd1c-427e-43a9-bc08-9284bf18af36",
+  "prevId": "e3eb1cff-ec61-4da2-8411-eb8bd927b86b",
   "tables": {
     "account": {
       "name": "account",
@@ -1602,6 +1602,22 @@
           "autoincrement": false,
           "default": "'[\"software\"]'"
         },
+        "resume_command": {
+          "name": "resume_command",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "resume_timeout_minutes": {
+          "name": "resume_timeout_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 240
+        },
         "workflow_preset": {
           "name": "workflow_preset",
           "type": "text",
@@ -1623,29 +1639,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "workflow_tags": {
-          "name": "workflow_tags",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "resume_command": {
-          "name": "resume_command",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "''"
-        },
-        "resume_timeout_minutes": {
-          "name": "resume_timeout_minutes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 240
         }
       },
       "indexes": {},
@@ -3863,13 +3856,6 @@
           "autoincrement": false,
           "default": "'mid'"
         },
-        "workflow_preset": {
-          "name": "workflow_preset",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "assignee": {
           "name": "assignee",
           "type": "text",
@@ -4006,6 +3992,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        },
+        "workflow_preset": {
+          "name": "workflow_preset",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {

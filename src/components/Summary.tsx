@@ -18,6 +18,7 @@ import {
   Scale,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 
 import { Actor, ClaimedActor } from '#/components/Actor'
 import { AgentsAtWork } from '#/components/AgentsAtWork'
@@ -44,7 +45,8 @@ import {
   type ProjectSummary,
   type SummaryPayload as Payload,
 } from '#/lib/api'
-import { ago, clock } from '#/lib/format'
+import { currentLocale, shared } from '#/i18n'
+import { ago, clock, stamp } from '#/lib/format'
 import { needKeys, undismissed, useDismissedNeeds } from '#/lib/needsYou'
 import { projectTabSearch } from '#/lib/settingsTabs'
 import { carryingOverStages, stageBadge, stageOf } from '#/lib/stages'
@@ -58,6 +60,7 @@ import type { Stalled } from '#/lib/workTimeline'
  * from before today. Refreshed every 30 seconds while the page is visible.
  */
 export function Summary({ projectId }: { projectId?: number }) {
+  const { t: tr } = useTranslation()
   const { data, isLoading, error } = useQuery({
     queryKey: ['summary', projectId ?? 'all'],
     queryFn: () => get<Payload>(`/api/summary${projectId ? `?projectId=${projectId}` : ''}`),
@@ -76,7 +79,7 @@ export function Summary({ projectId }: { projectId?: number }) {
         ))}
       </div>
     )
-  if (error || !data) return <Empty>Could not load the summary: {errorMessage(error)}</Empty>
+  if (error || !data) return <Empty>{tr('overview.loadError', { error: errorMessage(error) })}</Empty>
   if (!data.projects.length) return <GettingStarted />
   // Only the entries the human has not opened yet, and counts to match.
   const projects = data.projects.map((p) => undismissed(p, dismissed))
@@ -91,7 +94,7 @@ export function Summary({ projectId }: { projectId?: number }) {
         <section key={p.project.id} className="space-y-3">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 className="text-lg font-semibold tracking-tight">
-              <Tip content={`${p.project.name}: overview`}>
+              <Tip content={tr('overview.projectOverview', { name: p.project.name })}>
                 <Link to="/projects/$id" params={{ id: String(p.project.id) }} className="hover:underline">
                   {p.project.name}
                 </Link>
@@ -109,14 +112,12 @@ export function Summary({ projectId }: { projectId?: number }) {
 /** What every Overview card is given: the project, the clock, and how to remember an opened entry. */
 type CardProps = { p: ProjectSummary; now: number; dismiss: (key: string) => void }
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
-
 /** The block's counts in one line, beside the project's name on Home. */
 const headline = (p: ProjectSummary) =>
   [
-    p.needsYou.total ? `${p.needsYou.total} waiting on you` : null,
-    `${p.inProgress.length} in progress`,
-    `${p.doneToday.tickets.length} done today`,
+    p.needsYou.total ? shared.t('overview.headline.waiting', { count: p.needsYou.total }) : null,
+    shared.t('overview.headline.inProgress', { count: p.inProgress.length }),
+    shared.t('overview.headline.doneToday', { count: p.doneToday.tickets.length }),
   ]
     .filter(Boolean)
     .join(' · ')
@@ -136,11 +137,19 @@ function ProjectBlock({ p, now, dismiss }: CardProps) {
   if (!p.project.overview.length)
     return (
       <Empty>
-        Every card of this overview is hidden.{' '}
-        <Link to="/settings" search={projectTabSearch(p.project.id)} hash="layout" className="underline">
-          Show them again in the layout settings
-        </Link>
-        .
+        <Trans
+          i18nKey="overview.allHidden"
+          components={{
+            goto: (
+              <Link
+                to="/settings"
+                search={projectTabSearch(p.project.id)}
+                hash="layout"
+                className="underline"
+              />
+            ),
+          }}
+        />
       </Empty>
     )
   return (
@@ -181,6 +190,7 @@ function Section({
   children: ReactNode
 }) {
   // On a phone the scroll cards show their first three entries and a way to see the rest.
+  const { t: tr } = useTranslation()
   const [expanded, setExpanded] = useState(false)
   const shown = Math.min(count ?? 0, rows ?? count ?? 0)
   const more = scroll && shown > 3
@@ -217,7 +227,7 @@ function Section({
             aria-expanded={expanded}
             onClick={() => setExpanded((v) => !v)}
           >
-            {expanded ? 'Show fewer' : `View all ${shown}`}
+            {expanded ? tr('overview.showFewer') : tr('overview.viewAll', { count: shown })}
           </Button>
         </div>
       )}
@@ -287,11 +297,12 @@ function TicketLink({
 
 /** Who holds it: one of the project's agents with its picture, anyone else as the board shows them. */
 function Who({ p, name }: { p: ProjectSummary; name: string }) {
-  if (!name) return <span>unassigned</span>
+  const { t: tr } = useTranslation()
+  if (!name) return <span>{tr('overview.unassigned')}</span>
   const agent = p.agents.find((a) => a.name.toLowerCase() === name.toLowerCase())
   if (!agent) return <Actor name={name} />
   return (
-    <Tip content={`${agent.name} (one of the project's agents)`}>
+    <Tip content={tr('overview.projectAgent', { name: agent.name })}>
       <span className="inline-flex items-center gap-1 font-medium">
         <AgentAvatar agent={agent} />
         {agent.name}
@@ -313,10 +324,15 @@ function StageBadge({ p, status }: { p: ProjectSummary; status: string }) {
 function since(iso: string) {
   const d = new Date(iso)
   const now = new Date()
-  if (d.toDateString() === now.toDateString()) return `since ${clock(iso)}`
+  if (d.toDateString() === now.toDateString()) return shared.t('workStatus.since', { time: clock(iso) })
   const days = (now.getTime() - d.getTime()) / 86_400_000
-  if (days < 6) return `since ${d.toLocaleDateString([], { weekday: 'short' })} ${d.getDate()}`
-  return `since ${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}`
+  if (days < 6)
+    return shared.t('overview.sinceDate', {
+      date: `${d.toLocaleDateString(currentLocale(), { weekday: 'short' })} ${d.getDate()}`,
+    })
+  return shared.t('overview.sinceDate', {
+    date: d.toLocaleDateString(currentLocale(), { month: 'short', day: 'numeric' }),
+  })
 }
 
 function LastPost({ post }: { post: CarryOver['lastPost'] }) {
@@ -339,16 +355,17 @@ function stalledOf(p: ProjectSummary, id: number, now: number): Stalled | null {
 
 /** When an agent was last heard from, relative, and what it said: one line under the now line. */
 function HeardLine({ timeline }: { timeline: WorkTimelineLike }) {
+  const { t: tr } = useTranslation()
   const h = lastHeard(timeline)
   if (!h)
     return (
       <p data-testid="last-heard" className="text-xs text-muted-foreground">
-        Nobody heard from yet
+        {tr('workStatus.nobodyHeard')}
       </p>
     )
   return (
     <p data-testid="last-heard" className="flex min-w-0 gap-x-1 text-xs text-muted-foreground tabular-nums">
-      <span className="shrink-0">Last heard {ago(h.at)}</span>
+      <span className="shrink-0">{tr('workStatus.lastHeard', { time: ago(h.at) })}</span>
       {h.agent && (
         <span className="min-w-0 truncate">{`· ${h.agent}${h.summary ? `: ${h.summary}` : ''}`}</span>
       )}
@@ -364,14 +381,21 @@ function Agents({ p }: CardProps) {
 }
 
 function NeedsYou({ p, now, dismiss }: CardProps) {
+  const { t: tr } = useTranslation()
   const { decisions, humanWaits, prs, threads, reviews, blockedTasks, instructionChanges, stalled, total } =
     p.needsYou
   const pid = String(p.project.id)
   const settle = useSettleInstructions(pid)
   return (
-    <Section icon={Inbox} title="Needs you" count={total} scroll className="lg:order-1 lg:col-span-full">
+    <Section
+      icon={Inbox}
+      title={tr('overview.needsYou.title')}
+      count={total}
+      scroll
+      className="lg:order-1 lg:col-span-full"
+    >
       {!total ? (
-        <Quiet>Nothing waiting on you.</Quiet>
+        <Quiet>{tr('overview.needsYou.empty')}</Quiet>
       ) : (
         <Rows>
           {decisions.map((d) => (
@@ -386,7 +410,7 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                   className="hover:underline"
                   onClick={() => dismiss(needKeys.decision(d))}
                 >
-                  Decide: {d.question}
+                  {tr('overview.needsYou.decide', { question: d.question })}
                 </Link>
               }
               meta={
@@ -395,7 +419,11 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                     {d.prTicket ? d.ticketTitle : `#${d.ticketId} ${d.ticketTitle}`}
                   </span>
                   <span>
-                    {plural(d.options, 'option')} · asked by {d.author} {ago(d.createdAt)}
+                    {tr('overview.needsYou.asked', {
+                      options: tr('overview.option', { count: d.options }),
+                      author: d.author,
+                      ago: ago(d.createdAt),
+                    })}
                   </span>
                 </>
               }
@@ -412,7 +440,7 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                   className="hover:underline"
                   onClick={() => dismiss(needKeys.humanWait(w))}
                 >
-                  Waiting on you {since(w.since)} · {w.agent}
+                  {tr('overview.needsYou.waitingOnYou', { since: since(w.since), agent: w.agent })}
                   {w.note ? `: ${w.note}` : ''}
                 </Link>
               }
@@ -421,7 +449,7 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                   <span className="truncate">
                     #{w.ticketId} {w.ticketTitle}
                   </span>
-                  {w.parent && <span className="truncate">lane of #{w.parent.id}</span>}
+                  {w.parent && <span className="truncate">{tr('overview.laneOf', { id: w.parent.id })}</span>}
                 </>
               }
             />
@@ -438,26 +466,24 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                   className="hover:underline"
                   onClick={() => dismiss(needKeys.pr(pr))}
                 >
-                  Review PR #{pr.number} {pr.title}
+                  {tr('overview.needsYou.reviewPr', { number: pr.number, title: pr.title })}
                 </Link>
               }
               meta={
                 <>
                   {pr.repo && <span className="rounded bg-muted px-1">{pr.repo}</span>}
-                  {pr.isDraft && <span>draft</span>}
-                  <span>
-                    by {pr.author} · updated {ago(pr.updatedAt)}
-                  </span>
+                  {pr.isDraft && <span>{tr('overview.draft')}</span>}
+                  <span>{tr('overview.needsYou.prBy', { author: pr.author, ago: ago(pr.updatedAt) })}</span>
                 </>
               }
               side={
-                <Tip content="Open on GitHub">
+                <Tip content={tr('overview.openOnGithub')}>
                   <a
                     href={pr.url}
                     target="_blank"
                     rel="noreferrer"
                     className="text-muted-foreground hover:text-foreground"
-                    aria-label="Open on GitHub"
+                    aria-label={tr('overview.openOnGithub')}
                     onClick={() => dismiss(needKeys.pr(pr))}
                   >
                     <ExternalLink className="size-3.5" />
@@ -500,7 +526,7 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                     {th.last.author}: {th.last.text}
                   </span>
                   <span className="shrink-0">
-                    {th.waiting > 1 ? `${th.waiting} new · ` : ''}
+                    {th.waiting > 1 ? tr('overview.needsYou.newReplies', { count: th.waiting }) : ''}
                     {ago(th.last.createdAt)}
                   </span>
                 </>
@@ -514,7 +540,7 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
               title={
                 <span>
                   <span className="mr-1.5 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
-                    blocked
+                    {tr('overview.needsYou.blocked')}
                   </span>
                   {task.parentTask && <span className="text-muted-foreground">{task.parentTask} › </span>}
                   {task.text}
@@ -532,7 +558,9 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                       onClick={() => dismiss(needKeys.blockedTask(task))}
                     />
                   </span>
-                  {task.parent && <span className="truncate">lane of #{task.parent.id}</span>}
+                  {task.parent && (
+                    <span className="truncate">{tr('overview.laneOf', { id: task.parent.id })}</span>
+                  )}
                 </>
               }
             />
@@ -550,9 +578,12 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                     className="hover:underline"
                     onClick={() => dismiss(needKeys.instructionChange(c))}
                   >
-                    Project instructions changed
+                    {tr('overview.needsYou.instructionsChanged')}
                   </Link>{' '}
-                  by <Actor name={c.changedBy} />
+                  <Trans
+                    i18nKey="overview.needsYou.changedBy"
+                    components={{ actor: <Actor name={c.changedBy} /> }}
+                  />
                 </span>
               }
               meta={
@@ -567,13 +598,13 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                       disabled={settle.isPending}
                       onClick={() => settle.mutate({ id: c.changeId, action: 'review' })}
                     >
-                      Reviewed
+                      {tr('overview.needsYou.reviewed')}
                     </Button>
                     <Tip
                       content={
                         c.revertable
-                          ? 'Put the instructions back as they were before this change'
-                          : 'The instructions changed again since: revert the later change first'
+                          ? tr('overview.needsYou.revertTip')
+                          : tr('overview.needsYou.revertBlockedTip')
                       }
                     >
                       <span className="inline-flex">
@@ -584,7 +615,7 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                           disabled={settle.isPending || !c.revertable}
                           onClick={() => settle.mutate({ id: c.changeId, action: 'revert' })}
                         >
-                          Revert
+                          {tr('overview.needsYou.revert')}
                         </Button>
                       </span>
                     </Tip>
@@ -619,10 +650,12 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                 meta={
                   <>
                     <StageBadge p={p} status={s.status} />
-                    {s.parent && <span className="truncate">lane of #{s.parent.id}</span>}
+                    {s.parent && (
+                      <span className="truncate">{tr('overview.laneOf', { id: s.parent.id })}</span>
+                    )}
                     {s.lastAgent && (
                       <span className="min-w-0 wrap-anywhere">
-                        last{' '}
+                        {tr('overview.needsYou.last')}{' '}
                         {s.lastFrom === 'assignee' ? (
                           // No event named anyone: the assignee, which nobody signed in recorded, so no badge.
                           <span data-testid="last-assignee" className="font-medium">
@@ -654,9 +687,9 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
               meta={
                 <>
                   <StageBadge p={p} status={t.status} />
-                  {t.parent && <span className="truncate">lane of #{t.parent.id}</span>}
+                  {t.parent && <span className="truncate">{tr('overview.laneOf', { id: t.parent.id })}</span>}
                   {t.assignee && <Who p={p} name={t.assignee} />}
-                  {t.prNumber && <span>PR #{t.prNumber}</span>}
+                  {t.prNumber && <span>{tr('overview.pr', { number: t.prNumber })}</span>}
                   <WorkLine
                     timeline={{
                       ...timelineFromActivity(null, null),
@@ -682,11 +715,18 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
  * server sorts them by their last signal, oldest first.
  */
 function LostContact({ p, now }: CardProps) {
+  const { t: tr } = useTranslation()
   const rows = p.lostContact
   return (
-    <Section icon={AlertTriangle} title="Lost contact" count={rows.length} scroll className="lg:order-2">
+    <Section
+      icon={AlertTriangle}
+      title={tr('overview.lost.title')}
+      count={rows.length}
+      scroll
+      className="lg:order-2"
+    >
       {!rows.length ? (
-        <Quiet>No lost contact.</Quiet>
+        <Quiet>{tr('overview.lost.empty')}</Quiet>
       ) : (
         <Rows>
           {rows.map((l) => {
@@ -699,13 +739,17 @@ function LostContact({ p, now }: CardProps) {
                 side={<StageBadge p={p} status={l.status} />}
                 meta={
                   <>
-                    {l.parent && <span className="truncate">lane of #{l.parent.id}</span>}
+                    {l.parent && (
+                      <span className="truncate">{tr('overview.laneOf', { id: l.parent.id })}</span>
+                    )}
                     <span className="min-w-0 wrap-anywhere">
                       {l.agent} · {l.phase} · {since(l.since)}
                     </span>
-                    <Tip content={`Last heard ${new Date(heard).toLocaleString()}`}>
+                    <Tip content={tr('overview.lost.lastHeardTip', { when: stamp(heard) })}>
                       <span className="tabular-nums">
-                        last heard {workDuration(now - Date.parse(heard))} ago
+                        {tr('overview.lost.lastHeard', {
+                          duration: workDuration(now - Date.parse(heard), tr),
+                        })}
                       </span>
                     </Tip>
                   </>
@@ -721,11 +765,18 @@ function LostContact({ p, now }: CardProps) {
 
 /** The Overview's in-progress rows: each ticket's now line, the agent's last word and how long on it. */
 export function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
+  const { t: tr } = useTranslation()
   const items = p.inProgress
   return (
-    <Section icon={Play} title="In progress" count={items.length} scroll className="lg:order-3">
+    <Section
+      icon={Play}
+      title={tr('overview.inProgress.title')}
+      count={items.length}
+      scroll
+      className="lg:order-3"
+    >
       {!items.length ? (
-        <Quiet>Nothing in progress.</Quiet>
+        <Quiet>{tr('overview.inProgress.empty')}</Quiet>
       ) : (
         <Rows>
           {items.map((t) => {
@@ -741,25 +792,25 @@ export function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
                     <HeardLine timeline={timeline} />
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <Who p={p} name={t.assignee} />
-                      <Tip content={new Date(t.since).toLocaleString()}>
+                      <Tip content={new Date(t.since).toLocaleString(currentLocale())}>
                         <span>{since(t.since)}</span>
                       </Tip>
                       {t.lanes > 0 && (
                         <span className="inline-flex items-center gap-1">
-                          <Layers className="size-3" /> {plural(t.lanes, 'lane')}
+                          <Layers className="size-3" /> {tr('overview.lane', { count: t.lanes })}
                         </span>
                       )}
                       {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
                       {t.blockedNext && <BlockedTasksBadge n={t.blockedTasks} />}
                       {t.preview && (
-                        <Tip content={`Preview of ${t.preview.workspace}`}>
+                        <Tip content={tr('overview.previewOf', { workspace: t.preview.workspace })}>
                           <a
                             href={t.preview.url}
                             target="_blank"
                             rel="noreferrer"
                             className="inline-flex items-center gap-1 text-foreground hover:underline"
                           >
-                            <ExternalLink className="size-3" /> Preview
+                            <ExternalLink className="size-3" /> {tr('overview.preview')}
                           </a>
                         </Tip>
                       )}
@@ -778,17 +829,18 @@ export function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
 }
 
 function DoneToday({ p }: { p: ProjectSummary }) {
+  const { t: tr } = useTranslation()
   const { tickets, prs, activity } = p.doneToday
   return (
     <Section
       icon={CheckCircle2}
-      title="Done today"
+      title={tr('overview.doneToday.title')}
       count={tickets.length + prs.length}
       scroll
       className="lg:order-4"
     >
       {!tickets.length && !prs.length ? (
-        <Quiet>Nothing finished yet today.</Quiet>
+        <Quiet>{tr('overview.doneToday.empty')}</Quiet>
       ) : (
         <Rows>
           {tickets.map((t) => (
@@ -798,7 +850,7 @@ function DoneToday({ p }: { p: ProjectSummary }) {
               title={<TicketLink p={p} id={t.id} title={t.title} />}
               meta={
                 <>
-                  {t.parent && <span className="truncate">lane of #{t.parent.id}</span>}
+                  {t.parent && <span className="truncate">{tr('overview.laneOf', { id: t.parent.id })}</span>}
                   {t.assignee && <Who p={p} name={t.assignee} />}
                   <span>{clock(t.doneAt)}</span>
                 </>
@@ -811,14 +863,14 @@ function DoneToday({ p }: { p: ProjectSummary }) {
               icon={<GitPullRequest className="text-violet-600 dark:text-violet-400" />}
               title={
                 <a href={pr.url} target="_blank" rel="noreferrer" className="hover:underline">
-                  PR #{pr.number} {pr.title}
+                  {tr('overview.prTitle', { number: pr.number, title: pr.title })}
                 </a>
               }
               meta={
                 <>
                   {pr.repo && <span className="rounded bg-muted px-1">{pr.repo}</span>}
-                  <Tip content="Merged or closed: it left the review queue">
-                    <span>closed {clock(pr.closedAt)}</span>
+                  <Tip content={tr('overview.doneToday.closedTip')}>
+                    <span>{tr('overview.doneToday.closed', { time: clock(pr.closedAt) })}</span>
                   </Tip>
                   {pr.tickets.map((t) => (
                     <TicketLink key={t.id} p={p} id={t.id} title={t.title} />
@@ -834,26 +886,27 @@ function DoneToday({ p }: { p: ProjectSummary }) {
         params={{ id: String(p.project.id) }}
         className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
       >
-        {plural(activity, 'thing')} happened today: Daily <ArrowRight className="size-3" />
+        {tr('overview.doneToday.activity', { count: activity })} <ArrowRight className="size-3" />
       </Link>
     </Section>
   )
 }
 
 function CarryingOver({ p, now }: CardProps) {
+  const { t: tr } = useTranslation()
   // The summary carries every ticket from before today; Overview lists the Blocked and In review ones.
   const shown = carryingOverStages(p.stages)
   const items = p.carryingOver.filter((t) => shown.has(t.status))
   return (
     <Section
       icon={Clock}
-      title="Carrying over"
+      title={tr('overview.carryingOver.title')}
       count={items.length}
       className="lg:order-5 lg:col-span-full"
       scroll
     >
       {!items.length ? (
-        <Quiet>Nothing blocked or in review from before today.</Quiet>
+        <Quiet>{tr('overview.carryingOver.emptyShown')}</Quiet>
       ) : (
         <Rows>
           {items.map((t) => {
@@ -868,8 +921,14 @@ function CarryingOver({ p, now }: CardProps) {
                     <WorkLine timeline={timeline} now={now} stage={stallStage(p.stages, t.status)} detail />
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <Who p={p} name={t.assignee} />
-                      <Tip content={`Work on it started ${new Date(t.since).toLocaleString()}`}>
-                        <span>{t.days ? `${plural(t.days, 'day')} in progress` : since(t.since)}</span>
+                      <Tip
+                        content={tr('overview.carryingOver.startedTip', {
+                          when: new Date(t.since).toLocaleString(currentLocale()),
+                        })}
+                      >
+                        <span>
+                          {t.days ? tr('overview.carryingOver.days', { count: t.days }) : since(t.since)}
+                        </span>
                       </Tip>
                     </div>
                     <LastPost post={t.lastPost} />

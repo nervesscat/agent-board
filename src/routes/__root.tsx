@@ -7,8 +7,10 @@ import {
   Scripts,
   createRootRouteWithContext,
 } from '@tanstack/react-router'
+import type { i18n as I18n } from 'i18next'
 import { Menu, Plug, Settings } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
+import { I18nextProvider, useTranslation } from 'react-i18next'
 import { cn } from 'cn'
 
 import { CrossBoardMark } from '#/components/CrossBoardMark'
@@ -27,6 +29,8 @@ import { Button, buttonVariants } from '#/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
 import { Toaster } from '#/components/ui/sonner'
 import { Tip, TooltipProvider } from '#/components/ui/tooltip'
+import { useLanguageOf } from '#/i18n/react'
+import { LanguageSync } from '#/i18n/LanguageSync'
 import { get, type Me } from '#/lib/api'
 import { KEY_ENTRIES } from '#/lib/reveal'
 import { followTheme } from '#/lib/theme'
@@ -35,6 +39,8 @@ import appCss from '#/styles.css?url'
 
 interface RouterContext {
   queryClient: QueryClient
+  /** The language the interface is drawn in: one per request on the server, the browser's one in the browser. */
+  i18n: I18n
 }
 
 export const Route = createRootRouteWithContext<RouterContext>()({
@@ -62,8 +68,10 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  // The page's own language, which follows the choice at once (the shell is above the provider).
+  const language = useLanguageOf(Route.useRouteContext().i18n)
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={language} suppressHydrationWarning>
       <head>
         {/* KEY_ENTRIES before the stylesheet: a script in the head does not run until a stylesheet before
             it has loaded, and it must run as the page opens. A stylesheet from HeadContent would come
@@ -93,8 +101,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
  * notifications they are icon buttons with a tooltip (`name`); in the menu they keep their words.
  */
 const PAGES = [
-  { to: '/agents', label: 'Connect', name: 'Connect an agent', Icon: Plug },
-  { to: '/settings', label: 'Settings', name: 'Settings', Icon: Settings },
+  { to: '/agents', label: 'shell.connect', name: 'shell.connectAgent', Icon: Plug },
+  { to: '/settings', label: 'shell.settings', name: 'shell.settings', Icon: Settings },
 ] as const
 
 /**
@@ -104,16 +112,27 @@ const PAGES = [
 const TOOLTIP_DELAY = 300
 
 function App() {
+  const { i18n } = Route.useRouteContext()
+  return (
+    <I18nextProvider i18n={i18n}>
+      <Board />
+    </I18nextProvider>
+  )
+}
+
+function Board() {
+  const { t, i18n } = useTranslation()
   useEffect(followTheme, [])
   return (
     <TooltipProvider delay={TOOLTIP_DELAY}>
+      <LanguageSync />
       {/* Opaque and padded for the phone's safe area: this bar is what paints the strip behind the status
           bar (viewport-fit=cover above), so a translucent bar would let the page's canvas show through. */}
       <header className="sticky top-0 z-20 border-b bg-background pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
         {/* gap-2 under sm: at 360 px the lockup, the test mode badge, the switcher, the search button
             and the Pages menu fit only with the tighter gap. */}
         <nav className="mx-auto flex h-12 max-w-7xl items-center gap-2 px-4 text-sm sm:gap-5">
-          <Tip content="Home">
+          <Tip content={t('shell.home')}>
             <Link to="/" className="flex shrink-0 items-center gap-2">
               <CrossBoardMark className="size-[22px] shrink-0" />
               {/* Below 390 px the wordmark leaves the row (the mark alone links home, its name kept
@@ -135,10 +154,10 @@ function App() {
           </div>
           <div className="hidden items-center gap-2 md:flex">
             {PAGES.map((p) => (
-              <Tip key={p.to} content={p.name}>
+              <Tip key={p.to} content={t(p.name)}>
                 <Link
                   to={p.to}
-                  aria-label={p.name}
+                  aria-label={t(p.name)}
                   className={cn(
                     buttonVariants({ variant: 'ghost', size: 'icon' }),
                     '[&.active]:bg-muted [&.active]:text-foreground',
@@ -155,7 +174,10 @@ function App() {
       <HostToolsBanner />
       <ReportDueBanner />
       <main className="mx-auto w-full max-w-7xl px-4 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
-        <Outlet />
+        {/* Remounted when the language changes, so every text, date and number is drawn again in it. */}
+        <Fragment key={i18n.language}>
+          <Outlet />
+        </Fragment>
       </main>
       <UpdateCard />
       <Gallery />
@@ -167,14 +189,15 @@ function App() {
 
 /** Outside production sign-in can be off: say so, so no screenshot is ever taken for the live board. */
 function AuthOffBadge() {
+  const { t } = useTranslation()
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: () => get<Me>('/api/me'), staleTime: Infinity })
   // Read after mount: /api/me can answer before React has hydrated the top bar.
   const hydrated = useHydrated()
   if (!hydrated || !me?.authOff) return null
   return (
-    <Tip content={`BOARD_ENV=${me.boardEnv}, sign-in off: signed in as ${me.actor}. Not the live board.`}>
+    <Tip content={t('shell.authOffTip', { env: me.boardEnv, actor: me.actor })}>
       <Badge variant="destructive" className="shrink-0 uppercase">
-        {me.boardEnv === 'test' ? 'test mode' : 'auth off'}
+        {me.boardEnv === 'test' ? t('shell.testMode') : t('shell.authOff')}
       </Badge>
     </Tip>
   )
@@ -185,12 +208,13 @@ const MENU_ITEM =
 
 /** The same pages behind one button, for screens too narrow to list them, and Getting started's entry. */
 function PagesMenu() {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={<Button variant="ghost" size="icon" className="md:hidden" />}
-        aria-label="Pages"
+        aria-label={t('shell.pages')}
       >
         <Menu />
       </PopoverTrigger>
@@ -198,7 +222,7 @@ function PagesMenu() {
         <GettingStartedMenuItem className={MENU_ITEM} onGo={() => setOpen(false)} />
         {PAGES.map((p) => (
           <Link key={p.to} to={p.to} onClick={() => setOpen(false)} className={MENU_ITEM}>
-            {p.label}
+            {t(p.label)}
           </Link>
         ))}
       </PopoverContent>

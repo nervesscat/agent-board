@@ -1,6 +1,8 @@
 import { CircleAlert, CircleCheck, CircleDashed, CircleX, Clock, GitMerge } from 'lucide-react'
 import { cn } from 'cn'
+import type { TFunction } from 'i18next'
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Badge } from '#/components/ui/badge'
 import { Tip } from '#/components/ui/tooltip'
@@ -16,41 +18,26 @@ const TONE: Record<Tone, { variant: 'secondary' | 'destructive' | 'outline'; cla
   muted: { variant: 'outline', className: 'text-muted-foreground' },
 }
 
-const MERGE: Record<PrRow['merge'], { label: string; title: string; tone: Tone }> = {
-  clean: { label: 'mergeable', title: 'No conflicts with the base.', tone: 'good' },
-  conflicts: {
-    label: 'conflicts',
-    title: 'Conflicts with the base branch: it needs a rebase or a merge before it can land.',
-    tone: 'bad',
-  },
-  behind: {
-    label: 'behind base',
-    title: 'The base moved on and branch protection wants the branch up to date first.',
-    tone: 'wait',
-  },
-  blocked: {
-    label: 'blocked',
-    title: 'Branch protection: a required review or check is still missing.',
-    tone: 'wait',
-  },
-  checking: {
-    label: 'checking',
-    title: 'GitHub is still working out whether it merges (usually right after a push). Refresh in a moment.',
-    tone: 'muted',
-  },
+/** The texts of each state are `prState.merge.<state>` (label, title), `prState.ci.<state>` and `prState.review.<decision>`. */
+const MERGE: Record<PrRow['merge'], { tone: Tone }> = {
+  clean: { tone: 'good' },
+  conflicts: { tone: 'bad' },
+  behind: { tone: 'wait' },
+  blocked: { tone: 'wait' },
+  checking: { tone: 'muted' },
 }
 
-const CI: Record<PrRow['ci'], { label: string; tone: Tone; icon: ReactNode }> = {
-  passing: { label: 'CI passing', tone: 'good', icon: <CircleCheck data-icon="inline-start" /> },
-  failing: { label: 'CI failing', tone: 'bad', icon: <CircleX data-icon="inline-start" /> },
-  pending: { label: 'CI running', tone: 'wait', icon: <Clock data-icon="inline-start" /> },
-  none: { label: 'no CI', tone: 'muted', icon: <CircleDashed data-icon="inline-start" /> },
+const CI: Record<PrRow['ci'], { tone: Tone; icon: ReactNode }> = {
+  passing: { tone: 'good', icon: <CircleCheck data-icon="inline-start" /> },
+  failing: { tone: 'bad', icon: <CircleX data-icon="inline-start" /> },
+  pending: { tone: 'wait', icon: <Clock data-icon="inline-start" /> },
+  none: { tone: 'muted', icon: <CircleDashed data-icon="inline-start" /> },
 }
 
-const REVIEW: Record<string, { label: string; tone: Tone }> = {
-  APPROVED: { label: 'approved', tone: 'good' },
-  CHANGES_REQUESTED: { label: 'changes requested', tone: 'bad' },
-  REVIEW_REQUIRED: { label: 'review required', tone: 'wait' },
+const REVIEW: Record<string, { tone: Tone }> = {
+  APPROVED: { tone: 'good' },
+  CHANGES_REQUESTED: { tone: 'bad' },
+  REVIEW_REQUIRED: { tone: 'wait' },
 }
 
 /** One state as a badge, with `tip` as its tooltip if it has one. */
@@ -67,12 +54,17 @@ function Pill({ tone, tip, children }: { tone: Tone; tip?: string; children: Rea
 type State = Pick<PrRow, 'merge' | 'mergeCheck' | 'ci' | 'checks' | 'reviewDecision' | 'isDraft'>
 
 /** The merge chip's hover: what the state means, and where it came from and when. */
-function mergeTitle({ merge, mergeCheck: c }: Pick<State, 'merge' | 'mergeCheck'>) {
-  const when = c.at ? `, ${stamp(c.at)}` : ''
-  if (c.source === 'local') return `${MERGE[merge].title} Checked here against origin/${c.base}${when}.`
+function mergeTitle({ merge, mergeCheck: c }: Pick<State, 'merge' | 'mergeCheck'>, t: TFunction) {
+  const title = t(`prState.merge.${merge}.title`)
+  if (c.source === 'local')
+    return c.at
+      ? t('prState.checkedLocalAt', { title, base: c.base, when: stamp(c.at) })
+      : t('prState.checkedLocal', { title, base: c.base })
   if (c.outdated)
-    return `origin/${c.base} moved after GitHub's word${c.at ? ` of ${stamp(c.at)}` : ''}: waiting for GitHub to look again.`
-  return `${MERGE[merge].title} GitHub's word as of ${c.at ? stamp(c.at) : 'the last refresh'}.`
+    return c.at
+      ? t('prState.outdatedAt', { base: c.base, when: stamp(c.at) })
+      : t('prState.outdated', { base: c.base })
+  return c.at ? t('prState.githubAt', { title, when: stamp(c.at) }) : t('prState.githubLast', { title })
 }
 
 /**
@@ -80,30 +72,40 @@ function mergeTitle({ merge, mergeCheck: c }: Pick<State, 'merge' | 'mergeCheck'
  * decision, with links to the checks that failed.
  */
 export function PrState({ pr, className }: { pr: State; className?: string }) {
+  const { t } = useTranslation()
   const merge = MERGE[pr.merge]
   const ci = CI[pr.ci]
   const review = pr.reviewDecision ? REVIEW[pr.reviewDecision] : undefined
   const count = (state: string) => pr.checks.filter((c) => c.state === state).length
   const failed = pr.checks.filter((c) => c.state === 'fail')
   const ciTitle = pr.checks.length
-    ? `${count('pass')} passed · ${failed.length} failed · ${count('pending')} running · ${count('skipped')} skipped`
-    : 'No checks on the head commit.'
+    ? t('prState.checks', {
+        pass: count('pass'),
+        failed: failed.length,
+        pending: count('pending'),
+        skipped: count('skipped'),
+      })
+    : t('prState.noChecks')
   return (
     <div className={cn('flex flex-wrap items-center gap-1.5 text-xs', className)}>
-      {pr.isDraft && <Pill tone="muted">draft</Pill>}
-      <Pill tone={merge.tone} tip={mergeTitle(pr)}>
+      {pr.isDraft && <Pill tone="muted">{t('prState.draft')}</Pill>}
+      <Pill tone={merge.tone} tip={mergeTitle(pr, t)}>
         <GitMerge data-icon="inline-start" />
-        {merge.label}
+        {t(`prState.merge.${pr.merge}.label`)}
       </Pill>
       <Pill tone={ci.tone} tip={ciTitle}>
         {ci.icon}
-        {ci.label}
+        {t(`prState.ci.${pr.ci}`)}
         {pr.ci === 'pending' && ` · ${count('pending')}`}
       </Pill>
-      {review && <Pill tone={review.tone}>{review.label}</Pill>}
+      {review && pr.reviewDecision && (
+        <Pill tone={review.tone}>
+          {t(`prState.review.${pr.reviewDecision as 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED'}`)}
+        </Pill>
+      )}
       {failed.length > 0 && (
         <span className="inline-flex flex-wrap items-center gap-x-1.5 text-muted-foreground">
-          failed:
+          {t('prState.failed')}
           {failed.map((c, i) =>
             c.url ? (
               <a
@@ -129,9 +131,10 @@ export function PrState({ pr, className }: { pr: State; className?: string }) {
 
 /** A red mark for a list row whose PR has conflicts or failing CI; nothing otherwise. */
 export function PrAlert({ pr }: { pr: Pick<PrRow, 'merge' | 'ci'> }) {
+  const { t } = useTranslation()
   const problems = [
-    pr.merge === 'conflicts' && 'merge conflicts',
-    pr.ci === 'failing' && 'CI failing',
+    pr.merge === 'conflicts' && t('prState.mergeConflicts'),
+    pr.ci === 'failing' && t('prState.ci.failing'),
   ].filter(Boolean)
   if (!problems.length) return null
   return (

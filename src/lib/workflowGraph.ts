@@ -1,3 +1,5 @@
+import { currentLocale, shared } from '#/i18n'
+
 import type { Complexity } from './constants'
 import {
   defaultTeamAgent,
@@ -6,7 +8,7 @@ import {
   type ResolvedWorkflow,
   type TeamAgentRef,
 } from './workflow'
-import { effortText, groupSubSteps, roundsText, skipText } from './workflowView'
+import { effortText, groupSubSteps, lockReasonText, roundsText, skipText } from './workflowView'
 
 /**
  * What the Workflow page draws as a graph, worked out from the resolved workflow alone: which nodes there are,
@@ -40,7 +42,9 @@ export function roundRows(phases: readonly ResolvedSubStep[]): RoundRow[] {
 
 /** What the loop-back arrow of the round says: the count for the ticket's complexity, `No review rounds on low`. */
 export function loopLabel(rounds: number, complexity: Complexity): string {
-  return rounds > 0 ? roundsText(rounds) : `No review rounds on ${complexity}`
+  return rounds > 0
+    ? roundsText(rounds)
+    : shared.t('workflowGraph.noRoundsOn', { complexity: shared.t(`workflowGraph.complexity.${complexity}`) })
 }
 
 /** A node of the graph a person can select: a step of the workflow, or a phase of the review round. */
@@ -100,25 +104,32 @@ export interface NodeView {
 /** The words for what the human changed on a step, for its marker. */
 export function changedText(step: Pick<ResolvedStep, 'edited'>): string | null {
   const parts = [
-    step.edited.moved && 'its place in the order',
-    step.edited.enabled && 'turned off',
-    step.edited.effort && 'its effort',
-    step.edited.agent && 'its Team agent',
+    step.edited.moved && shared.t('workflowView.changed.moved'),
+    step.edited.enabled && shared.t('workflowView.changed.off'),
+    step.edited.effort && shared.t('workflowView.changed.effort'),
+    step.edited.agent && shared.t('workflowView.changed.agent'),
   ].filter((p): p is string => Boolean(p))
-  return parts.length ? parts.join(', ') : null
+  return parts.length ? parts.join(shared.t('workflowView.separator')) : null
 }
 
 function readAs(view: Omit<NodeView, 'name'>, numbered: boolean): string {
   const who = view.team ? view.team.name : view.agentLabel
   const states = [
-    view.lock && 'locked',
-    view.skipped?.toLowerCase() ?? (view.skipsOnLow ? 'skipped on low tickets' : null),
-    view.team?.missing && 'agent missing',
-    view.changed && 'changed',
+    view.lock && shared.t('workflowView.name.locked'),
+    view.skipped?.toLocaleLowerCase(currentLocale()) ??
+      (view.skipsOnLow ? shared.t('workflowView.name.skipsOnLow') : null),
+    view.team?.missing && shared.t('workflowChips.agentMissing'),
+    view.changed && shared.t('workflowChips.changed'),
   ].filter((s): s is string => Boolean(s))
   const title = view.number === null ? view.label : `${view.number}${numbered ? '.' : ''} ${view.label}`
-  return [title, `agent ${who}`, ...states].join(', ')
+  return [title, shared.t('workflowView.name.agent', { name: who }), ...states].join(
+    shared.t('workflowView.separator'),
+  )
 }
+
+/** Who runs a node when no Team agent does: `you` is the ticket agent (a word), a role (`/feature-review`) is a name. */
+const agentLabelText = (node: Pick<ResolvedStep, 'agent' | 'agentLabel'>): string =>
+  node.agent === 'you' ? shared.t('workflowView.you') : node.agentLabel
 
 export function stepView(step: ResolvedStep): NodeView {
   const view = {
@@ -126,10 +137,10 @@ export function stepView(step: ResolvedStep): NodeView {
     number: step.number === null ? null : String(step.number),
     label: step.label,
     team: step.teamAgent,
-    agentLabel: step.agentLabel,
+    agentLabel: agentLabelText(step),
     role: step.agent,
     lock: step.lock,
-    lockReason: step.lockReason,
+    lockReason: lockReasonText(step),
     skipped: skipText(step),
     skipsOnLow: step.skipped === null && step.skipsOnLow,
     effort: effortText(step),
@@ -144,14 +155,14 @@ export function phaseView(phase: ResolvedSubStep): NodeView {
     number: phase.number,
     label: phase.label,
     team: phase.teamAgent,
-    agentLabel: phase.agentLabel,
+    agentLabel: agentLabelText(phase),
     role: phase.agent,
     lock: null,
     lockReason: null,
     skipped: null,
     skipsOnLow: false,
     effort: null,
-    changed: phase.teamAgent?.picked != null ? 'its Team agent' : null,
+    changed: phase.teamAgent?.picked != null ? shared.t('workflowView.changed.agent') : null,
   }
   return { ...view, name: readAs(view, false) }
 }

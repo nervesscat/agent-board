@@ -1,5 +1,6 @@
 import { FileText, Loader2, X } from 'lucide-react'
 import { type ClipboardEvent, type DragEvent, useEffect, useId, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { galleryItem } from '#/components/Gallery'
@@ -26,6 +27,7 @@ export function PendingFiles({
   uploading?: (file: File) => boolean
   thumbnails?: boolean
 }) {
+  const { t } = useTranslation()
   // Object URLs for the thumbnails and the gallery, released when the list changes or the form goes
   // away. They are made in the same effect that releases them: React may run an effect, clean it up
   // and run it again (it does in development), and URLs made once outside it would be revoked by then.
@@ -48,7 +50,7 @@ export function PendingFiles({
               <button
                 type="button"
                 className="block cursor-zoom-in"
-                aria-label={`Preview ${f.name}`}
+                aria-label={t('files.pending.preview', { name: f.name })}
                 {...galleryItem({ src: urls.get(f) ?? '', name: f.name, mime: f.type }, group)}
               >
                 <img
@@ -63,15 +65,15 @@ export function PendingFiles({
               {uploading?.(f) && (
                 <Loader2
                   className="pointer-events-none absolute top-1/2 left-1/2 size-5 -translate-1/2 animate-spin text-foreground"
-                  aria-label="uploading"
+                  aria-label={t('files.pending.uploading')}
                 />
               )}
-              <Tip content="Remove">
+              <Tip content={t('files.pending.remove')}>
                 <button
                   type="button"
                   onClick={() => remove(i)}
                   className="absolute -top-2 -right-2 inline-flex size-5 items-center justify-center rounded-full border bg-background text-muted-foreground hover:text-foreground"
-                  aria-label={`Remove ${f.name}`}
+                  aria-label={t('files.pending.removeNamed', { name: f.name })}
                 >
                   <X className="size-3" />
                 </button>
@@ -84,7 +86,7 @@ export function PendingFiles({
               <button
                 type="button"
                 className="inline-flex min-w-0 cursor-zoom-in items-center gap-1.5 rounded-sm hover:underline"
-                aria-label={`Preview ${f.name}`}
+                aria-label={t('files.pending.preview', { name: f.name })}
                 {...galleryItem(
                   { src: urls.get(f) ?? '', name: f.name, mime: f.type || 'application/octet-stream' },
                   group,
@@ -99,18 +101,18 @@ export function PendingFiles({
                 {uploading?.(f) ? (
                   <Loader2
                     className="size-3.5 shrink-0 animate-spin text-muted-foreground"
-                    aria-label="uploading"
+                    aria-label={t('files.pending.uploading')}
                   />
                 ) : (
                   <span className="shrink-0 text-muted-foreground">{fileSize(f.size)}</span>
                 )}
               </button>
-              <Tip content="Remove">
+              <Tip content={t('files.pending.remove')}>
                 <button
                   type="button"
                   onClick={() => remove(i)}
                   className="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-background hover:text-foreground"
-                  aria-label={`Remove ${f.name}`}
+                  aria-label={t('files.pending.removeNamed', { name: f.name })}
                 >
                   <X className="size-3.5" />
                 </button>

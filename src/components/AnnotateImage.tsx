@@ -10,6 +10,7 @@ import {
   Undo2,
 } from 'lucide-react'
 import { type PointerEvent, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { TrashIcon } from '#/components/TrashIcon'
@@ -84,14 +85,14 @@ export interface AnnotatedImage {
 
 type Tool = AnnotationKind | 'note' | 'select'
 
-const TOOLS: { tool: Tool; label: string; hint: string; Icon: typeof Pencil }[] = [
-  { tool: 'select', label: 'Select', hint: 'Pick marks to move, turn or delete them', Icon: MousePointer2 },
-  { tool: 'pen', label: 'Pencil', hint: 'Draw freehand', Icon: Pencil },
-  { tool: 'rect', label: 'Box', hint: 'Draw a box around something', Icon: Square },
-  { tool: 'arrow', label: 'Arrow', hint: 'Point at something', Icon: MoveUpRight },
-  { tool: 'ellipse', label: 'Ellipse', hint: 'Circle something', Icon: Circle },
-  { tool: 'text', label: 'Text', hint: 'Write on the picture', Icon: Type },
-  { tool: 'note', label: 'Note', hint: 'Click a mark to write its note', Icon: MessageSquarePlus },
+const TOOLS: { tool: Tool; Icon: typeof Pencil }[] = [
+  { tool: 'select', Icon: MousePointer2 },
+  { tool: 'pen', Icon: Pencil },
+  { tool: 'rect', Icon: Square },
+  { tool: 'arrow', Icon: MoveUpRight },
+  { tool: 'ellipse', Icon: Circle },
+  { tool: 'text', Icon: Type },
+  { tool: 'note', Icon: MessageSquarePlus },
 ]
 
 const DEFAULT_COLOR = '#e11d48'
@@ -338,8 +339,9 @@ export function AnnotateImage({
   /** What the focus goes back to when the canvas closes: whatever opened it. */
   finalFocus?: RefObject<HTMLElement | null>
 }) {
+  const { t } = useTranslation()
   const [bitmap, setBitmap] = useState<ImageBitmap | null>(null)
-  const [failed, setFailed] = useState('')
+  const [failed, setFailed] = useState(false)
   // The marks and their undo history: `history.present` is the picture as it stands.
   const [history, setHistory] = useState<History<Annotation[]>>(() => createHistory<Annotation[]>([]))
   const items = history.present
@@ -400,7 +402,7 @@ export function AnnotateImage({
     if (!file) return
     let dead = false
     setBitmap(null)
-    setFailed('')
+    setFailed(false)
     setHistory(createHistory<Annotation[]>([]))
     setSelected(new Set())
     setPreview(null)
@@ -415,7 +417,7 @@ export function AnnotateImage({
         decoded.current = made
         setBitmap(made)
       },
-      () => !dead && setFailed('This picture cannot be opened in the canvas.'),
+      () => !dead && setFailed(true),
     )
     return () => {
       dead = true
@@ -882,16 +884,16 @@ export function AnnotateImage({
       canvas.width = width
       canvas.height = height
       const ctx = canvas.getContext('2d')
-      if (!ctx) throw new Error('this browser cannot draw the picture')
+      if (!ctx) throw new Error(t('annotate.cannotDraw'))
       // No overlay: the selection is a tool on screen, never part of the picture.
       paint(canvas, bitmap, items, null)
       const blob = await new Promise<Blob>((resolve, reject) =>
         canvas.toBlob(
-          (png) => (png ? resolve(png) : reject(new Error('the picture could not be saved'))),
+          (png) => (png ? resolve(png) : reject(new Error(t('annotate.couldNotSave')))),
           'image/png',
         ),
       )
-      // The attachment is the annotated render, under a name that says it is a PNG.
+      // The attachment is the annotated render, under a name that says it is a PNG. (i18n-ignore: a file extension)
       const name = `${shownFile.name.replace(/\.[^./\\]+$/, '')}.png`
       onAttach(
         {
@@ -901,7 +903,7 @@ export function AnnotateImage({
         shownFile,
       )
     } catch (err) {
-      toast.error(errorMessage(err, 'the picture could not be saved'))
+      toast.error(errorMessage(err, t('annotate.couldNotSave')))
     } finally {
       setBusy(false)
     }
@@ -936,16 +938,17 @@ export function AnnotateImage({
     >
       <DialogContent className="sm:max-w-4xl" finalFocus={finalFocus}>
         <DialogHeader>
-          <DialogTitle>Annotate image</DialogTitle>
-          <DialogDescription>
-            {file.name}: draw on it and write what each mark means. The picture is attached as it looks here,
-            and the notes go with it.
-          </DialogDescription>
+          <DialogTitle>{t('annotate.title')}</DialogTitle>
+          <DialogDescription>{t('annotate.description', { name: file.name })}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <div role="toolbar" aria-label="Drawing tools" className="flex flex-wrap items-center gap-1">
-            {TOOLS.map(({ tool: name, label, hint, Icon }) => (
-              <Tip key={name} content={hint}>
+          <div
+            role="toolbar"
+            aria-label={t('annotate.toolbar')}
+            className="flex flex-wrap items-center gap-1"
+          >
+            {TOOLS.map(({ tool: name, Icon }) => (
+              <Tip key={name} content={t(`annotate.tool.${name}.hint`)}>
                 <Button
                   type="button"
                   size="sm"
@@ -954,25 +957,25 @@ export function AnnotateImage({
                   onClick={() => pickTool(name)}
                   disabled={busy}
                 >
-                  <Icon data-icon="inline-start" /> {label}
+                  <Icon data-icon="inline-start" /> {t(`annotate.tool.${name}.label`)}
                 </Button>
               </Tip>
             ))}
             <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
-            <Tip content="Colour">
+            <Tip content={t('annotate.colour')}>
               <input
                 type="color"
-                aria-label="Colour"
+                aria-label={t('annotate.colour')}
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
                 disabled={busy}
                 className="h-7 w-8 cursor-pointer rounded-md border bg-background p-0.5"
               />
             </Tip>
-            <Tip content="Stroke width">
+            <Tip content={t('annotate.strokeWidth')}>
               <input
                 type="range"
-                aria-label="Stroke width"
+                aria-label={t('annotate.strokeWidth')}
                 min={1}
                 max={20}
                 step={1}
@@ -984,16 +987,16 @@ export function AnnotateImage({
             </Tip>
             <label className="flex items-center gap-1.5 text-xs">
               <Checkbox checked={fillShown} onCheckedChange={chooseFill} disabled={busy} />
-              Fill
+              {t('annotate.fill')}
             </label>
             {tool === 'text' && (
               <Input
-                aria-label="Text"
+                aria-label={t('annotate.tool.text.label')}
                 value={text}
                 maxLength={ANNOTATION_TEXT_MAX}
                 onChange={(e) => setText(e.target.value.slice(0, ANNOTATION_TEXT_MAX))}
                 disabled={busy}
-                placeholder="Text to place"
+                placeholder={t('annotate.textToPlace')}
                 className="h-7 w-48"
               />
             )}
@@ -1005,7 +1008,7 @@ export function AnnotateImage({
               onClick={() => travel('undo')}
               disabled={!canUndo}
             >
-              <Undo2 data-icon="inline-start" /> Undo
+              <Undo2 data-icon="inline-start" /> {t('annotate.undo')}
             </Button>
             <Button
               type="button"
@@ -1014,7 +1017,7 @@ export function AnnotateImage({
               onClick={() => travel('redo')}
               disabled={!canRedo}
             >
-              <Redo2 data-icon="inline-start" /> Redo
+              <Redo2 data-icon="inline-start" /> {t('annotate.redo')}
             </Button>
             <Button
               type="button"
@@ -1027,23 +1030,21 @@ export function AnnotateImage({
               }}
               disabled={!items.length || busy}
             >
-              <TrashIcon data-icon="inline-start" /> Clear
+              <TrashIcon data-icon="inline-start" /> {t('annotate.clear')}
             </Button>
           </div>
           <div className="flex items-center gap-2">
             <Label htmlFor="annotation-note" className="text-xs">
-              Note
+              {t('annotate.tool.note.label')}
             </Label>
             <Input
               id="annotation-note"
-              aria-label="Note"
+              aria-label={t('annotate.tool.note.label')}
               value={selectedItem?.note ?? ''}
               maxLength={ANNOTATION_TEXT_MAX}
               onChange={(e) => setNote(e.target.value)}
               disabled={!selectedItem || busy}
-              placeholder={
-                selectedItem ? 'What does this mark mean?' : 'Draw a mark, or pick Note and click one'
-              }
+              placeholder={selectedItem ? t('annotate.notePlaceholder') : t('annotate.notePlaceholderEmpty')}
               className="h-8"
             />
           </div>
@@ -1054,7 +1055,7 @@ export function AnnotateImage({
                 width={bitmap.width}
                 height={bitmap.height}
                 role="img"
-                aria-label="Picture to annotate"
+                aria-label={t('annotate.canvas')}
                 className={cn('max-h-[calc(60vh-1rem)] w-auto max-w-full touch-none border bg-white', cursor)}
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
@@ -1063,17 +1064,19 @@ export function AnnotateImage({
                 onPointerLeave={onPointerLeave}
               />
             ) : (
-              <p className="p-6 text-sm text-muted-foreground">{failed || 'Opening the picture…'}</p>
+              <p className="p-6 text-sm text-muted-foreground">
+                {failed ? t('annotate.cannotOpen') : t('annotate.opening')}
+              </p>
             )}
           </div>
           {notes.length > 0 && (
             // A long note (the field takes thousands of characters) scrolls here rather than growing
             // the dialog past the window, which would put the buttons below the edge.
             <div
-              aria-label="Notes"
+              aria-label={t('annotate.notes')}
               className="max-h-24 overflow-y-auto text-xs wrap-anywhere text-muted-foreground"
             >
-              <span className="font-medium text-foreground">Notes</span>
+              <span className="font-medium text-foreground">{t('annotate.notes')}</span>
               <ol className="mt-1 space-y-0.5">
                 {notes.map((item, i) => (
                   <li key={item.id}>
@@ -1089,14 +1092,14 @@ export function AnnotateImage({
             // Said outright, not only through greyed controls: what is drawn here goes into the
             // picture being encoded now, so edits made meanwhile would be silently left out.
             <p role="status" className="text-xs text-muted-foreground sm:mr-auto">
-              The marks are locked until the picture is attached.
+              {t('annotate.locked')}
             </p>
           )}
           <Button type="button" variant="outline" onClick={onAttachOriginal} disabled={busy}>
-            Attach original
+            {t('annotate.attachOriginal')}
           </Button>
           <Button type="button" onClick={attach} disabled={!bitmap || busy}>
-            {busy ? 'Attaching…' : 'Attach'}
+            {busy ? t('annotate.attaching') : t('annotate.attach')}
           </Button>
         </DialogFooter>
       </DialogContent>

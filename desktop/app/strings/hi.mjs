@@ -1,0 +1,38 @@
+// The desktop app's own texts in hi (see ../strings.mjs). Every key of en.mjs, the same {{placeholders}} and <tags>.
+export default {
+  open: 'खोलें',
+  openInBrowser: 'ब्राउज़र में खोलें',
+  retryNow: 'अभी फिर कोशिश करें',
+  startAtLogin: 'लॉगिन पर शुरू करें',
+  quit: 'बंद करें',
+  openSettings: 'सेटिंग्स फ़ाइल खोलें',
+  openLogs: 'लॉग फ़ोल्डर खोलें',
+  openHome: 'ऐप फ़ोल्डर खोलें',
+  startAtLoginFailed: 'लॉगिन पर शुरू करने की सेटिंग बदली नहीं जा सकी।',
+  cannotStart: 'बोर्ड शुरू नहीं हो सकता।',
+  settingsInvalid: 'बोर्ड की सेटिंग्स मान्य नहीं हैं।',
+  homeUnusable:
+    'ऐप का फ़ोल्डर {{home}} इस्तेमाल नहीं हो सकता: {{error}}\n\nAGENT_BOARD_HOME को ऐसे फ़ोल्डर पर सेट करें जिसमें लिखा जा सके, या डिफ़ॉल्ट के लिए उसे हटा दें।',
+  homeLine: '{{error}}\n\nऐप का फ़ोल्डर: {{home}}',
+  dataFolderUnusable:
+    'इसका डेटा फ़ोल्डर {{dir}} इस्तेमाल नहीं हो सकता: {{error}}\n\n{{file}} में, या एनवायरनमेंट में, कोई और DATA_DIR सेट करें और ऐप फिर शुरू करें।',
+  logsLine: '{{detail}}\n\nलॉग: {{logs}}',
+  stopped: 'बोर्ड रुक गया।',
+  restartedTimes_one: ' यह {{count}} बार फिर शुरू हुआ।',
+  restartedTimes_other: ' यह {{count}} बार फिर शुरू हुआ।',
+  noOutput: '(कोई आउटपुट नहीं)',
+  exitedSignal: '{{time}} पर इसे {{signal}} से बंद किया गया।',
+  exitedCode: '{{time}} पर यह कोड {{code}} के साथ बंद हुआ।',
+  exited: '{{time}} पर यह बंद हुआ।',
+  reasonCode: 'एग्ज़िट कोड {{code}}',
+  reasonSignal: 'सिग्नल {{signal}}',
+  reasonNone: 'कोई एग्ज़िट कोड नहीं',
+  tipRestarting: '{{name}}: बोर्ड फिर शुरू हो रहा है ({{reason}})',
+  tipRestarted: '{{name}}: {{url}} ({{reason}} के बाद {{time}} पर फिर शुरू हुआ)',
+  notifyRestarted: 'बोर्ड फिर शुरू हुआ ({{reason}})।',
+  didNotStart: 'बोर्ड शुरू नहीं हुआ।',
+  didNotAnswer: 'इसने एक मिनट में {{url}} पर जवाब नहीं दिया।',
+  unreachableHeading: '<code>{{address}}</code> पर बोर्ड तक पहुँचा नहीं जा सकता।',
+  unreachableBody:
+    'बोर्ड किसी दूसरी मशीन पर चलता है: जाँचें कि यह ऑनलाइन है और वहाँ बोर्ड चल रहा है। ऐप खुद फिर कोशिश करता है, और {{retry}} तुरंत कोशिश करता है।',
+}

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, KeyRound, LogOut, Plus } from 'lucide-react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import {
@@ -16,10 +17,11 @@ import {
 } from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
 import { del, errorMessage, get, post } from '#/lib/api'
+import { shared } from '#/i18n'
 import { ago, stamp } from '#/lib/format'
 import type { EnrolLink, PasskeyRow, SessionRow } from '#/server/passkeys'
 
-const where = (rpId: string) => (rpId === 'localhost' ? 'this machine' : rpId)
+const where = (rpId: string) => (rpId === 'localhost' ? shared.t('devices.thisMachine') : rpId)
 
 /**
  * The devices section of Settings: the passkeys that sign in to the board and the sessions they opened,
@@ -28,6 +30,7 @@ const where = (rpId: string) => (rpId === 'localhost' ? 'this machine' : rpId)
  * this machine.
  */
 export function Devices() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const passkeys = useQuery({
     queryKey: ['passkeys'],
@@ -68,7 +71,7 @@ export function Devices() {
     <section className="space-y-3" aria-labelledby="devices-title">
       <div className="flex items-center justify-between gap-2">
         <h2 id="devices-title" className="text-sm font-medium">
-          Devices
+          {t('devices.title')}
         </h2>
         <div className="flex gap-2">
           <Button
@@ -77,24 +80,18 @@ export function Devices() {
             onClick={() => addDevice.mutate()}
             disabled={addDevice.isPending}
           >
-            <Plus /> Add a device
+            <Plus /> {t('devices.add')}
           </Button>
           <Button size="sm" variant="ghost" onClick={() => signOut.mutate()} disabled={signOut.isPending}>
-            <LogOut /> Sign out
+            <LogOut /> {t('devices.signOut')}
           </Button>
         </div>
       </div>
-      <p className="text-sm text-muted-foreground">
-        The passkeys that sign in to the board. A passkey works on the address it was made on: this machine
-        (localhost), or the board&apos;s tailnet name for your other devices.
-      </p>
+      <p className="text-sm text-muted-foreground">{t('devices.text')}</p>
 
       {link && (
         <div className="space-y-2 rounded-md border p-3 text-sm" role="status">
-          <p>
-            Open this link on the new device and create a passkey there. It works once, until{' '}
-            {stamp(link.expiresAt)}.
-          </p>
+          <p>{t('devices.link', { until: stamp(link.expiresAt) })}</p>
           {link.links.map((l) => (
             <div key={l.where} className="flex items-center gap-2">
               <span className="w-24 shrink-0 text-xs text-muted-foreground">{l.where}</span>
@@ -102,11 +99,11 @@ export function Devices() {
               <Button
                 size="icon-sm"
                 variant="ghost"
-                aria-label={`Copy the ${l.where} link`}
+                aria-label={t('devices.copyLinkAria', { where: l.where })}
                 onClick={() =>
                   navigator.clipboard.writeText(l.url).then(
-                    () => toast.success('Copied'),
-                    () => toast.error('Could not copy'),
+                    () => toast.success(t('connect.copied')),
+                    () => toast.error(t('connect.couldNotCopy')),
                   )
                 }
               >
@@ -117,36 +114,52 @@ export function Devices() {
         </div>
       )}
 
-      <ul className="divide-y rounded-md border text-sm" aria-label="Passkeys">
+      <ul className="divide-y rounded-md border text-sm" aria-label={t('devices.passkeys')}>
         {passkeys.data?.map((p) => (
           <li key={p.id} className="flex items-center gap-3 px-3 py-2">
             <KeyRound className="size-4 shrink-0 text-muted-foreground" />
             <div className="min-w-0 flex-1">
               <div className="font-medium">{p.name}</div>
               <div className="text-xs text-muted-foreground">
-                {where(p.rpId)} · added {ago(p.createdAt)} · last used {ago(p.lastUsedAt ?? p.createdAt)}
-                {p.sessions ? ` · ${p.sessions} session${p.sessions === 1 ? '' : 's'}` : ''}
+                {p.sessions
+                  ? t('devices.passkeyMetaSessions', {
+                      count: p.sessions,
+                      where: where(p.rpId),
+                      added: ago(p.createdAt),
+                      used: ago(p.lastUsedAt ?? p.createdAt),
+                    })
+                  : t('devices.passkeyMeta', {
+                      where: where(p.rpId),
+                      added: ago(p.createdAt),
+                      used: ago(p.lastUsedAt ?? p.createdAt),
+                    })}
               </div>
             </div>
             {p.rpId === 'localhost' && localKeys <= 1 ? (
-              <span className="text-xs text-muted-foreground">last on this machine</span>
+              <span className="text-xs text-muted-foreground">{t('devices.lastLocal')}</span>
             ) : (
               <AlertDialog>
                 <AlertDialogTrigger
-                  render={<Button size="sm" variant="ghost" aria-label={`Revoke ${p.name}`} />}
+                  render={
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={t('devices.revokeAria', { name: p.name })}
+                    />
+                  }
                 >
-                  Revoke
+                  {t('connect.revoke')}
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Revoke {p.name}?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      The passkey signs in no more, and the browsers signed in with it are signed out.
-                    </AlertDialogDescription>
+                    <AlertDialogTitle>{t('devices.revokeTitle', { name: p.name })}</AlertDialogTitle>
+                    <AlertDialogDescription>{t('devices.revokeText')}</AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>Keep</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => revokePasskey.mutate(p.id)}>Revoke</AlertDialogAction>
+                    <AlertDialogCancel>{t('connect.keep')}</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => revokePasskey.mutate(p.id)}>
+                      {t('connect.revoke')}
+                    </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -155,30 +168,36 @@ export function Devices() {
         ))}
       </ul>
 
-      <h3 className="pt-2 text-sm font-medium">Signed in</h3>
-      <ul className="divide-y rounded-md border text-sm" aria-label="Sessions">
+      <h3 className="pt-2 text-sm font-medium">{t('devices.signedIn')}</h3>
+      <ul className="divide-y rounded-md border text-sm" aria-label={t('devices.sessions')}>
         {sessions.data?.map((s) => (
           <li key={s.id} className="flex items-center gap-3 px-3 py-2">
             <div className="min-w-0 flex-1">
               <div className="font-medium">
                 {s.passkey}
                 {s.current && (
-                  <span className="ml-2 text-xs font-normal text-muted-foreground">this browser</span>
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    {t('devices.thisBrowser')}
+                  </span>
                 )}
               </div>
               <div className="text-xs text-muted-foreground">
-                {where(s.rpId)} · signed in {ago(s.createdAt)} · seen {ago(s.lastSeenAt)} · until{' '}
-                {stamp(s.expiresAt)}
+                {t('devices.sessionMeta', {
+                  where: where(s.rpId),
+                  signedIn: ago(s.createdAt),
+                  seen: ago(s.lastSeenAt),
+                  until: stamp(s.expiresAt),
+                })}
               </div>
             </div>
             {!s.current && (
               <Button
                 size="sm"
                 variant="ghost"
-                aria-label={`Sign out ${s.passkey}, signed in ${ago(s.createdAt)}`}
+                aria-label={t('devices.signOutAria', { name: s.passkey, when: ago(s.createdAt) })}
                 onClick={() => endSession.mutate(s.id)}
               >
-                Sign out
+                {t('devices.signOut')}
               </Button>
             )}
           </li>

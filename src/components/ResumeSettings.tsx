@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Badge } from '#/components/ui/badge'
@@ -17,6 +18,7 @@ import { RESUME_COMMAND_MAX, RESUME_PRESETS, RESUME_TIMEOUT, resumeCommandProble
  * project's settings.
  */
 export function ResumeSettings({ projectId }: { projectId: string }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const { data: p } = useProject(projectId)
   const { data: tools } = useQuery({
@@ -42,29 +44,26 @@ export function ResumeSettings({ projectId }: { projectId: string }) {
       setMinutesText(String(row.resumeTimeoutMinutes))
       await qc.invalidateQueries({ queryKey: ['project', projectId] })
       void qc.invalidateQueries({ queryKey: ['ticket-resume'] })
-      toast.success('Saved')
+      toast.success(t('common.saved'))
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
   if (!p) return null
   return (
-    <section id="resume" aria-label="Resume" className="max-w-3xl scroll-mt-16 space-y-3">
+    <section id="resume" aria-label={t('resumeSettings.title')} className="max-w-3xl scroll-mt-16 space-y-3">
       <div>
-        <h2 className="text-xl font-semibold tracking-tight">Resume</h2>
+        <h2 className="text-xl font-semibold tracking-tight">{t('resumeSettings.title')}</h2>
         <p className="text-sm text-muted-foreground">
-          An agent that asks a question ends its turn. With a command here, the board continues the work
-          itself when you answer a decision card on the board, or move a ticket from a blocked or review stage
-          back to an active one: it runs the command on this machine, in the ticket&apos;s worktree, with the
-          question and your answer (or your latest words) on its standard input and in the file named by{' '}
-          <code>BOARD_RESUME_PROMPT_FILE</code>; <code>BOARD_URL</code>, <code>BOARD_PROJECT_ID</code>,{' '}
-          <code>BOARD_TICKET_ID</code> and <code>BOARD_AGENT_NAME</code> are set. Nothing is started for a
-          ticket with a live agent or one already resuming. It runs with the board user&apos;s rights, and
-          only you can set it. Empty is off.
+          <Trans i18nKey="resumeSettings.intro" components={{ code: <code /> }} />
         </p>
       </div>
-      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Presets">
+      <div
+        className="flex flex-wrap items-center gap-2"
+        role="group"
+        aria-label={t('resumeSettings.presets')}
+      >
         {RESUME_PRESETS.map((preset) => {
-          const found = tools?.find((t) => t.id === preset.id)?.found
+          const found = tools?.find((tool) => tool.id === preset.id)?.found
           return (
             <Button
               key={preset.id}
@@ -76,7 +75,7 @@ export function ResumeSettings({ projectId }: { projectId: string }) {
               {preset.name}
               {found !== undefined && (
                 <Badge variant={found ? 'secondary' : 'outline'} className="ml-1">
-                  {found ? 'found' : 'not found'}
+                  {found ? t('resumeSettings.found') : t('resumeSettings.notFound')}
                 </Badge>
               )}
             </Button>
@@ -92,11 +91,11 @@ export function ResumeSettings({ projectId }: { projectId: string }) {
         }}
       >
         <div className="space-y-1">
-          <Label htmlFor="resume-command">Resume command</Label>
+          <Label htmlFor="resume-command">{t('resumeSettings.command')}</Label>
           <Input
             id="resume-command"
             className="font-mono"
-            placeholder="claude -p (empty: off)"
+            placeholder={t('resumeSettings.commandPlaceholder')}
             maxLength={RESUME_COMMAND_MAX}
             value={command}
             aria-invalid={!!problem}
@@ -105,7 +104,7 @@ export function ResumeSettings({ projectId }: { projectId: string }) {
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <div className="space-y-1">
-            <Label htmlFor="resume-timeout">Stop it after (minutes)</Label>
+            <Label htmlFor="resume-timeout">{t('resumeSettings.timeout')}</Label>
             <Input
               id="resume-timeout"
               type="number"
@@ -120,17 +119,17 @@ export function ResumeSettings({ projectId }: { projectId: string }) {
             />
           </div>
           <Button type="submit" size="sm" disabled={!dirty || !!problem || !timeoutOk || save.isPending}>
-            {save.isPending ? 'Saving…' : 'Save'}
+            {save.isPending ? t('resumeSettings.saving') : t('resumeSettings.save')}
           </Button>
           <span className="text-xs text-muted-foreground" aria-live="polite">
             {problem ??
               (!timeoutOk
-                ? `A whole number from ${RESUME_TIMEOUT.min} to ${RESUME_TIMEOUT.max}.`
+                ? t('resumeSettings.timeoutProblem', { min: RESUME_TIMEOUT.min, max: RESUME_TIMEOUT.max })
                 : dirty
-                  ? 'Unsaved changes.'
+                  ? t('resumeSettings.unsaved')
                   : command.trim()
-                    ? 'No changes.'
-                    : 'Resuming is off.')}
+                    ? t('resumeSettings.noChanges')
+                    : t('resumeSettings.off'))}
           </span>
         </div>
       </form>

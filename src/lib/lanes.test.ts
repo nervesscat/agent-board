@@ -35,11 +35,12 @@ describe('lanes', () => {
       { key: 'spec', kind: 'open' as const },
       { key: 'build', kind: 'active' as const },
       { key: 'qa', kind: 'review' as const },
+      { key: 'go', kind: 'approved' as const },
       { key: 'ship', kind: 'done' as const },
     ]
-    expect(laneStageOrder(custom).map((s) => s.key)).toEqual(['ship', 'qa', 'build', 'spec', 'ideas'])
-    const mine = [lane(1, 'ideas'), lane(2, 'gone'), lane(3, 'qa'), lane(4, 'spec')]
-    expect(sortLanes(mine, custom).map((l) => l.id)).toEqual([3, 4, 1, 2])
+    expect(laneStageOrder(custom).map((s) => s.key)).toEqual(['ship', 'go', 'qa', 'build', 'spec', 'ideas'])
+    const mine = [lane(1, 'ideas'), lane(2, 'gone'), lane(3, 'qa'), lane(4, 'spec'), lane(5, 'go')]
+    expect(sortLanes(mine, custom).map((l) => l.id)).toEqual([5, 3, 4, 1, 2])
   })
 
   it('step through the filtered list in that order', () => {

@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute, useBlocker } from '@tanstack/react-router'
 import { FolderGit2, Pencil } from 'lucide-react'
 import { useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { InstructionsHistory, instructionChangesKey } from '#/components/InstructionsHistory'
@@ -28,6 +29,7 @@ import { useAnchor, useReveal } from '#/lib/reveal'
 export const Route = createFileRoute('/projects/$id/instructions')({ component: InstructionsPage })
 
 function InstructionsPage() {
+  const { t } = useTranslation()
   const { id } = Route.useParams()
   const { data: p, error } = useProject(id)
   // A link into the history (#instructions-history) lands on it on an in-app navigation too.
@@ -35,17 +37,15 @@ function InstructionsPage() {
   return (
     <div className="max-w-3xl space-y-5">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Instructions</h1>
-        <p className="text-sm text-muted-foreground">
-          What every agent reads before working here. Every change is kept below.
-        </p>
+        <h1 className="text-xl font-semibold tracking-tight">{t('instructions.pageTitle')}</h1>
+        <p className="text-sm text-muted-foreground">{t('instructions.pageDescription')}</p>
       </div>
       {/* A new editor per project: an edit never follows the page to another one. */}
       {p ? (
         <Instructions key={id} projectId={id} saved={p.instructions} />
       ) : (
         !error && (
-          <DelayedLoading label="Loading instructions…" className="space-y-2">
+          <DelayedLoading label={t('loading.instructions')} className="space-y-2">
             <div className="h-5" />
             <div className="rounded-md border p-4">
               <SkeletonText lines={8} />
@@ -65,11 +65,18 @@ function InstructionsPage() {
           ))}
         </ul>
         <p className="text-xs text-muted-foreground">
-          Repos:{' '}
-          <Link to="/projects/$id/repositories" params={{ id }} className="underline hover:text-foreground">
-            Repositories page
-          </Link>
-          . Rename or delete the project: project menu → Manage projects.
+          <Trans
+            i18nKey="instructions.reposLine"
+            components={{
+              goto: (
+                <Link
+                  to="/projects/$id/repositories"
+                  params={{ id }}
+                  className="underline hover:text-foreground"
+                />
+              ),
+            }}
+          />
         </p>
       </div>
       <InstructionsHistory key={`history-${id}`} projectId={id} />
@@ -85,6 +92,7 @@ const always = () => true
  * Cancel, Esc, leaving the page or closing the tab ask first.
  */
 function Instructions({ projectId, saved }: { projectId: string; saved: string }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [editing, setEditing] = useState(false)
   const [body, setBody] = useState(saved)
@@ -104,7 +112,7 @@ function Instructions({ projectId, saved }: { projectId: string; saved: string }
       // Back to reading once the saved text is the one shown.
       await qc.invalidateQueries({ queryKey: ['project', projectId] })
       setEditing(false)
-      toast.success('Saved')
+      toast.success(t('common.saved'))
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
@@ -131,12 +139,12 @@ function Instructions({ projectId, saved }: { projectId: string; saved: string }
     blocker.proceed?.()
   }
   return (
-    <section aria-label="Project instructions" className="space-y-2">
+    <section aria-label={t('instructions.sectionLabel')} className="space-y-2">
       <div className="flex items-center gap-3">
-        <Label>Project instructions</Label>
+        <Label>{t('instructions.sectionLabel')}</Label>
         {!editing && (
           <Button type="button" variant="ghost" size="xs" className="ml-auto" onClick={open}>
-            <Pencil data-icon="inline-start" /> edit
+            <Pencil data-icon="inline-start" /> {t('instructions.edit')}
           </Button>
         )}
       </div>
@@ -149,24 +157,24 @@ function Instructions({ projectId, saved }: { projectId: string; saved: string }
             onCancel={cancel}
             autoFocus
             minHeight="min-h-64"
-            label="Project instructions"
-            placeholder="How to run the repos, the conventions to follow, what never to do."
+            label={t('instructions.sectionLabel')}
+            placeholder={t('instructions.placeholder')}
           />
           <div className="flex items-center justify-end gap-2">
             <span className="mr-auto text-xs text-muted-foreground" aria-live="polite">
-              {dirty ? 'Unsaved changes. Ctrl/⌘+Enter saves.' : 'No changes.'}
+              {dirty ? t('instructions.unsavedHint') : t('instructions.noChangesHint')}
             </span>
             <Button type="button" variant="ghost" size="sm" onClick={cancel}>
-              Cancel
+              {t('instructions.cancel')}
             </Button>
             <Button type="button" size="sm" onClick={submit} disabled={!dirty || save.isPending}>
-              {save.isPending ? 'Saving…' : 'Save'}
+              {save.isPending ? t('instructions.saving') : t('instructions.save')}
             </Button>
           </div>
         </div>
       ) : saved ? (
         // Clicking the text edits it; a link inside still opens.
-        <Tip content="Click to edit">
+        <Tip content={t('instructions.clickToEdit')}>
           <div
             role="button"
             tabIndex={0}
@@ -187,7 +195,7 @@ function Instructions({ projectId, saved }: { projectId: string; saved: string }
           onClick={open}
           className="w-full rounded-md border border-dashed p-4 text-left text-sm text-muted-foreground hover:text-foreground"
         >
-          No instructions yet. Click to write them.
+          {t('instructions.empty')}
         </button>
       )}
       <AlertDialog
@@ -198,15 +206,13 @@ function Instructions({ projectId, saved }: { projectId: string; saved: string }
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Discard your changes?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The project instructions have unsaved changes. Agents keep reading the saved ones.
-            </AlertDialogDescription>
+            <AlertDialogTitle>{t('instructions.discardTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('instructions.discardDescription')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogCancel>{t('instructions.keepEditing')}</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={discard}>
-              Discard
+              {t('instructions.discard')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "7a9d8a90-a22e-4d39-8955-57b18e374137",
-  "prevId": "3dd212da-d3ed-46e5-9d5f-cd6c320fa64d",
+  "id": "257dd5be-c624-4c1c-bd6b-9a01f3f19bea",
+  "prevId": "0d85d055-caec-4c98-b5e2-f83541e13421",
   "tables": {
     "account": {
       "name": "account",
@@ -1602,6 +1602,21 @@
           "autoincrement": false,
           "default": "'[\"software\"]'"
         },
+        "workflow_preset": {
+          "name": "workflow_preset",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'standard'"
+        },
+        "workflow_tweaks": {
+          "name": "workflow_tweaks",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "resume_command": {
           "name": "resume_command",
           "type": "text",
@@ -1617,21 +1632,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": 240
-        },
-        "workflow_preset": {
-          "name": "workflow_preset",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'standard'"
-        },
-        "workflow_tweaks": {
-          "name": "workflow_tweaks",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {},
@@ -3849,6 +3849,13 @@
           "autoincrement": false,
           "default": "'mid'"
         },
+        "workflow_preset": {
+          "name": "workflow_preset",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "assignee": {
           "name": "assignee",
           "type": "text",
@@ -3985,13 +3992,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
-        },
-        "workflow_preset": {
-          "name": "workflow_preset",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {

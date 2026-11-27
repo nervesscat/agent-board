@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Pencil, Pin, PinOff, Plus, StickyNote, X } from 'lucide-react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DelayedLoading, SkeletonText } from '#/components/Loading'
@@ -31,6 +32,7 @@ export const notesKey = (projectId: number | string) => ['notes', String(project
 const pinned = (note: ProjectNote) => note.position < 0
 
 export function Notes({ p }: { p: ProjectSummary }) {
+  const { t } = useTranslation()
   const projectId = p.project.id
   const key = notesKey(projectId)
   const qc = useQueryClient()
@@ -80,7 +82,7 @@ export function Notes({ p }: { p: ProjectSummary }) {
     <Card size="sm" className="lg:order-6 lg:col-span-full">
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2">
-          <StickyNote className="size-4 text-muted-foreground" /> Notes
+          <StickyNote className="size-4 text-muted-foreground" /> {t('notes.title')}
           {notes.length > 0 && (
             <span className="rounded-full bg-muted px-1.5 text-xs font-normal tabular-nums text-muted-foreground">
               {notes.length}
@@ -89,18 +91,18 @@ export function Notes({ p }: { p: ProjectSummary }) {
           <span className="ml-auto flex items-center gap-1">
             {notes.length > SHOWN && (
               <Button type="button" variant="ghost" size="sm" onClick={() => setManaging(true)}>
-                Manage all ({notes.length})
+                {t('notes.manageAll', { count: notes.length })}
               </Button>
             )}
             <Button type="button" variant="ghost" size="sm" onClick={() => setAdding((v) => !v)}>
-              <Plus /> Add note
+              <Plus /> {t('notes.add')}
             </Button>
           </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {isLoading ? (
-          <DelayedLoading label="Loading notes…">
+          <DelayedLoading label={t('loading.notes')}>
             <SkeletonText lines={3} />
           </DelayedLoading>
         ) : error && !data ? (
@@ -113,7 +115,6 @@ export function Notes({ p }: { p: ProjectSummary }) {
         )}
         {adding && (
           <NoteForm
-            save="Save note"
             busy={add.isPending}
             onSubmit={(input) => add.mutate(input)}
             onCancel={() => setAdding(false)}
@@ -123,24 +124,20 @@ export function Notes({ p }: { p: ProjectSummary }) {
       <Dialog open={managing} onOpenChange={setManaging}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Notes ({notes.length})</DialogTitle>
-            <DialogDescription>
-              One short fact each, pinned first. A note&apos;s author, an orchestrator or the human can change
-              it.
-            </DialogDescription>
+            <DialogTitle>{t('notes.dialogTitle', { count: notes.length })}</DialogTitle>
+            <DialogDescription>{t('notes.dialogDescription')}</DialogDescription>
           </DialogHeader>
           <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
             <ul className="space-y-2">{notes.map(row)}</ul>
             {adding ? (
               <NoteForm
-                save="Save note"
                 busy={add.isPending}
                 onSubmit={(input) => add.mutate(input)}
                 onCancel={() => setAdding(false)}
               />
             ) : (
               <Button type="button" variant="outline" size="sm" onClick={() => setAdding(true)}>
-                <Plus /> Add note
+                <Plus /> {t('notes.add')}
               </Button>
             )}
           </div>
@@ -152,20 +149,18 @@ export function Notes({ p }: { p: ProjectSummary }) {
 
 /** What a note is for, with two examples, so an empty card still explains the feature. */
 function EmptyNotes() {
+  const { t } = useTranslation()
   return (
     <div className="space-y-2">
-      <p className="text-sm text-muted-foreground">
-        A note is one short fact the next session must not rediscover — a command, a path, a rule, a reminder.
-        Keep each to one fact, never a document.
-      </p>
+      <p className="text-sm text-muted-foreground">{t('notes.empty')}</p>
       <ul className="space-y-1 text-sm">
         <li>
-          <span className="font-medium">Release command</span>{' '}
+          <span className="font-medium">{t('notes.exampleLabel')}</span> {/* i18n-ignore: a command */}
           <span className="text-muted-foreground">pnpm release 0.2.5</span>
         </li>
         <li>
-          <span className="font-medium">Preview ports</span>{' '}
-          <span className="text-muted-foreground">47101 and up, one per run</span>
+          <span className="font-medium">{t('notes.exampleLabel2')}</span>{' '}
+          <span className="text-muted-foreground">{t('notes.exampleBody2')}</span>
         </li>
       </ul>
     </div>
@@ -185,6 +180,7 @@ function NoteRow({
   onPin: () => void
   onDelete: () => void
 }) {
+  const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   if (editing)
     return (
@@ -192,7 +188,6 @@ function NoteRow({
         <NoteForm
           label={note.label}
           body={note.body}
-          save="Save note"
           busy={saving}
           onSubmit={(input) => {
             onSave(input)
@@ -214,36 +209,36 @@ function NoteRow({
         </p>
       </div>
       <div className="flex shrink-0 items-center">
-        <Tip content={pinned(note) ? 'Unpin this note' : 'Pin this note above the others'}>
+        <Tip content={pinned(note) ? t('notes.unpinTip') : t('notes.pinTip')}>
           <Button
             type="button"
             variant="ghost"
             size="icon-xs"
-            aria-label={`${pinned(note) ? 'Unpin' : 'Pin'} ${note.label}`}
+            aria-label={t(pinned(note) ? 'notes.unpin' : 'notes.pin', { label: note.label })}
             disabled={saving}
             onClick={onPin}
           >
             {pinned(note) ? <PinOff /> : <Pin />}
           </Button>
         </Tip>
-        <Tip content="Edit this note">
+        <Tip content={t('notes.editTip')}>
           <Button
             type="button"
             variant="ghost"
             size="icon-xs"
-            aria-label={`Edit ${note.label}`}
+            aria-label={t('notes.edit', { label: note.label })}
             disabled={saving}
             onClick={() => setEditing(true)}
           >
             <Pencil />
           </Button>
         </Tip>
-        <Tip content="Delete this note">
+        <Tip content={t('notes.deleteTip')}>
           <Button
             type="button"
             variant="ghost"
             size="icon-xs"
-            aria-label={`Delete ${note.label}`}
+            aria-label={t('notes.delete', { label: note.label })}
             disabled={saving}
             onClick={onDelete}
           >
@@ -259,18 +254,17 @@ function NoteRow({
 function NoteForm({
   label: initialLabel = '',
   body: initialBody = '',
-  save,
   busy,
   onSubmit,
   onCancel,
 }: {
   label?: string
   body?: string
-  save: string
   busy: boolean
   onSubmit: (input: { label: string; body: string }) => void
   onCancel: () => void
 }) {
+  const { t } = useTranslation()
   const [label, setLabel] = useState(initialLabel)
   const [body, setBody] = useState(initialBody)
   const valid = label.trim().length > 0 && body.trim().length > 0
@@ -286,8 +280,8 @@ function NoteForm({
         <Input
           value={label}
           maxLength={LABEL_MAX}
-          aria-label="Note label"
-          placeholder="Release command"
+          aria-label={t('notes.labelAria')}
+          placeholder={t('notes.exampleLabel')}
           onChange={(e) => setLabel(e.target.value)}
         />
         <p className="text-right text-xs text-muted-foreground tabular-nums">
@@ -298,8 +292,8 @@ function NoteForm({
         <Textarea
           value={body}
           maxLength={BODY_MAX}
-          aria-label="Note body"
-          placeholder="pnpm release 0.2.5"
+          aria-label={t('notes.bodyAria')}
+          placeholder="pnpm release 0.2.5" // i18n-ignore: a command
           onChange={(e) => setBody(e.target.value)}
         />
         <p className="text-right text-xs text-muted-foreground tabular-nums">
@@ -308,10 +302,10 @@ function NoteForm({
       </div>
       <div className="flex items-center gap-1">
         <Button type="submit" size="sm" disabled={!valid || busy}>
-          <Check /> {save}
+          <Check /> {t('notes.save')}
         </Button>
         <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={onCancel}>
-          <X /> Cancel
+          <X /> {t('notes.cancel')}
         </Button>
       </div>
     </form>

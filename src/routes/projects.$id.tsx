@@ -1,6 +1,7 @@
 import { Link, Outlet, createFileRoute, useRouter, useRouterState } from '@tanstack/react-router'
 import { PanelLeft, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from 'cn'
 
 import { LAYOUT_ICONS } from '#/components/layoutIcons'
@@ -8,11 +9,11 @@ import { Button } from '#/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
 import { visibleNavPages } from '#/lib/kinds'
-import { type AreaId, defaultLayout, layoutElement, shownIn } from '#/lib/layout'
+import { type AreaId, defaultLayout, layoutLabel, shownIn } from '#/lib/layout'
 import { LAST_MODULE, encodeModule } from '#/lib/lastModule'
 import { rememberCurrentProject, useProject } from '#/lib/project'
 import { remember } from '#/lib/remembered'
-import { SIDEBAR_TOGGLE_LABEL, nextSidebarMode, useSidebarMode } from '#/lib/sidebar'
+import { nextSidebarMode, sidebarToggleLabel, useSidebarMode } from '#/lib/sidebar'
 import { useHydrated } from '#/lib/useHydrated'
 
 export const Route = createFileRoute('/projects/$id')({ component: ProjectLayout })
@@ -59,6 +60,7 @@ const EDGE_PX = 40
 const SLIDE = 'md:motion-safe:duration-200 md:motion-safe:ease-out'
 
 function ProjectLayout() {
+  const { t } = useTranslation()
   const { id } = Route.useParams()
   const navigate = Route.useNavigate()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
@@ -173,18 +175,18 @@ function ProjectLayout() {
       const to = MODULES[page].replace('$id', id)
       return page === 'nav.overview' ? pathname === to : pathname.startsWith(to)
     }) ?? pages[0]
-  const pageItems = Object.fromEntries(pages.map((page) => [page, layoutElement(page).label]))
+  const pageItems = Object.fromEntries(pages.map((page) => [page, layoutLabel(page, t)]))
   const ToggleIcon = TOGGLE_ICON[mode]
   // The one toggle, inside the sidebar (its first row), so it goes where the sidebar goes: hidden with it, back
   // with it when the pointer comes near.
   const toggle = (
-    <Tip content={SIDEBAR_TOGGLE_LABEL[mode]}>
+    <Tip content={sidebarToggleLabel(mode, t)}>
       <Button
         ref={toggleRef}
         type="button"
         variant="ghost"
         size="icon-sm"
-        aria-label={SIDEBAR_TOGGLE_LABEL[mode]}
+        aria-label={sidebarToggleLabel(mode, t)}
         onClick={(event) => {
           const next = nextSidebarMode(mode)
           // Pressed by keyboard into hidden (no pointer click: detail is 0, and the toggle holds focus): the sidebar
@@ -290,13 +292,13 @@ function ProjectLayout() {
                 onValueChange={(v) => v && navigate({ to: MODULES[v as AreaId<'nav'>], params: { id } })}
                 items={pageItems}
               >
-                <SelectTrigger className="w-full" aria-label="Project page">
+                <SelectTrigger className="w-full" aria-label={t('projectNav.page')}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {pages.map((page) => (
                     <SelectItem key={page} value={page}>
-                      {layoutElement(page).label}
+                      {layoutLabel(page, t)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -306,7 +308,7 @@ function ProjectLayout() {
           <nav className="hidden gap-1 md:flex md:flex-col">
             {pages.map((page) => {
               const Icon = LAYOUT_ICONS[page]
-              const label = layoutElement(page).label
+              const label = layoutLabel(page, t)
               const link = (
                 <Link
                   to={MODULES[page]}

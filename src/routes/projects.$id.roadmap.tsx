@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { Check, ChevronDown } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
 
 import { Actor } from '#/components/Actor'
@@ -12,18 +13,13 @@ import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { WorkLine, WorkSummary } from '#/components/WorkStatus'
 import { WorkTimelineBar, hasWork } from '#/components/WorkTimeline'
+import { currentLocale } from '#/i18n'
 import { errorMessage, get, type ProjectWork, type RoadmapTicket } from '#/lib/api'
 import { type Step, type StepGroup, type StepState, stepCounts, timeline } from '#/lib/roadmap'
 import { stallStage } from '#/lib/activityTimeline'
 import { useStages } from '#/lib/project'
 import { STAGE_DOT, type StageLike, stageBadge, stageOf } from '#/lib/stages'
-import {
-  WINDOW_CHOICES,
-  WINDOW_LABELS,
-  type WindowChoice,
-  parseWindowChoice,
-  windowFor,
-} from '#/lib/roadmapWindow'
+import { WINDOW_CHOICES, type WindowChoice, parseWindowChoice, windowFor } from '#/lib/roadmapWindow'
 import { useMounted, useNow, useServerOffset } from '#/lib/useNow'
 import { onServerClock } from '#/lib/workStatus'
 import type { Window } from '#/lib/timelineRows'
@@ -57,6 +53,7 @@ const hasState = (b: RoadmapItem, state: StepState) =>
 const isBlocked = (b: RoadmapItem) => b.stage.kind === 'blocked' || hasState(b, 'blocked')
 
 function Roadmap() {
+  const { t: tr } = useTranslation()
   const { id } = Route.useParams()
   const { show = 'all', window: windowParam } = Route.useSearch()
   const navigate = Route.useNavigate()
@@ -104,56 +101,71 @@ function Roadmap() {
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Roadmap</h1>
-          <p className="text-sm text-muted-foreground">Every ticket in flight: done, now, next.</p>
+          <h1 className="text-xl font-semibold tracking-tight">{tr('roadmap.title')}</h1>
+          <p className="text-sm text-muted-foreground">{tr('roadmap.subtitle')}</p>
         </div>
         <ChipTabs
           chips={[
-            { key: 'all', label: 'All', count: n(tickets.length) },
-            { key: 'blocked', label: 'Blocked', count: n(blocked.length) },
-            { key: 'review', label: 'Needs review', count: n(review.length) },
+            { key: 'all', label: tr('roadmap.filter.all'), count: n(tickets.length) },
+            { key: 'blocked', label: tr('roadmap.filter.blocked'), count: n(blocked.length) },
+            { key: 'review', label: tr('roadmap.filter.review'), count: n(review.length) },
           ]}
           value={show}
           onChange={(v: Filter) =>
             navigate({ search: (prev) => ({ ...prev, show: v === 'all' ? undefined : v }), replace: true })
           }
+          // A long translation wraps onto a second row instead of widening the page.
+          listClassName="max-w-full max-sm:flex-wrap max-sm:group-data-horizontal/tabs:h-auto"
         />
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
-        <span>Time axis, every row:</span>
+        <span>{tr('roadmap.timeAxis')}</span>
         <ChipTabs<WindowChoice | ''>
-          chips={WINDOW_CHOICES.map((key) => ({ key, label: WINDOW_LABELS[key] }))}
+          chips={WINDOW_CHOICES.map((key) => ({ key, label: tr(`roadmap.window.${key}`) }))}
           value={windowParam ?? ''}
           onChange={(v) =>
             navigate({ search: (prev) => ({ ...prev, window: v || undefined }), replace: true })
           }
+          listClassName="max-w-full max-sm:flex-wrap max-sm:group-data-horizontal/tabs:h-auto"
         />
         {mounted && (
           <span>
-            {new Date(range.start).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} to now
+            {tr('roadmap.range', {
+              start: new Date(range.start).toLocaleString(currentLocale(), {
+                dateStyle: 'short',
+                timeStyle: 'short',
+              }),
+            })}
           </span>
         )}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2 text-xs text-muted-foreground">
         <div className="flex flex-wrap gap-4">
-          <Stat n={n(tickets.length)} label="tickets" />
-          <Stat n={n(every.length - tickets.length)} label="lanes" />
-          <Stat n={n(every.filter((b) => hasState(b, 'now')).length)} label="working now" />
-          <Stat n={n(every.filter(isBlocked).length)} label="blocked" amber />
-          <Stat n={n(review.length)} label="in review" />
-          <Stat n={n(every.filter((b) => b.row.work.stalled).length)} label="no word" amber />
+          <Stat n={n(tickets.length)} label={tr('roadmap.stat.tickets', { count: tickets.length })} />
+          <Stat
+            n={n(every.length - tickets.length)}
+            label={tr('roadmap.stat.lanes', { count: every.length - tickets.length })}
+          />
+          <Stat n={n(every.filter((b) => hasState(b, 'now')).length)} label={tr('roadmap.stat.workingNow')} />
+          <Stat n={n(every.filter(isBlocked).length)} label={tr('roadmap.stat.blocked')} amber />
+          <Stat n={n(review.length)} label={tr('roadmap.stat.inReview')} />
+          <Stat
+            n={n(every.filter((b) => b.row.work.stalled).length)}
+            label={tr('roadmap.stat.noWord')}
+            amber
+          />
         </div>
       </div>
       {work && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span>Project work, every ticket and lane:</span>
+          <span>{tr('roadmap.projectWork')}</span>
           <WorkSummary totals={work.totals} />
         </div>
       )}
       {error ? (
         <p className="text-sm text-destructive">{errorMessage(error)}</p>
       ) : isLoading ? (
-        <DelayedLoading label="Loading roadmap…">
+        <DelayedLoading label={tr('loading.roadmap')}>
           <div className="overflow-hidden rounded-lg border bg-card" aria-hidden>
             <div className="hidden h-8 items-center gap-6 border-b px-5 md:flex md:pl-[316px]">
               {Array.from({ length: 5 }, (_, i) => (
@@ -180,10 +192,10 @@ function Roadmap() {
       ) : shown.length === 0 ? (
         <Empty>
           {show === 'all'
-            ? 'No ticket is in progress, blocked or in review.'
+            ? tr('roadmap.empty.all')
             : show === 'blocked'
-              ? 'Nothing is blocked.'
-              : 'No ticket is waiting for review.'}
+              ? tr('roadmap.empty.blocked')
+              : tr('roadmap.empty.review')}
         </Empty>
       ) : (
         <div
@@ -234,6 +246,7 @@ function TicketRows({
   timeWindow: Window
   windowKey: string
 }) {
+  const { t: tr } = useTranslation()
   const [open, setOpen] = useState(true)
   return (
     <section className="border-b last:border-b-0" aria-label={`#${ticket.row.id} ${ticket.row.title}`}>
@@ -246,7 +259,7 @@ function TicketRows({
             onClick={() => setOpen((v) => !v)}
           >
             <ChevronDown className={`size-3 transition-transform ${open ? '' : '-rotate-90'}`} />
-            {lanes.length} lane{lanes.length === 1 ? '' : 's'}
+            {tr('roadmap.lanes', { count: lanes.length })}
           </button>
         )}
       </Row>
@@ -283,6 +296,7 @@ function Row({
   windowKey: string
   children?: React.ReactNode
 }) {
+  const { t: tr } = useTranslation()
   const { row, stage, groups } = item
   const { done, total } = stepCounts(groups)
   const indent = lane ? 40 + lane.depth * 14 : 16
@@ -312,14 +326,18 @@ function Row({
         <div
           className={`flex flex-wrap items-center gap-2 text-xs text-muted-foreground ${lane ? 'mt-1' : 'mt-1.5'}`}
         >
-          {row.assignee ? <Actor name={row.assignee} className="font-normal" /> : <span>Unassigned</span>}
+          {row.assignee ? (
+            <Actor name={row.assignee} className="font-normal" />
+          ) : (
+            <span>{tr('roadmap.unassigned')}</span>
+          )}
           <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${stageBadge(stage)}`}>
             {stage.name}
           </span>
           <WorkLine timeline={row.work} stage={item.stall} detail />
           {children}
           {total > 0 && (
-            <Tip content={`${done} of ${total} done`}>
+            <Tip content={tr('roadmap.progress', { done, total })}>
               <span className="ml-auto inline-flex items-center gap-1.5">
                 <span className="h-1 w-11 overflow-hidden rounded-full bg-muted">
                   <span
@@ -342,7 +360,11 @@ function Row({
         <div className="hidden md:block">
           <Track groups={groups} lane={Boolean(lane)} />
         </div>
-        <div role="group" className={`space-y-1 px-5 ${lane ? 'pb-2' : 'pb-3'}`} aria-label="Work timeline">
+        <div
+          role="group"
+          className={`space-y-1 px-5 ${lane ? 'pb-2' : 'pb-3'}`}
+          aria-label={tr('roadmap.workTimeline')}
+        >
           {/* Keyed on the choice, not the times: a new choice re-anchors a live track at now; the ticking end does not. */}
           <WorkTimelineBar
             key={windowKey}
@@ -360,6 +382,7 @@ function Row({
 
 /** The tasks left to right; it scrolls sideways, starting with the current step in view. */
 function Track({ groups, lane }: { groups: StepGroup[]; lane: boolean }) {
+  const { t: tr } = useTranslation()
   const ref = useRef<HTMLDivElement>(null)
   const key = groups.map((g) => g.steps.map((s) => `${s.id}:${s.state}`).join()).join('|')
   useEffect(() => {
@@ -369,7 +392,9 @@ function Track({ groups, lane }: { groups: StepGroup[]; lane: boolean }) {
       track.scrollLeft = Math.max(0, current.offsetLeft - track.clientWidth / 2 + current.offsetWidth / 2)
   }, [key])
   if (!groups.length)
-    return <div className="flex items-center px-5 py-3 text-xs text-muted-foreground">No tasks yet.</div>
+    return (
+      <div className="flex items-center px-5 py-3 text-xs text-muted-foreground">{tr('roadmap.noTasks')}</div>
+    )
   let index = 0
   return (
     <div
@@ -401,9 +426,11 @@ function Track({ groups, lane }: { groups: StepGroup[]; lane: boolean }) {
 
 /** The same tasks as `Track`, stacked on a phone: a status dot, the step, its state and a reason. */
 function Steps({ groups }: { groups: StepGroup[] }) {
-  if (!groups.length) return <div className="px-5 py-3 text-xs text-muted-foreground">No tasks yet.</div>
+  const { t: tr } = useTranslation()
+  if (!groups.length)
+    return <div className="px-5 py-3 text-xs text-muted-foreground">{tr('roadmap.noTasks')}</div>
   return (
-    <div className="space-y-3 px-5 py-3" aria-label="Tasks">
+    <div className="space-y-3 px-5 py-3" aria-label={tr('roadmap.tasks')}>
       {groups.map((g) => (
         <div key={g.steps[0]!.id}>
           {g.caption && (
@@ -424,7 +451,7 @@ function Steps({ groups }: { groups: StepGroup[] }) {
                   )}
                 </div>
                 <span className="shrink-0 text-[10.5px] tracking-wide text-muted-foreground uppercase">
-                  {s.state}
+                  {tr(`roadmap.step.${s.state}`)}
                 </span>
               </li>
             ))}
@@ -473,6 +500,7 @@ const LABEL: Record<StepState, string> = {
 }
 
 function StepItem({ step, first, lane }: { step: Step; first: boolean; lane: boolean }) {
+  const { t: tr } = useTranslation()
   // The line into a step is solid up to where the ticket is, dashed after.
   const reached = step.state === 'done' || step.state === 'now' || step.state === 'blocked'
   const tip = step.blocked && step.blockedReason ? `${step.text}: ${step.blockedReason}` : step.text
@@ -492,7 +520,7 @@ function StepItem({ step, first, lane }: { step: Step; first: boolean; lane: boo
           <span
             className={`absolute rounded-full px-1.5 font-semibold tracking-wider whitespace-nowrap uppercase ${lane ? '-top-[17px] text-[9.5px] leading-[13px]' : '-top-[19px] text-[10px] leading-[15px]'} ${FLAG[step.state]}`}
           >
-            {step.state}
+            {tr(`roadmap.step.${step.state}`)}
           </span>
         )}
         <Dot state={step.state} small={lane} />

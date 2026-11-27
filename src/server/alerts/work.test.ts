@@ -252,6 +252,18 @@ describe('8: approved but not merged', () => {
     expect(found.find((c) => c.subject === String(b.id))!.details).toEqual(['Failed check: unit'])
   })
 
+  it('goes by the stage kind: an approved-kind stage with another key counts, and the PR check alert leaves it out', async () => {
+    const pid = newProject()
+    const repo = repoOf(pid)
+    const { createStage } = await import('../stages')
+    const go = createStage(pid, { name: 'Go ahead', kind: 'approved' }, 'human')
+    expect(go.key).not.toBe('approved')
+    const pr = prRow(pid, repo.id, { mergeable: 'CONFLICTING', mergeStateStatus: 'DIRTY' })
+    const t = withPr(pid, repo.id, pr.number, go.key)
+    expect(ids(await check('approved-not-merged', pid))).toEqual([String(t.id)])
+    expect(await check('pr-checks-failed', pid)).toEqual([])
+  })
+
   it('is not raised for a ticket still in review with a conflicting PR', async () => {
     const pid = newProject()
     const repo = repoOf(pid)

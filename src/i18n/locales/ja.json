@@ -1,0 +1,3006 @@
+{
+  "common": {
+    "saved": "保存しました",
+    "close": "閉じる",
+    "cancel": "キャンセル",
+    "delete": "削除"
+  },
+  "loading": {
+    "ticket": "チケットを読み込み中…",
+    "tickets": "チケットを読み込み中…",
+    "agents": "エージェントを読み込み中…",
+    "branches": "ブランチを読み込み中…",
+    "recentTickets": "最近のチケットを読み込み中…",
+    "folders": "フォルダーを読み込み中…",
+    "projectPhases": "プロジェクトのフェーズを読み込み中…",
+    "stages": "ステージを読み込み中…",
+    "preview": "プレビューを読み込み中…",
+    "file": "ファイルを読み込み中…",
+    "files": "ファイルを読み込み中…",
+    "instructionsHistory": "指示の履歴を読み込み中…",
+    "instructions": "指示を読み込み中…",
+    "notes": "ノートを読み込み中…",
+    "reviewResult": "レビュー結果を読み込み中…",
+    "changes": "変更を読み込み中…",
+    "replies": "返信を読み込み中…",
+    "timeline": "タイムラインを読み込み中…",
+    "activity": "アクティビティを読み込み中…",
+    "pushedToday": "今日のプッシュを読み込み中…",
+    "calendar": "カレンダーを読み込み中…",
+    "report": "レポートを読み込み中…",
+    "reportSettings": "レポート設定を読み込み中…",
+    "shift": "シフトを読み込み中…",
+    "cleanup": "クリーンアップを読み込み中…",
+    "runs": "実行を読み込み中…",
+    "branchState": "ブランチの状態を読み込み中…",
+    "tags": "タグを読み込み中…",
+    "previews": "プレビューを読み込み中…",
+    "repositories": "リポジトリを読み込み中…",
+    "roadmap": "ロードマップを読み込み中…",
+    "earlierVersions": "以前のバージョンを読み込み中…",
+    "workspaces": "ワークスペースを読み込み中…"
+  },
+  "shell": {
+    "home": "ホーム",
+    "pages": "ページ",
+    "connect": "接続",
+    "settings": "設定",
+    "testMode": "テストモード",
+    "authOff": "認証オフ",
+    "authOffTip": "BOARD_ENV={{env}}、ログイン無効: {{actor}} としてログイン中です。本番のボードではありません。",
+    "connectAgent": "エージェントの接続"
+  },
+  "time": {
+    "never": "—",
+    "justNow": "たった今",
+    "minutesAgo": "{{count}}分前",
+    "hoursAgo": "{{count}}時間前",
+    "daysAgo": "{{count}}日前",
+    "minutesAgoLong_other": "{{count}}分前",
+    "hoursAgoLong_other": "{{count}}時間前",
+    "yesterday": "昨日",
+    "daysAgoLong_other": "{{count}}日前",
+    "weeksAgoLong_other": "{{count}}週間前"
+  },
+  "settings": {
+    "title": "設定",
+    "tabs": {
+      "label": "設定",
+      "board": "ボード",
+      "projectLabel": "このプロジェクト: {{name}}",
+      "project": "このプロジェクト:"
+    },
+    "board": {
+      "defaultAgent": {
+        "title": "既定のエージェントCLI",
+        "text": "<goto>エージェントの接続</goto>で最初に開くCLIです。そのコマンドだけを表示します。"
+      },
+      "previews": {
+        "title": "プレビュー",
+        "text": "全プロジェクトを通じて、ボードが同時にビルドして実行するプレビューの数です(1〜32)。各プレビューはデータのコピーを持つ独立したボードです。上限を超える起動は拒否されます。使用数はプロジェクトのプレビューページで確認できます。"
+      },
+      "theme": {
+        "title": "テーマ",
+        "text": "既定ではシステムの設定に従います。選択はボードではなく、このブラウザーに保存されます。",
+        "system": "システム",
+        "light": "ライト",
+        "dark": "ダーク"
+      },
+      "language": {
+        "title": "言語",
+        "text": "日付や数値を含め、インターフェース全体の言語です。ボードに保存されるので、ログインするどのデバイスでも同じ言語になります。人やエージェントが書いた内容はそのままです。",
+        "search": "言語を検索",
+        "none": "一致する言語がありません",
+        "failed": "その言語を読み込めませんでした。ページを再読み込みして、もう一度お試しください。"
+      }
+    }
+  },
+  "connect": {
+    "copied": "コピーしました",
+    "couldNotCopy": "コピーできませんでした",
+    "browserNoCopy": "ブラウザーがコピーを許可しませんでした。代わりにテキストを選択してください",
+    "copy": "コピー",
+    "save": "保存",
+    "revoke": "無効化",
+    "keep": "残す",
+    "turnOff": "オフにする",
+    "checkAgain": "再確認",
+    "title": "エージェントの接続",
+    "intro": "CLIを接続します。<strong>コマンドを生成</strong>でMCPトークンを作成し、スキルはボタン(別のマシンでは1行のコマンド)でこのマシンにインストールします。既定のCLIは<goto>設定</goto>で選べます。",
+    "step1": {
+      "title": "1. MCPサーバーを接続",
+      "command": "ターミナルで1回実行します。全リポジトリ向けにサーバーを登録します。",
+      "config": "<code>{{file}}</code> に追記します。",
+      "configOpencode": "<code>{{file}}</code> に追記します(ファイルに「mcp」がすでにある場合は、そこにボードのエントリーをマージしてください)。"
+    },
+    "step2": {
+      "title": "2. スキルをインストール",
+      "text": "ボードの最新のスキルを <code>{{path}}</code> にダウンロードします。{{agent}} はどのリポジトリでもここから見つけます。",
+      "textCodex": "ボードの最新のスキルを <code>{{path}}</code> にダウンロードします。{{agent}} はどのリポジトリでもここから見つけます。OpenCodeもこのフォルダーを読みます。",
+      "textOpencode": "ボードの最新のスキルを <code>{{path}}</code> にダウンロードします。{{agent}} はどのリポジトリでもここから見つけます。OpenCodeは ~/.claude/skills も読むので、Claude Codeに入っていれば不要です。",
+      "tokenNote": "インストール用のコマンドにはダウンロードトークンが含まれ、<time>{{at}}</time> に失効します(約10分間有効)。その後は、コマンドをコピーし直して新しいものを取得してください。",
+      "skillCopied": "SKILL.mdをコピーしました",
+      "copySkill": "SKILL.mdをコピー",
+      "previewSkill": "SKILL.mdをプレビュー",
+      "session": "<code>/session</code> もインストールします。ボードとのセッションを開始するスキルで、短い概要を表示し、指定したチケットをすべて委任し、要対応の内容を同じ形式のメッセージにまとめます。"
+    },
+    "step3": {
+      "title": "3. レビュー用スキルをインストール(Claude Code)"
+    },
+    "opencode": {
+      "section": "OpenCodeの多段階委任",
+      "checkAria": "OpenCodeの設定を再確認",
+      "readFailed": "OpenCodeの設定を読み込めませんでした",
+      "readFailedText": "そのファイルを修正してから、再確認してください。設定を読み込めるまで、多段階委任はオフのままです。",
+      "on": "多段階委任はオンです(深さ {{depth}})",
+      "readFrom": "<code>{{source}}</code> から読み込みました。システム全体の設定は、グローバルやプロジェクトの設定より優先されます。",
+      "off": "多段階委任はオフです。サブエージェントはサブエージェントを起動できません",
+      "offText": "次を <code>{{source}}</code> に追加し(<code>experimental</code> ブロックがあればその中に)、OpenCodeを再起動してください。<code>experimental</code> ブロックを定義している最後の設定ファイルが採用されます。システム全体の設定はグローバルやプロジェクトの設定より優先されるため、後のファイルが先の深さを上書きすることがあります。ボードはファイルを読むだけです。",
+      "copySnippet": "スニペットをコピー",
+      "deprecated": "<code>{{source}}</code> のトップレベルの <code>subagent_depth</code> はOpenCodeでは読み込まれなくなりました。有効なのは <code>experimental.subagent_depth</code> だけです。"
+    },
+    "generate": {
+      "agentName": "エージェント名",
+      "button": "コマンドを生成",
+      "newOrchestrator": "以下のコマンドには、<strong>{{name}}</strong> 用の新しいオーケストレータートークンが含まれています(有効期限: {{until}})。表示されるのは今回だけです。必要なものを今すぐコピーしてください。ページを離れると失われ、もう一度押すと新しく作り直します。",
+      "newWorker": "以下のコマンドには、<strong>{{name}}</strong> 用の新しいワーカートークンが含まれています(有効期限: {{until}})。表示されるのは今回だけです。必要なものを今すぐコピーしてください。ページを離れると失われ、もう一度押すと新しく作り直します。",
+      "intro": "このエージェント用のトークンを作成し、このページのすべてのコマンドに埋め込みます。既定では<strong>オーケストレーター</strong>で、プロジェクトの指示も変更できます。ワーカーにするには、設定の「エージェントトークン」で変更してください。名前はボード上のエージェント名になります。トークンは無効化しない限り1年間ログインでき、表示は1回だけです。"
+    }
+  },
+  "tokens": {
+    "title": "エージェントトークン",
+    "listText": "上のコマンドに含まれるトークンと、そのロールの一覧です。ロールはオーケストレーター(プロジェクトの指示も変更できる)かワーカーで、どちらも設定の「エージェントトークン」で変更できます(新規はオーケストレーター)。無効化すると、そのトークンを使うエージェントは次のリクエストでログアウトされます。",
+    "none": "まだありません。",
+    "meta": "作成 {{made}} · {{used}} · 有効期限 {{at}}",
+    "metaExpired": "作成 {{made}} · {{used}} · 失効 {{at}}",
+    "lastUsed": "最終使用 {{when}}",
+    "neverUsed": "未使用",
+    "revokeAria": "{{when}}に作成された {{name}} を無効化",
+    "revokeTitle": "{{name}} のトークンを無効化しますか?",
+    "revokeText": "このトークンを使うエージェントは、次のリクエストから拒否されます。新しいトークンで接続するには、もう一度コマンドを生成してください。",
+    "identities": {
+      "text": "誰が誰か: エージェントトークンはそれぞれボード上のIDで、ワーカーにしない限りオーケストレーターです。その配下で名乗るサブエージェントは常にワーカーとして一緒に表示されます。長い一覧は折りたたまれ、目のボタンで残りを表示できます。",
+      "empty": "エージェントトークンはまだありません。「エージェントの接続」で作成できます。",
+      "agentAria": "エージェント {{name}}",
+      "orchestratorTip": "オーケストレーターはプロジェクトの指示も変更できます。変更は、あなたが確認または取り消すまで「要対応」に残ります。名乗り(<token>/<name>)を持つサブエージェントはワーカーのままです。",
+      "orchestrator": "オーケストレーター",
+      "orchestratorAria": "{{name}}: オーケストレーター",
+      "nowOrchestrator": "{{name}} はオーケストレーターになりました",
+      "nowWorker": "{{name}} はワーカーになりました",
+      "revokeAria": "{{name}} を無効化",
+      "revokeText": "このトークンを使うエージェントと、その配下で動くすべてのサブエージェントは、次のリクエストから拒否されます。新しいトークンで接続するには、「エージェントの接続」でもう一度コマンドを生成してください。",
+      "hide": "エージェントを隠す",
+      "show_other": "{{count}}件のエージェントを表示",
+      "workingUnder": "{{token}} の配下で稼働中",
+      "seen": "最終確認 {{when}}"
+    }
+  },
+  "devices": {
+    "thisMachine": "このマシン",
+    "title": "デバイス",
+    "add": "デバイスを追加",
+    "signOut": "ログアウト",
+    "text": "ボードへのログインに使うパスキーです。パスキーは作成したアドレスでのみ有効です。このマシンでは localhost、他のデバイスではボードのテイルネット名を使います。",
+    "link": "新しいデバイスでこのリンクを開き、パスキーを作成してください。1回限り有効で、{{until}} までです。",
+    "copyLinkAria": "{{where}}のリンクをコピー",
+    "passkeys": "パスキー",
+    "passkeyMeta": "{{where}} · 追加 {{added}} · 最終使用 {{used}}",
+    "passkeyMetaSessions_other": "{{where}} · 追加 {{added}} · 最終使用 {{used}} · {{count}}セッション",
+    "lastLocal": "最後はこのマシン",
+    "revokeAria": "{{name}} を無効化",
+    "revokeTitle": "{{name}} を無効化しますか?",
+    "revokeText": "このパスキーではログインできなくなり、このパスキーでログイン中のブラウザーはログアウトされます。",
+    "signedIn": "ログイン中",
+    "sessions": "セッション",
+    "thisBrowser": "このブラウザー",
+    "sessionMeta": "{{where}} · ログイン {{signedIn}} · 最終確認 {{seen}} · 期限 {{until}}",
+    "signOutAria": "{{when}}にログインした {{name}} をログアウト"
+  },
+  "tailnet": {
+    "title": "他のデバイス(テイルネット)",
+    "text": "テイルネット経由でHTTPSを使い、他のデバイスやクラウドエージェントからボードを開けます。ここでオンにするだけで、ファイルの編集は不要です。その後、各デバイスは独自のパスキーでログインします(下のデバイス)。",
+    "signInOff": "このボードではログインが無効です(BOARD_ENV={{env}})。このマシンでのみ応答し、テイルネット経由では応答しないため、ここでは入口を保存できません。",
+    "fromEnv": "config.env(または .env)で設定されています: <code>PUBLIC_ORIGIN={{origin}}</code>。この設定が優先されるため、入口はここでは読み取り専用です。設定画面で指定するには、その行を削除してください。",
+    "funnel": "Tailscale Funnelがオンです。ボードがインターネットに公開されますが、ボードはこれを拒否します。オフにしてください(<code>tailscale funnel off</code>、または <code>tailscale serve reset</code>)。オフにするまで保存できません。",
+    "unserved": "保存された入口は提供されていません: {{reason}}。",
+    "tailscale": "Tailscale",
+    "version": "バージョン {{version}}",
+    "installed": "インストール済み",
+    "notInstalled": "未インストール",
+    "signedIn": "ログイン",
+    "yes": "はい",
+    "no": "いいえ({{state}})",
+    "notRunning": "停止中",
+    "thisMachine": "このマシン",
+    "noName": "テイルネット名なし",
+    "https": "HTTPS",
+    "certsOn": "証明書オン",
+    "certsOff": "証明書オフ",
+    "serve": "443で提供",
+    "serveBoard": "ボード({{target}})",
+    "serveNothing": "なし",
+    "funnelLabel": "Funnel",
+    "funnelUnknown": "Funnelを読み取れませんでした",
+    "funnelOn": "オン(拒否)",
+    "funnelOff": "オフ",
+    "said": "Tailscaleのメッセージ: {{error}}",
+    "entrance": "入口",
+    "use": "https://{{name}} を使う",
+    "turnOffTitle": "テイルネットの入口をオフにしますか?",
+    "turnOffText": "ボードは {{origin}} で応答しなくなります。その名前でログインしていたブラウザーはログアウトされます(パスキーは一覧に残ります)。",
+    "hint": "httpsのみ、ホスト名だけで、ポートとパスは指定できません。ボードのデータベースに保存され、再起動なしですぐ反映されます。",
+    "servedConfig": "現在の提供先: {{origin}}(config.envで設定)。",
+    "servedSetting": "現在の提供先: {{origin}}(この設定から)。",
+    "servedNone": "現在の提供先: なし。ボードはこのマシンでのみ応答します。",
+    "entranceOff": "入口はオフです",
+    "test": "入口をテスト",
+    "works": "動作しています。",
+    "notYet": "まだです。",
+    "next": {
+      "notInstalled": "このマシンにTailscaleがインストールされていません。インストールしてログインしてから、再確認してください(README: Using it from other devices)。",
+      "notSignedIn": "このマシンのTailscaleは{{state}}です。tailscale up を実行してログインしてから、再確認してください。",
+      "noName": "このマシンにはテイルネット名がありません。Tailscale管理コンソールでMagicDNSをオンにしてから、再確認してください。",
+      "httpsOff": "{{name}} のHTTPS証明書がオフです。Tailscale管理コンソールでオンにしてから、再確認してください。",
+      "ready": "準備完了: このマシンはテイルネット上で {{name}} であり、serveがボードに転送します。"
+    },
+    "serveOther": "このマシンのポート443は現在 {{target}} を提供しています。代わりに https://{{name}} をボードに向けるには、ここで次を実行してください。",
+    "serveNotSet": "serveはまだ設定されていません。https://{{name}} でボードを開くには、ここで次を実行してください。",
+    "copyServe": "serveコマンドをコピー",
+    "neverRuns": "ボードがこれを実行することはありません。実行後に再確認してください。停止するには <code>tailscale serve --https=443 off</code> を実行します。"
+  },
+  "updates": {
+    "badgeTip": "CrossBoard {{version}} が利用可能です({{installed}} をインストール済み)",
+    "badgeAria": "アップデートがあります",
+    "badge": "更新",
+    "title": "アップデート",
+    "checkout": "このボードはチェックアウトから実行されており、アップデーターがありません。更新するには、そのチェックアウトの <code>main</code> で <code>git pull</code> を実行し、続けて <code>pnpm start</code> を実行してください(README: 「Running it」)。ここから新しいバージョンを確認・インストールできるのは、デスクトップアプリだけです。",
+    "installed": "インストール済み",
+    "installedValue": "CrossBoard {{version}}",
+    "newestRelease": "最新リリース",
+    "unsupported": "このアプリは自己更新できません。インストーラーやパッケージではなく、展開したフォルダーから実行されています。ここで更新を受け取るには、GitHubのリリースをインストールしてください。",
+    "checking": "確認中…",
+    "checkNow": "今すぐ確認",
+    "install": "ダウンロードしてインストール",
+    "downloadAria": "ダウンロード",
+    "downloading": "{{version}} をダウンロード中… {{percent}}%",
+    "installing": "{{version}} をインストール中: ボードが一時停止し、アプリが新しいバージョンで再起動します。",
+    "whatsNew": "{{version}} の新機能",
+    "autoCheck": "起動時と6時間ごとにアップデートを確認",
+    "prereleases": "プレリリースを含める(0.3.0-beta.1 など)",
+    "note": "「ダウンロードしてインストール」を押すまで、何もダウンロードもインストールもされません。ダウンロードのたびに、まずリリースのメタデータにあるsha512と照合します。",
+    "notChecked": "未確認",
+    "none": "新しいものはありません({{when}}に確認)",
+    "unknown": "不明({{when}}に確認)",
+    "skipped": "{{version}} をスキップしました。このバージョンのアップデートカードは再表示されません。",
+    "undo": "元に戻す",
+    "manual": "インストールするにはターミナルで次を実行し、その後アプリを再起動してください。",
+    "copyCommand": "コマンドをコピー",
+    "card": {
+      "artwork": "リリースのアートワーク",
+      "available": "CrossBoard {{version}} が利用可能です",
+      "skip": "このバージョンをスキップ",
+      "installNow": "今すぐインストール"
+    }
+  },
+  "skills": {
+    "install": "スキルをインストール",
+    "update": "スキルを更新",
+    "installedBoard": "ボードのスキルを <time>{{at}}</time> にインストールしました",
+    "installedReview": "レビュー用スキルを <time>{{at}}</time> にインストールしました",
+    "installedBoardAria": "ボードのスキルをインストールしました",
+    "installedReviewAria": "レビュー用スキルをインストールしました",
+    "installedFiles": "インストールしたファイル",
+    "failedBoard": "ボードのスキルをインストールできませんでした(HTTP {{status}})",
+    "failedReview": "レビュー用スキルをインストールできませんでした(HTTP {{status}})",
+    "failedBoardAria": "ボードのスキルをインストールできませんでした",
+    "failedReviewAria": "レビュー用スキルをインストールできませんでした",
+    "failedHint": "フォルダーがボードの実行ユーザーのもので、書き込み可能か確認してください。",
+    "retry": "再試行",
+    "action": {
+      "created": "作成",
+      "updated": "更新",
+      "unchanged": "変更なし"
+    },
+    "fileStatus": {
+      "current": "最新",
+      "outdated": "古い",
+      "missing": "なし"
+    },
+    "intro": "<code>/todo-review</code> はTo doのチケットを引き渡しまで進め、<code>/review-queue</code> はPRキューをレビューします。どちらもこれらのエージェントに委任します。<code>/feature-review</code> は、各変更に対して実行されるレビューです。1行のコマンドで、この3つをエージェントごと <code>~/.claude</code> にインストールします(Claude Code用。OpenCodeもスキルを読みます)。同名のファイルは置き換えられます。",
+    "placeholderNote": "コマンドをコピーするまでは <code>{{placeholder}}</code> が入っています。コピーすると、ボードがこのページのすべてのインストール用コマンドに、約10分間有効なダウンロードトークンを発行します。",
+    "filesInstalled_other": "インストールされるファイル {{count}}件",
+    "track": "追跡",
+    "global": "グローバル",
+    "byRepo": "リポジトリ別",
+    "repoStatus": {
+      "current": "最新",
+      "outdated": "古い",
+      "none": "リポジトリにインストールされていません",
+      "unreachable": "チェックアウトを読み取れません"
+    },
+    "globalStatus": {
+      "current": "最新",
+      "outdated": "古い",
+      "none": "未インストール",
+      "unreachable": "フォルダーを読み取れません"
+    },
+    "onMachine": "このマシン",
+    "globalText": "ボードが動いているマシンの <code>~/.claude</code> にあるコピーです。独自のコピーがないリポジトリでは、Claude Codeがこれを使います。上のコマンドで最新になります。",
+    "globalHomeText": "ボードが動いているマシンで、<code>~/.claude</code> の代わりに <code>CLAUDE_HOME</code> が指すフォルダーにあるコピーです。上のコマンドのインストール先は <code>~/.claude</code> なので、このコピーにはそのフォルダーへインストールする専用のコマンドがあります。",
+    "claudeOnMachine": "このマシンの ~/.claude",
+    "noneGlobal": "これらのファイルはまだありません。上のコマンドでインストールできます。",
+    "noneHome": "これらのファイルはまだありません。このコマンドでインストールできます。",
+    "inRepos": "リポジトリ内",
+    "reposText": "リポジトリは自分の <code>.claude</code> フォルダーに独自のコピーを持てます。Claude Codeはそのリポジトリでは <code>~/.claude</code> ではなくこちらを使います。古いコピーには、そのリポジトリの <code>.claude</code> にこれらのファイルをインストールするコマンドがあります。同名のファイルは置き換え、他は残します。",
+    "noReposProject": "このプロジェクトにはまだリポジトリがありません。",
+    "noReposBoard": "ボードにはまだリポジトリがありません。",
+    "repoLabel": "{{project}} の {{repo}}",
+    "usesGlobal": "<code>~/.claude</code> のインストールを使用します。",
+    "differ_other": "{{total}}個のファイルのうち{{count}}個が異なるか不足しています",
+    "notUpToDate": "最新でないファイル"
+  },
+  "skillDiff": {
+    "description": "インストール用コマンドで変わる内容です。- の行はインストール済みのコピーにあって削除され、+ の行はボードが配信するコピーから入ります。改行コードの違いは除きます。",
+    "unreadable": "インストール済みのコピーをテキストとして読み取れません({{reason}}): <code>{{path}}</code>",
+    "noChanges": "変更なし: インストール済みのコピーはボードのものと同じです。",
+    "changes": "変更"
+  },
+  "hostTools": {
+    "section": "不足しているツール",
+    "line": "<strong>{{problem}}</strong>: {{breaks}}が動作しません。対処: {{fix}}。",
+    "dismissTip": "次の確認でも {{name}} が見つからない場合まで、これを隠します",
+    "dismissAria": "{{name}} の警告を閉じる",
+    "recheckTip": "ボードのPATHでgit、gh、claude、node、pnpmをもう一度探します",
+    "recheckAria": "ツールを再確認",
+    "text": {
+      "breaks": {
+        "git": "チケットのブランチとコミットの状態、マージ済みの確認、クリーンアップ",
+        "gh": "PRキュー、CIの状態、PRチケット",
+        "claude": "ボード自身のレポート生成(レポート → 生成)",
+        "node": "管理されたプレビュー",
+        "pnpm": "管理されたプレビュー",
+        "ghTooOld": "ghにログイン済みかどうかのボードの確認"
+      },
+      "problem": {
+        "notFound": "ボードのPATHに {{name}} が見つかりません",
+        "claudeNotFound": "claude が見つかりません: CLAUDE_BIN は {{bin}} です",
+        "tooOld": "{{gh}} はこの確認には古すぎます: --active を認識しません",
+        "noConfigWhere": "ghが設定を見つけられません: {{needs}} がないため、{{file}} を探しました",
+        "noConfig": "ghが設定を見つけられません: HOME も GH_CONFIG_DIR もありません",
+        "signedOut": "ghにログインしていません"
+      },
+      "fix": {
+        "then": "その後、再確認してください(フォルダーがまだPATHにない場合は、ボードを再起動してください)",
+        "installGit": "git(https://git-scm.com/downloads)をインストールし、{{after}}",
+        "installGh": "GitHub CLI(https://cli.github.com)をインストールして gh auth login を実行し、{{after}}",
+        "installClaude": "Claude Code(https://docs.claude.com/en/docs/claude-code/setup)をインストールするか、.env(デスクトップアプリでは config.env)の CLAUDE_BIN にフルパスを設定してから、ボードを再起動してください",
+        "installNode": "Node.js(https://nodejs.org)をインストールし、{{after}}",
+        "installPnpm": "corepack enable pnpm を実行する(またはインストールする: https://pnpm.io/installation)かして、{{after}}",
+        "upgradeGh": "GitHub CLI(https://cli.github.com)をアップグレードしてから、再確認してください(DebianやUbuntuでは sudo apt install --only-upgrade gh、macOSでは brew upgrade gh)",
+        "noConfig": "ghにログインしたときのホームを HOME に設定して(または hosts.yml のあるフォルダーを GH_CONFIG_DIR に設定して)ボードを起動し、再確認してください",
+        "signedOut": "このマシンで gh auth login を実行してから、再確認してください"
+      }
+    }
+  },
+  "previewLimit": {
+    "label": "プレビューの上限",
+    "saving": "保存中…"
+  },
+  "projectSettings": {
+    "intro": "このプロジェクトの動作を決めます。新しいチケットの初期内容、提案するタグ、チケットを停滞とみなす時間、表示するアラート、ステージ、実行、各ページの表示内容です。エージェントへの指示は専用のページにあります。",
+    "save": "保存",
+    "saving": "保存中…",
+    "unsaved": "未保存の変更があります。",
+    "noChanges": "変更はありません。",
+    "kinds": {
+      "title": "種類",
+      "description": "プロジェクトの用途です。ソフトウェア種別のないプロジェクトでは、リポジトリ、PR、CI、プレビュー、クリーンアップが非表示になります。リポジトリとPRのデータは保持されます。"
+    },
+    "phases": {
+      "title": "既定のフェーズ",
+      "description": "新しいチケットが最初に持つ最上位のタスクで、順序どおりに並びます。作成時に指定したタスクは最初のフェーズの下に入り、レーンはフェーズなしで始まります。エージェントは終えたものにチェックを付け、合わないものは削除または名前を変更します。空にすると、タスクなしでチケットが始まります。",
+      "empty": "フェーズなし: 新しいチケットはタスクなしで始まります。",
+      "new": "新しいフェーズ",
+      "list": "既定のフェーズ",
+      "placeholder": "フェーズを追加",
+      "add": "フェーズを追加",
+      "useBuiltIn": "組み込みの一覧を使う"
+    },
+    "tags": {
+      "title": "タグの候補",
+      "description": "チケットのタグの下にチップとして出す候補で、その後に各チケットがすでに持つタグが続きます。エージェントは <code>get_project</code> で読み取って再利用します。空にすると、使用中のタグだけを提示します。",
+      "empty": "候補なし: 使用中のタグだけを提示します。",
+      "new": "新しいタグ",
+      "placeholder": "タグを追加",
+      "add": "タグを追加",
+      "useDefaults": "既定を使う"
+    },
+    "stall": {
+      "title": "停滞したチケット",
+      "description": "チケットの表示は2つの時計で決まります。リースはエージェントのハートビートや投稿で維持されるもので、10分続き、スパンが開いたまま切れると、チケットは<lost>連絡途絶</lost>と表示されます。これはエージェントがいなくなった状態で、あなたの返事待ちではありません。開いたものがないチケットは、エージェントからの連絡(ハートビート、スパン、待機、引き渡し)もボードが確認した動き(プッシュ、PR、プレビュー)も、この時間なかった場合に<stalled>停滞</stalled>と表示されます。このダイヤルがその無音のしきい値で、こちらが先に判定されます。10分未満にすると、リースが切れる前に無音のチケットが検出されます。リースの10分は固定です。",
+      "label": "停滞とみなす時間(分)",
+      "invalid": "{{min}}〜{{max}}の整数。"
+    }
+  },
+  "kinds": {
+    "legend": "プロジェクトの用途",
+    "hint": "ソフトウェアを選ぶと、リポジトリ、ブランチ、PR、CI、プレビュー、クリーンアップが加わります。それ以外の種類は作業をgitの外に置き、ボードは実際に使うものだけを表示します。",
+    "label": {
+      "software": "ソフトウェア",
+      "music": "音楽",
+      "art": "アート",
+      "writing": "執筆",
+      "video": "動画",
+      "research": "リサーチ",
+      "lawyer": "法律",
+      "accountant": "会計",
+      "cybersecurity": "サイバーセキュリティ",
+      "life": "生活"
+    }
+  },
+  "lists": {
+    "tasks": "タスク",
+    "addTask": "タスクを追加",
+    "addTaskLabel": "タスクを追加",
+    "moveUp": "上へ移動",
+    "moveDown": "下へ移動",
+    "moveItemUp": "{{item}} を上へ移動",
+    "moveItemDown": "{{item}} を下へ移動",
+    "remove": "削除",
+    "removeItem": "{{item}} を削除"
+  },
+  "tagsInput": {
+    "tooLong": "{{max}}文字を超えています",
+    "remove": "削除",
+    "removeTag": "{{tag}} を削除",
+    "suggested": "候補のタグ",
+    "addTag": "タグ {{tag}} を追加",
+    "tooMany": "タグは最大{{max}}個です。",
+    "tooLongTag": "タグは最大{{max}}文字です。"
+  },
+  "stagesEditor": {
+    "title": "ステージ",
+    "description": "機能ボードの列で、左から右に並びます。種類はボードのルール(担当取得、却下、レーンの進捗)の基準になり、エージェントには各ステージのキー、名前、種類が見えます。名前を変えてもキーは変わりません。",
+    "moveEarlier": "{{name}} を前へ移動",
+    "moveLater": "{{name}} を後ろへ移動",
+    "tickets_other": "{{count}}件のチケット",
+    "newPlaceholder": "新しいステージ(例: QA)",
+    "add": "ステージを追加",
+    "moveAnyway": "それでも移動",
+    "kind": {
+      "open": "未着手",
+      "active": "作業中",
+      "blocked": "ブロック",
+      "review": "レビュー",
+      "done": "完了",
+      "cancelled": "中止",
+      "approved": "承認済み"
+    },
+    "hint": {
+      "open": "着手待ちです。担当を取ると、作業開始ステージに移ります",
+      "active": "作業中です",
+      "blocked": "あなたの対応待ちです",
+      "review": "レビューに引き渡し済みです",
+      "done": "完了済みです。担当は取れません",
+      "cancelled": "取りやめです。却下するとチケットはここに移り、そのタスクは進捗から外れます",
+      "approved": "マージのあなたの承認です。エージェントはチケットをここに移しません"
+    },
+    "color": {
+      "gray": "グレー",
+      "slate": "スレート",
+      "sky": "スカイ",
+      "blue": "ブルー",
+      "teal": "ティール",
+      "emerald": "エメラルド",
+      "lime": "ライム",
+      "amber": "アンバー",
+      "orange": "オレンジ",
+      "rose": "ローズ",
+      "pink": "ピンク",
+      "violet": "バイオレット"
+    },
+    "colour": "色",
+    "stageName": "ステージ名",
+    "firstActive": "最初の作業中ステージ({{name}})",
+    "firstActiveNone": "最初の作業中ステージ(なし)",
+    "workStarts": "作業開始ステージ",
+    "workStartsHint": "チケットの担当を取ったときに置かれる場所です。「進行中」や「作業中」のステータスも、このステージを指します。",
+    "delete": "{{name}} を削除",
+    "deleteTitle": "ステージ「{{name}}」を削除しますか?",
+    "holds_other": "このステージには{{count}}件のチケット(レーンを含む)があります。移動先のステージを選んでください。",
+    "holdsNone": "このステージにチケットはありません。",
+    "moveTo": "移動先…",
+    "cancel": "キャンセル",
+    "deleteConfirm": "削除"
+  },
+  "runsSettings": {
+    "title": "実行",
+    "description": "チケットの各リポジトリのワークツリーからボードが起動するものです。チケットの「実行」カードから、またはエージェントの依頼で起動します。<strong>プレビュー</strong>はポートで応答し、開くためのリンクが付きます。<strong>ジョブ</strong>はリンクのないバックグラウンドワーカーです。どちらもワークツリーで、インストール(ロックファイルが変わったときだけ)、ビルド、起動コマンドの順に実行します。エージェントは起動と停止のほか、追加、変更、削除もでき、変更はエージェント名でプロジェクトのアクティビティに表示されます。",
+    "noRepos": "このプロジェクトにはまだリポジトリがありません。",
+    "removed": "削除済み",
+    "groupLabel": "{{name}} の実行",
+    "add": "実行を追加",
+    "none": "実行なし: このリポジトリのチケットには起動するものがありません。",
+    "typePreview": "プレビュー",
+    "typeJob": "ジョブ",
+    "portHealth": "ポート {{port}} · ヘルス {{path}}",
+    "portAuto": "自動",
+    "moveUp": "上へ移動",
+    "moveDown": "下へ移動",
+    "edit": "編集",
+    "editRun": "{{name}} を編集",
+    "delete": "削除",
+    "deleteRun": "{{name}} を削除",
+    "deleteTitle": "実行「{{name}}」を削除しますか?",
+    "deleteDescription": "現在動いている場所では停止し、{{repo}} のチケットからは選べなくなります。",
+    "cancel": "キャンセル",
+    "newRun": "新しい実行",
+    "portProblem": "ポート: 自動、または{{from}}〜{{to}}のポート",
+    "name": "名前",
+    "type": "種類",
+    "typePreviewLong": "プレビュー(ポートとリンク)",
+    "typeJobLong": "ジョブ(バックグラウンドワーカー)",
+    "install": "インストール",
+    "installPlaceholder": "pnpm install --frozen-lockfile(空: なし)",
+    "build": "ビルド",
+    "buildPlaceholder": "pnpm build(空: なし)",
+    "start": "起動",
+    "startPreviewPlaceholder": "node server.js(PORT を読み取る)",
+    "port": "ポート",
+    "healthPath": "ヘルスパス",
+    "envPreview": "起動コマンド用の環境変数です。値の中の {port} はそのポートになり、PORT と HOST が設定されます",
+    "env": "起動コマンド用の環境変数",
+    "varName": "変数{{n}}の名前",
+    "varValue": "変数{{n}}の値",
+    "valuePlaceholder": "値",
+    "removeVar": "変数{{n}}を削除",
+    "addVar": "変数を追加",
+    "copyData": "先に稼働中のボードのデータを data/preview にコピーする(DATA_DIR として)",
+    "save": "保存",
+    "saving": "保存中…"
+  },
+  "layoutEditor": {
+    "title": "レイアウト",
+    "description": "このプロジェクトで何をどこに表示するかを決めます。メニューのページ、概要のカード(ホームのプロジェクト欄も同じ)、チケットページのセクションが対象です。タイルをオフにすると非表示になり、ドラッグするか矢印で動かせ、チケットのセクションは別の列にも移せます。非表示のページも、リンクからは開けます。<lock/> が付いたものは移動できますが、常に表示されます。",
+    "area": {
+      "nav": "プロジェクトメニュー",
+      "overview": "概要のカード",
+      "ticketMain": "チケットページ、メイン列",
+      "ticketSide": "チケットページ、サイド列"
+    },
+    "where": {
+      "nav": "メニュー内",
+      "overview": "概要内",
+      "ticket": "チケットページ内"
+    },
+    "menu": "メニュー",
+    "overview": "概要",
+    "ticketPage": "チケットページ",
+    "mainColumn": "メイン列",
+    "sideColumn": "サイド列",
+    "hiddenCount_other": "{{count}}件を非表示。",
+    "reset": "既定に戻す",
+    "shown": "{{total}}件中{{shown}}件を表示",
+    "dropHere": "ここにドロップ",
+    "empty": "空です。セクションをここへドラッグしてください",
+    "moveUp": "上へ移動",
+    "moveDown": "下へ移動",
+    "moveUpIn": "{{where}}の {{name}} を上へ移動",
+    "moveDownIn": "{{where}}の {{name}} を下へ移動",
+    "toSideTip": "サイド列へ移動",
+    "toMainTip": "メイン列へ移動",
+    "toSide": "{{name}} をサイド列へ移動",
+    "toMain": "{{name}} をメイン列へ移動",
+    "alwaysShown": "常に表示: {{reason}}",
+    "show": "表示",
+    "hide": "非表示",
+    "showIn": "{{where}}の {{name}} を表示",
+    "element": {
+      "nav": {
+        "overview": "概要",
+        "prs": "PRキュー",
+        "features": "進行中の機能",
+        "roadmap": "ロードマップ",
+        "previews": "プレビュー",
+        "gallery": "ギャラリー",
+        "agents": "チーム",
+        "daily": "デイリー",
+        "cleanup": "クリーンアップ",
+        "repositories": "リポジトリ",
+        "instructions": "指示",
+        "workflow": "ワークフロー"
+      },
+      "overview": {
+        "needsYou": "要対応",
+        "inProgress": "進行中",
+        "doneToday": "今日完了",
+        "carryingOver": "持ち越し",
+        "notes": "ノート",
+        "agents": "稼働中のエージェント",
+        "lostContact": "連絡途絶"
+      },
+      "ticket": {
+        "instructions": "指示",
+        "tasks": "タスク",
+        "timeline": "タイムライン",
+        "lanes": "レーン",
+        "activity": "アクティビティ",
+        "runs": "実行",
+        "details": "詳細",
+        "branch": "ブランチ",
+        "workspaces": "ワークスペース",
+        "resume": "再開"
+      }
+    },
+    "locked": {
+      "nav": {
+        "overview": "プロジェクトの最初のページ",
+        "features": "プロジェクトのボード"
+      },
+      "ticket": {
+        "instructions": "チケット自身のテキスト",
+        "tasks": "ブロックされたタスクのリンクの移動先",
+        "activity": "あなたの対応を待つ決定やスレッドがここにあります"
+      }
+    }
+  },
+  "repoDialog": {
+    "newProject": "新しいプロジェクト…",
+    "editTitle": "{{name}} を編集",
+    "newTitle": "新しいリポジトリ",
+    "description": "ローカルのgitチェックアウトです。ボードはgitとghで読み取るだけで、書き込みはしません。",
+    "project": "プロジェクト",
+    "projectName": "プロジェクト名",
+    "moves": "PR、チケット、レビュー結果も一緒に移動します。",
+    "path": "リポジトリのパス",
+    "pathPlaceholder": "/home/you/code/… または C:\\code\\…",
+    "browse": "参照…",
+    "name": "名前",
+    "namePlaceholder": "GitHubまたはフォルダーから",
+    "baseBranch": "ベースブランチ",
+    "removeRepo": "リポジトリを削除",
+    "removeTitle": "{{name}} を削除しますか?",
+    "removeDescription": "PRキューのエントリーも一緒に削除されます。チケットとレビュー結果はプロジェクトに残りますが、PRチケットは一緒に削除されます。ディスク上のチェックアウトには影響しません。",
+    "keep": "残す",
+    "remove": "削除",
+    "saving": "保存中…",
+    "save": "保存",
+    "add": "リポジトリを追加"
+  },
+  "folderPicker": {
+    "title": "チェックアウトを選択",
+    "description": "ボードが動いているマシンのフォルダーです。<repo/> はgitチェックアウトを示します。",
+    "up": "1つ上のフォルダーへ",
+    "home": "ホーム",
+    "path": "フォルダーのパス",
+    "folders": "フォルダー",
+    "none": "フォルダーがありません。",
+    "git": "git",
+    "isRepo": "このフォルダーはgitチェックアウトです。",
+    "notRepo": "gitチェックアウトではありません。",
+    "use": "このフォルダーを使う"
+  },
+  "instructions": {
+    "state": {
+      "pending": "対応待ち",
+      "accepted": "確認済み",
+      "reverted": "取り消し済み"
+    },
+    "markedReviewed": "確認済みにしました",
+    "reverted": "プロジェクトの指示を取り消しました",
+    "historyTitle": "指示の履歴",
+    "historyDescription": "あなたまたはオーケストレーターによる変更のすべてを、変更前のテキストとともに記録します。オーケストレーターの変更は即座に反映され、あなたの確認を待ちます。",
+    "noChanges": "まだ変更はありません。",
+    "changeBy": "{{name}} による変更",
+    "aRevert": "取り消し",
+    "revertedBy": "{{name}} が取り消し({{when}})",
+    "reviewedBy": "{{name}} が確認({{when}})",
+    "hideChange": "変更を隠す",
+    "showChange": "変更を表示",
+    "reviewed": "確認済み",
+    "revertTip": "この変更の前の指示に戻します",
+    "revertBlocked": "その後も指示が変更されています。先に後の変更を取り消してください",
+    "revert": "取り消す",
+    "diffLabel": "指示の変更内容",
+    "pageTitle": "指示",
+    "pageDescription": "ここで作業する前に、すべてのエージェントが読む内容です。変更はすべて下に残ります。",
+    "reposLine": "リポジトリ: <goto>リポジトリのページ</goto>。プロジェクト名の変更や削除は、プロジェクトメニュー → プロジェクトの管理から。",
+    "sectionLabel": "プロジェクトの指示",
+    "edit": "編集",
+    "placeholder": "リポジトリの動かし方、守る規約、してはいけないこと。",
+    "unsavedHint": "未保存の変更があります。Ctrl/⌘+Enterで保存します。",
+    "noChangesHint": "変更はありません。",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "saving": "保存中…",
+    "clickToEdit": "クリックして編集",
+    "empty": "まだ指示がありません。クリックして書き始めましょう。",
+    "discardTitle": "変更を破棄しますか?",
+    "discardDescription": "プロジェクトの指示に未保存の変更があります。エージェントは保存済みの内容を読み続けます。",
+    "keepEditing": "編集を続ける",
+    "discard": "破棄"
+  },
+  "repositories": {
+    "title": "リポジトリ",
+    "description": "このプロジェクトが読み取るチェックアウトです。",
+    "new": "新しいリポジトリ",
+    "baseLine": "ベース {{branch}} · <path>{{path}}</path>",
+    "empty": "このプロジェクトにはまだリポジトリがありません。ローカルのgitチェックアウトのパスを指定して追加してください。"
+  },
+  "reports": {
+    "status": {
+      "done": "提出済み",
+      "missing": "未提出",
+      "upcoming": "予定",
+      "off": "オフ"
+    },
+    "weekday": {
+      "1": "月曜日",
+      "2": "火曜日",
+      "3": "水曜日",
+      "4": "木曜日",
+      "5": "金曜日",
+      "6": "土曜日",
+      "7": "日曜日"
+    },
+    "weekdayShort": {
+      "1": "月",
+      "2": "火",
+      "3": "水",
+      "4": "木",
+      "5": "金",
+      "6": "土",
+      "7": "日"
+    },
+    "weekOf": "{{date}}の週",
+    "scheduleOff": "オフ",
+    "scheduleDaily": "毎日 {{end}}まで、{{format}}",
+    "scheduleWeekly": "毎週{{day}} {{end}}まで、{{format}}",
+    "formatFile": "ファイル",
+    "formatText": "テキスト"
+  },
+  "daily": {
+    "title": "デイリー",
+    "subtitle": "期間のレポートと、1時間ごとの完了内容です。",
+    "previousDay": "前日",
+    "nextDay": "翌日",
+    "opening": "デイリーを開いています…"
+  },
+  "reportDue": {
+    "region": "期限のレポート",
+    "notifyTitleDue": "{{project}}: レポートの期限",
+    "notifyTitleMissing": "{{project}}: レポート未提出",
+    "notifyBodyDaily": "{{label}}のデイリーレポートの期限は{{time}}です。",
+    "notifyBodyWeekly": "{{label}}の週次レポートの期限は{{time}}です。",
+    "missing": ": レポート未提出、シフトは{{time}}に終了しました",
+    "due": ": レポートの期限まであと{{left}}({{time}})",
+    "leftMinutes": "{{count}}分",
+    "leftHours": "{{hours}}時間",
+    "leftHoursMinutes": "{{hours}}時間{{minutes}}分",
+    "notificationsOn": "このブラウザーで通知はオンです",
+    "notificationsBlocked": "このブラウザーで通知はブロックされています",
+    "notifyTip": "レポートの期限にブラウザー通知を出します(ボードのタブが開いている間)",
+    "notifyMe": "通知する"
+  },
+  "activityLog": {
+    "region": "アクティビティ",
+    "empty": "{{date}}は何も起きませんでした。",
+    "actions_other": "{{count}}件の操作",
+    "contributors_other": "{{count}}人が参加",
+    "contributorsTitle": "参加者",
+    "by": "{{names}}",
+    "openAll": "すべて開く",
+    "closeAll": "すべて閉じる",
+    "openReview": "レビュー結果を開く",
+    "kind": {
+      "ticket_other": "チケット{{count}}件",
+      "task_other": "タスク{{count}}件",
+      "update_other": "更新{{count}}件",
+      "comment_other": "コメント{{count}}件",
+      "pr_other": "PR {{count}}件",
+      "review_other": "レビュー{{count}}件",
+      "workspace_other": "ワークスペース{{count}}件",
+      "agent_other": "エージェント{{count}}件",
+      "project_other": "プロジェクト{{count}}件",
+      "summary_other": "サマリー{{count}}件",
+      "report_other": "レポート{{count}}件",
+      "handoff_other": "引き渡し{{count}}件"
+    }
+  },
+  "generateReport": {
+    "wrote": "claudeがレポートを書きました",
+    "loading": "読み込み中…",
+    "off": "レポートはオフです。先にレポート設定で頻度を決めてください",
+    "file": "このプロジェクトのレポートはファイルです。claudeが書けるのはテキストのレポートだけです",
+    "none": "この日に求められているレポートはありません",
+    "fix": "{{problem}}。対処: {{fix}}。",
+    "tip": "claudeがプロンプト、テンプレート、アクティビティからレポートを書きます",
+    "writing": "claudeが執筆中…",
+    "generate": "claudeで生成",
+    "failed": "claudeがレポートを書けませんでした: {{message}}"
+  },
+  "pushedToday": {
+    "commits_other": "{{count}}コミット",
+    "label": "今日のプッシュ: {{commits}}、{{added}}行追加、{{removed}}行削除",
+    "labelNone": "今日のプッシュ: なし",
+    "nothing": "今日のプッシュはありません",
+    "title": "今日のプッシュ",
+    "checked": "originを{{ago}}に確認",
+    "notFetched": "originはまだ取得されていません",
+    "byRepo": "リポジトリ別の今日のプッシュ",
+    "emptyRepos": "このプロジェクトのリポジトリで、今日originに届いたものはありません。",
+    "hint": "今日originのブランチに届いたコミットです。重複はなく、マージは含みません。"
+  },
+  "reportCalendar": {
+    "region": "レポートカレンダー",
+    "counts": "提出済み {{done}} · 未提出 {{missing}}",
+    "openMissing": "最も近い未提出のレポート、{{period}}を開く",
+    "nothingMissing": "未提出はありません",
+    "nextMissing": "次の未提出",
+    "dayLabel": "{{day}}: {{status}}"
+  },
+  "reportCard": {
+    "region": "レポート",
+    "title": "レポート",
+    "off": "このプロジェクトのレポートはオフです。レポート設定で提出の頻度を選んでください。",
+    "notAsked": "{{date}}に求められているレポートはありません。",
+    "due": "期限 {{date}}",
+    "replace": "差し替える",
+    "post": "レポートを投稿",
+    "versions_other": "{{count}}版",
+    "version": "第{{n}}版",
+    "none": "{{label}}のレポートはまだありません。",
+    "history": "履歴({{count}})",
+    "earlier": "過去の版",
+    "forLabel": "{{label}}のレポート",
+    "placeholderFile": "レポートのファイルを添付してください。ひとこと添えるのは任意です。",
+    "placeholderText": "プロンプトの指示どおりにレポートを書いてください。ファイルを貼り付けるかドロップすると添付できます。",
+    "attach": "添付",
+    "cancel": "キャンセル",
+    "attachFirst": "先にレポートのファイルを添付してください",
+    "posting": "投稿中…",
+    "replaceButton": "差し替え",
+    "postButton": "投稿"
+  },
+  "reportSettings": {
+    "region": "レポート設定",
+    "title": "レポート設定",
+    "field": {
+      "prompt": "プロンプト",
+      "template": "テンプレート"
+    },
+    "formatText": "テキスト",
+    "formatFile": "ファイル(PDFなど)",
+    "prompt": "プロンプト",
+    "promptKindFile": "ファイル",
+    "promptKindText": "テキスト",
+    "edit": "編集",
+    "clickToEdit": "クリックして編集",
+    "noPrompt": "レポートのプロンプトはまだありません。クリックして、レポートに含める内容と書き方、短いテキストかファイルかを指定してください。",
+    "promptLabel": "レポートのプロンプト",
+    "promptPlaceholder": "レポートに書く内容と書き方: 読み手、トーン、強調点、短いテキストかPDFか。",
+    "as": "形式",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "saving": "保存中…",
+    "sections": "生成されるレポートには、次のセクションがこの順で入ります: {{headings}}。",
+    "noHeadings": "見出しなし: 生成されたレポートは検証されません。",
+    "template": "テンプレート",
+    "theDefault": "既定",
+    "templateLabel": "レポートのテンプレート",
+    "useDefault": "既定を使う",
+    "diffGroup": "レポートの{{field}}の変更内容",
+    "bothEmpty": "どちらも空です。",
+    "state": {
+      "pending": "対応待ち",
+      "accepted": "保持",
+      "reverted": "取り消し済み"
+    },
+    "dialogTitle": "レポートの{{field}}の変更",
+    "dialogTitleGeneric": "レポート設定の変更",
+    "loading": "読み込み中…",
+    "byAgent": "<who>{{name}}</who>(エージェント)による変更",
+    "by": "<who>{{name}}</who>による変更",
+    "keptBy": "{{name}} が保持",
+    "revertedBy": "{{name}} が取り消し",
+    "showChange": "変更内容を表示",
+    "noticesRegion": "エージェントによる確認待ちの変更",
+    "keptToast": "新しいレポートの{{field}}を保持しました",
+    "revertedToast": "レポートの{{field}}を取り消しました",
+    "noticeLabel": "{{name}} がレポートの{{field}}を変更しました",
+    "noticeText": "<who>{{name}}</who> がレポートの{{field}}を変更しました。取り消しますか?",
+    "hideChange": "変更を隠す",
+    "showTheChange": "変更を表示",
+    "accept": "承認",
+    "revert": "取り消す",
+    "laterChange": "その後も{{field}}が変更されています。先にその変更を取り消してください"
+  },
+  "shift": {
+    "notWorkday": "勤務日ではありません",
+    "before": "勤務前",
+    "on": "勤務中",
+    "after": "勤務後",
+    "tip": "今日の勤務 {{span}}、現在 {{now}}、{{where}}。レポートの期限は勤務終了時です。",
+    "label": "勤務 {{span}}、現在 {{now}}: {{where}}",
+    "cadence": {
+      "off": "オフ",
+      "daily": "毎日",
+      "weekly": "毎週"
+    },
+    "badOrder": "勤務の終了は開始より後にしてください。",
+    "noWorkday": "勤務日を1日以上選んでください。",
+    "badAlert": "終了の0〜720分前の間で指定してください。",
+    "schedule": "スケジュール",
+    "due": "期限",
+    "hintDaily": "勤務の設定です。レポートの期限は終了時です。",
+    "hintWeekly": "勤務の設定です。レポートの期限は、上の曜日の終了時です。",
+    "start": "勤務開始",
+    "end": "勤務終了",
+    "workdays": "勤務日",
+    "workdaysHint": "デイリーレポートはこれらの日に求められ、他の日はオフで、未提出にはなりません。",
+    "remind": "リマインド開始(終了の何分前か)",
+    "save": "保存",
+    "saving": "保存中…",
+    "weekdayLabel": "曜日"
+  },
+  "cleanup": {
+    "counts": {
+      "deleted_other": "{{count}}件を削除",
+      "kept_other": "{{count}}件を保持",
+      "gone_other": "{{count}}件はすでに削除済み"
+    },
+    "actions": {
+      "local": {
+        "row": "ブランチを削除",
+        "all": "削除可能なローカルブランチをすべて削除",
+        "title_other": "ローカルブランチ{{count}}件を削除しますか?",
+        "confirm_other": "ローカルブランチ{{count}}件を削除",
+        "what": "各ブランチはチェックアウトから削除されます。originのコピーは残ります。"
+      },
+      "remote": {
+        "row": "originで削除",
+        "all": "削除可能なoriginのブランチをすべて削除",
+        "title_other": "originのブランチ{{count}}件を削除しますか?",
+        "confirm_other": "originのブランチ{{count}}件を削除",
+        "what": "各ブランチはoriginから削除され、それを使うすべての人に影響します。ローカルブランチは残ります。"
+      },
+      "worktrees": {
+        "row": "ワークツリーとブランチを削除",
+        "all": "削除可能なワークツリーをブランチごとすべて削除",
+        "title_other": "{{count}}件のブランチのワークツリーとブランチを削除しますか?",
+        "confirm_other": "ワークツリーを削除し、{{count}}件のブランチを削除",
+        "what": "各ワークツリーのフォルダー(node_modulesなどの無視されたファイルを含む)を削除し、続いてローカルブランチを削除します。中のリンクはリンクとして削除され、リンク先がワークツリーの外にあるフォルダーは残ります。originのコピーは残ります。"
+      }
+    },
+    "previewState": {
+      "running": ":{{port}}で実行中",
+      "building": "ビルド中",
+      "starting": "起動中"
+    },
+    "copied": "コピーしました",
+    "sweep": {
+      "partial_other": "{{count}}件のファイルを削除しました。{{failed}}件は削除できず、次回に持ち越されます",
+      "done_other": "{{count}}件のファイルを削除しました({{size}})"
+    },
+    "toast": {
+      "keptSee": "{{counts}}: 理由は下を参照",
+      "jobFailed": "{{title}} が失敗しました: {{reason}}"
+    },
+    "noReasonGiven": "理由の記載なし",
+    "title": "クリーンアップ",
+    "intro": "ベースと照合した、後片付けが必要な完了済みの作業です。",
+    "refresh": "更新",
+    "agentsNote": "エージェントはマージ済みのローカルブランチを削除できます(<tool>cleanup_delete</tool>)。ワークツリーの削除とoriginのブランチの削除は、このページからあなたが行います。",
+    "deleteOff": "削除はオフです: {{reason}}。",
+    "repoError": "{{name}}: {{error}}。ブランチとワークツリーが不明なため、このリポジトリでは何も削除できません。",
+    "progress": {
+      "label": "削除の進捗",
+      "of": "{{total}}件中{{done}}件",
+      "starting": "開始中…",
+      "failed": "失敗 · {{reason}}",
+      "succeeded": "成功 · {{counts}}"
+    },
+    "empty": "残っているものはありません。クローズしたチケットはすべて片付いています。",
+    "group": {
+      "safe": {
+        "title": "削除して安全",
+        "hint": "すべてのコミット、または同じパッチがベースに入っています。"
+      },
+      "edited": {
+        "title": "編集されているが反映済み",
+        "hint": "取り込みの途中でコミットが変わっていますが、ブランチをマージしても何も追加されません。"
+      },
+      "unique": {
+        "title": "独自の作業が残っています",
+        "hint": "ベースにない変更がブランチにあります。残すか、作業の行き先を確認してください。"
+      },
+      "kept": {
+        "title": "保持",
+        "hint": "作業中のチケットまたは未クローズのPR、ベース、リポジトリのベースブランチ、メインのチェックアウトのブランチ、originの既定ブランチが使用中のもので、ここからは削除されません。"
+      },
+      "other": {
+        "title": "比較対象なし",
+        "hint": "ブランチなしで登録されたままのワークスペース、または照合するベースがないブランチです。"
+      }
+    },
+    "workspacesRegistered_other": "{{count}}件のワークスペースを登録済み",
+    "previewStop": "プレビュー({{state}}): チケット側で停止してください",
+    "notLocal": "ローカルにありません",
+    "worktreeKept": "{{path}}: 保持、{{reason}}",
+    "mainCheckout": "メインのチェックアウト",
+    "originSha": "origin {{sha}}",
+    "copyRestore": "復元コマンドをコピー: {{command}}",
+    "col": {
+      "ticket": "チケット",
+      "branch": "ブランチ",
+      "reach": "反映",
+      "worktree": "ワークツリー",
+      "origin": "origin",
+      "branchOnOrigin": "originのブランチ"
+    },
+    "remote": {
+      "title": "originに残っているブランチ",
+      "intro": "直近のフェッチ時点の状態です。ボードは削除の前にoriginを再度フェッチします。各ブランチは、自身のコミットをoriginのベースのコピーと比べるか、先頭がまさにそのコミットであるマージ済みPRで判定されます。"
+    },
+    "prMerged": "PR #{{number}} がこのコミットでマージされました",
+    "prWasMerged": "PR #{{number}} はこのコミットでマージされました",
+    "untracked": {
+      "title": "未追跡のワークツリー",
+      "intro": "どのチケットにもワークスペースにも該当しないワークツリーです。チケットに登録するか、削除してください。"
+    },
+    "detached": "デタッチ {{sha}}",
+    "uploads": {
+      "title": "未添付のアップロード",
+      "intro": "1日以上前にアップロードされ、ボード上のどこにも使われていないファイルです。作成せずに閉じた新規チケットのウィンドウや、送信前に投稿から外したファイルなどが該当します。ボードは1時間ごとに削除します。1日未満のファイルは対象外です。",
+      "introRecent": "1日以上前にアップロードされ、ボード上のどこにも使われていないファイルです。作成せずに閉じた新規チケットのウィンドウや、送信前に投稿から外したファイルなどが該当します。ボードは1時間ごとに削除します。1日未満のファイルは対象外です(現在 {{recent}})。",
+      "summary_other": "{{count}}件のファイル、{{size}}",
+      "deleteNow": "今すぐ削除",
+      "confirmTitle": "未添付のアップロードを削除しますか?",
+      "confirmText_other": "1日以上前にアップロードされ、投稿、返信、チケット、エージェントの画像のいずれにも使われていない{{count}}件のファイル({{size}})です。この操作は元に戻せません。"
+    },
+    "keep": "残す",
+    "delete": "削除",
+    "keptReason": "保持: {{reason}}",
+    "noLocalBranch": "ローカルブランチなし",
+    "kind": {
+      "remote": "origin上",
+      "local": "ローカル",
+      "worktrees": "ワークツリーを含む"
+    },
+    "worktreePath": "ワークツリー {{path}}",
+    "stopsPreview": "そのプレビューを停止します({{state}})",
+    "stopsServer": "このワークツリーから動いている場合、:{{port}} のサーバーを停止します",
+    "confirmChecked": "各項目は削除の直前に再確認され、何か変わっていれば保持されます。強制はしません。復元コマンドは削除後に表示されます。",
+    "toDelete": "削除対象",
+    "toDeleteEdited": "削除対象(編集あり)",
+    "editedOnTheWay": "取り込みの途中で編集あり: これらのコミットはベースと異なりますが、マージしても何も変わりません",
+    "outcome": {
+      "deleted": "削除しました",
+      "refused": "保持",
+      "failed": "失敗",
+      "gone": "すでに削除済み"
+    },
+    "advice": {
+      "changes": "ワークツリー内でコミットまたはスタッシュしてから、更新してください。",
+      "prune": "git worktree prune を実行してから、更新してください。",
+      "moved": "更新してから、新しいコミットで再度確認してください。",
+      "checkedOut": "先にそこで別のブランチをチェックアウトしてください。"
+    },
+    "removed": "{{path}} を削除しました",
+    "removedLink": "リンク {{path}} を削除しました。リンク先の {{target}} は残ります",
+    "copyCommand": "コピー: {{command}}",
+    "results": {
+      "label": "削除結果",
+      "title": "前回の削除",
+      "retry": "保持した項目を再試行",
+      "dismiss": "閉じる"
+    }
+  },
+  "gallery": {
+    "kind": {
+      "image": "画像",
+      "video": "動画",
+      "pdf": "PDF",
+      "docs": "ドキュメントとテキスト",
+      "other": "その他"
+    },
+    "sort": {
+      "newest": "新しい順",
+      "oldest": "古い順",
+      "name": "名前 A→Z",
+      "name-desc": "名前 Z→A",
+      "largest": "大きい順",
+      "smallest": "小さい順",
+      "type": "種類順"
+    },
+    "page": {
+      "title": "ギャラリー",
+      "intro": "プロジェクトのチケットにあるすべてのファイルです。",
+      "filters": "フィルター",
+      "fileType": "ファイルの種類",
+      "from": "開始",
+      "to": "終了",
+      "sortTip": "並べ替え: {{sort}}",
+      "sort": "並べ替え",
+      "archivedTip": "アーカイブ済みチケットのファイルも含めます",
+      "includeArchived": "アーカイブを含める",
+      "clearFilters": "フィルターをクリア",
+      "loadError": "ファイルを読み込めませんでした: {{error}}",
+      "noMatch": "この条件に一致するファイルはありません。",
+      "none": "このプロジェクトにはまだファイルがありません。",
+      "loadingMore": "ファイルをさらに読み込み中…"
+    }
+  },
+  "files": {
+    "copyImage": {
+      "unsupported": "このブラウザーは画像をクリップボードにコピーできません",
+      "failedNamed": "{{name}} をコピーできませんでした",
+      "copied": "コピーしました",
+      "failed": "コピーできませんでした",
+      "copy": "画像をコピー"
+    },
+    "attachments": {
+      "notesOn": "{{name}} のメモ",
+      "sizeKb": "{{kb}} KB"
+    },
+    "grid": {
+      "open": "{{name}} を開く",
+      "inLaneTip": "レーン {{lane}} 内",
+      "inLane": "レーン {{lane}} 内",
+      "openTicket": "チケットを開く",
+      "replyTip": "一緒に送られた返信",
+      "postTip": "一緒に送られた投稿",
+      "openThread": "スレッドを開く"
+    },
+    "pending": {
+      "preview": "{{name}} をプレビュー",
+      "uploading": "アップロード中",
+      "remove": "削除",
+      "removeNamed": "{{name}} を削除"
+    },
+    "viewer": {
+      "openInNewTab": "新しいタブで開く",
+      "download": "ダウンロード",
+      "close": "閉じる(Esc)",
+      "notes": "画像のメモ",
+      "previous": "前へ",
+      "next": "次へ",
+      "noPreview": "この種類のファイルはプレビューできません。",
+      "zoomOut": "縮小(-)",
+      "fit": "全体表示(0)",
+      "zoomIn": "拡大(+)",
+      "loadFailed": "このファイルを読み込めませんでした。",
+      "empty": "(空のファイル)",
+      "cut": "最初の{{limit}}文字を表示しています。残りはファイルをダウンロードして確認してください。"
+    }
+  },
+  "annotate": {
+    "cannotDraw": "このブラウザーでは画像を描画できません",
+    "couldNotSave": "画像を保存できませんでした",
+    "title": "画像に注釈を付ける",
+    "description": "{{name}}: 画像に描き込み、各マークの意味を書きます。画像はここでの見た目のまま添付され、メモも一緒に付きます。",
+    "toolbar": "描画ツール",
+    "tool": {
+      "select": {
+        "label": "選択",
+        "hint": "マークを選んで移動、回転、削除します"
+      },
+      "pen": {
+        "label": "ペン",
+        "hint": "自由に描きます"
+      },
+      "rect": {
+        "label": "四角",
+        "hint": "対象を四角で囲みます"
+      },
+      "arrow": {
+        "label": "矢印",
+        "hint": "対象を指し示します"
+      },
+      "ellipse": {
+        "label": "楕円",
+        "hint": "対象を丸で囲みます"
+      },
+      "text": {
+        "label": "テキスト",
+        "hint": "画像に文字を書き込みます"
+      },
+      "note": {
+        "label": "メモ",
+        "hint": "マークをクリックしてメモを書きます"
+      },
+      "line": {
+        "label": "線",
+        "hint": "直線を引きます"
+      }
+    },
+    "colour": "色",
+    "strokeWidth": "線の太さ",
+    "fill": "塗りつぶし",
+    "textToPlace": "配置するテキスト",
+    "undo": "元に戻す",
+    "redo": "やり直す",
+    "clear": "クリア",
+    "notePlaceholder": "このマークは何を意味しますか?",
+    "notePlaceholderEmpty": "マークを描くか、メモを選んでマークをクリックしてください",
+    "canvas": "注釈を付ける画像",
+    "cannotOpen": "この画像はキャンバスで開けません。",
+    "opening": "画像を開いています…",
+    "notes": "メモ",
+    "locked": "画像を添付するまで、マークはロックされています。",
+    "attachOriginal": "元の画像を添付",
+    "attaching": "添付中…",
+    "attach": "添付"
+  },
+  "reach": {
+    "merged": {
+      "label": "マージ済み",
+      "title": "すべてのコミットがそのままベースに入っています。削除して安全です。"
+    },
+    "rebased": {
+      "label": "リベース済み",
+      "title": "コミットはリベースまたはチェリーピックされ、同じパッチがベースに入っています。削除して安全です。"
+    },
+    "edited": {
+      "label": "編集して反映",
+      "title": "パッチは異なりますが、ブランチをマージしてもベースは何も変わりません。削除して安全です。"
+    },
+    "unique": {
+      "label": "独自の作業",
+      "title": "ベースにない変更がブランチに残っています。残してください。"
+    }
+  },
+  "runsCard": {
+    "step": {
+      "install": "依存関係をインストール中",
+      "build": "ビルド中",
+      "copy": "稼働中のデータをコピー中",
+      "server": "起動中"
+    },
+    "status": {
+      "stopped": "停止中",
+      "building": "ビルド中",
+      "buildingStep": "ビルド中 · {{step}}",
+      "running": "実行中",
+      "failed": "失敗"
+    },
+    "notStarted_other": "{{count}}件が未起動: {{list}}",
+    "nothingRunning": "実行中のものはありませんでした",
+    "startAllTip": "チケットのリポジトリで、まだ動いていない実行をすべて起動します",
+    "startAll": "すべて起動",
+    "stopAllTip": "チケットのビルド中または実行中のものをすべて停止します",
+    "stopAll": "すべて停止",
+    "inUse": "ボードで{{limit}}件中{{inUse}}件の実行が稼働中",
+    "primary": "メイン",
+    "workspaceTip": "{{path}} のワークスペース {{name}}",
+    "workspaceTipNoPath": "ワークスペース {{name}}",
+    "noRuns": "実行がありません。プロジェクトの設定で追加してください。",
+    "orphaned": "このチケットにはもうありません",
+    "orphanedHint": "停止はできますが、ここから再起動はできません",
+    "alsoRunning": "他にも実行中",
+    "alsoRunningHint": "ここで停止できます。その行の起動は、表示されている方を起動します",
+    "links": "リンク",
+    "openTip": "CrossBoardの中、ページの上にプレビューを表示します。ボードはそのままです",
+    "open": "開く",
+    "openBrowser": "ブラウザーで開く",
+    "throughBoard": "ボード経由",
+    "startTipPreview": "チケットのワークツリーからビルドし、空いているポートで実行します",
+    "startTipJob": "チケットのワークツリーからビルドし、バックグラウンドで起動します",
+    "start": "起動",
+    "stop": "停止",
+    "restartTip": "停止し、再ビルドして起動します",
+    "restart": "再起動",
+    "cannotStart": "起動できません: {{reason}}",
+    "onPort": ":{{port}}で",
+    "runningPlain": "実行中",
+    "since": "、{{time}}から",
+    "buildLog": "ビルドログ",
+    "runLog": "実行ログ",
+    "logAria": "{{name}} のログ"
+  },
+  "previews": {
+    "step": {
+      "install": "依存関係をインストール中",
+      "build": "ビルド中",
+      "copy": "稼働中のデータをコピー中",
+      "server": "サーバーを起動中"
+    },
+    "group": {
+      "running": "実行中",
+      "runningHint": "ボードがビルドして実行しているもの、またはこのマシン上で応答するリンクです。",
+      "stopped": "停止中",
+      "stoppedHint": "停止または失敗したもの、応答しないリンク、ボードが確認しない別のマシンのリンクです。"
+    },
+    "subtitle": "実行中かどうかを問わず、すべてのプレビューです。",
+    "empty": "プレビューはまだありません。エージェントがチケットのワークスペースにプレビューのリンクを登録するか、ボードがそのワークツリーから実行すると、ここに表示されます。",
+    "noneIn": "{{name}} にプレビューはありません。",
+    "showAll": "すべてのステージを表示",
+    "allStages": "すべてのステージ",
+    "stage": "ステージ",
+    "stageTip": "このステージにあるチケットのプレビューを表示します",
+    "nothingToStop": "停止するものがありません",
+    "couldNotStop_other": "{{count}}件を停止できませんでした: {{list}}",
+    "stoppedCount_other": "{{count}}件を停止しました",
+    "barTip": "全プロジェクトを通じて、ボードがビルドまたは実行するプレビューと、同時に実行できる最大数です",
+    "bar": "ボード実行のプレビュー: <strong>{{limit}}件中{{inUse}}件使用中</strong> <muted>(ボード全体)</muted>",
+    "stopAllTitle": "このプロジェクトの実行中のプレビューをすべて停止しますか?",
+    "stopAllDescription": "ボードが実行しているプレビューは停止し、ポートを解放します。リンクは、ワークスペースのワークツリーでサーバーが動いているとボードが判断できる場合に停止し、それ以外は動き続けます。理由はトーストに表示されます。リンクはページに残ります。",
+    "keepThem": "そのままにする",
+    "uncheckedLink": "ボードが確認するのは、このマシン上のリンクだけです",
+    "throughBoard": "ボード経由:",
+    "openThrough": "ボード経由で開く",
+    "linkNotStopped": "ボードはこれを停止しません: {{reason}}",
+    "stoppedStillListening": "停止しましたが、:{{port}} でまだ待ち受けているものがあります",
+    "stopLinkTip": "このリンクの先のサーバー(ワークスペースのワークツリーで動いているもの)を停止し、ポートを解放します",
+    "startTip": "このワークツリーをビルドし、稼働中のデータの新しいコピーで、空いているポートで実行します",
+    "stopTip": "プレビューを停止し、ポートを解放します",
+    "restartTip": "停止し、再ビルドして、データの新しいコピーで起動します",
+    "answered": "{{time}} にHTTP {{status}} で応答しました",
+    "notRunning": "停止中",
+    "noAnswer": "{{time}} に応答なし",
+    "notChecked": "未確認",
+    "checking": "確認中…",
+    "checkingTitle": "応答するか確認しています",
+    "fullLog": "全ログ",
+    "log": "ログ",
+    "serverLog": "サーバーログ",
+    "building": "ビルド中…",
+    "buildingStep": "ビルド中… {{step}}",
+    "startingOn": ":{{port}} で起動中…",
+    "startingOnStep": ":{{port}} で起動中… {{step}}",
+    "runBy": "ボードが :{{port}} で実行中",
+    "runBySince": "ボードが :{{port}} で実行中({{time}} から)",
+    "failed": "失敗: {{reason}}",
+    "stoppedReason": "停止: {{reason}}",
+    "stopAllRuns": "すべて停止"
+  },
+  "previewWindow": {
+    "building": "ビルド中です。実行が始まるとここに表示されます。",
+    "failed": "プレビューが失敗しました。ログはチケットで確認できます。",
+    "failedReason": "プレビューが失敗しました: {{reason}}。ログはチケットで確認できます。",
+    "blocked": "このプレビューはボード内に表示されません。フレーム内での表示が拒否されています。",
+    "blockedReason": "このプレビューはボード内に表示されません: {{reason}}。",
+    "stoppedThrough": "このプレビューは停止しています。チケットの「実行」カードかプレビューのページから起動してください。",
+    "stoppedDirect": "プレビューがこのマシンで応答しません。動いている場所でサーバーを再起動してください。",
+    "frameTitle": "{{title}} のプレビュー",
+    "copied": "リンクをコピーしました",
+    "couldNotCopy": "リンクをコピーできませんでした",
+    "window": "プレビューウィンドウ",
+    "openPreviews": "プレビューを開く",
+    "reloadTip": "プレビューを再読み込みします",
+    "reload": "プレビューを再読み込み",
+    "restoreTip": "フローティングウィンドウに戻します",
+    "maximizeTip": "画面全体に表示します",
+    "restore": "プレビューウィンドウを元に戻す",
+    "maximize": "プレビューウィンドウを最大化",
+    "closeTip": "プレビューを閉じます(実行は続きます)",
+    "close": "プレビューウィンドウを閉じる",
+    "url": "プレビューのURL",
+    "copyTip": "プレビューのリンクをコピーします",
+    "copy": "プレビューのリンクをコピー"
+  },
+  "roleLabels": {
+    "human": "人間",
+    "orchestrator": "オーケストレーター",
+    "worker": "エージェント",
+    "board": "ボード"
+  },
+  "runReport": {
+    "section": {
+      "brief": "ブリーフと、それで足りたか",
+      "readRan": "読んだものと実行したもの",
+      "problems": "途中で起きた問題",
+      "gaps": "確認できなかったことと、その前提",
+      "moreTime": "時間があればやること",
+      "improvements": "この実行をより良くできたこと",
+      "intent": "意図の出どころ",
+      "inferences": "推測せざるを得なかったこと",
+      "questions": "チケットでは答えが出なかった疑問",
+      "approach": "アプローチと、却下した代替案",
+      "alternatives": "検討して却下した代替案",
+      "selfTests": "自分でテストしたことと、その方法",
+      "fixPass": "修正パスで変えたことと、最初のパスで見逃した理由",
+      "scheduling": "実行したフェーズのスケジュールの組み方",
+      "judging": "各フェーズの返答の判断方法",
+      "provisioning": "ランタイムの用意の仕方と、失敗したこと",
+      "freshness": "最新であることの証明方法",
+      "evidence": "各受け入れ基準の確認方法",
+      "unexercised": "実行できなかった基準",
+      "techniques": "欠陥を探すのに使った手法",
+      "surfaces": "対象にした範囲と、しなかった範囲",
+      "candidates": "候補の出し方と、除外したもの",
+      "disproof": "各指摘を反証しようとした方法",
+      "unsettled": "決着がつかなかった指摘と、その理由",
+      "asked": "人間が依頼した内容(本人の言葉で)",
+      "compared": "各依頼と結果の比較方法",
+      "conflicts": "マージ、そのコンフリクトと、その読み取り方"
+    },
+    "label": "{{agent}} 第{{round}}回",
+    "notReported": "報告なし",
+    "effort": "労力 {{effort}}",
+    "briefedBy": "<actor /> からの指示",
+    "duration": "所要時間",
+    "durationMeasured": "所要時間(計測)",
+    "durationSelf": "所要時間(自己申告)",
+    "ownEstimate": "自己見積もり",
+    "difficulty": "難易度",
+    "confidence": "確信度",
+    "started": "開始",
+    "ended": "終了",
+    "time": {
+      "readingMs": "読み取り",
+      "runningMs": "実行",
+      "waitingMs": "待機",
+      "writingMs": "書き込み",
+      "otherMs": "その他"
+    },
+    "steps": "ステップ",
+    "dialogTitle": "実行レポート: {{label}}",
+    "dialogTitleEmpty": "実行レポート",
+    "round": "第{{round}}回",
+    "difficultyShort": "難易度 {{n}}/5",
+    "confidenceShort": "確信度 {{n}}/5"
+  },
+  "projectAgents": {
+    "title": "チーム",
+    "text": "エージェントが担うロールです。チケットを割り当てると、そのエージェント専用になります。",
+    "new": "新しいエージェント",
+    "empty": "エージェントはまだいません。すべてのチケットは、接続中のエージェントで共有されます。",
+    "added": "{{names}} を追加しました",
+    "defaults": {
+      "title": "既定のエージェント",
+      "files": "作成者は作業のファイルをプロジェクトのフォルダーに作ってチケットに添付し、人間が承認するか、チケットを差し戻します。作成後に編集できます。このプロジェクトで働くエージェントは、ボードのアドレスの <code>{{path}}</code> に接続します(「エージェントの接続」ページと同じMCPで、このプロジェクトのテキストとツールが付きます)。",
+      "software": "ビルドとレビューのサイクルです。<strong>spec</strong> が受け入れ基準を書き、<strong>builder</strong> がコードを書き、<strong>runner</strong> がレビューし、レビューの各フェーズ(<strong>env</strong>、<strong>verify</strong>、<strong>hunt</strong>、<strong>refute</strong>、<strong>merge</strong>)が壊そうとします。指摘はbuilderに戻ります。その後 <strong>intent</strong> が、結果を人間自身の言葉と照らし合わせます。それぞれに、指示と、オーケストレーターが委任に使うメモが付いています。作成後にどれも編集できます。",
+      "addAll": "既定のエージェントを追加",
+      "addNames": "{{names}} を追加",
+      "allAdded": "すべて追加済み",
+      "skills": "このサイクルを動かすスキルとエージェントのMCP接続は、<goto>エージェントの接続</goto>でインストールします。"
+    },
+    "noReserved": "専用のチケットはありません",
+    "remove": "{{name}} を削除",
+    "removeTitle": "{{name}} を削除しますか?",
+    "removeReserved_other": "専用だった{{count}}件のチケットは、共有で未割り当てになります。",
+    "removeKept": "すでに投稿した内容には、その名前が残ります。",
+    "keep": "残す",
+    "removeAction": "削除",
+    "instructions": "指示",
+    "instructionsHint": "エージェントが従う内容",
+    "delegate": "委任のタイミング",
+    "delegateHint": "オーケストレーターの判断の基準",
+    "delegateEmpty": "委任のメモがまだありません。オーケストレーターは、いつこのエージェントを呼ぶべきか分かりません。",
+    "report": "実行レポート",
+    "reportHint": "各実行が、引き渡す前に埋めるテンプレート",
+    "nothingYet": "まだありません。",
+    "lines_other": "{{count}}行",
+    "picture": "画像",
+    "choosePicture": "画像を選択",
+    "removePicture": "画像を削除",
+    "namePlaceholder": "reviewer、frontend、qa…",
+    "nameRule": "英字、数字、- と _ が使えます。スレッドで @name が使えるようにするためです",
+    "instructionsText": "エージェントが従う内容です。何者か、どう働くか、してはいけないこと。オーケストレーターは、これを使ってサブエージェントに指示します。",
+    "instructionsPlaceholder": "あなたはテスターです。実行中のプレビューに対して、すべての受け入れ基準を確認します…",
+    "delegateText": "オーケストレーターが判断する基準です。いつこのエージェントに作業を渡すか、何を渡すか、何が返るか、その次は何か。",
+    "delegatePlaceholder": "Builderがステップを終えたら、プレビューのリンクと受け入れ基準を添えて渡します。基準ごとにPASS / FAILを返します。すべてPASSならBreakerへ、失敗ならBuilderへ戻します。",
+    "templateLabel": "実行レポートのテンプレート",
+    "templateText": "このエージェントの実行が、引き渡す前に埋める内容で、実行ごとに1件です。すべてのレポートに共通する部分(ID、時間、ブリーフ、ステップ、評価、問題、ギャップ)から始まります。このエージェント固有の内容を追加してください。ボードはこれをエージェントと一緒に保持します。",
+    "templatePlaceholder": "## ルール …",
+    "add": "エージェントを追加"
+  },
+  "gettingStarted": {
+    "agentEmpty": "プロジェクトはまだありません。人間がホームの「はじめに」で最初のプロジェクトを作成します。",
+    "title": "はじめに · {{total}}件中{{done}}件",
+    "intro": "エージェントがこのボードで働く前の4つのステップです。完了すると、それぞれ自動でチェックが付きます。",
+    "entryTip": "このボードで作業を始めるためのステップ",
+    "entryAria": "はじめに、{{total}}件中{{done}}件完了",
+    "entryShort": "はじめに ·",
+    "popoverIntro": "完了すると、各ステップに自動でチェックが付きます。",
+    "dismissTip": "「はじめに」を今後表示しない",
+    "dismissAria": "「はじめに」を閉じる",
+    "menuItem": "はじめに · {{done}}/{{total}}",
+    "stepsAria": "はじめにのステップ",
+    "stepAria": "{{title}}: {{state}}",
+    "titles": {
+      "tools": "このマシンのツール",
+      "project": "プロジェクトを作成し、最初のリポジトリを追加",
+      "agent": "エージェントを接続",
+      "ticket": "最初のチケットを書き、エージェントに渡す"
+    },
+    "state": {
+      "done": "完了",
+      "checking": "確認中…",
+      "notDone": "未完了"
+    },
+    "couldNotCheck": "このステップを確認できませんでした: {{error}}",
+    "tools": {
+      "hint": "ボードはPATH上の <code>git</code> と <code>gh</code>(ログイン済み)を実行します。<code>claude</code> は任意で、ボード自身のレポート(レポート → 生成)にのみ必要です。<code>node</code> と <code>pnpm</code> はプレビューにのみ必要です。",
+      "missing": "<problem>{{problem}}</problem>。対処: {{fix}}。"
+    },
+    "project": {
+      "hint": "プロジェクトは、エージェントが作業するチェックアウトをまとめます。最初のリポジトリには、チェックアウトのフォルダー、GitHubのリポジトリ、ベースブランチが入ります。",
+      "addRepo": "{{name}} にリポジトリを追加",
+      "new": "新しいプロジェクト"
+    },
+    "agent": {
+      "hint": "「エージェントの接続」でコマンドを生成すると、エージェントのトークンと、ターミナルで実行するコマンドが作られます。ボードのMCPサーバーへの接続と、ボードのスキルのインストールです。"
+    },
+    "ticket": {
+      "hint": "やることを、プロジェクトの機能ページにチケットとして書きます。その後、リポジトリで <code>claude</code> を実行し、<code>/board pick up the next ticket</code> と伝えてください。",
+      "write": "チケットを書く",
+      "createFirst": "先にプロジェクトを作成してください(ステップ2)。"
+    },
+    "checkAgain": "再確認"
+  },
+  "projectSwitcher": {
+    "project": "プロジェクト",
+    "select": "プロジェクトを選択",
+    "projects": "プロジェクト",
+    "repos_other": "{{count}}リポジトリ",
+    "tickets_other": "{{count}}チケット",
+    "openPrs_other": "未マージのPR {{count}}件",
+    "newProject": "新しいプロジェクト…",
+    "manage": "プロジェクトを管理…",
+    "newTitle": "新しいプロジェクト",
+    "newDescription": "プロジェクトはリポジトリをまとめます。リポジトリは、リポジトリのページから追加します。",
+    "name": "名前",
+    "create": "作成",
+    "manageDescription": "プロジェクトの名前を変更または削除します。リポジトリの追加、移動、削除は、リポジトリのページで行います。",
+    "renamed": "{{name}} に名前を変更しました",
+    "nameOf": "{{name}} の名前",
+    "rename": "名前を変更",
+    "deleteName": "{{name}} を削除",
+    "deleteTitle": "{{name}} を削除しますか?",
+    "deleteText": "一緒に削除されるもの: {{repos}}、{{tickets}}、{{openPrs}}、そのレビューとデイリーログ。ディスク上のチェックアウトには影響しません。リポジトリを残すには、先に別のプロジェクトへ移してください。",
+    "keep": "残す",
+    "delete": "削除",
+    "noRepos": "リポジトリなし",
+    "counts": "{{tickets}} · {{openPrs}}"
+  },
+  "newTicket": {
+    "newTicket": "新しいチケット",
+    "newLane": "新しいレーン",
+    "description": "同僚に依頼するつもりで書いてください。エージェントは作業を始める前にこれを読みます。",
+    "laneDescription": "<parent>{{title}}</parent> の並行する一部で、独自のブランチ、担当者、タスク、更新を持ちます。",
+    "title": "タイトル",
+    "instructions": "指示",
+    "instructionsPlaceholder": "やること、完了の判断基準、してはいけないこと。ファイルを貼り付けるかドロップすると添付できます。",
+    "initialTasks": "最初のタスク",
+    "phases": "プロジェクトのフェーズ({{phases}})から始まります。ここに入力したタスクは {{first}} の下に入ります。",
+    "stage": "ステージ",
+    "complexity": "複雑度",
+    "repository": "リポジトリ",
+    "assignee": "担当者(任意)",
+    "tags": "タグ(任意)",
+    "tagsPlaceholder": "高、フォーム",
+    "branchesOff": "同じリポジトリなら、<branch>{{branch}}</branch> から分岐します。",
+    "uploading": "アップロード中…",
+    "create": "作成",
+    "workflow": "ワークフロー"
+  },
+  "notes": {
+    "title": "ノート",
+    "manageAll": "すべて管理({{count}})",
+    "add": "ノートを追加",
+    "dialogTitle": "ノート({{count}})",
+    "dialogDescription": "1件につき短い事実を1つ、ピン留めしたものが先頭に並びます。ノートは、作成者、オーケストレーター、人間が変更できます。",
+    "empty": "ノートは、次のセッションが調べ直さなくて済むようにする短い事実です。コマンド、パス、ルール、リマインダーなど。1件に事実は1つだけで、文書は書かないでください。",
+    "exampleLabel": "リリースコマンド",
+    "exampleLabel2": "プレビューのポート",
+    "exampleBody2": "47101から、実行ごとに1つ",
+    "unpinTip": "このノートのピン留めを外す",
+    "pinTip": "このノートを先頭にピン留めする",
+    "unpin": "{{label}} のピン留めを外す",
+    "pin": "{{label}} をピン留め",
+    "editTip": "このノートを編集",
+    "edit": "{{label}} を編集",
+    "deleteTip": "このノートを削除",
+    "delete": "{{label}} を削除",
+    "labelAria": "ノートのラベル",
+    "bodyAria": "ノートの本文",
+    "save": "ノートを保存",
+    "cancel": "キャンセル"
+  },
+  "actor": {
+    "howBoard": "ボード(自動記録)",
+    "howHuman": "あなた(パスキーでログイン)",
+    "howOrchestrator": "人間がオーケストレーターにしたトークンでログインしたエージェント。プロジェクトの指示も変更できます",
+    "howWorkerUnder": "{{parent}} 配下のワーカーのエージェント",
+    "howAgent": "トークンでログインしたエージェント",
+    "projectAgent": "{{name}}(プロジェクトのエージェント)",
+    "projectAgentVia": "{{name}}(プロジェクトのエージェント、{{chain}} 経由で投稿)",
+    "via": "{{via}} 経由",
+    "tip": "{{chain}}: {{how}}",
+    "under": "{{parent}} 配下",
+    "by": "<actor/> による"
+  },
+  "postTools": {
+    "editText": "テキストを編集",
+    "cancel": "キャンセル",
+    "saving": "保存中…",
+    "save": "保存",
+    "edited": "編集済み",
+    "editedAt": "{{when}}に編集",
+    "editLabel": "編集",
+    "edit": "編集",
+    "deleteLabel": "削除",
+    "delete": "削除",
+    "deletePostTitle": "この投稿を削除しますか?",
+    "deleteReplyTitle": "この返信を削除しますか?",
+    "deleteText": "返信とファイルも一緒に削除されます。この操作は元に戻せません。",
+    "keep": "残す"
+  },
+  "pickers": {
+    "unassigned": "未割り当て",
+    "reserved": "{{name}}(専用)",
+    "projectAgents": "プロジェクトのエージェント: 担当できるのはこのエージェントだけ",
+    "connectedAgents": "接続中のエージェント: 共有",
+    "noBranchYet": "— まだありません —",
+    "clear": "{{what}} をクリア"
+  },
+  "prState": {
+    "merge": {
+      "clean": {
+        "label": "マージ可能",
+        "title": "ベースとのコンフリクトはありません。"
+      },
+      "conflicts": {
+        "label": "コンフリクト",
+        "title": "ベースブランチとコンフリクトしています。取り込むには、リベースかマージが必要です。"
+      },
+      "behind": {
+        "label": "ベースより遅れ",
+        "title": "ベースが進んでおり、ブランチ保護により先にブランチを最新にする必要があります。"
+      },
+      "blocked": {
+        "label": "ブロック",
+        "title": "ブランチ保護: 必須のレビューまたはチェックがまだ足りません。"
+      },
+      "checking": {
+        "label": "確認中",
+        "title": "GitHubがマージ可能かどうかをまだ判定中です(通常はプッシュ直後)。少し待ってから更新してください。"
+      }
+    },
+    "ci": {
+      "passing": "CI成功",
+      "failing": "CI失敗",
+      "pending": "CI実行中",
+      "none": "CIなし"
+    },
+    "review": {
+      "APPROVED": "承認済み",
+      "CHANGES_REQUESTED": "変更依頼あり",
+      "REVIEW_REQUIRED": "レビュー必須"
+    },
+    "checkedLocal": "{{title}} origin/{{base}} と照合した、ここでの確認結果です。",
+    "checkedLocalAt": "{{title}} origin/{{base}} と照合した、ここでの確認結果です({{when}})。",
+    "outdated": "GitHubの情報の後に origin/{{base}} が進みました。GitHubの再確認を待っています。",
+    "outdatedAt": "{{when}}のGitHubの情報の後に origin/{{base}} が進みました。GitHubの再確認を待っています。",
+    "githubAt": "{{title}} {{when}}時点のGitHubの情報です。",
+    "githubLast": "{{title}} 直近の更新時点のGitHubの情報です。",
+    "checks": "成功 {{pass}} · 失敗 {{failed}} · 実行中 {{pending}} · スキップ {{skipped}}",
+    "noChecks": "先頭のコミットにチェックはありません。",
+    "draft": "ドラフト",
+    "failed": "失敗:",
+    "mergeConflicts": "マージのコンフリクト"
+  },
+  "pushDot": {
+    "pushed": "プッシュ済み",
+    "pushedBehind": "プッシュ済み、{{count}}遅れ",
+    "pushedBehindTitle_other": "プッシュ済み。originにはさらに{{count}}コミットあります",
+    "ahead": "未プッシュ {{count}}",
+    "aheadTitle_other": "未プッシュ: ここだけに{{count}}コミットあります",
+    "aheadBehindTitle_other": "未プッシュ: ここだけに{{count}}コミットあり、originにはこのブランチにない{{behind}}もあります",
+    "localOnly": "originになし",
+    "localOnlyTitle": "未プッシュ: originにそのブランチがありません",
+    "localOnlyAheadTitle_other": "未プッシュ: originにそのブランチがなく、ここだけに{{count}}コミットあります",
+    "itsBase": "そのベース",
+    "merged": "{{into}} にマージ済み",
+    "mergedTitle": "{{into}} にマージ済みで、ブランチはoriginから削除されています",
+    "remoteOnly": "originのみ",
+    "remoteOnlyTitle": "originのみ: ローカルブランチがありません",
+    "none": "見つかりません",
+    "noneTitle": "ここにもoriginにもそのブランチはありません",
+    "checked": "{{ago}}に確認",
+    "notFetched": "originはまだ取得されていません",
+    "fetchNow": "今すぐoriginをフェッチ"
+  },
+  "clock": {
+    "typeTime": "{{label}}(時刻を入力)",
+    "amPm": "{{label}}: 午前または午後",
+    "setHourOrMinute": "{{label}}: 時または分を設定",
+    "hour": "時",
+    "minute": "分"
+  },
+  "markdown": {
+    "agentChip": "{{name}}(プロジェクトのエージェント)",
+    "pages_other": "{{count}}ページ"
+  },
+  "editor": {
+    "text": "テキスト",
+    "bold": "太字",
+    "italic": "斜体",
+    "strikethrough": "取り消し線",
+    "inlineCode": "インラインコード",
+    "heading": "見出し",
+    "bulletList": "箇条書き",
+    "numberedList": "番号付きリスト",
+    "checklist": "チェックリスト",
+    "quote": "引用",
+    "codeBlock": "コードブロック",
+    "link": "リンク",
+    "linkTo": "リンク先",
+    "attaching": "ファイルを添付中…",
+    "attach": "ファイルを添付",
+    "formatting": "書式"
+  },
+  "projectNav": {
+    "homeText": "全プロジェクトを一覧で。対応待ち、進行中、今日の完了、次の予定です。",
+    "overviewText": "対応が必要なもの、進行中のもの、次の予定です。",
+    "page": "プロジェクトのページ",
+    "toggle": {
+      "expanded": "サイドバーを縮小",
+      "shrunk": "サイドバーを隠す",
+      "hidden": "サイドバーを表示"
+    }
+  },
+  "palette": {
+    "page": {
+      "overview": {
+        "title": "概要",
+        "subtitle": "プロジェクトのサマリー",
+        "keywords": "ホーム, プロジェクト, サマリー, 要対応, overview, home"
+      },
+      "board": {
+        "title": "ボード",
+        "subtitle": "進行中の機能",
+        "keywords": "チケット, 機能, カンバン, ステージ, 進行中, tickets, board"
+      },
+      "roadmap": {
+        "title": "ロードマップ",
+        "subtitle": "作業のタイムライン",
+        "keywords": "タイムライン, 作業, スケジュール, roadmap"
+      },
+      "prs": {
+        "title": "PRキュー",
+        "subtitle": "レビュー待ちと他者待ちのプルリクエスト",
+        "keywords": "pr, プルリクエスト, レビュー, マージ, pull requests"
+      },
+      "reviews": {
+        "title": "レビュー",
+        "subtitle": "PRキューにあるレビュー結果",
+        "keywords": "判定, 指摘, レビュー結果, pr, review"
+      },
+      "previews": {
+        "title": "プレビュー",
+        "subtitle": "ボードが実行するプレビュー",
+        "keywords": "実行, サーバー, ポート, previews"
+      },
+      "gallery": {
+        "title": "ギャラリー",
+        "subtitle": "ファイルとスクリーンショット",
+        "keywords": "ファイル, 画像, アップロード, gallery"
+      },
+      "team": {
+        "title": "チーム",
+        "subtitle": "プロジェクトで働くエージェント",
+        "keywords": "エージェント, ペルソナ, 専用, team, agents"
+      },
+      "daily": {
+        "title": "デイリー",
+        "subtitle": "プロジェクトの1日",
+        "keywords": "アクティビティ, 今日, レポート, daily"
+      },
+      "cleanup": {
+        "title": "クリーンアップ",
+        "subtitle": "残ったブランチとワークツリー",
+        "keywords": "ブランチ, ワークツリー, 削除, 残り, cleanup"
+      },
+      "repositories": {
+        "title": "リポジトリ",
+        "subtitle": "このプロジェクトが読むチェックアウト",
+        "keywords": "リポジトリ, git, チェックアウト, repos"
+      },
+      "instructions": {
+        "title": "指示",
+        "subtitle": "設定: すべてのエージェントが読む内容",
+        "keywords": "設定, プロジェクト設定, ルール, レイアウト, フェーズ, ステージ, 実行, instructions"
+      },
+      "home": {
+        "title": "ホーム",
+        "subtitle": "全プロジェクトを一覧で",
+        "keywords": "プロジェクト, サマリー, ボード, home"
+      },
+      "dailyGlobal": {
+        "title": "デイリー",
+        "subtitle": "全プロジェクトの活動",
+        "keywords": "アクティビティ, レポート, 今日, daily"
+      },
+      "connect": {
+        "title": "接続",
+        "subtitle": "エージェントを接続してスキルをインストール",
+        "keywords": "エージェント, mcp, トークン, セットアップ, インストール, connect"
+      },
+      "settingsGlobal": {
+        "title": "設定",
+        "subtitle": "ボード全体の設定",
+        "keywords": "環境設定, テーマ, プレビュー, デバイス, settings"
+      },
+      "workflow": {
+        "title": "ワークフロー",
+        "subtitle": "エージェントがチケットで踏むステップを、ツリーで表示",
+        "keywords": "ステップ, プリセット, レビューラウンド, 引き渡し, 委任, 順序, workflow, steps"
+      }
+    },
+    "setting": {
+      "theme": {
+        "title": "テーマ",
+        "subtitle": "システム、ライト、ダーク",
+        "keywords": "外観, 色, ダーク, ライト, システム, theme"
+      },
+      "defaultAgent": {
+        "title": "既定のエージェントCLI",
+        "subtitle": "接続ページが最初に開くCLI",
+        "keywords": "エージェント, claude, codex, opencode, 接続"
+      },
+      "previewsLimit": {
+        "title": "プレビューの上限",
+        "subtitle": "同時に実行できるプレビューの数",
+        "keywords": "プレビュー, 実行, 上限, ポート, limit"
+      },
+      "updates": {
+        "title": "アップデート",
+        "subtitle": "ボードアプリの更新",
+        "keywords": "バージョン, リリース, アップグレード, updates"
+      },
+      "agentRoles": {
+        "title": "エージェントのロール",
+        "subtitle": "ワーカーまたはオーケストレーター",
+        "keywords": "エージェント, トークン, オーケストレーター, ワーカー, 権限, roles"
+      },
+      "tailnet": {
+        "title": "テイルネットの入口",
+        "subtitle": "他のデバイスからボードにアクセス",
+        "keywords": "tailscale, ネットワーク, リモート, 公開, tailnet"
+      },
+      "devices": {
+        "title": "デバイスとパスキー",
+        "subtitle": "ログインするデバイス",
+        "keywords": "パスキー, セッション, ログイン, セキュリティ, passkeys"
+      },
+      "instructions": {
+        "title": "プロジェクトの指示",
+        "subtitle": "すべてのエージェントが読む内容",
+        "keywords": "ルール, エージェント, プロンプト, instructions"
+      },
+      "instructionsHistory": {
+        "title": "指示の履歴",
+        "subtitle": "指示へのすべての変更",
+        "keywords": "バージョン, 履歴, 変更, history"
+      },
+      "defaultPhases": {
+        "title": "既定のフェーズ",
+        "subtitle": "新しいチケットが最初に持つタスク",
+        "keywords": "タスク, フェーズ, 新しいチケット, phases"
+      },
+      "tagSuggestions": {
+        "title": "タグの候補",
+        "subtitle": "チケットに提示するタグ",
+        "keywords": "タグ, ラベル, tags"
+      },
+      "stalledTickets": {
+        "title": "停滞したチケット",
+        "subtitle": "チケットを停滞と表示する条件",
+        "keywords": "停滞, 分, アイドル, stall"
+      },
+      "notifications": {
+        "title": "通知",
+        "subtitle": "このプロジェクトで表示するアラート",
+        "keywords": "アラート, ミュート, ベル, リマインダー, 通知, alerts, mute"
+      },
+      "stages": {
+        "title": "ステージ",
+        "subtitle": "ボードの列とその意味",
+        "keywords": "列, ワークフロー, ステータス, 作業ステージ, stages"
+      },
+      "runs": {
+        "title": "実行",
+        "subtitle": "ボードが実行するプレビューとジョブ",
+        "keywords": "プレビュー, ジョブ, コマンド, ビルド, runs"
+      },
+      "layout": {
+        "title": "レイアウト",
+        "subtitle": "ページ、カード、チケットのセクション",
+        "keywords": "配置, メニュー, サイドバー, layout"
+      },
+      "agentTokens": {
+        "title": "エージェントトークン",
+        "subtitle": "エージェントのログインに使うトークン",
+        "keywords": "トークン, エージェント, キー, 無効化, ロール, tokens"
+      },
+      "skills": {
+        "title": "レビュー用スキル",
+        "subtitle": "レビュー用スキルをインストール(Claude Code)",
+        "keywords": "スキル, レビュー, インストール, skills"
+      }
+    },
+    "kinds": {
+      "ticket": "チケット",
+      "page": "ページ",
+      "setting": "設定",
+      "action": "操作"
+    },
+    "keywords": {
+      "newTicket": "作成, 追加, チケット, レーン, 新規, new, create",
+      "copyLink": "url, 共有, クリップボード, link",
+      "startPreview": "実行, プレビュー, 起動, サーバー, start",
+      "stopPreview": "実行, プレビュー, 停止, サーバー, stop",
+      "switchProject": "プロジェクト, 切り替え, 開く, switch"
+    },
+    "recent": "最近",
+    "notStarted_other": "{{count}}件が未起動: {{details}}",
+    "notStopped_other": "{{count}}件が未停止: {{details}}",
+    "nothingRunning": "実行中のものはありませんでした",
+    "createIn": "{{name}} にチケットを作成",
+    "createInThis": "このプロジェクトにチケットを作成",
+    "copyLink": "チケットのリンクをコピー",
+    "copyLinkText": "このチケットのアドレスをクリップボードに入れます",
+    "linkCopied": "チケットのリンクをコピーしました",
+    "startPreview": "プレビューを起動",
+    "startPreviewText": "チケットのプレビューとジョブを起動します",
+    "stopPreview": "プレビューを停止",
+    "stopPreviewText": "チケットのプレビューとジョブを停止します",
+    "switchTo": "{{name}} に切り替え",
+    "currentProject": "現在のプロジェクト",
+    "openOverview": "概要を開く",
+    "searchTip": "ボードを検索(Ctrl+F)",
+    "search": "ボードを検索",
+    "description": "チケット、ページ、設定、操作を検索します。上下キーで移動、Enterで実行、Escapeで閉じます。",
+    "placeholder": "チケット、ページ、設定、操作を検索…",
+    "close": "検索を閉じる",
+    "results": "検索結果",
+    "searching": "検索中…",
+    "noMatches": "「{{query}}」に一致するものはありません。",
+    "type": "入力してボードを検索します。",
+    "toMove": "移動",
+    "toOpen": "開く",
+    "toClose": "閉じる",
+    "anywhere": "どこでも"
+  },
+  "signIn": {
+    "finishTitle": "ホストでセットアップを完了",
+    "finishBody": "このボードにはまだアカウントがありません。アカウントはボードが動いているマシンで作成します。そこで {{url}} を開いてください。その後ここに戻り、ボードのリンクでこのデバイスを追加します。",
+    "setupTitle": "セットアップ",
+    "setupHeading": "CrossBoardをセットアップ",
+    "setupIntro": "このマシンで、ボードのアカウントと最初のパスキーを作成します。他のデバイスは、あとで設定から1回限りのリンクで追加します。",
+    "nameLabel": "ボードでのあなたの名前",
+    "deviceLabel": "このデバイス",
+    "deviceDefault": "このコンピューター",
+    "devicePlaceholder": "スマホ、ノートPC…",
+    "createPasskey": "パスキーを作成",
+    "loginTitle": "ログイン",
+    "loginHeading": "ログイン",
+    "loginWelcomeMachine": "おかえりなさい、{{name}} さん。このマシンのパスキーでログインしてください。",
+    "loginWelcomeDevice": "おかえりなさい、{{name}} さん。このデバイスのパスキーでログインしてください。",
+    "loginButton": "パスキーでログイン",
+    "enrollTitle": "デバイスを追加",
+    "enrollNeedsLinkHeading": "デバイスを追加",
+    "enrollNeedsLink": "このページにはボードのリンクが必要です。ログイン済みのデバイスで、設定、デバイスの順に開き、「デバイスを追加」を押してください。",
+    "enrollHeading": "このデバイスを追加",
+    "enrollIntro": "このデバイスで {{name}} のパスキーを作成します。リンクは1回限りで、15分間有効です。",
+    "noPasskeys": "このブラウザーではここでパスキーを使えません。",
+    "promptClosed": "パスキーの確認が閉じられたか、時間切れになりました。もう一度お試しください。"
+  },
+  "ticketBoard": {
+    "stage": "ステージ",
+    "archiveTip_other": "{{stage}} の{{count}}件のチケットをアーカイブ",
+    "archiveAll": "すべてアーカイブ",
+    "archiveTitle_other": "{{count}}件のチケットをアーカイブしますか?",
+    "archiveDescription": "{{stage}} のチケットは、レーンも含めてすべてボードから外れます。アーカイブ済みに残り、そこから個別に復元でき、ページも開けます。",
+    "cancel": "キャンセル",
+    "archive": "アーカイブ",
+    "decisions_other": "要判断 {{count}}件",
+    "tasksBlocked_other": "ブロック中のタスク {{count}}件",
+    "previousStage": "前のステージ",
+    "nextStage": "次のステージ",
+    "lanes_other": "{{count}}レーン",
+    "laneStage": "{{stage}} {{count}}",
+    "hitInstructions": "指示",
+    "hitPost": "投稿",
+    "hitReply": "返信",
+    "noTickets": "チケットはありません。",
+    "nothingArchived": "アーカイブはありません。",
+    "archived": "{{when}}にアーカイブ",
+    "archivedBy": "<actor/> が{{when}}にアーカイブ",
+    "restore": "復元"
+  },
+  "ticketList": {
+    "archivedToast_other": "{{count}}件のチケットをアーカイブしました",
+    "restoredToast": "#{{id}} をボードに戻しました",
+    "title": "進行中の機能",
+    "board": "ボード",
+    "list": "リスト",
+    "archived": "アーカイブ済み",
+    "noMatch": "「{{query}}」に一致するチケットはありません。",
+    "clearSearch": "検索をクリア",
+    "state": "状態",
+    "clearState": "状態のフィルターをクリア",
+    "allTags": "すべてのタグ",
+    "filterByTag": "タグで絞り込み",
+    "tags": "タグ",
+    "searchTags": "タグを検索",
+    "noTagsMatch": "一致するタグはありません",
+    "tickets_other": "{{count}}件のチケット",
+    "showEveryTag": "すべてのタグを表示",
+    "clearTag": "タグのフィルターをクリア",
+    "loadingTags": "タグを読み込み中…",
+    "couldNotLoadTags": "タグを読み込めませんでした。",
+    "retry": "再試行",
+    "searchTickets": "チケットを検索",
+    "searchPlaceholder": "名前またはスレッドで検索",
+    "clearSearchAria": "検索をクリア"
+  },
+  "needs": {
+    "titleIn": "#{{id}} {{title}}: {{branch}} は {{into}} に入っています",
+    "titleNotIn": "#{{id}} {{title}}: {{branch}} は {{into}} にマージされていません",
+    "titleDone": "#{{id}} {{title}}: 完了",
+    "titleNotDone": "#{{id}} {{title}}: 未完了、ブランチなし",
+    "markDoneAnyway": "それでも完了にする",
+    "mergeFirst": "先にマージしてください:\n{{list}}",
+    "badge": "依存 {{list}}",
+    "statusMerged": "依存 #{{id}} · マージ済み",
+    "statusNotMerged": "依存 #{{id}} · 未マージ",
+    "removeNeed": "#{{id}} への依存を外す",
+    "addPlaceholder": "先にマージが必要なチケットを追加…",
+    "noOthers": "他のチケットはありません",
+    "includes": "<goto>{{ref}}</goto> の未マージの作業を含みます",
+    "addAsNeed": "依存として追加",
+    "autoTitle": "ボードが追加しました: このチケットのブランチに、あのチケットの未マージのコミットが入っています。ブランチから消えれば、これも外れます。ここで外した場合は保持されます(同じコミットでは再び追加されません)。",
+    "addedByBoard": "ボードが追加",
+    "cannotBeDoneUnsure": "これらのコミットが誰のものか、ボードは確実には判断できないため、依存は追加しませんでした。#{{id}} は、#{{need}} のブランチがベースにマージされるまで完了にできません。"
+  },
+  "verdict": {
+    "approve": "承認",
+    "disapprove": "却下",
+    "approved": "承認済み",
+    "disapproved": "却下済み",
+    "disapproveTip": "却下: このレーンを中止します",
+    "approvedBy": "{{who}} が{{when}}に承認しました。クリックで取り消します。",
+    "disapprovedBy": "{{who}} が{{when}}に却下しました。クリックで取り消します(再開されます)。"
+  },
+  "reviewResult": {
+    "pr": "PR #{{number}}",
+    "counts": "確定 {{confirmed}} · 可能性あり {{plausible}} · 未検証 {{unverified}}",
+    "title": "レビュー結果"
+  },
+  "thread": {
+    "replyActions": "返信の操作",
+    "replyLabel": "返信",
+    "reply": "返信",
+    "ask": " · @{{name}} でそのエージェントに依頼",
+    "empty": "コメントはまだありません。",
+    "replyingTo": "{{name}} への返信",
+    "cancel": "キャンセル",
+    "placeholderCompact": "返信…{{ask}}",
+    "placeholder": "返信を書く{{ask}}",
+    "sending": "送信中…"
+  },
+  "prQueue": {
+    "title": "PRキュー",
+    "subtitle": "レビューするPRと自分のPRを、レビューの状態別に表示します。",
+    "filters": {
+      "me": {
+        "label": "レビュー待ち",
+        "title": "あなたがレビューする他の人のPR: 承認待ち、承認済み、またはあなたのコメントで保留中"
+      },
+      "others": {
+        "label": "他者待ち",
+        "title": "あなたのPR(エージェントのも含む): 承認待ち、全レビュアーが承認済み、またはレビュアーのコメントで保留中"
+      },
+      "all": {
+        "label": "すべてのPR",
+        "title": "リポジトリのオープンなPRすべて。誰が書いたか、あなたに関係があるかは問いません"
+      }
+    },
+    "reviewers": {
+      "mine": "自分がレビュアーのもの",
+      "involving": "自分に関係するもの"
+    },
+    "tabs": {
+      "pending": "保留中",
+      "reviewed": "レビュー済み",
+      "on_hold": "保留",
+      "done": "完了"
+    },
+    "empty": {
+      "me": "レビューする{{stage}}のものはありません。",
+      "others": "他者待ちの{{stage}}のものはありません。",
+      "all": "オープンなPRに{{stage}}のものはありません。"
+    },
+    "refresh": "更新",
+    "mergeAfterTip": "このチケットは、先に次のマージが必要です:\n{{list}}",
+    "mergeAfterItem": "PR #{{number}}(#{{ticketId}} {{title}} から)",
+    "mergeAfter": "<refs/> の後にマージ",
+    "updated": "{{when}}に更新",
+    "merged": "{{when}}にマージ",
+    "myReview": "自分のレビュー: {{state}}",
+    "myReviewState": {
+      "approved": "承認済み",
+      "changes_requested": "変更依頼",
+      "commented": "コメント済み",
+      "dismissed": "却下",
+      "pending": "保留中"
+    },
+    "forYourReview": "あなたのレビュー待ち",
+    "yourPr": "あなたのPR",
+    "fromTicket": "#{{id}} {{title}} から",
+    "reviewFresh": "このSHAでレビュー済み",
+    "reviewStale": "レビューは古いSHAのものです",
+    "openTicket": "チケットを開く",
+    "release": "解除",
+    "hold": "保留",
+    "holdTitle": "#{{number}} を保留にする",
+    "holdText": "あなたとエージェント向けのメモです。GitHubには変更を加えません。",
+    "holdPlaceholder": "待たせる理由…",
+    "holdConfirm": "保留にする",
+    "notInvolvingYou": "あなたに関係なし"
+  },
+  "workStatus": {
+    "state": {
+      "waiting": "対応待ち",
+      "yourTurn": "あなたの番",
+      "lost": "連絡途絶",
+      "noWord": "連絡なし",
+      "quiet": "動きなし",
+      "working": "作業中",
+      "nothing": "未着手"
+    },
+    "line": {
+      "yourTurn": "あなたの番 · {{duration}}待ち",
+      "lost": "連絡途絶 · {{duration}}",
+      "noWord": "連絡なし {{duration}}",
+      "quiet": "動きなし {{duration}}",
+      "working": "作業中 · 最終連絡 {{duration}}"
+    },
+    "unit": {
+      "m": "{{count}}分",
+      "h": "{{count}}時間",
+      "d": "{{count}}日"
+    },
+    "since": "{{time}}から",
+    "minutes": "{{count}}分",
+    "lastWord": "最終連絡 {{count}}分前",
+    "noWordYet": "まだ連絡なし",
+    "why": {
+      "inStage": "{{stage}} にあり、{{time}}からエージェントの連絡なし",
+      "waitingOn": "{{on}} を待っており、{{time}}から誰からも連絡なし",
+      "nothingOpen": "{{time}}から未着手",
+      "work": "作業",
+      "ended": "{{phase}}が{{time}}に終わってから未着手",
+      "endedQuote": "{{phase}}が{{time}}に終わってから未着手(「{{quote}}」)",
+      "noProgress": "{{time}}から進捗の投稿なし"
+    },
+    "verb": {
+      "spec": "仕様作成中",
+      "build": "ビルド中",
+      "review": "レビュー中",
+      "verify": "検証中",
+      "pr": "PR作成中",
+      "preview": "プレビュー中",
+      "merge": "マージ中",
+      "work": "作業中"
+    },
+    "nobodyHeard": "まだ誰からも連絡なし",
+    "lastHeard": "最終連絡 {{time}}",
+    "worked": "作業",
+    "waited": "待機",
+    "onYou": "あなた待ち",
+    "defs": {
+      "worked": "作業: エージェントが、人を待たずに作業を開いていた時間。",
+      "waited": "待機: チケットが動かず、人も待っていなかった時間。",
+      "onYou": "あなた待ち: 人を待っていた時間(人への待機、またはブロック中のステージ)。"
+    }
+  },
+  "workTimeline": {
+    "noWork": "記録された作業はまだありません。",
+    "now": "現在",
+    "board": "ボード",
+    "unnamed": "名前なし",
+    "work": "作業",
+    "theHuman": "人間",
+    "running": "実行中",
+    "neverClosed": "未完了のまま",
+    "phaseRound": "{{phase}} 第{{round}}回",
+    "phaseRoundShort": "{{phase}} 第{{round}}回",
+    "delegatedTo": "{{on}} に委任",
+    "subAgentOf": "{{name}}({{parent}}のサブエージェント)",
+    "created": "作業の{{count}}分前に作成",
+    "notToScaleNote": "この時間は実際の長さではなく、短いブロックで表示しています。",
+    "alsoThenItem": "{{name}}、{{time}}",
+    "duration": {
+      "seconds": "{{count}}秒",
+      "minutes": "{{count}}分",
+      "hours": "{{count}}時間",
+      "hoursMinutes": "{{h}}時間{{m}}分"
+    },
+    "spoken": {
+      "underMinute": "1分未満",
+      "days": "{{count}}日",
+      "minutes": "{{count}}分",
+      "hours": "{{count}}時間",
+      "hoursMinutes": "{{h}}時間{{m}}分"
+    },
+    "mark": {
+      "push": "プッシュ",
+      "pr": "プルリクエスト",
+      "preview": "プレビュー",
+      "merge": "マージ",
+      "other": "ボードのイベント"
+    },
+    "label": {
+      "via": "({{by}} 経由)",
+      "open": "、進行中",
+      "span": "{{agent}}{{via}}の{{phase}}、{{from}}から{{to}}、{{duration}}{{open}}",
+      "wait": "待機: {{reason}}({{agent}})、{{from}}から{{to}}、{{duration}}{{open}}{{note}}",
+      "delegation": "{{agent}}が{{on}}に委任、{{from}}から{{to}}、{{duration}}{{open}}{{note}}",
+      "handoff": "{{from}}が{{to}}に作業を引き渡し、{{time}}{{note}}",
+      "mark": "{{name}}{{note}}、{{time}}",
+      "collapsed": "{{label}}、{{from}}から{{to}}、{{duration}}、縮尺は実際と異なります"
+    },
+    "fact": {
+      "delegatedTo": "委任先",
+      "by": "担当",
+      "started": "開始",
+      "ended": "終了",
+      "note": "メモ",
+      "waiting": "待機",
+      "waitingFor": "待機先",
+      "on": "対象",
+      "duration": "所要時間",
+      "who": "誰が",
+      "work": "作業",
+      "from": "開始",
+      "to": "終了",
+      "at": "時刻",
+      "event": "イベント",
+      "notToScale": "縮尺は実際と異なる",
+      "alsoThen": "同時に"
+    },
+    "summary": {
+      "noAgentWork": "記録されたエージェントの作業はありません。",
+      "worked": "{{duration}}作業",
+      "waited": "{{target}}を{{duration}}待機",
+      "delegated": "{{on}}に委任",
+      "clause": "{{agent}}: {{parts}}",
+      "workBy_other": "{{over}}の間に{{count}}エージェントが作業: {{clauses}}。{{live}}{{scale}}",
+      "activityBy_other": "{{over}}の間に{{count}}エージェントが活動: {{clauses}}。{{live}}{{scale}}",
+      "stillGoing": "継続中です。",
+      "notToScale": " 縮尺は実際と異なります: {{skipped}}。"
+    },
+    "card": {
+      "title": "タイムライン",
+      "showMore": "もっと見る",
+      "showLess": "閉じる",
+      "story": "タイムラインのあらすじ"
+    },
+    "story": {
+      "waitingFor": "{{who}}を待機中 · {{duration}}",
+      "waitedFor": "{{who}}を待機 · {{duration}}{{note}}",
+      "started": "{{phase}}を開始{{note}}",
+      "ended": "{{phase}}を終了{{note}}",
+      "handoff": "{{from}}作業を{{to}}に引き渡し{{note}}",
+      "handoffFrom": "{{name}}から",
+      "someone": "誰か",
+      "waiting": "{{who}}を待機中",
+      "stoppedWaiting": "{{who}}の待機を終了{{note}}",
+      "movedTo": "{{stage}} に移動",
+      "createdIn": "{{stage}} で作成",
+      "pushed": "プッシュ",
+      "openedPr": "PRを作成{{note}}",
+      "merged": "マージ",
+      "preview": "プレビュー {{note}}",
+      "somethingElse": "その他",
+      "lockNote": "ロック({{note}})",
+      "lock": "ロック",
+      "you": "あなた",
+      "mcp": "MCPサーバー",
+      "seconds": "{{count}}秒",
+      "minutes": "{{count}}分",
+      "minutesSeconds": "{{m}}分{{s}}秒",
+      "hours": "{{count}}時間",
+      "hoursMinutes": "{{h}}時間{{m}}分"
+    },
+    "stretch": {
+      "start": "開始待ち",
+      "blocked": "ブロック",
+      "human": "人の対応待ち",
+      "review": "レビュー中",
+      "merge": "マージ待ち",
+      "decision": "判断待ち"
+    },
+    "skipped": {
+      "start": "開始待ち{{duration}}",
+      "blocked": "ブロック{{duration}}",
+      "human": "人の対応待ち{{duration}}",
+      "review": "レビュー中{{duration}}",
+      "merge": "マージ待ち{{duration}}"
+    },
+    "openReport": "{{agent}}のレポートを開く: {{label}}",
+    "openReportRound": "{{agent}}の第{{round}}回のレポートを開く: {{label}}",
+    "reportDescription": "この実行のために書かれたレポート",
+    "factsDescription": "この実行の事実",
+    "loadingReport": "実行レポートを読み込み中…",
+    "reportsFailed": "レポートを読み込めませんでした。",
+    "noReport": "この実行のレポートはありません。",
+    "noReportYet": "この実行のレポートはまだありません。"
+  },
+  "roadmap": {
+    "title": "ロードマップ",
+    "subtitle": "進行中のすべてのチケット。完了、現在、次の予定です。",
+    "filter": {
+      "all": "すべて",
+      "blocked": "ブロック",
+      "review": "要レビュー"
+    },
+    "timeAxis": "時間軸(全行):",
+    "window": {
+      "today": "今日",
+      "24h": "24時間",
+      "7d": "7日",
+      "fit": "全行に合わせる"
+    },
+    "range": "{{start}}から現在まで",
+    "stat": {
+      "tickets_other": "チケット",
+      "lanes_other": "レーン",
+      "workingNow": "作業中",
+      "blocked": "ブロック",
+      "inReview": "レビュー中",
+      "noWord": "連絡なし"
+    },
+    "projectWork": "プロジェクトの作業(すべてのチケットとレーン):",
+    "empty": {
+      "all": "進行中、ブロック中、レビュー中のチケットはありません。",
+      "blocked": "ブロック中のものはありません。",
+      "review": "レビュー待ちのチケットはありません。"
+    },
+    "lanes_other": "{{count}}レーン",
+    "unassigned": "未割り当て",
+    "progress": "{{total}}件中{{done}}件完了",
+    "workTimeline": "作業タイムライン",
+    "noTasks": "タスクはまだありません。",
+    "tasks": "タスク",
+    "step": {
+      "done": "完了",
+      "now": "現在",
+      "next": "次",
+      "later": "以降",
+      "blocked": "ブロック"
+    }
+  },
+  "overview": {
+    "loadError": "サマリーを読み込めませんでした: {{error}}",
+    "projectOverview": "{{name}}: 概要",
+    "headline": {
+      "waiting": "対応待ち {{count}}件",
+      "inProgress": "進行中 {{count}}件",
+      "doneToday": "今日完了 {{count}}件"
+    },
+    "allHidden": "この概要のカードはすべて非表示です。<goto>レイアウト設定で再表示できます</goto>。",
+    "showFewer": "表示を減らす",
+    "viewAll": "{{count}}件すべてを表示",
+    "unassigned": "未割り当て",
+    "projectAgent": "{{name}}(プロジェクトのエージェント)",
+    "sinceDate": "{{date}}から",
+    "laneOf": "#{{id}} のレーン",
+    "draft": "ドラフト",
+    "pr": "PR #{{number}}",
+    "prTitle": "PR #{{number}} {{title}}",
+    "openOnGithub": "GitHubで開く",
+    "option_other": "{{count}}個の選択肢",
+    "lane_other": "{{count}}レーン",
+    "previewOf": "{{workspace}} のプレビュー",
+    "preview": "プレビュー",
+    "needsYou": {
+      "title": "要対応",
+      "empty": "対応待ちのものはありません。",
+      "decide": "判断: {{question}}",
+      "asked": "{{options}} · {{author}} が{{ago}}に質問",
+      "waitingOnYou": "{{since}}から対応待ち · {{agent}}",
+      "reviewPr": "PR #{{number}} {{title}} をレビュー",
+      "prBy": "{{author}} · {{ago}}に更新",
+      "newReplies": "新着 {{count}}件 · ",
+      "blocked": "ブロック",
+      "instructionsChanged": "プロジェクトの指示が変更されました",
+      "changedBy": "<actor/> による",
+      "reviewed": "確認済み",
+      "revertTip": "この変更の前の指示に戻します",
+      "revertBlockedTip": "その後も指示が変更されています。先に後の変更を取り消してください",
+      "revert": "取り消す",
+      "last": "最終"
+    },
+    "lost": {
+      "title": "連絡途絶",
+      "empty": "連絡途絶はありません。",
+      "lastHeardTip": "最後の連絡: {{when}}",
+      "lastHeard": "最後の連絡は{{duration}}前"
+    },
+    "inProgress": {
+      "title": "進行中",
+      "empty": "進行中のものはありません。"
+    },
+    "doneToday": {
+      "title": "今日完了",
+      "empty": "今日はまだ完了したものがありません。",
+      "closedTip": "マージまたはクローズ済み: レビューキューから外れました",
+      "closed": "{{time}}にクローズ",
+      "activity_other": "今日は{{count}}件の出来事がありました: デイリー"
+    },
+    "carryingOver": {
+      "title": "持ち越し",
+      "startedTip": "{{when}}に作業を開始",
+      "days_other": "{{count}}日間進行中",
+      "emptyShown": "今日より前からのブロックやレビュー中のものはありません。"
+    }
+  },
+  "notifications": {
+    "title": "通知",
+    "clearFinished": "完了分をクリア",
+    "empty": "実行中のものはありません",
+    "dismiss": "{{label}} を閉じる",
+    "of": "{{total}}件中{{done}}件",
+    "starting": "開始中…",
+    "noReason": "理由の記載なし",
+    "failed": "{{title}} が失敗しました",
+    "finished": "{{title}} が完了しました",
+    "finishedWith": "{{title}} が完了しました · {{summary}}",
+    "failedLine": "失敗 · {{elapsed}} · {{reason}}",
+    "succeededLine": "成功 · {{elapsed}}",
+    "retryKept": "保持した項目を再試行",
+    "youAsked": "{{actor}} · あなたの依頼: {{request}}",
+    "stale": "{{since}}更新なし · 停止している可能性があります",
+    "trackedFailed": "失敗 · {{reason}}",
+    "succeeded": "成功",
+    "notice": "お知らせ",
+    "cannotWait": "待機できません: {{reason}}",
+    "muted": "このプロジェクトで「{{name}}」をミュートしました",
+    "new": "新着",
+    "snooze": "スヌーズ",
+    "snoozeFor": "スヌーズ時間",
+    "mute": "このプロジェクトでこの種類をミュート",
+    "copied": "コピーしました",
+    "copyFailed": "コピーできませんでした。テキストを選択してください",
+    "unit": {
+      "s": "{{value}}秒",
+      "min": "{{value}}分",
+      "h": "{{value}}時間",
+      "d": "{{value}}日"
+    },
+    "severity": {
+      "info": "情報",
+      "warning": "警告",
+      "problem": "問題"
+    }
+  },
+  "ticketPage": {
+    "archivedToast": "アーカイブしました。ボードから外れ、アーカイブ済みに移りました",
+    "restoredToast": "ボードに戻しました",
+    "disapprovedToast": "#{{id}} を却下して中止しました",
+    "undo": "元に戻すと、却下を取り消して {{stage}} に戻します。",
+    "undoAction": "元に戻す",
+    "summary": "サマリー",
+    "updated": "{{when}}に更新",
+    "archivedBy": "{{name}} が{{when}}にアーカイブ",
+    "archivedByLane": "{{name}} が{{when}}に、親のチケットと一緒にアーカイブ",
+    "someone": "誰か",
+    "archivedBadge": "アーカイブ済み",
+    "decisionNeeded": "要判断",
+    "archiveTip": "レーンごとボードから外します。機能ページの「アーカイブ済み」から戻せます",
+    "deleteTitle": "このチケットを削除しますか?",
+    "deleteBody": "タスク、更新、添付ファイル、スレッドも一緒に削除されます。",
+    "deleteLanes_other": "{{count}}件のレーンがあります。一緒に削除するか、残して1つ上の階層に移します。",
+    "deleteKeepLanes": "削除し、レーンは残す",
+    "deleteWithLanes": "レーンごと削除",
+    "title": "タイトル",
+    "clickToRename": "クリックして名前を変更",
+    "tagsAria": "タグ(カンマ区切り)",
+    "tagsPlaceholder": "高、フォーム",
+    "editTagsTip": "クリックしてタグを編集",
+    "addTags": "+ タグ",
+    "instructions": "指示",
+    "attaching": "添付中…",
+    "attach": "添付",
+    "edit": "編集",
+    "instructionsPlaceholder": "やること、完了の判断基準、してはいけないこと。ファイルを貼り付けるかドロップすると添付できます。",
+    "showLess": "閉じる",
+    "showFull": "指示の全文を表示",
+    "removeNamed": "{{name}} を削除",
+    "otherReposTip": "プロジェクトの他のリポジトリでのこのチケットの作業で、それぞれ専用のブランチにあります。ブランチと実行に表示されます",
+    "otherRepos": "他のリポジトリ",
+    "repositoryNamed": "リポジトリ {{name}}",
+    "takeOffTip": "{{name}} をチケットから外します(このチケットでの実行は停止します)",
+    "addRepo": "リポジトリを追加",
+    "addRepoPlaceholder": "リポジトリを追加…",
+    "details": "詳細",
+    "assignee": "担当者",
+    "reservedTip": "このプロジェクトのエージェント専用です。他のエージェントは担当できず、あなただけが割り当てを変更できます",
+    "reserved": "専用",
+    "repository": "リポジトリ",
+    "branch": "ブランチ",
+    "baseBranch": "ベースブランチ",
+    "needsTip": "完了にする前に、ブランチをこのチケットのベースにマージする必要があるチケット",
+    "needs": "依存",
+    "neededBy": "被依存",
+    "autoTip": {
+      "Pushed": "ボードがgitから自動でチェックします(ブランチがoriginにあり、ローカルのコミットがすべて入っている)",
+      "PR": "ボードがGitHubから自動でチェックします(チケットのPRが未マージまたはマージ済み)",
+      "CI": "ボードがGitHubから自動でチェックします(PRのチェックが成功、または先頭のSHAに「CI run locally: green」のコメントがある)",
+      "Preview": "ボードがプレビューから自動でチェックします(チケットのワークスペースがプレビューを実行中、またはプレビューのリンクが応答する)",
+      "Summary": "ボードがチケットの投稿から自動でチェックします(エージェントがブランチの最後のコミットより後にサマリーを書いた、または更新した)",
+      "Merged": "ボードがGitHubとgitから自動でチェックします(PRがマージ済み、またはブランチがベースにマージ済み)"
+    },
+    "tickedAuto": "自動でチェックされます",
+    "blocked": "ブロック",
+    "subtasksBlocked_other": "ブロック中のサブタスク {{count}}件",
+    "unblock": "{{name}} のブロックを解除",
+    "markBlockedNamed": "{{name}} をブロックにする",
+    "addSubtask": "サブタスクを追加",
+    "addSubtaskTo": "{{name}} にサブタスクを追加",
+    "removeTask": "削除",
+    "removeTaskSubtasks": "サブタスクごと削除",
+    "blockedPlaceholder": "人間がすべきこと(任意)",
+    "whyBlocked": "{{name}} がブロックされている理由",
+    "markBlocked": "ブロックにする",
+    "tasks": "タスク",
+    "noTasks": "タスクはまだありません。新しいチケットが最初に持つフェーズを追加してください。実装、続いて引き渡しの各フェーズ(プッシュ、PR、CI、プレビュー、サマリー、マージ)です。具体的なステップは、実装のサブタスクとして追加します。プッシュ、PR、CI、プレビュー、サマリー、マージは、ボードが自動でチェックします。",
+    "subtasksOf": "{{name}} のサブタスク",
+    "newSubtaskOf": "{{name}} の新しいサブタスク",
+    "add": "追加",
+    "addPhase": "フェーズを追加: Implementation、Pushed、PR…",
+    "all": "すべて",
+    "nounLane": "レーン",
+    "laneOf": "レーン {{n}}/{{count}}",
+    "filtered": "(絞り込み中)",
+    "nounTicketIn": "{{stage}} のチケット",
+    "stageOf": "{{stage}} の {{n}}/{{count}}",
+    "previousNoun": "前の{{noun}}",
+    "nextNoun": "次の{{noun}}",
+    "stepKeysTip": "[ と ] で前後に移動します",
+    "lanesCancelled": "中止 {{count}}件",
+    "allTasks": "全タスク {{done}}/{{total}}",
+    "noLanes": "レーンはありません。作業の一部を並行して進める場合は、このチケットをレーンに分割してください。各レーンには、専用のブランチ、担当者、タスク、更新が付きます。",
+    "filterStage": "ステージ",
+    "filterTags": "タグ",
+    "showing": "{{total}}件中{{shown}}件を表示",
+    "clearFilters": "絞り込みを解除",
+    "activity": "アクティビティ",
+    "feed": "フィード",
+    "mainTip": "あなた向け: あなたの投稿と、その下の返信、判断、質問",
+    "main": "メイン",
+    "agentsTip": "エージェントの作業記録: 進捗、レビューのフェーズ、builderのメモ",
+    "agents": "エージェント",
+    "includeLanePosts": "レーンの投稿を含める",
+    "newCount_other": "新着 {{count}}件",
+    "newPost": "新しい投稿",
+    "postPlaceholder": "投稿を書きます。質問、回答、進捗など。スクリーンショットや録画を貼り付けるかドロップできます。",
+    "agentsPlaceholder": "エージェントの記録に書きます。担当者へのメモです。ファイルを貼り付けるかドロップできます。",
+    "posting": "投稿中…",
+    "post": "投稿",
+    "postInAgents": "エージェントに投稿",
+    "noPosts": "投稿はまだありません。",
+    "noPostsHere": "ここにはまだ投稿がありません。",
+    "noAgentPosts": "エージェントの投稿はまだありません。",
+    "sections": "チケットのセクション",
+    "summaryPosted": "{{when}}に投稿",
+    "summaryUpdated": "{{when}}に更新",
+    "summaryWritten": "{{when}}に作成",
+    "history": "履歴({{count}})",
+    "noSummary": "サマリーはまだありません。エージェントが書くまでは、最新の進捗の投稿が代わりになります。",
+    "earlierVersions": "過去の版",
+    "firstVersion": "最初の版",
+    "replies_other": "{{count}}件の返信",
+    "summaryActions": "サマリーの操作",
+    "hideRepliesLabel": "返信を隠す",
+    "replyLabel": "返信",
+    "hideReplies": "返信を隠す",
+    "showReplies": "{{replies}}を表示",
+    "replySummary": "サマリーに返信",
+    "laneSummaryTip": "レーンのサマリー: 担当エージェントが保っている、作業の現状",
+    "summaryChip": "サマリー",
+    "progress": "進捗",
+    "postActions": "投稿の操作",
+    "notProgressLabel": "進捗ではない",
+    "markProgressLabel": "進捗にする",
+    "notProgressTip": "進捗ではない: 通常の投稿にします",
+    "markProgressTip": "進捗として記録",
+    "decisionArchived": "{{ids}} をアーカイブしました。ボードから外れ、アーカイブ済みに移りました",
+    "notArchived": "アーカイブしませんでした: {{why}}",
+    "decision": "判断",
+    "decidedInChat": "チャットであなたが判断 ·",
+    "relayedTip": "オーケストレーターが、チャットでのあなたの回答を記録しました。カードでは何もクリックされていません。",
+    "relayed": "代理記録",
+    "relayedBy": "<actor/> が{{when}}に ·",
+    "decidedBy": "<actor/> が{{when}}に判断 ·",
+    "change": "変更",
+    "decisionNeededHere": "あなたの判断が必要です",
+    "recommended": "推奨",
+    "saidInChat": "チャットでのあなたの発言:",
+    "agentNotePlaceholder": "エージェントへのメモ(任意)",
+    "agentNote": "エージェントへのメモ",
+    "decide": "決定",
+    "vsBase": "ベースと比べて +{{ahead}} / −{{behind}} ·",
+    "branchNotInCheckout": "ブランチはまだチェックアウトにありません",
+    "reviewOlder": "レビューは古いSHAのものです",
+    "latestReview": "最新のレビュー",
+    "branchIn": "{{name}} のブランチ",
+    "base": "ベース {{name}}",
+    "noBranch": "ブランチはまだありません。上で選ぶか、エージェントが設定します。",
+    "workspaces": "ワークスペース",
+    "workspacesDesc": "エージェントがこのチケット用に開いた、ワークツリー、サブブランチ、サブエージェントのサンドボックスです。",
+    "workspacesDescLanes": "エージェントがこのチケットとそのレーン用に開いた、ワークツリー、サブブランチ、サブエージェントのサンドボックスです。",
+    "noneYet": "まだありません。",
+    "breadcrumb": "パンくずリスト",
+    "scrollSideUp": "サイド列を上にスクロール",
+    "scrollSideDown": "サイド列を下にスクロール",
+    "workflow": "ワークフロー",
+    "workflowOwn": "このチケットに設定された{{workflow}}ワークフローに従います。",
+    "workflowProject": "プロジェクトのワークフロー({{workflow}})に従います。",
+    "workflowSteps": "ステップを見る",
+    "lanesProgress": "{{done}}/{{total}} 完了",
+    "workflowDeleted": "このチケットに設定されたワークフローは削除されたため、プロジェクトのワークフロー（{{workflow}}）に従います。"
+  },
+  "complexity": {
+    "label": {
+      "low": "低",
+      "mid": "中",
+      "high": "高",
+      "max": "最大"
+    },
+    "workflowHint": "低: Standardワークフローではspecもレビューもなし。中・高・最大: プロジェクトのワークフローが定めるレビューラウンド(Standard: 1回、3回、最大10回)。最大はゼロから作る作業向けで、既存のコードベースの機能は、どれほど難しくても最大にはしません。",
+    "levelHint": {
+      "low": "低: プロジェクトのワークフローが定めるレビューラウンド(Standard: なし)。builderが自分で検証します。",
+      "mid": "中: プロジェクトのワークフローが定めるレビューラウンド(Standard: 1回)。",
+      "high": "高: プロジェクトのワークフローが定めるレビューラウンド(Standard: 最大3回)。",
+      "max": "最大: プロジェクトのワークフローが定めるレビューラウンド(Standard: 最大10回)。サイトやアプリ全体をゼロから作る場合、新しいプロダクト、単独のサービス向けで、通過した最初のラウンドで止まります。既存のコードベースの機能は、どれほど難しくても高までです。"
+    }
+  },
+  "agentsAtWork": {
+    "title": "稼働中のエージェント",
+    "error": "誰が作業中か読み取れませんでした。",
+    "empty": "作業中のエージェントはいません",
+    "more_other": "ほか{{count}}件",
+    "round": "{{phase}} 第{{round}}回",
+    "waiting": "待機: {{what}}",
+    "blocked": "ブロック",
+    "quiet": "動きなし",
+    "lastHeard": "最終連絡 {{time}}",
+    "label": "#{{id}} {{title}} — {{phase}}、{{since}}、{{state}}",
+    "labelAgent": "#{{id}} {{title}} — エージェント {{agent}}、{{phase}}、{{since}}、{{state}}",
+    "state": {
+      "working": "作業中",
+      "waiting": "待機中",
+      "asleep": "休止中"
+    }
+  },
+  "notificationSettings": {
+    "title": "通知",
+    "intro": "このプロジェクトでベルに表示できるアラートです。オフにするとここには表示されません。ボードは引き続き監視し、他のプロジェクトはそれぞれの設定を保ちます。",
+    "none": "アラートはまだありません",
+    "show": "{{label}}を表示"
+  },
+  "alerts": {
+    "group": {
+      "setup": "セットアップとバージョン",
+      "work": "作業",
+      "machine": "このマシン",
+      "housekeeping": "整理"
+    },
+    "snooze": {
+      "minutes_other": "{{count}}分",
+      "hours_other": "{{count}}時間",
+      "days_other": "{{count}}日"
+    }
+  },
+  "workflowChips": {
+    "selfTip": "チケットのエージェントが自分で行います",
+    "agentTip": {
+      "picked": "このために選ばれたチームのエージェントです。指示はチームのページに書かれています。ロール({{agent}})が、そのスパンと実行レポートの名前になります。",
+      "role": "ロール({{agent}})と同名のチームのエージェントです。指示はチームのページに書かれています。ロール({{agent}})が、そのスパンと実行レポートの名前になります。",
+      "default": "{{agent}}という名前のチームのエージェントはいないため、組み込みの{{agent}}ロールとして実行されます。指示はチームのページに書かれています。ロール({{agent}})が、そのスパンと実行レポートの名前になります。"
+    },
+    "agentMissing": "エージェントなし",
+    "missingTip": "{{picked}}が選ばれていますが、チームにその名前のエージェントは現在いません。エージェントが戻るか別のエージェントが選ばれるまで、{{name}}として実行されます。",
+    "locked": "固定",
+    "lockedAboveLow": "低より上で固定",
+    "skippedOnLow": "低ではスキップ",
+    "changed": "変更あり",
+    "changedTip": "プリセットからの変更: {{what}}"
+  },
+  "workflowCustom": {
+    "name": "名前",
+    "new": "新しいワークフロー",
+    "newDescription": "このプロジェクトのワークフローを複製し、単独で変更するものです。ステップの追加と削除、並べ替え、各ステップの担当の指定ができます。中のレビューは、複製元のプリセットから引き継がれます。",
+    "startFrom": "元にするワークフロー",
+    "create": "ワークフローを作成",
+    "rename": "名前を変更",
+    "renameTitle": "ワークフローの名前を変更",
+    "renameDescription": "チケットとプロジェクトは、新しい名前のままそれに従い続けます。",
+    "deleteTitle": "ワークフロー「{{name}}」を削除しますか？",
+    "deleteDescription": "プロジェクトがこれを使っている場合は{{standard}}に戻ります。これを指定しているチケットは、代わりにプロジェクトのワークフローに従います。プリセットには影響しません。この操作は取り消せません。",
+    "deleteWorkflow": "ワークフローを削除",
+    "addStep": "ステップを追加",
+    "allIn": "すべての種類が追加済みです"
+  },
+  "workflowGraph": {
+    "label": "複雑度「{{complexity}}」のチケットの{{label}}ワークフロー",
+    "complexity": {
+      "low": "低",
+      "mid": "中",
+      "high": "高",
+      "max": "最大"
+    },
+    "roundSurvives": "ラウンド通過",
+    "roundFails": "ラウンド失敗",
+    "inParallel": "並列",
+    "reviewRound": "レビューラウンド",
+    "noRoundsOn": "{{complexity}}ではレビューラウンドなし"
+  },
+  "workflowPanel": {
+    "idle": "グラフのステップを選ぶと、その内容を確認し、実行するエージェント、労力、実行するかどうか、順序での位置を変更できます。",
+    "runnerAgents": "チケットのエージェントが/feature-reviewを自分で実行します。そのフェーズは、フェーズのノードで選んだチームのエージェントが実行します。",
+    "selfAgent": "チケットのエージェントが自分で行います。選べるチームのエージェントはありません。",
+    "whatItDoes": "内容",
+    "handoffTo": "{{next}}への引き渡し",
+    "result": "結果",
+    "team": {
+      "title": "チームのエージェント",
+      "default": "既定({{name}})",
+      "notInTeam": "{{name}}(チームにいません)",
+      "missing": "{{picked}}が選ばれていますが、チームにその名前のエージェントは現在いません。エージェントが戻るか別のエージェントが選ばれるまで、{{name}}として実行されます。選択を解除するには「既定」を選んでください。",
+      "runsAs": "{{name}}として実行されます。指示はチームのページに書かれています。ロール({{role}})が、そのスパンと実行レポートの名前になります。",
+      "runsAsDefault": "{{name}}として実行されます(組み込みのエージェント: チームにその名前のものはありません)。指示はチームのページに書かれています。ロール({{role}})が、そのスパンと実行レポートの名前になります。"
+    },
+    "placeInOrder": "順序での位置",
+    "moveUp": "上へ移動",
+    "moveDown": "下へ移動",
+    "moveUpTip": "上へ移動: {{step}}が早く実行されます",
+    "moveDownTip": "下へ移動: {{step}}が後に実行されます",
+    "runs": "実行する",
+    "run": "{{step}}を実行",
+    "alsoRunOnLow": "低のチケットでも{{step}}を実行",
+    "aboveLowNote": "このスイッチは、低のチケットでも実行するかどうかだけを決めます。",
+    "effort": "労力",
+    "effortHint": "Agentツールの労力としてそのまま渡されます。{{hint}}。",
+    "reviewRuns": "ラウンドごとに別々の/feature-reviewを{{total}}回実行します: {{runs}}。それぞれ別のエージェント名で動き、互いの指摘は見えません。",
+    "survival": "<strong>ラウンドを通過する条件</strong>: {{survival}}。",
+    "inThisWorkflow": "このワークフロー内",
+    "removeStep": "ステップを削除",
+    "takesOut": "{{step}} をこのワークフローから外します。グラフ上の「ステップを追加」から再び追加できます。",
+    "alwaysFirst": "{{step}} は常に最初のステップなので、削除できません。",
+    "alwaysLast": "{{step}} は常に最後のステップなので、削除できません。",
+    "lockedStep": "{{step}} はロックされているので、削除できません。"
+  },
+  "workflowPage": {
+    "title": "ワークフロー",
+    "intro": "チケットが「To do」から引き渡しに至るまでの流れです。エージェントが踏むステップを順に、誰が実行し、何を次に渡すかを示します。プロジェクトは1つのワークフローに従い、チケットはそのページで別のものを指定できます。エージェントはボードからこれを読むので、ここでの変更は次の実行から反映されます。",
+    "graphShows": "グラフは複雑度「{{complexity}}」のチケットを表示しています。",
+    "projectFollows": "プロジェクトはこのワークフローに従います",
+    "use": "このワークフローを使う",
+    "resetThis": "このワークフローをリセット",
+    "resetTitle": "{{label}}ワークフローをリセットしますか?",
+    "resetBody": "順序、スイッチ、労力、チームのエージェント、レビューラウンドが、{{label}}プリセットの初期状態に戻ります。他のプリセットの変更はそのまま残ります。",
+    "cancel": "キャンセル",
+    "reset": "リセット",
+    "sectionLabel": "{{label}}ワークフロー",
+    "projects": "プロジェクトの",
+    "summary_other": "複雑度「{{complexity}}」のチケットで{{count}}ステップ · レビュー: {{rounds}}",
+    "created": "ワークフローを作成しました",
+    "renamed": "名前を変更しました",
+    "deleted": "ワークフローを削除しました",
+    "resetBodyCustom": "ステップ、順序、スイッチ、エフォート、チームのエージェント、レビューの回数は、{{label}} ワークフローが作られた時の状態に戻ります。名前は残り、他のワークフローで行った変更もそのまま残ります。",
+    "fellBack": "このプロジェクトが従っていたワークフローが削除されたため、今は{{standard}}に従っています。それを指定していたチケットはプロジェクトのワークフローに従います。このお知らせを閉じるには{{standard}}のままにするか、下で別のワークフローを選んで「このワークフローを使う」を押してください。",
+    "notOwn": "そのワークフローはこのプロジェクトのものではない（削除された可能性があります）ため、プロジェクト自身のものを表示しています。",
+    "keepStandard": "{{label}}を維持",
+    "customNote": "あなた自身のワークフローで、{{base}} から複製されたものです。一覧の種類のステップを追加し、ロックされていないものを削除して、各ステップが許す範囲内で並べ替えてください。中のレビュー（そのフェーズと実行内容）は {{base}} から引き継がれます。"
+  },
+  "workflowPresets": {
+    "group": "ワークフローのプリセット",
+    "active": "使用中",
+    "tweaked": "調整済み",
+    "complexity": "複雑度",
+    "stats_other": "{{count}}ステップ · レビューラウンド {{rounds}}",
+    "light": {
+      "label": "Light",
+      "description": "ビルド、ゲート、レビュアー1人、意図の確認、引き渡し。specエージェントも環境も、個別のhuntもありません。"
+    },
+    "standard": {
+      "label": "Standard",
+      "description": "フルサイクル: spec、ビルド、ゲート、レビューラウンド(spec、環境、verify、独立した2つのhunt、refute、マージの確認)、その後に意図の確認、PR、CI、プレビュー、引き渡し。"
+    },
+    "thorough": {
+      "label": "Thorough",
+      "description": "Standardに加えて、専用のテスト作成パス、セキュリティチェックリストによる3つ目のhunt、各レビューラウンドの最後の意図の確認、低より上のすべてのレベルでレビューラウンドが1回増えます。"
+    },
+    "maximum": {
+      "label": "Maximum",
+      "description": "Thoroughに加えて、独立した2つ目のspec、最初のレビューを見ない別のエージェントによる各ラウンドの2回目のフルレビュー、すべてのエージェントでの高い労力。"
+    },
+    "content": {
+      "label": "コンテンツ",
+      "description": "担当の確保、下書きの作成と自己チェック、下書きに対する人によるレビューの回、サマリー、引き渡し。spec、PR、CI、プレビュー、レビューのフェーズはありません。"
+    },
+    "custom": "カスタム",
+    "copiedFrom": "独自、{{base}} から複製"
+  },
+  "workflowReview": {
+    "legend": "複雑度ごとのレビューラウンド",
+    "changed": "変更あり",
+    "notSaved": "保存されていません: {{reason}}",
+    "default": "既定 {{value}}"
+  },
+  "workflowReads": {
+    "title": "エージェントが読むもの",
+    "hint": "このワークフローについてget_workflowが返すテキスト",
+    "textLabel": "ワークフローのテキスト"
+  },
+  "workflowSelect": {
+    "project": "プロジェクトのワークフロー({{label}})",
+    "hint": "エージェントが従うワークフロー。プロジェクト自身のもの、またはこのチケットだけのためのプロジェクトの別のワークフローです。プロジェクトのワークフローを変更しても、ワークフローを指定したチケットは動きません。",
+    "deleted": "削除されたワークフロー（プロジェクトのものに従う）"
+  },
+  "workflowTags": {
+    "title": "ワークフローを選ぶタグ",
+    "empty": "まだワークフローを選ぶタグはありません。エージェントは set_workflow_tags でこの対応表を設定します。タグのいずれかが付いていて独自のワークフローがないチケットは、そのタグに対応するワークフローに従い、なければプロジェクトのワークフローに従います。",
+    "tag": "タグ",
+    "workflow": "ワークフロー",
+    "notOne": "プロジェクトのワークフローではありません"
+  },
+  "workflowView": {
+    "noRounds": "レビューラウンドなし",
+    "rounds_other": "{{count}}ラウンド",
+    "complexity": {
+      "low": "低",
+      "mid": "中",
+      "high": "高",
+      "max": "最大"
+    },
+    "effort": {
+      "auto": "自動",
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "effortLevel": {
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "autoLevel": "自動: {{level}}",
+    "autoEffortHint": "自動はチケットに合わせます: 低のチケットは低、中と高は中、最大は高",
+    "separator": "、",
+    "you": "あなた",
+    "skippedNoRounds": "レビューラウンドなし",
+    "skippedOff": "オフ",
+    "changed": {
+      "moved": "順序での位置",
+      "off": "オフにした",
+      "effort": "労力",
+      "agent": "チームのエージェント"
+    },
+    "name": {
+      "agent": "エージェント {{name}}",
+      "locked": "固定",
+      "skipsOnLow": "低のチケットではスキップ"
+    },
+    "lockReason": {
+      "claim": "固定: チケットを読んで担当を取るまで、何も始められません。",
+      "build": "固定: 変更をビルドしないまま納品されることはありません。",
+      "gate": "固定: 確認されていない変更は先に進みません。",
+      "intent": "低より上で固定: 低より上のすべてのチケットは、引き渡す前に人間本人の言葉と照らして確認されます。",
+      "rounds": "ロック中: 引き渡し前に、人がドラフトを確認します。",
+      "always": "固定: これがないとチケットは引き渡せません。"
+    },
+    "survival": {
+      "light": "レビュアーが再現できた指摘がなく、builderの根拠がすべての受け入れ基準を満たしている",
+      "standard": "判定がSHIP、動作確認がYES、ベース確認がNOで、すべての受け入れ基準が実行によってPASS(UNVERIFIEDは、エスカレーションの規則に挙げられた、乗り越えられなかった理由がある場合のみ)",
+      "thoroughIntent": "判定がSHIP、動作確認がYES、ベース確認がNOで、すべての受け入れ基準が実行によってPASS(UNVERIFIEDは、エスカレーションの規則に挙げられた、乗り越えられなかった理由がある場合のみ)で、ラウンド最後の意図の確認が一致している",
+      "maximum": "2つのレビューがどちらも通過し({{standard}})、突き合わせで未解決の指摘が残らない",
+      "maximumIntent": "2つのレビューがどちらも通過し({{standard}})、突き合わせで未解決の指摘が残らず、ラウンド最後の意図の確認が一致している"
+    },
+    "move": {
+      "after": "{{step}}は{{other}}の後に置く必要があります",
+      "stayFirst": "{{step}}は最初のままにする必要があります",
+      "stayLast": "{{step}}は最後のままにする必要があります",
+      "alreadyFirst": "{{step}}はすでに最初です",
+      "alreadyLast": "{{step}}はすでに最後です"
+    }
+  },
+  "backToModule": {
+    "back": "{{label}}に戻る",
+    "home": "ホーム"
+  },
+  "ticketLine": {
+    "openedBy": "{{name}}({{role}})が{{when}}に作成",
+    "updated": "{{when}}に更新",
+    "opened": "{{when}}に作成"
+  },
+  "resumeSettings": {
+    "title": "再開",
+    "intro": "質問をしたエージェントは、そのターンを終えます。ここにコマンドを設定すると、ボード上の判断カードに答えたとき、またはチケットをブロックやレビューのステージから作業中のステージに戻したときに、ボードが自分で作業を続けます。コマンドはこのマシンのチケットのワークツリーで実行され、質問とあなたの回答(または直近の発言)が標準入力と <code>BOARD_RESUME_PROMPT_FILE</code> で指定されたファイルに渡されます。<code>BOARD_URL</code>、<code>BOARD_PROJECT_ID</code>、<code>BOARD_TICKET_ID</code>、<code>BOARD_AGENT_NAME</code> が設定されます。エージェントが稼働中のチケットや、すでに再開中のチケットでは何も起動しません。ボードのユーザーの権限で実行され、設定できるのはあなただけです。空欄はオフです。",
+    "presets": "プリセット",
+    "found": "あり",
+    "notFound": "なし",
+    "command": "再開コマンド",
+    "commandPlaceholder": "claude -p(空欄: オフ)",
+    "timeout": "停止までの時間(分)",
+    "save": "保存",
+    "saving": "保存中…",
+    "timeoutProblem": "{{min}}から{{max}}までの整数。",
+    "unsaved": "未保存の変更があります。",
+    "noChanges": "変更はありません。",
+    "off": "再開はオフです。"
+  },
+  "resumeCard": {
+    "title": "再開",
+    "resume": "再開",
+    "retry": "再試行",
+    "started": "ボードが作業を再び開始しました",
+    "empty": "このチケットを再開したものはまだありません。",
+    "setInSettings": "人間がプロジェクトの設定で設定します。",
+    "failed": "ボードは再開できませんでした: {{reason}}",
+    "log": "ログ",
+    "state": {
+      "queued": "開始中",
+      "running": "実行中",
+      "succeeded": "完了",
+      "failed": "失敗",
+      "skipped": "未開始"
+    }
+  },
+  "runReportsWindow": {
+    "reports": "レポート",
+    "reportsCount": "レポート({{n}})",
+    "title": "実行レポート",
+    "description": "このチケットの実行レポートです。フィルターと並べ替えが使えます。1件を開くと全文が表示されます。",
+    "back": "レポートに戻る",
+    "none": "実行レポートはまだありません。",
+    "noMatch": "この条件に合うレポートはありません。",
+    "count_other": "{{count}}件中{{shown}}件のレポート",
+    "clearFilters": "フィルターをクリア",
+    "filter": {
+      "agent": "エージェント",
+      "round": "ラウンド",
+      "time": "期間",
+      "difficulty": "難易度",
+      "confidence": "確信度",
+      "duration": "所要時間",
+      "sortBy": "並べ替え"
+    },
+    "items": {
+      "allAgents": "すべてのエージェント",
+      "allRounds": "すべてのラウンド",
+      "round": "第{{n}}回",
+      "noRound": "ラウンドなし"
+    },
+    "time": {
+      "any": "すべての期間",
+      "hour": "直近1時間",
+      "today": "今日",
+      "week": "直近7日間"
+    },
+    "duration": {
+      "any": "すべて",
+      "reported": "報告あり",
+      "unreported": "報告なし"
+    },
+    "rating": {
+      "any": "すべて",
+      "unrated": "未評価"
+    },
+    "sort": {
+      "newest": "新しい順",
+      "oldest": "古い順",
+      "longest": "長い順",
+      "difficulty": "難易度が高い順",
+      "confidence": "確信度が高い順"
+    }
+  }
+}

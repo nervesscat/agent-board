@@ -50,6 +50,7 @@ import {
 } from './ticketRepos'
 import {
   firstOfKind,
+  lastOfKind,
   kindOf,
   listStages,
   matchStages,
@@ -1079,7 +1080,7 @@ export const verdictOf = (t: Pick<schema.Ticket, 'approvedAt' | 'disapprovedAt'>
   t.approvedAt ? 'approved' : t.disapprovedAt ? 'disapproved' : null
 
 /**
- * Whether approving this ticket closes it (to the first done stage): a PR review at any stage, and the
+ * Whether approving this ticket closes it (to the last done stage): a PR review at any stage, and the
  * hand-off of work in a project with no software kind from its review stage, where the human's approval
  * is the review.
  */
@@ -1091,7 +1092,9 @@ export function approvalCloses(
   // A hand-off is a ticket with no repo in a project with no software kind. A ticket that names a repo
   // keeps its approval as the human's call only, so taking it back never has to reopen it.
   return (
-    t.repoId === null && !hasGitSide(getProject(t.projectId).kinds) && kindOf(stages, t.status) === 'review'
+    t.repoId === null &&
+    !hasGitSide(getProject(t.projectId).kinds) &&
+    ['review', 'approved'].includes(kindOf(stages, t.status))
   )
 }
 
@@ -1110,15 +1113,14 @@ export function refuseLaneVerdict(t: Pick<schema.Ticket, 'id' | 'parentId' | 'ta
 /**
  * The human's call on a ticket: approve it, disapprove it (which moves it to the project's
  * first cancelled stage), or clear the call. Approving a ticket in a review stage moves it to Approved
- * (the review-kind stage the default layout puts after In review), where an orchestrator merges the PR
- * without asking again, the move there being the human's go-ahead; approving a PR review (a ticket tagged `PR`) finishes it in the first
+ * (the first stage of kind `approved`, which the default layout puts after In review), where an orchestrator merges the PR
+ * without asking again, the move there being the human's go-ahead; approving a PR review (a ticket tagged `PR`) finishes it in the last
  * done stage instead. Taking that back returns it to `reopenTo` or the first review stage. Taking back
  * a disapproval puts a cancelled ticket back to `reopenTo` (the stage it had, when an undo knows it) or
  * the stage new tickets start in. Callers make sure the actor is the human.
  *
- * Only the verdict and a move put a ticket in Approved: no stage kind sends one there, since it is a
- * `review` stage, the same as In review. The default `review` stage stays the first of its kind, so
- * the board's by-kind picks (the PR sync's `reviewed`, the preview filter) still land in In review.
+ * Only the verdict and a move put a ticket in Approved: a status given as a kind never names it by
+ * accident, since it has a kind of its own (`approved`), apart from `review`.
  */
 export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { reopenTo?: string } = {}) {
   const t = getTicket(id)
@@ -1131,8 +1133,8 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
   const before = verdictOf(t)
   const now = new Date().toISOString()
   const stages = listStages(t.projectId)
-  // The ticket's own Approved stage, when the project kept it: a key, and a review stage still.
-  const approved = stages.find((s) => s.key === 'approved' && s.kind === 'review')
+  // The project's Approved stage: its first stage of kind `approved`, whatever its key.
+  const approved = firstOfKind(stages, 'approved')
   // Approving again a ticket that a move took out of Approved puts it back there: the approval is the go-ahead.
   const reapprove =
     verdict === 'approved' &&
@@ -1142,19 +1144,19 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     kindOf(stages, t.status) === 'review'
   if (before === verdict && !reapprove) return t
   const cancel = firstOfKind(stages, 'cancelled')
-  // A PR review (tagged PR) is finished by the call: approving it closes it as done. So is the hand-off
+  // A PR review (tagged PR) is finished by the call: approving it closes it as done, in the last done stage. So is the hand-off
   // of work in a project with no software kind: the files are the deliverable, and the human's approval
   // is its review.
   const pr = t.tags.some((tag) => tag.toLowerCase() === 'pr')
   const kind = kindOf(stages, t.status)
-  const finish = verdict === 'approved' && approvalCloses(t, stages) ? firstOfKind(stages, 'done') : undefined
+  const finish = verdict === 'approved' && approvalCloses(t, stages) ? lastOfKind(stages, 'done') : undefined
   const approve = verdict === 'approved' && kind === 'review' && approved ? approved : undefined
   const reopen =
     (before === 'disapproved' && kind === 'cancelled') ||
     // Taking back the approval of a ticket that closed on it: a PR review, or a hand-off (closedByApproval).
     (before === 'approved' && (pr || t.closedByApproval) && kind === 'done' && verdict === null) ||
     // Taking back an approval returns a ticket in Approved to the review column it came from.
-    (before === 'approved' && verdict === null && t.status === 'approved')
+    (before === 'approved' && verdict === null && kind === 'approved')
   const reopenTo = opts.reopenTo
     ? resolveStage(stages, opts.reopenTo, projectWorkStage(t.projectId, stages))
     : before === 'approved'

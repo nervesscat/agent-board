@@ -2,6 +2,7 @@
 export const ALERT_GROUPS = ['setup', 'work', 'machine', 'housekeeping'] as const
 export type AlertGroup = (typeof ALERT_GROUPS)[number]
 
+// i18n-ignore: the English names the server and the e2e specs use; the interface says them through alertGroupLabel (alertText.ts)
 export const ALERT_GROUP_LABELS: Record<AlertGroup, string> = {
   setup: 'Setup and versions',
   work: 'Work',
@@ -16,16 +17,6 @@ export type AlertSeverity = (typeof ALERT_SEVERITIES)[number]
 export function worstSeverity(severities: AlertSeverity[]): AlertSeverity {
   if (severities.includes('problem')) return 'problem'
   return severities.includes('warning') ? 'warning' : 'info'
-}
-
-/** A snooze option as the menu words it: `1 hour`, `1 day`, `7 days`. */
-export function snoozeLabel(ms: number): string {
-  const minutes = Math.round(ms / 60_000)
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'}`
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'}`
-  const days = Math.round(hours / 24)
-  return `${days} day${days === 1 ? '' : 's'}`
 }
 
 /**

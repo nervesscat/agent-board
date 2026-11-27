@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil } from 'lucide-react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Markdown } from '#/components/Markdown'
@@ -15,8 +16,6 @@ import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, patch, type ReportSettingsView } from '#/lib/api'
 import type { ReportFormat } from '#/lib/constants'
 import { DEFAULT_REPORT_TEMPLATE, templateHeadings } from '#/lib/reportTemplate'
-
-const FORMATS: Record<ReportFormat, string> = { text: 'Text', file: 'A file (e.g. a PDF)' }
 
 /**
  * What the report must say and how (the prompt), whether it is a text or a file, and the shape a
@@ -38,14 +37,17 @@ export function ReportPromptSettings({
 }
 
 function PromptSettings({ projectId, settings }: { projectId: number; settings: ReportSettingsView }) {
+  const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
 
   return (
-    <div role="group" aria-label="Prompt" className="space-y-2">
+    <div role="group" aria-label={t('reportSettings.prompt')} className="space-y-2">
       <div className="flex items-center gap-2">
-        <h3 className="text-sm font-medium">Prompt</h3>
+        <h3 className="text-sm font-medium">{t('reportSettings.prompt')}</h3>
         <span className="text-xs text-muted-foreground">
-          {settings.format === 'file' ? 'a file' : 'text'}
+          {settings.format === 'file'
+            ? t('reportSettings.promptKindFile')
+            : t('reportSettings.promptKindText')}
         </span>
         {!editing && (
           <Button
@@ -55,7 +57,7 @@ function PromptSettings({ projectId, settings }: { projectId: number; settings: 
             className="ml-auto"
             onClick={() => setEditing(true)}
           >
-            <Pencil data-icon="inline-start" /> edit
+            <Pencil data-icon="inline-start" /> {t('reportSettings.edit')}
           </Button>
         )}
       </div>
@@ -63,7 +65,7 @@ function PromptSettings({ projectId, settings }: { projectId: number; settings: 
         <PromptForm projectId={projectId} settings={settings} onDone={() => setEditing(false)} />
       ) : settings.prompt ? (
         // Clicking the prompt edits it; a link inside still opens.
-        <Tip content="Click to edit">
+        <Tip content={t('reportSettings.clickToEdit')}>
           <div
             role="button"
             tabIndex={0}
@@ -84,8 +86,7 @@ function PromptSettings({ projectId, settings }: { projectId: number; settings: 
           onClick={() => setEditing(true)}
           className="text-left text-sm text-muted-foreground hover:text-foreground"
         >
-          No report prompt yet. Click to say what the report must contain and how, and whether it is a short
-          text or a file.
+          {t('reportSettings.noPrompt')}
         </button>
       )}
     </div>
@@ -102,6 +103,11 @@ function PromptForm({
   settings: ReportSettingsView
   onDone: () => void
 }) {
+  const { t } = useTranslation()
+  const FORMATS: Record<ReportFormat, string> = {
+    text: t('reportSettings.formatText'),
+    file: t('reportSettings.formatFile'),
+  }
   const qc = useQueryClient()
   const [prompt, setPrompt] = useState(settings.prompt)
   const [format, setFormat] = useState<ReportFormat>(settings.format)
@@ -124,13 +130,13 @@ function PromptForm({
         onCancel={onDone}
         autoFocus
         minHeight="min-h-40"
-        label="Report prompt"
-        placeholder="What the report must say and how: who reads it, the tone, what to stress, a short text or a PDF."
+        label={t('reportSettings.promptLabel')}
+        placeholder={t('reportSettings.promptPlaceholder')}
       />
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
           <Label htmlFor="report-format" className="text-xs">
-            As
+            {t('reportSettings.as')}
           </Label>
           <Select value={format} onValueChange={(v) => setFormat(v as ReportFormat)} items={FORMATS}>
             <SelectTrigger id="report-format" size="sm" className="w-44">
@@ -147,10 +153,10 @@ function PromptForm({
         </div>
         <div className="ml-auto flex gap-2">
           <Button type="button" variant="ghost" size="sm" onClick={onDone}>
-            Cancel
+            {t('reportSettings.cancel')}
           </Button>
           <Button type="button" size="sm" onClick={submit} disabled={save.isPending}>
-            {save.isPending ? 'Saving…' : 'Save'}
+            {save.isPending ? t('reportSettings.saving') : t('reportSettings.save')}
           </Button>
         </div>
       </div>
@@ -160,18 +166,20 @@ function PromptForm({
 
 /** The sections a template asks for, as a line under it. */
 function Sections({ template }: { template: string }) {
+  const { t } = useTranslation()
   const headings = templateHeadings(template)
   return (
     <p className="text-xs wrap-anywhere text-muted-foreground">
       {headings.length
-        ? `A generated report has these sections, in this order: ${headings.map((h) => h.text).join(' · ')}.`
-        : 'No headings: a generated report is not checked against it.'}
+        ? t('reportSettings.sections', { headings: headings.map((h) => h.text).join(' · ') })
+        : t('reportSettings.noHeadings')}
     </p>
   )
 }
 
 /** The markdown skeleton a generated report must fill: its headings, in order, are the sections. */
 function TemplateSettings({ projectId, settings }: { projectId: number; settings: ReportSettingsView }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [draft, setDraft] = useState<string | null>(null)
   const save = useMutation({
@@ -184,10 +192,10 @@ function TemplateSettings({ projectId, settings }: { projectId: number; settings
   })
 
   return (
-    <div role="group" aria-label="Template" className="space-y-2">
+    <div role="group" aria-label={t('reportSettings.template')} className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-sm font-medium">Template</h3>
-        {settings.templateIsDefault && <Badge variant="secondary">the default</Badge>}
+        <h3 className="text-sm font-medium">{t('reportSettings.template')}</h3>
+        {settings.templateIsDefault && <Badge variant="secondary">{t('reportSettings.theDefault')}</Badge>}
         {draft === null && (
           <Button
             type="button"
@@ -196,7 +204,7 @@ function TemplateSettings({ projectId, settings }: { projectId: number; settings
             className="ml-auto"
             onClick={() => setDraft(settings.template)}
           >
-            <Pencil data-icon="inline-start" /> edit
+            <Pencil data-icon="inline-start" /> {t('reportSettings.edit')}
           </Button>
         )}
       </div>
@@ -216,7 +224,7 @@ function TemplateSettings({ projectId, settings }: { projectId: number; settings
           }}
         >
           <Textarea
-            aria-label="Report template"
+            aria-label={t('reportSettings.templateLabel')}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
@@ -235,15 +243,15 @@ function TemplateSettings({ projectId, settings }: { projectId: number; settings
                 size="sm"
                 onClick={() => setDraft(DEFAULT_REPORT_TEMPLATE)}
               >
-                Use the default
+                {t('reportSettings.useDefault')}
               </Button>
             )}
             <div className="ml-auto flex gap-2">
               <Button type="button" variant="ghost" size="sm" onClick={() => setDraft(null)}>
-                Cancel
+                {t('reportSettings.cancel')}
               </Button>
               <Button type="submit" size="sm" disabled={save.isPending}>
-                {save.isPending ? 'Saving…' : 'Save'}
+                {save.isPending ? t('reportSettings.saving') : t('reportSettings.save')}
               </Button>
             </div>
           </div>

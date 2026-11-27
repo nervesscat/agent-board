@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Info, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Empty } from '#/components/Empty'
@@ -32,10 +33,10 @@ import { Skeleton } from '#/components/ui/skeleton'
 import { del, errorMessage, get, patch, post, put, type WorkflowOverview } from '#/lib/api'
 import type { Complexity } from '#/lib/constants'
 import {
-  WORKFLOW_PRESET_DEFS,
   addStep,
   addableSteps,
   customSource,
+  isWorkflowPreset,
   moveStep,
   removeStep,
   resolveWorkflow,
@@ -52,7 +53,7 @@ import {
   withoutStep,
 } from '#/lib/workflowEdit'
 import { findNode } from '#/lib/workflowGraph'
-import { COMPLEXITY_NAMES, reviewHeaderText } from '#/lib/workflowView'
+import { roundsText } from '#/lib/workflowView'
 
 /** The project's workflow: the overview of every preset, read once and kept as each change answers with the new one. */
 const overviewKey = (projectId: string) => ['workflow', projectId] as const
@@ -105,6 +106,7 @@ export function WorkflowPage({
   onView: (preset: string) => void
   onComplexity: (level: Complexity) => void
 }) {
+  const { t: tr } = useTranslation()
   const qc = useQueryClient()
   const key = overviewKey(projectId)
   const { data, error } = useQuery({
@@ -116,7 +118,7 @@ export function WorkflowPage({
   // The answer is the reason a save failed, or null once it was kept: an editor stays open on a refusal.
   const run = (
     job: () => Promise<WorkflowOverview & { created?: string }>,
-    message = 'Saved',
+    message = tr('common.saved'),
     after?: (overview: WorkflowOverview & { created?: string }) => void,
   ) => {
     const next = queue.current.then(job).then(
@@ -213,29 +215,42 @@ export function WorkflowPage({
           name,
           from,
         }),
-      'Workflow created',
+      tr('workflowPage.created'),
       (overview) => overview.created && onView(overview.created),
     )
   }
   const rename = (name: string) =>
     run(
       () => patch<WorkflowOverview>(`/api/projects/${projectId}/workflow/custom/${viewed}`, { name }),
-      'Renamed',
+      tr('workflowPage.renamed'),
     )
   const removeWorkflow = () =>
     run(
       () => del<WorkflowOverview>(`/api/projects/${projectId}/workflow/custom/${viewed}`),
-      'Workflow deleted',
+      tr('workflowPage.deleted'),
       (overview) => onView(overview.active),
     )
   const makeActive = () =>
-    run(() => put<WorkflowOverview>(`/api/projects/${projectId}/workflow`, { preset: viewed }), 'Saved')
+    run(
+      () => put<WorkflowOverview>(`/api/projects/${projectId}/workflow`, { preset: viewed }),
+      tr('common.saved'),
+    )
   // The project's workflow is stored as Standard, so a pick that was deleted is not read as one any more.
   const keepStandard = () =>
-    run(() => put<WorkflowOverview>(`/api/projects/${projectId}/workflow`, { preset: 'standard' }), 'Saved')
+    run(
+      () => put<WorkflowOverview>(`/api/projects/${projectId}/workflow`, { preset: 'standard' }),
+      tr('common.saved'),
+    )
   const reset = () =>
-    run(() => del<WorkflowOverview>(`/api/projects/${projectId}/workflow/${viewed}`), 'Reset')
+    run(
+      () => del<WorkflowOverview>(`/api/projects/${projectId}/workflow/${viewed}`),
+      tr('workflowPage.reset'),
+    )
   const isActive = viewed === active
+  const presetLabel =
+    current.custom || !isWorkflowPreset(current.id)
+      ? current.label
+      : tr(`workflowPresets.${current.id}.label`)
   const rounds = workflow.rounds[complexity]
   const flightOf = (level: Complexity) => {
     const flightKey = `${workflow.preset}:${level}`
@@ -267,12 +282,8 @@ export function WorkflowPage({
   return (
     <div className="max-w-6xl space-y-6">
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold tracking-tight">Workflow</h1>
-        <p className="text-sm text-muted-foreground">
-          How a ticket goes from To do to hand-off: the steps its agent runs, in order, who runs each and what
-          each hands to the next. The project follows one workflow; a ticket can name another on its page. The
-          agents read it from the board, so a change here is followed from their next run.
-        </p>
+        <h1 className="text-xl font-semibold tracking-tight">{tr('workflowPage.title')}</h1>
+        <p className="text-sm text-muted-foreground">{tr('workflowPage.intro')}</p>
       </div>
 
       {(data.fellBack || missing) && (
@@ -284,12 +295,12 @@ export function WorkflowPage({
           <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
           <span className="flex-1">
             {data.fellBack
-              ? `The workflow this project followed was deleted, so it follows ${WORKFLOW_PRESET_DEFS.standard.label} now. Tickets that named it follow the project's workflow. Keep ${WORKFLOW_PRESET_DEFS.standard.label} to dismiss this, or pick another workflow below and press Use this workflow.`
-              : "That workflow is not one of this project's (it may have been deleted), so the project's own is shown."}
+              ? tr('workflowPage.fellBack', { standard: tr('workflowPresets.standard.label') })
+              : tr('workflowPage.notOwn')}
           </span>
           {data.fellBack && (
             <Button type="button" size="sm" variant="outline" data-keep-standard onClick={keepStandard}>
-              Keep {WORKFLOW_PRESET_DEFS.standard.label}
+              {tr('workflowPage.keepStandard', { label: tr('workflowPresets.standard.label') })}
             </Button>
           )}
         </p>
@@ -314,16 +325,16 @@ export function WorkflowPage({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <ComplexityPicker value={complexity} onChange={onComplexity} />
         <span className="text-xs text-muted-foreground">
-          The graph shows a {COMPLEXITY_NAMES[complexity].toLowerCase()} ticket.
+          {tr('workflowPage.graphShows', { complexity: tr(`workflowGraph.complexity.${complexity}`) })}
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {isActive ? (
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-              <Check className="size-3.5" aria-hidden /> The project follows this workflow
+              <Check className="size-3.5" aria-hidden /> {tr('workflowPage.projectFollows')}
             </span>
           ) : (
             <Button type="button" size="sm" onClick={makeActive}>
-              <Check data-icon="inline-start" /> Use this workflow
+              <Check data-icon="inline-start" /> {tr('workflowPage.use')}
             </Button>
           )}
           {current.custom && <RenameWorkflowDialog name={current.label} onRename={rename} />}
@@ -332,28 +343,26 @@ export function WorkflowPage({
             <AlertDialogTrigger
               render={<Button type="button" variant="outline" size="sm" disabled={!current.tweaked} />}
             >
-              <RotateCcw data-icon="inline-start" /> Reset this workflow
+              <RotateCcw data-icon="inline-start" /> {tr('workflowPage.resetThis')}
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle className="wrap-anywhere">
-                  Reset the {current.label} workflow?
-                </AlertDialogTitle>
+                <AlertDialogTitle>{tr('workflowPage.resetTitle', { label: presetLabel })}</AlertDialogTitle>
                 <AlertDialogDescription className="wrap-anywhere">
                   {current.custom
-                    ? `Its steps, order, switches, efforts, Team agents and review rounds go back to how the ${current.label} workflow was made. Its name stays and the other workflows keep what was changed in them.`
-                    : `Its order, switches, efforts, Team agents and review rounds go back to what the ${current.label} preset ships with. The other presets keep what was changed in them.`}
+                    ? tr('workflowPage.resetBodyCustom', { label: presetLabel })
+                    : tr('workflowPage.resetBody', { label: presetLabel })}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogCancel>{tr('workflowPage.cancel')}</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={() => {
                     setConfirmingReset(false)
                     reset()
                   }}
                 >
-                  Reset
+                  {tr('workflowPage.reset')}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -361,17 +370,22 @@ export function WorkflowPage({
         </div>
       </div>
 
-      <section aria-label={`${current.label} workflow`} className="space-y-3">
+      <section aria-label={tr('workflowPage.sectionLabel', { label: presetLabel })} className="space-y-3">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <h2 className="text-base font-semibold wrap-anywhere">
-            {current.label}
+            {presetLabel}
             {isActive && (
-              <span className="ml-2 text-xs font-normal text-muted-foreground">the project&apos;s</span>
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                {tr('workflowPage.projects')}
+              </span>
             )}
           </h2>
           <p className="text-xs text-muted-foreground" data-summary>
-            {workflow.numbered} steps for a {COMPLEXITY_NAMES[complexity].toLowerCase()} ticket ·{' '}
-            {reviewHeaderText(workflow.order, rounds)}
+            {tr('workflowPage.summary', {
+              count: workflow.numbered,
+              complexity: tr(`workflowGraph.complexity.${complexity}`),
+              rounds: roundsText(rounds),
+            })}
           </p>
           {current.custom && (
             <div className="ml-auto w-full sm:w-auto">
@@ -381,10 +395,7 @@ export function WorkflowPage({
         </div>
         {current.custom && (
           <p className="text-xs text-muted-foreground" data-custom-note>
-            Your own workflow, copied from {WORKFLOW_PRESET_DEFS[current.custom.base].label}. Add steps of the
-            kinds listed, remove the ones that are not locked, and move them within what each step allows. The
-            review inside it (its phases and what they run) comes with{' '}
-            {WORKFLOW_PRESET_DEFS[current.custom.base].label}.
+            {tr('workflowPage.customNote', { base: tr(`workflowPresets.${current.custom.base}.label`) })}
           </p>
         )}
         <div

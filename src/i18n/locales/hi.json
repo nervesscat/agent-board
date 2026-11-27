@@ -1,0 +1,3090 @@
+{
+  "common": {
+    "saved": "सहेजा गया",
+    "close": "बंद करें",
+    "cancel": "रद्द करें",
+    "delete": "मिटाएँ"
+  },
+  "loading": {
+    "ticket": "ticket लोड हो रहा है…",
+    "tickets": "ticket लोड हो रहे हैं…",
+    "agents": "एजेंट लोड हो रहे हैं…",
+    "branches": "branch लोड हो रही हैं…",
+    "recentTickets": "हाल के ticket लोड हो रहे हैं…",
+    "folders": "फ़ोल्डर लोड हो रहे हैं…",
+    "projectPhases": "प्रोजेक्ट के फ़ेज़ लोड हो रहे हैं…",
+    "stages": "चरण लोड हो रहे हैं…",
+    "preview": "Preview लोड हो रहा है…",
+    "file": "फ़ाइल लोड हो रही है…",
+    "files": "फ़ाइलें लोड हो रही हैं…",
+    "instructionsHistory": "निर्देशों का इतिहास लोड हो रहा है…",
+    "instructions": "निर्देश लोड हो रहे हैं…",
+    "notes": "नोट लोड हो रहे हैं…",
+    "reviewResult": "रिव्यू नतीजा लोड हो रहा है…",
+    "changes": "बदलाव लोड हो रहे हैं…",
+    "replies": "जवाब लोड हो रहे हैं…",
+    "timeline": "टाइमलाइन लोड हो रही है…",
+    "activity": "गतिविधि लोड हो रही है…",
+    "pushedToday": "आज push हुआ लोड हो रहा है…",
+    "calendar": "कैलेंडर लोड हो रहा है…",
+    "report": "रिपोर्ट लोड हो रही है…",
+    "reportSettings": "रिपोर्ट सेटिंग्स लोड हो रही हैं…",
+    "shift": "शिफ़्ट लोड हो रही है…",
+    "cleanup": "क्लीनअप लोड हो रहा है…",
+    "runs": "रन लोड हो रहे हैं…",
+    "branchState": "branch की स्थिति लोड हो रही है…",
+    "tags": "टैग लोड हो रहे हैं…",
+    "previews": "Preview लोड हो रहे हैं…",
+    "repositories": "रिपॉज़िटरी लोड हो रही हैं…",
+    "roadmap": "रोडमैप लोड हो रहा है…",
+    "earlierVersions": "पुराने संस्करण लोड हो रहे हैं…",
+    "workspaces": "Workspace लोड हो रहे हैं…"
+  },
+  "shell": {
+    "home": "होम",
+    "pages": "पेज",
+    "connect": "कनेक्ट करें",
+    "settings": "सेटिंग्स",
+    "testMode": "टेस्ट मोड",
+    "authOff": "auth बंद",
+    "authOffTip": "BOARD_ENV={{env}}, साइन-इन बंद: {{actor}} के रूप में साइन इन। यह लाइव बोर्ड नहीं है।",
+    "connectAgent": "एजेंट कनेक्ट करें"
+  },
+  "time": {
+    "never": "—",
+    "justNow": "अभी-अभी",
+    "minutesAgo": "{{count}} मिनट पहले",
+    "hoursAgo": "{{count}} घंटे पहले",
+    "daysAgo": "{{count}} दिन पहले",
+    "minutesAgoLong_one": "{{count}} मिनट पहले",
+    "minutesAgoLong_other": "{{count}} मिनट पहले",
+    "hoursAgoLong_one": "{{count}} घंटा पहले",
+    "hoursAgoLong_other": "{{count}} घंटे पहले",
+    "yesterday": "कल",
+    "daysAgoLong_one": "{{count}} दिन पहले",
+    "daysAgoLong_other": "{{count}} दिन पहले",
+    "weeksAgoLong_one": "{{count}} सप्ताह पहले",
+    "weeksAgoLong_other": "{{count}} सप्ताह पहले"
+  },
+  "settings": {
+    "title": "सेटिंग्स",
+    "tabs": {
+      "label": "सेटिंग्स",
+      "board": "बोर्ड",
+      "projectLabel": "यह प्रोजेक्ट: {{name}}",
+      "project": "यह प्रोजेक्ट:"
+    },
+    "board": {
+      "defaultAgent": {
+        "title": "डिफ़ॉल्ट एजेंट CLI",
+        "text": "<goto>एजेंट कनेक्ट करें</goto> इसी पर खुलता है और सिर्फ़ इसके कमांड दिखाता है।"
+      },
+      "previews": {
+        "title": "Preview",
+        "text": "बोर्ड हर प्रोजेक्ट में एक साथ कितने preview बनाकर चलाए (1 से 32)। हर preview पूरा बोर्ड है, जिसके पास डेटा की अपनी कॉपी होती है; सीमा से ऊपर की शुरुआत नामंज़ूर होती है। प्रोजेक्ट का Preview पेज दिखाता है कि कितने उपयोग में हैं।"
+      },
+      "theme": {
+        "title": "थीम",
+        "text": "डिफ़ॉल्ट रूप से आपके सिस्टम के अनुसार चलती है। चुनाव इसी ब्राउज़र में रहता है, बोर्ड पर नहीं।",
+        "system": "सिस्टम",
+        "light": "हल्की",
+        "dark": "गहरी"
+      },
+      "language": {
+        "title": "भाषा",
+        "text": "पूरे इंटरफ़ेस की भाषा, तारीख़ें और संख्याएँ भी। यह बोर्ड पर सहेजी जाती है, इसलिए आप जिस भी डिवाइस से साइन इन करें, साथ चलती है। लोगों और एजेंटों का लिखा वैसा ही रहता है।",
+        "search": "भाषा खोजें",
+        "none": "कोई भाषा नहीं मिली",
+        "failed": "वह भाषा लोड नहीं हो सकी। पेज रीलोड करें और फिर कोशिश करें।"
+      }
+    }
+  },
+  "connect": {
+    "copied": "कॉपी हुआ",
+    "couldNotCopy": "कॉपी नहीं हो सका",
+    "browserNoCopy": "ब्राउज़र ने कॉपी करने नहीं दिया; टेक्स्ट चुनकर कॉपी करें",
+    "copy": "कॉपी करें",
+    "save": "सहेजें",
+    "revoke": "रद्द करें",
+    "keep": "रखें",
+    "turnOff": "बंद करें",
+    "checkAgain": "फिर जाँचें",
+    "title": "एजेंट कनेक्ट करें",
+    "intro": "CLI कनेक्ट करें: <strong>कमांड बनाएँ</strong> उसका MCP token बनाता है, और skill इस मशीन पर एक बटन से (दूसरी मशीन पर लाइन से) इंस्टॉल होती है। डिफ़ॉल्ट CLI <goto>सेटिंग्स</goto> में तय होता है।",
+    "step1": {
+      "title": "1. MCP सर्वर कनेक्ट करें",
+      "command": "टर्मिनल में एक बार चलाएँ; यह हर रेपो के लिए सर्वर रजिस्टर करता है।",
+      "config": "<code>{{file}}</code> में जोड़ें।",
+      "configOpencode": "<code>{{file}}</code> में जोड़ें (फ़ाइल में \"mcp\" पहले से हो तो बोर्ड की एंट्री उसमें मिलाएँ)।"
+    },
+    "step2": {
+      "title": "2. skill इंस्टॉल करें",
+      "text": "बोर्ड की मौजूदा skill <code>{{path}}</code> में डाउनलोड करता है, जहाँ {{agent}} उसे हर रेपो में पाता है।",
+      "textCodex": "बोर्ड की मौजूदा skill <code>{{path}}</code> में डाउनलोड करता है, जहाँ {{agent}} उसे हर रेपो में पाता है। OpenCode भी यही फ़ोल्डर पढ़ता है।",
+      "textOpencode": "बोर्ड की मौजूदा skill <code>{{path}}</code> में डाउनलोड करता है, जहाँ {{agent}} उसे हर रेपो में पाता है। OpenCode ~/.claude/skills भी पढ़ता है: Claude Code में पहले से हो तो इसे छोड़ दें।",
+      "tokenNote": "इंस्टॉल लाइनों में एक डाउनलोड token है जो <time>{{at}}</time> पर समाप्त होता है: लगभग दस मिनट। उसके बाद नया पाने के लिए लाइन फिर कॉपी करें।",
+      "skillCopied": "SKILL.md कॉपी हुई",
+      "copySkill": "SKILL.md कॉपी करें",
+      "previewSkill": "SKILL.md देखें",
+      "session": "<code>/session</code> भी इंस्टॉल करता है, वह skill जो बोर्ड के साथ सत्र खोलती है: यह छोटा ब्रीफ़ देती है, आपके बताए हर ticket को सौंपती है, और जिस पर आपकी बारी है उसे एक ही संदेश-रूप में रखती है।"
+    },
+    "step3": {
+      "title": "3. रिव्यू skills इंस्टॉल करें (Claude Code)"
+    },
+    "opencode": {
+      "section": "OpenCode बहुस्तरीय delegation",
+      "checkAria": "OpenCode कॉन्फ़िग फिर जाँचें",
+      "readFailed": "OpenCode कॉन्फ़िग पढ़ा नहीं जा सका",
+      "readFailedText": "उस फ़ाइल को ठीक करें, फिर दोबारा जाँचें। कॉन्फ़िग पढ़े जाने तक बहुस्तरीय delegation बंद रहता है।",
+      "on": "बहुस्तरीय delegation चालू (गहराई {{depth}})",
+      "readFrom": "<code>{{source}}</code> से पढ़ा। सिस्टम-व्यापी कॉन्फ़िग ग्लोबल और प्रोजेक्ट फ़ाइलों से ऊपर है।",
+      "off": "बहुस्तरीय delegation बंद है: सबएजेंट सबएजेंट शुरू नहीं कर सकते",
+      "offText": "इसे <code>{{source}}</code> में जोड़ें (उसमें <code>experimental</code> ब्लॉक हो तो उसके अंदर), फिर OpenCode रीस्टार्ट करें। जो आख़िरी कॉन्फ़िग फ़ाइल <code>experimental</code> ब्लॉक परिभाषित करती है वही तय करती है; सिस्टम-व्यापी कॉन्फ़िग ग्लोबल और प्रोजेक्ट फ़ाइलों से ऊपर है, इसलिए बाद वाली पहले की गहराई को बदल सकती है। बोर्ड सिर्फ़ फ़ाइलें पढ़ता है।",
+      "copySnippet": "स्निपेट कॉपी करें",
+      "deprecated": "<code>{{source}}</code> का टॉप-लेवल <code>subagent_depth</code> अब OpenCode नहीं पढ़ता; सिर्फ़ <code>experimental.subagent_depth</code> गिना जाता है।"
+    },
+    "generate": {
+      "agentName": "एजेंट का नाम",
+      "button": "कमांड बनाएँ",
+      "newOrchestrator": "नीचे के कमांड में <strong>{{name}}</strong> के लिए नया ऑर्केस्ट्रेटर token है, जो {{until}} तक मान्य है। यह सिर्फ़ इसी बार दिखता है: जो चाहिए अभी कॉपी कर लें। पेज छोड़ने पर यह खो जाता है; दोबारा दबाने पर नया बनता है।",
+      "newWorker": "नीचे के कमांड में <strong>{{name}}</strong> के लिए नया वर्कर token है, जो {{until}} तक मान्य है। यह सिर्फ़ इसी बार दिखता है: जो चाहिए अभी कॉपी कर लें। पेज छोड़ने पर यह खो जाता है; दोबारा दबाने पर नया बनता है।",
+      "intro": "इस एजेंट के लिए token बनाकर इस पेज के हर कमांड में भर देता है। यह डिफ़ॉल्ट रूप से <strong>ऑर्केस्ट्रेटर</strong> होता है, इसलिए प्रोजेक्ट के निर्देश भी बदल सकता है; इसे सेटिंग्स, एजेंट token में वर्कर बनाएँ। नाम बोर्ड पर एजेंट का नाम है। token 1 साल के लिए साइन इन कराता है, जब तक रद्द न हो, और सिर्फ़ एक बार दिखता है।"
+    }
+  },
+  "tokens": {
+    "title": "एजेंट token",
+    "listText": "ऊपर के कमांड जो token लेकर चलते हैं, हर एक अपनी भूमिका के साथ: ऑर्केस्ट्रेटर, जो प्रोजेक्ट के निर्देश भी बदलता है, या वर्कर (दोनों सेटिंग्स, एजेंट token में तय होते हैं; नया token ऑर्केस्ट्रेटर होता है)। एक को रद्द करें तो उसे इस्तेमाल करने वाला एजेंट अगले अनुरोध पर साइन आउट हो जाता है।",
+    "none": "अभी कोई नहीं।",
+    "meta": "बना {{made}} · {{used}} · समाप्ति {{at}}",
+    "metaExpired": "बना {{made}} · {{used}} · समाप्त हुआ {{at}}",
+    "lastUsed": "आख़िरी उपयोग {{when}}",
+    "neverUsed": "कभी उपयोग नहीं हुआ",
+    "revokeAria": "{{name}} रद्द करें, बना {{when}}",
+    "revokeTitle": "{{name}} का token रद्द करें?",
+    "revokeText": "इसे इस्तेमाल करने वाले एजेंट का अगला अनुरोध से ही अस्वीकार हो जाएगा। नए token से जोड़ने के लिए कमांड फिर बनाएँ।",
+    "identities": {
+      "text": "कौन कौन है: हर एजेंट token बोर्ड पर एक पहचान है, ऑर्केस्ट्रेटर जब तक आप उसे वर्कर न बना दें। इसके अंतर्गत अपना नाम बताने वाले सबएजेंट इसके साथ सूचीबद्ध होते हैं, हमेशा वर्कर के रूप में; लंबी सूची मुड़ी हुई शुरू होती है, बाकी के लिए आँख वाला बटन होता है।",
+      "empty": "अभी कोई एजेंट token नहीं: एजेंट कनेक्ट करें उन्हें बनाता है।",
+      "agentAria": "एजेंट {{name}}",
+      "orchestratorTip": "ऑर्केस्ट्रेटर प्रोजेक्ट के निर्देश भी बदलता है; हर बदलाव आपके \"आपकी बारी\" में तब तक रुका रहता है जब तक आप उसे रिव्यू या वापस न कर दें। अपना परिचय देने वाले इसके सबएजेंट (<token>/<name>) वर्कर ही रहते हैं।",
+      "orchestrator": "ऑर्केस्ट्रेटर",
+      "orchestratorAria": "{{name}}: ऑर्केस्ट्रेटर",
+      "nowOrchestrator": "{{name}} अब ऑर्केस्ट्रेटर है",
+      "nowWorker": "{{name}} अब वर्कर है",
+      "revokeAria": "{{name}} रद्द करें",
+      "revokeText": "इसे इस्तेमाल करने वाला एजेंट और इसके अंतर्गत काम करने वाला हर सबएजेंट अगले अनुरोध से अस्वीकार हो जाएगा। नए token से जोड़ने के लिए एजेंट कनेक्ट करें पर कमांड फिर बनाएँ।",
+      "hide": "एजेंट छिपाएँ",
+      "show_one": "{{count}} एजेंट दिखाएँ",
+      "show_other": "{{count}} एजेंट दिखाएँ",
+      "workingUnder": "{{token}} के अंतर्गत काम",
+      "seen": "देखा गया {{when}}"
+    }
+  },
+  "devices": {
+    "thisMachine": "यह मशीन",
+    "title": "डिवाइस",
+    "add": "डिवाइस जोड़ें",
+    "signOut": "साइन आउट",
+    "text": "बोर्ड में साइन इन कराने वाली passkey। passkey उसी पते पर चलती है जिस पर बनी हो: यह मशीन (localhost), या आपके दूसरे डिवाइस के लिए बोर्ड का tailnet नाम।",
+    "link": "यह लिंक नए डिवाइस पर खोलें और वहाँ passkey बनाएँ। यह {{until}} तक, सिर्फ़ एक बार काम करता है।",
+    "copyLinkAria": "{{where}} का लिंक कॉपी करें",
+    "passkeys": "Passkey",
+    "passkeyMeta": "{{where}} · जोड़ी गई {{added}} · आख़िरी उपयोग {{used}}",
+    "passkeyMetaSessions_one": "{{where}} · जोड़ी गई {{added}} · आख़िरी उपयोग {{used}} · {{count}} सत्र",
+    "passkeyMetaSessions_other": "{{where}} · जोड़ी गई {{added}} · आख़िरी उपयोग {{used}} · {{count}} सत्र",
+    "lastLocal": "आख़िरी बार इस मशीन पर",
+    "revokeAria": "{{name}} रद्द करें",
+    "revokeTitle": "{{name}} रद्द करें?",
+    "revokeText": "यह passkey अब साइन इन नहीं कराएगी, और इससे साइन इन ब्राउज़र साइन आउट हो जाएँगे।",
+    "signedIn": "साइन इन",
+    "sessions": "सत्र",
+    "thisBrowser": "यह ब्राउज़र",
+    "sessionMeta": "{{where}} · साइन इन {{signedIn}} · देखा गया {{seen}} · {{until}} तक",
+    "signOutAria": "{{name}} साइन आउट करें, साइन इन {{when}}"
+  },
+  "tailnet": {
+    "title": "अन्य डिवाइस (tailnet)",
+    "text": "अपने दूसरे डिवाइस और क्लाउड एजेंट से बोर्ड को अपने tailnet पर HTTPS के साथ खोलें। इसे यहीं चालू करें; कोई फ़ाइल नहीं बदलनी। फिर आपके डिवाइस अपनी passkey से साइन इन करते हैं (नीचे, डिवाइस)।",
+    "signInOff": "इस बोर्ड पर साइन-इन बंद है (BOARD_ENV={{env}}): यह सिर्फ़ इसी मशीन पर जवाब देता है, tailnet से कभी नहीं, इसलिए एंट्रेंस यहाँ सहेजा नहीं जा सकता।",
+    "fromEnv": "config.env (या .env) में सेट: <code>PUBLIC_ORIGIN={{origin}}</code>। यह इस सेटिंग पर भारी है, इसलिए एंट्रेंस यहाँ केवल-पढ़ने के लिए है। सेटिंग्स में तय करने के लिए वहाँ से वह लाइन हटाएँ।",
+    "funnel": "Tailscale Funnel चालू है: यह बोर्ड को इंटरनेट पर रखता है, जिसे बोर्ड नामंज़ूर करता है। इसे बंद करें (<code>tailscale funnel off</code>, या <code>tailscale serve reset</code>); तब तक सहेजना नामंज़ूर है।",
+    "unserved": "सहेजा गया एंट्रेंस सर्व नहीं हो रहा: {{reason}}।",
+    "tailscale": "Tailscale",
+    "version": "संस्करण {{version}}",
+    "installed": "इंस्टॉल है",
+    "notInstalled": "इंस्टॉल नहीं है",
+    "signedIn": "साइन इन",
+    "yes": "हाँ",
+    "no": "नहीं ({{state}})",
+    "notRunning": "चल नहीं रहा",
+    "thisMachine": "यह मशीन",
+    "noName": "कोई tailnet नाम नहीं",
+    "https": "HTTPS",
+    "certsOn": "सर्टिफ़िकेट चालू",
+    "certsOff": "सर्टिफ़िकेट बंद",
+    "serve": "443 पर serve",
+    "serveBoard": "बोर्ड ({{target}})",
+    "serveNothing": "कुछ नहीं",
+    "funnelLabel": "Funnel",
+    "funnelUnknown": "Funnel पढ़ा नहीं जा सका",
+    "funnelOn": "चालू (नामंज़ूर)",
+    "funnelOff": "बंद",
+    "said": "Tailscale ने कहा: {{error}}",
+    "entrance": "एंट्रेंस",
+    "use": "https://{{name}} इस्तेमाल करें",
+    "turnOffTitle": "tailnet एंट्रेंस बंद करें?",
+    "turnOffText": "बोर्ड {{origin}} पर जवाब देना बंद कर देगा। उस नाम से साइन इन ब्राउज़र साइन आउट हो जाएँगे (उनकी passkey सूची में रहेंगी)।",
+    "hint": "सिर्फ़ https, होस्ट नाम, कोई पोर्ट और पाथ नहीं। बोर्ड के डेटाबेस में सहेजा जाता है और बिना रीस्टार्ट के तुरंत लागू होता है।",
+    "servedConfig": "अभी serve हो रहा: {{origin}} (config.env में सेट)।",
+    "servedSetting": "अभी serve हो रहा: {{origin}} (इस सेटिंग से)।",
+    "servedNone": "अभी serve हो रहा: कुछ नहीं; बोर्ड सिर्फ़ इसी मशीन पर जवाब देता है।",
+    "entranceOff": "एंट्रेंस बंद है",
+    "test": "एंट्रेंस जाँचें",
+    "works": "काम करता है।",
+    "notYet": "अभी नहीं।",
+    "next": {
+      "notInstalled": "इस मशीन पर Tailscale इंस्टॉल नहीं है: इंस्टॉल करके साइन इन करें, फिर दोबारा जाँचें (README: दूसरे डिवाइस से इस्तेमाल)।",
+      "notSignedIn": "इस मशीन पर Tailscale {{state}} है: tailscale up चलाकर साइन इन करें, फिर दोबारा जाँचें।",
+      "noName": "इस मशीन का कोई tailnet नाम नहीं है: Tailscale एडमिन कंसोल में MagicDNS चालू करें, फिर दोबारा जाँचें।",
+      "httpsOff": "{{name}} के लिए HTTPS सर्टिफ़िकेट बंद हैं: Tailscale एडमिन कंसोल में चालू करें, फिर दोबारा जाँचें।",
+      "ready": "तैयार: यह मशीन आपके tailnet पर {{name}} है, और serve इसे बोर्ड तक भेजता है।"
+    },
+    "serveOther": "इस मशीन का पोर्ट 443 अभी {{target}} को serve करता है। https://{{name}} को बोर्ड की ओर भेजने के लिए यहाँ यह चलाएँ:",
+    "serveNotSet": "Serve अभी सेट नहीं है। बोर्ड को https://{{name}} पर खोलने के लिए यहाँ यह चलाएँ:",
+    "copyServe": "serve कमांड कॉपी करें",
+    "neverRuns": "बोर्ड इसे कभी नहीं चलाता। फिर दोबारा जाँचें। रोकने के लिए: <code>tailscale serve --https=443 off</code>।"
+  },
+  "updates": {
+    "badgeTip": "CrossBoard {{version}} उपलब्ध है ({{installed}} इंस्टॉल है)",
+    "badgeAria": "अपडेट उपलब्ध है",
+    "badge": "अपडेट",
+    "title": "अपडेट",
+    "checkout": "यह बोर्ड checkout से चलता है, जिसमें अपडेटर नहीं होता। इसे अपडेट करने के लिए उस checkout में <code>main</code> पर <code>git pull</code> चलाएँ, फिर <code>pnpm start</code> (README: \"Running it\")। यहाँ से नए संस्करण सिर्फ़ डेस्कटॉप ऐप जाँचता और इंस्टॉल करता है।",
+    "installed": "इंस्टॉल है",
+    "installedValue": "CrossBoard {{version}}",
+    "newestRelease": "नवीनतम रिलीज़",
+    "unsupported": "ऐप की यह कॉपी खुद को अपडेट नहीं कर सकती: यह इंस्टॉलर या पैकेज से नहीं, खुले फ़ोल्डर से चलती है। यहाँ अपडेट पाने के लिए GitHub से रिलीज़ इंस्टॉल करें।",
+    "checking": "जाँच हो रही है…",
+    "checkNow": "अभी जाँचें",
+    "install": "डाउनलोड और इंस्टॉल करें",
+    "downloadAria": "डाउनलोड",
+    "downloading": "{{version}} डाउनलोड हो रहा है… {{percent}}%",
+    "installing": "{{version}} इंस्टॉल हो रहा है: बोर्ड कुछ देर रुकता है और ऐप नए संस्करण के रूप में फिर शुरू होता है।",
+    "whatsNew": "{{version}} में नया क्या है",
+    "autoCheck": "शुरू होने पर और हर छह घंटे में अपडेट जाँचें",
+    "prereleases": "प्री-रिलीज़ शामिल करें (0.3.0-beta.1 जैसे)",
+    "note": "जब तक आप डाउनलोड और इंस्टॉल करें नहीं दबाते, कुछ डाउनलोड या इंस्टॉल नहीं होता। हर डाउनलोड पहले रिलीज़ के मेटाडेटा के sha512 से जाँचा जाता है।",
+    "notChecked": "अभी जाँचा नहीं गया",
+    "none": "कोई नया नहीं (जाँचा {{when}})",
+    "unknown": "अज्ञात (जाँचा {{when}})",
+    "skipped": "{{version}} छोड़ा गया: अपडेट कार्ड उसके लिए फिर नहीं दिखेगा।",
+    "undo": "पूर्ववत करें",
+    "manual": "इसे इंस्टॉल करने के लिए टर्मिनल में चलाएँ, फिर ऐप दोबारा शुरू करें:",
+    "copyCommand": "कमांड कॉपी करें",
+    "card": {
+      "artwork": "रिलीज़ आर्टवर्क",
+      "available": "CrossBoard {{version}} उपलब्ध है",
+      "skip": "यह संस्करण छोड़ें",
+      "installNow": "अभी इंस्टॉल करें"
+    }
+  },
+  "skills": {
+    "install": "skill इंस्टॉल करें",
+    "update": "skill अपडेट करें",
+    "installedBoard": "बोर्ड skill <time>{{at}}</time> पर इंस्टॉल हुई",
+    "installedReview": "रिव्यू skills <time>{{at}}</time> पर इंस्टॉल हुईं",
+    "installedBoardAria": "बोर्ड skill इंस्टॉल हुई",
+    "installedReviewAria": "रिव्यू skills इंस्टॉल हुईं",
+    "installedFiles": "इंस्टॉल की गई फ़ाइलें",
+    "failedBoard": "बोर्ड skill इंस्टॉल नहीं हो सकी (HTTP {{status}})",
+    "failedReview": "रिव्यू skills इंस्टॉल नहीं हो सकीं (HTTP {{status}})",
+    "failedBoardAria": "बोर्ड skill इंस्टॉल नहीं हो सकी",
+    "failedReviewAria": "रिव्यू skills इंस्टॉल नहीं हो सकीं",
+    "failedHint": "जाँचें कि फ़ोल्डर उसी उपयोगकर्ता का है जिसके रूप में बोर्ड चलता है, और उसमें लिखा जा सकता है।",
+    "retry": "फिर कोशिश करें",
+    "action": {
+      "created": "बनी",
+      "updated": "अपडेट हुई",
+      "unchanged": "अपरिवर्तित"
+    },
+    "fileStatus": {
+      "current": "नवीनतम",
+      "outdated": "पुरानी",
+      "missing": "गायब"
+    },
+    "intro": "<code>/todo-review</code> To do ticket को hand-off तक चलाती है और <code>/review-queue</code> PR कतार का रिव्यू करती है, दोनों इन एजेंट को सौंपती हैं। <code>/feature-review</code> वह रिव्यू है जो वे हर बदलाव पर चलाती हैं। एक लाइन तीनों को उनके एजेंट सहित <code>~/.claude</code> में इंस्टॉल करती है (Claude Code; OpenCode भी इसकी skills पढ़ता है), और उसी नाम की फ़ाइलें बदल देती है।",
+    "placeholderNote": "लाइन कॉपी होने तक इसमें <code>{{placeholder}}</code> रहता है: तब बोर्ड इस पेज की हर इंस्टॉल लाइन के लिए लगभग दस मिनट वाला डाउनलोड token बनाता है।",
+    "filesInstalled_one": "{{count}} फ़ाइलें इंस्टॉल होती हैं",
+    "filesInstalled_other": "{{count}} फ़ाइलें इंस्टॉल होती हैं",
+    "track": "ट्रैक",
+    "global": "ग्लोबल",
+    "byRepo": "रेपो के अनुसार",
+    "repoStatus": {
+      "current": "अप टू डेट",
+      "outdated": "पुरानी",
+      "none": "रेपो में इंस्टॉल नहीं",
+      "unreachable": "checkout पढ़ा नहीं जा सकता"
+    },
+    "globalStatus": {
+      "current": "अप टू डेट",
+      "outdated": "पुरानी",
+      "none": "इंस्टॉल नहीं",
+      "unreachable": "फ़ोल्डर पढ़ा नहीं जा सकता"
+    },
+    "onMachine": "इस मशीन पर",
+    "globalText": "जिस मशीन पर बोर्ड चलता है उस पर <code>~/.claude</code> की कॉपी, जिसे Claude Code हर उस रेपो में इस्तेमाल करता है जिसकी अपनी कॉपी नहीं है। ऊपर की लाइन इसे अप टू डेट करती है।",
+    "globalHomeText": "जिस मशीन पर बोर्ड चलता है उस पर <code>CLAUDE_HOME</code> जिस फ़ोल्डर का नाम देता है उसकी कॉपी, <code>~/.claude</code> की जगह। ऊपर की लाइन <code>~/.claude</code> में इंस्टॉल करती है: इस कॉपी की अपनी लाइन है जो फ़ाइलें उसी फ़ोल्डर में इंस्टॉल करती है।",
+    "claudeOnMachine": "इस मशीन पर ~/.claude",
+    "noneGlobal": "इनमें से कोई फ़ाइल अभी वहाँ नहीं है: ऊपर की लाइन उन्हें इंस्टॉल करती है।",
+    "noneHome": "इनमें से कोई फ़ाइल अभी वहाँ नहीं है: यह लाइन उन्हें इंस्टॉल करती है।",
+    "inRepos": "आपके रेपो में",
+    "reposText": "रेपो अपने <code>.claude</code> फ़ोल्डर में अपनी कॉपी रख सकता है, जिसे Claude Code वहाँ <code>~/.claude</code> वाली की जगह इस्तेमाल करता है। पुरानी कॉपी की एक लाइन है जो ये फ़ाइलें उस रेपो के <code>.claude</code> में इंस्टॉल करती है, उसी नाम की फ़ाइलें बदलती है और बाकी रखती है।",
+    "noReposProject": "इस प्रोजेक्ट में अभी कोई रेपो नहीं।",
+    "noReposBoard": "बोर्ड पर अभी कोई रेपो नहीं।",
+    "repoLabel": "{{project}} में {{repo}}",
+    "usesGlobal": "<code>~/.claude</code> का इंस्टॉल इस्तेमाल करता है।",
+    "differ_one": "{{total}} में से {{count}} फ़ाइलें अलग हैं या गायब हैं",
+    "differ_other": "{{total}} में से {{count}} फ़ाइलें अलग हैं या गायब हैं",
+    "notUpToDate": "अप टू डेट न होने वाली फ़ाइलें"
+  },
+  "skillDiff": {
+    "description": "इंस्टॉल लाइन क्या बदलेगी: - वाली लाइनें इंस्टॉल की हुई कॉपी में हैं और हट जाएँगी, + वाली लाइनें बोर्ड की दी हुई कॉपी से आती हैं। लाइन-एंडिंग छोड़कर।",
+    "unreadable": "इंस्टॉल की हुई कॉपी टेक्स्ट के रूप में पढ़ी नहीं जा सकती ({{reason}}): <code>{{path}}</code>",
+    "noChanges": "कोई बदलाव नहीं: इंस्टॉल की हुई कॉपी बोर्ड की कॉपी के साथ अप टू डेट है।",
+    "changes": "बदलाव"
+  },
+  "hostTools": {
+    "section": "गायब टूल",
+    "line": "<strong>{{problem}}</strong>: {{breaks}} काम नहीं करेगा। उपाय: {{fix}}।",
+    "dismissTip": "अगली जाँच में {{name}} फिर गायब मिलने तक इसे छिपाएँ",
+    "dismissAria": "{{name}} की चेतावनी हटाएँ",
+    "recheckTip": "बोर्ड के PATH पर git, gh, claude, node और pnpm फिर खोजें",
+    "recheckAria": "टूल फिर जाँचें",
+    "text": {
+      "breaks": {
+        "git": "ticket के branch और commit की स्थिति, merge की जाँच और क्लीनअप",
+        "gh": "PR कतार, CI की स्थिति और PR ticket",
+        "claude": "बोर्ड की अपनी रिपोर्ट बनाना (रिपोर्ट → बनाएँ)",
+        "node": "बोर्ड के चलाए preview",
+        "pnpm": "बोर्ड के चलाए preview",
+        "ghTooOld": "बोर्ड की यह जाँच कि gh साइन इन है"
+      },
+      "problem": {
+        "notFound": "बोर्ड के PATH पर {{name}} नहीं मिला",
+        "claudeNotFound": "claude नहीं मिला: CLAUDE_BIN {{bin}} है",
+        "tooOld": "{{gh}} इस जाँच के लिए बहुत पुराना है: वह --active नहीं जानता",
+        "noConfigWhere": "gh को अपना कॉन्फ़िग नहीं मिल रहा: {{needs}} नहीं है, इसलिए उसने {{file}} खोजा",
+        "noConfig": "gh को अपना कॉन्फ़िग नहीं मिल रहा: न HOME है न GH_CONFIG_DIR",
+        "signedOut": "gh साइन इन नहीं है"
+      },
+      "fix": {
+        "then": "फिर फिर जाँचें दबाएँ (अगर उसका फ़ोल्डर अब तक PATH पर नहीं था तो बोर्ड रीस्टार्ट करें)",
+        "installGit": "git इंस्टॉल करें (https://git-scm.com/downloads), {{after}}",
+        "installGh": "GitHub CLI इंस्टॉल करें (https://cli.github.com) और gh auth login चलाएँ, {{after}}",
+        "installClaude": "Claude Code इंस्टॉल करें (https://docs.claude.com/en/docs/claude-code/setup), या .env में (डेस्कटॉप ऐप के लिए config.env) CLAUDE_BIN को उसके पूरे पाथ पर सेट करें, फिर बोर्ड रीस्टार्ट करें",
+        "installNode": "Node.js इंस्टॉल करें (https://nodejs.org), {{after}}",
+        "installPnpm": "corepack enable pnpm चलाएँ (या इंस्टॉल करें: https://pnpm.io/installation), {{after}}",
+        "upgradeGh": "GitHub CLI अपग्रेड करें (https://cli.github.com; Debian या Ubuntu पर: sudo apt install --only-upgrade gh, macOS पर: brew upgrade gh), फिर फिर जाँचें दबाएँ",
+        "noConfig": "बोर्ड को HOME उस होम पर सेट करके शुरू करें जहाँ से gh साइन इन हुआ था (या GH_CONFIG_DIR को hosts.yml वाले फ़ोल्डर पर), फिर फिर जाँचें दबाएँ",
+        "signedOut": "इस मशीन पर gh auth login चलाएँ, फिर फिर जाँचें दबाएँ"
+      }
+    }
+  },
+  "previewLimit": {
+    "label": "Preview की सीमा",
+    "saving": "सहेजा जा रहा है…"
+  },
+  "projectSettings": {
+    "intro": "यह प्रोजेक्ट कैसे काम करता है: नए ticket किससे शुरू हों, कौन से टैग सुझाए जाएँ, ticket कब ठहरा माना जाए, कौन से अलर्ट दिखें, इसके चरण, रन और इसके पेज क्या दिखाएँ। इसके एजेंट के निर्देश उनके अपने पेज पर हैं।",
+    "save": "सहेजें",
+    "saving": "सहेजा जा रहा है…",
+    "unsaved": "बदलाव सहेजे नहीं गए।",
+    "noChanges": "कोई बदलाव नहीं।",
+    "kinds": {
+      "title": "प्रकार",
+      "description": "प्रोजेक्ट किसलिए है। सॉफ़्टवेयर प्रकार के बिना प्रोजेक्ट अपने रिपॉज़िटरी, PR, CI, preview और क्लीनअप छिपा देता है; उसके रेपो और PR सहेजे रहते हैं।"
+    },
+    "phases": {
+      "title": "डिफ़ॉल्ट फ़ेज़",
+      "description": "शीर्ष-स्तर के वे टास्क जिनसे हर नया ticket क्रम से शुरू होता है। बनाते समय दिए गए टास्क पहले के नीचे जाते हैं; lane इनके बिना शुरू होती है। एजेंट पूरा होने पर हर एक पर टिक करते हैं, और जो न जँचें उन्हें हटाते या बदलते हैं। ticket बिना टास्क के शुरू करने के लिए इसे खाली छोड़ें।",
+      "empty": "कोई फ़ेज़ नहीं: नए ticket बिना टास्क के शुरू होते हैं।",
+      "new": "नया फ़ेज़",
+      "list": "डिफ़ॉल्ट फ़ेज़",
+      "placeholder": "फ़ेज़ जोड़ें",
+      "add": "फ़ेज़ जोड़ें",
+      "useBuiltIn": "बिल्ट-इन सूची इस्तेमाल करें"
+    },
+    "tags": {
+      "title": "टैग सुझाव",
+      "description": "ticket के टैग के नीचे चिप के रूप में सुझाए जाने वाले टैग, उसके बाद वे टैग जो उसके ticket में पहले से हैं। एजेंट इन्हें <code>get_project</code> में पढ़कर दोबारा इस्तेमाल करते हैं। सिर्फ़ उपयोग में आए टैग सुझाने के लिए इसे खाली छोड़ें।",
+      "empty": "कोई सुझाव नहीं: सिर्फ़ उपयोग में आए टैग सुझाए जाते हैं।",
+      "new": "नया टैग",
+      "placeholder": "टैग जोड़ें",
+      "add": "टैग जोड़ें",
+      "useDefaults": "डिफ़ॉल्ट इस्तेमाल करें"
+    },
+    "stall": {
+      "title": "ठहरे हुए ticket",
+      "description": "दो घड़ियाँ तय करती हैं कि ticket कैसा दिखे। लीज़ वह है जिसे एजेंट का हार्टबीट या पोस्ट जीवित रखता है: यह दस मिनट चलती है, और स्पैन खुला रहते यह ख़त्म हो जाए तो ticket <lost>संपर्क टूटा</lost> दिखता है — एजेंट चला गया है, आपका इंतज़ार नहीं कर रहा। कुछ खुला न हो तो ticket तब <stalled>ठहरा</stalled> दिखता है जब इतनी देर से न किसी एजेंट की ख़बर (हार्टबीट, स्पैन, प्रतीक्षा, hand-off) आई हो और न बोर्ड ने उसका कुछ देखा हो (push, उसका PR, उसका preview)। यह डायल उसी चुप्पी की सीमा तय करता है, और यही पहले तय करता है: दस मिनट से कम की सीमा लीज़ ख़त्म होने से पहले ही चुप ticket को चिह्नित कर देती है। लीज़ के दस मिनट तय रहते हैं।",
+      "label": "इतने मिनट बाद ठहरा",
+      "invalid": "{{min}} से {{max}} तक पूर्ण संख्या।"
+    }
+  },
+  "kinds": {
+    "legend": "प्रोजेक्ट किसलिए है",
+    "hint": "सॉफ़्टवेयर रिपॉज़िटरी, branch, PR, CI, preview और क्लीनअप जोड़ता है। अन्य प्रकार अपना काम git से बाहर रखते हैं: बोर्ड वही दिखाता है जो वे इस्तेमाल करते हैं।",
+    "label": {
+      "software": "सॉफ़्टवेयर",
+      "music": "संगीत",
+      "art": "कला",
+      "writing": "लेखन",
+      "video": "वीडियो",
+      "research": "शोध",
+      "lawyer": "वकालत",
+      "accountant": "लेखा",
+      "cybersecurity": "साइबर सुरक्षा",
+      "life": "जीवन"
+    }
+  },
+  "lists": {
+    "tasks": "टास्क",
+    "addTask": "टास्क जोड़ें",
+    "addTaskLabel": "टास्क जोड़ें",
+    "moveUp": "ऊपर ले जाएँ",
+    "moveDown": "नीचे ले जाएँ",
+    "moveItemUp": "{{item}} ऊपर ले जाएँ",
+    "moveItemDown": "{{item}} नीचे ले जाएँ",
+    "remove": "हटाएँ",
+    "removeItem": "{{item}} हटाएँ"
+  },
+  "tagsInput": {
+    "tooLong": "{{max}} से ज़्यादा अक्षर",
+    "remove": "हटाएँ",
+    "removeTag": "{{tag}} हटाएँ",
+    "suggested": "सुझाए गए टैग",
+    "addTag": "टैग {{tag}} जोड़ें",
+    "tooMany": "अधिकतम {{max}} टैग।",
+    "tooLongTag": "टैग में अधिकतम {{max}} अक्षर हो सकते हैं।"
+  },
+  "stagesEditor": {
+    "title": "चरण",
+    "description": "फ़ीचर बोर्ड के कॉलम, बाएँ से दाएँ। प्रकार वह है जिससे बोर्ड के नियम चलते हैं (claim करना, नामंज़ूर करना, lane की प्रगति); एजेंट हर चरण की key, नाम और प्रकार देखते हैं। नाम बदलने पर key वही रहती है।",
+    "moveEarlier": "{{name}} को पहले ले जाएँ",
+    "moveLater": "{{name}} को बाद में ले जाएँ",
+    "tickets_one": "{{count}} ticket",
+    "tickets_other": "{{count}} ticket",
+    "newPlaceholder": "नया चरण, जैसे QA",
+    "add": "चरण जोड़ें",
+    "moveAnyway": "फिर भी ले जाएँ",
+    "kind": {
+      "open": "खुला",
+      "active": "सक्रिय",
+      "blocked": "अटका",
+      "review": "रिव्यू",
+      "done": "पूर्ण",
+      "cancelled": "रद्द",
+      "approved": "मंज़ूर"
+    },
+    "hint": {
+      "open": "उठाए जाने की प्रतीक्षा में; claim करने पर वह उस चरण में जाता है जहाँ काम शुरू होता है",
+      "active": "उस पर काम चल रहा है",
+      "blocked": "आपकी प्रतीक्षा में",
+      "review": "रिव्यू के लिए सौंपा गया",
+      "done": "पूरा हुआ; claim नहीं किया जा सकता",
+      "cancelled": "छोड़ा गया; नामंज़ूर करने पर ticket यहाँ आता है, और उसके टास्क प्रगति से बाहर हो जाते हैं",
+      "approved": "merge के लिए आपकी हरी झंडी; कोई एजेंट ticket को यहाँ नहीं ले जाता"
+    },
+    "color": {
+      "gray": "धूसर",
+      "slate": "स्लेटी",
+      "sky": "आसमानी",
+      "blue": "नीला",
+      "teal": "हरा-नीला",
+      "emerald": "पन्ना",
+      "lime": "नींबू",
+      "amber": "अंबर",
+      "orange": "नारंगी",
+      "rose": "गुलाबी-लाल",
+      "pink": "गुलाबी",
+      "violet": "बैंगनी"
+    },
+    "colour": "रंग",
+    "stageName": "चरण का नाम",
+    "firstActive": "पहला सक्रिय चरण ({{name}})",
+    "firstActiveNone": "पहला सक्रिय चरण (कोई नहीं)",
+    "workStarts": "काम यहाँ शुरू होता है",
+    "workStartsHint": "ticket को claim करने पर वह यहाँ जाता है; \"जारी\" या \"सक्रिय\" स्थिति का मतलब भी यही चरण है।",
+    "delete": "{{name}} मिटाएँ",
+    "deleteTitle": "चरण {{name}} मिटाएँ?",
+    "holds_one": "इसमें {{count}} ticket है (lane समेत)। वह चरण चुनें जहाँ वे जाएँ।",
+    "holds_other": "इसमें {{count}} ticket हैं (lane समेत)। वह चरण चुनें जहाँ वे जाएँ।",
+    "holdsNone": "इसमें कोई ticket नहीं है।",
+    "moveTo": "इन्हें यहाँ ले जाएँ…",
+    "cancel": "रद्द करें",
+    "deleteConfirm": "मिटाएँ"
+  },
+  "runsSettings": {
+    "title": "रन",
+    "description": "बोर्ड ticket के हर रेपो के worktree से क्या शुरू करता है, ticket के रन कार्ड से या जब कोई एजेंट कहे: <strong>preview</strong> किसी पोर्ट पर जवाब देता है और खोलने के लिए लिंक पाता है, <strong>जॉब</strong> बिना लिंक का बैकग्राउंड वर्कर है। हर एक worktree में अपना इंस्टॉल (सिर्फ़ lockfile बदलने पर), अपना बिल्ड, फिर अपना स्टार्ट कमांड चलाता है। एजेंट इन्हें शुरू और बंद करते हैं, और जोड़ सकते, बदल सकते और मिटा भी सकते हैं: हर बदलाव प्रोजेक्ट की गतिविधि में एजेंट के नाम से दिखता है।",
+    "noRepos": "प्रोजेक्ट में अभी कोई रेपो नहीं।",
+    "removed": "हटाया गया",
+    "groupLabel": "{{name}} के रन",
+    "add": "रन जोड़ें",
+    "none": "कोई रन नहीं: इस रेपो के ticket के पास शुरू करने को कुछ नहीं।",
+    "typePreview": "Preview",
+    "typeJob": "जॉब",
+    "portHealth": "पोर्ट {{port}} · हेल्थ {{path}}",
+    "portAuto": "ऑटो",
+    "moveUp": "ऊपर ले जाएँ",
+    "moveDown": "नीचे ले जाएँ",
+    "edit": "बदलें",
+    "editRun": "{{name}} बदलें",
+    "delete": "मिटाएँ",
+    "deleteRun": "{{name}} मिटाएँ",
+    "deleteTitle": "रन {{name}} मिटाएँ?",
+    "deleteDescription": "जहाँ यह अभी चल रहा है वहाँ रोक दिया जाएगा, और {{repo}} के ticket इसे अब नहीं दिखाएँगे।",
+    "cancel": "रद्द करें",
+    "newRun": "नया रन",
+    "portProblem": "पोर्ट: ऑटो, या {{from}} से {{to}} तक का पोर्ट",
+    "name": "नाम",
+    "type": "प्रकार",
+    "typePreviewLong": "Preview (पोर्ट और लिंक)",
+    "typeJobLong": "जॉब (बैकग्राउंड वर्कर)",
+    "install": "इंस्टॉल",
+    "installPlaceholder": "pnpm install --frozen-lockfile (खाली: कोई नहीं)",
+    "build": "बिल्ड",
+    "buildPlaceholder": "pnpm build (खाली: कोई नहीं)",
+    "start": "स्टार्ट",
+    "startPreviewPlaceholder": "node server.js (PORT पढ़ता है)",
+    "port": "पोर्ट",
+    "healthPath": "हेल्थ पाथ",
+    "envPreview": "स्टार्ट कमांड के लिए एनवायरनमेंट: किसी वैल्यू में {port} उसका पोर्ट है; PORT और HOST सेट होते हैं",
+    "env": "स्टार्ट कमांड के लिए एनवायरनमेंट",
+    "varName": "वैरिएबल {{n}} का नाम",
+    "varValue": "वैरिएबल {{n}} की वैल्यू",
+    "valuePlaceholder": "वैल्यू",
+    "removeVar": "वैरिएबल {{n}} हटाएँ",
+    "addVar": "वैरिएबल जोड़ें",
+    "copyData": "पहले लाइव बोर्ड का डेटा data/preview में कॉपी करें (DATA_DIR के रूप में)",
+    "save": "सहेजें",
+    "saving": "सहेजा जा रहा है…"
+  },
+  "layoutEditor": {
+    "title": "लेआउट",
+    "description": "इस प्रोजेक्ट में क्या दिखे और कहाँ: इसके मेनू के पेज, इसके ओवरव्यू के कार्ड (और होम पर इसके ब्लॉक के) और ticket पेज के सेक्शन। टाइल बंद करके छिपाएँ, खींचकर या तीरों से हिलाएँ, और ticket सेक्शन को दूसरे कॉलम में ले जाएँ। छिपा पेज अपने लिंक से फिर भी खुलता है। <lock/> लॉक वाले हिलते हैं पर हमेशा दिखते हैं।",
+    "area": {
+      "nav": "प्रोजेक्ट मेनू",
+      "overview": "ओवरव्यू के कार्ड",
+      "ticketMain": "ticket पेज, मुख्य कॉलम",
+      "ticketSide": "ticket पेज, साइड कॉलम"
+    },
+    "where": {
+      "nav": "मेनू में",
+      "overview": "ओवरव्यू पर",
+      "ticket": "ticket पेज पर"
+    },
+    "menu": "मेनू",
+    "overview": "ओवरव्यू",
+    "ticketPage": "ticket पेज",
+    "mainColumn": "मुख्य कॉलम",
+    "sideColumn": "साइड कॉलम",
+    "hiddenCount_one": "{{count}} छिपा।",
+    "hiddenCount_other": "{{count}} छिपे।",
+    "reset": "डिफ़ॉल्ट पर लौटाएँ",
+    "shown": "{{total}} में से {{shown}} दिख रहे",
+    "dropHere": "यहाँ छोड़ें",
+    "empty": "खाली: सेक्शन यहाँ खींचें",
+    "moveUp": "ऊपर ले जाएँ",
+    "moveDown": "नीचे ले जाएँ",
+    "moveUpIn": "{{name}} को {{where}} ऊपर ले जाएँ",
+    "moveDownIn": "{{name}} को {{where}} नीचे ले जाएँ",
+    "toSideTip": "साइड कॉलम में ले जाएँ",
+    "toMainTip": "मुख्य कॉलम में ले जाएँ",
+    "toSide": "{{name}} को साइड कॉलम में ले जाएँ",
+    "toMain": "{{name}} को मुख्य कॉलम में ले जाएँ",
+    "alwaysShown": "हमेशा दिखता है: {{reason}}",
+    "show": "दिखाएँ",
+    "hide": "छिपाएँ",
+    "showIn": "{{name}} को {{where}} दिखाएँ",
+    "element": {
+      "nav": {
+        "overview": "ओवरव्यू",
+        "prs": "PR कतार",
+        "features": "चालू फ़ीचर",
+        "roadmap": "रोडमैप",
+        "previews": "Preview",
+        "gallery": "गैलरी",
+        "agents": "टीम",
+        "daily": "दैनिक",
+        "cleanup": "क्लीनअप",
+        "repositories": "रिपॉज़िटरी",
+        "instructions": "निर्देश",
+        "workflow": "Workflow"
+      },
+      "overview": {
+        "needsYou": "आपकी बारी",
+        "inProgress": "जारी",
+        "doneToday": "आज पूर्ण",
+        "carryingOver": "पिछला बकाया",
+        "notes": "नोट",
+        "agents": "काम पर एजेंट",
+        "lostContact": "संपर्क टूटा"
+      },
+      "ticket": {
+        "instructions": "निर्देश",
+        "tasks": "टास्क",
+        "timeline": "टाइमलाइन",
+        "lanes": "Lane",
+        "activity": "गतिविधि",
+        "runs": "रन",
+        "details": "विवरण",
+        "branch": "Branch",
+        "workspaces": "Workspace",
+        "resume": "फिर शुरू करें"
+      }
+    },
+    "locked": {
+      "nav": {
+        "overview": "प्रोजेक्ट का लैंडिंग पेज",
+        "features": "प्रोजेक्ट का बोर्ड"
+      },
+      "ticket": {
+        "instructions": "ticket का अपना टेक्स्ट",
+        "tasks": "अटके टास्क के लिंक यहाँ पहुँचते हैं",
+        "activity": "जो फ़ैसले और थ्रेड आपकी प्रतीक्षा में हैं, वे यहाँ हैं"
+      }
+    }
+  },
+  "repoDialog": {
+    "newProject": "नया प्रोजेक्ट…",
+    "editTitle": "{{name}} बदलें",
+    "newTitle": "नई रिपॉज़िटरी",
+    "description": "एक लोकल git checkout। बोर्ड इसे git और gh से पढ़ता है; इसमें कभी कुछ नहीं लिखता।",
+    "project": "प्रोजेक्ट",
+    "projectName": "प्रोजेक्ट का नाम",
+    "moves": "इसके PR, ticket और रिव्यू नतीजे इसके साथ चले जाते हैं।",
+    "path": "रिपॉज़िटरी का पाथ",
+    "pathPlaceholder": "/home/you/code/… या C:\\code\\…",
+    "browse": "ब्राउज़ करें…",
+    "name": "नाम",
+    "namePlaceholder": "GitHub या फ़ोल्डर से",
+    "baseBranch": "बेस branch",
+    "removeRepo": "रेपो हटाएँ",
+    "removeTitle": "{{name}} हटाएँ?",
+    "removeDescription": "इसकी PR कतार की एंट्री भी चली जाती हैं। ticket और रिव्यू नतीजे प्रोजेक्ट में रहते हैं, पर इसके PR ticket इसके साथ चले जाते हैं। डिस्क का checkout जस का तस रहता है।",
+    "keep": "रखें",
+    "remove": "हटाएँ",
+    "saving": "सहेजा जा रहा है…",
+    "save": "सहेजें",
+    "add": "रिपॉज़िटरी जोड़ें"
+  },
+  "folderPicker": {
+    "title": "checkout चुनें",
+    "description": "जिस मशीन पर बोर्ड चलता है उसके फ़ोल्डर। <repo/> git checkout को दर्शाता है।",
+    "up": "एक फ़ोल्डर ऊपर",
+    "home": "होम",
+    "path": "फ़ोल्डर का पाथ",
+    "folders": "फ़ोल्डर",
+    "none": "यहाँ कोई फ़ोल्डर नहीं।",
+    "git": "git",
+    "isRepo": "यह फ़ोल्डर एक git checkout है।",
+    "notRepo": "git checkout नहीं है।",
+    "use": "यह फ़ोल्डर इस्तेमाल करें"
+  },
+  "instructions": {
+    "state": {
+      "pending": "आपकी प्रतीक्षा में",
+      "accepted": "रिव्यू हुआ",
+      "reverted": "वापस किया गया"
+    },
+    "markedReviewed": "रिव्यू हुआ चिह्नित किया",
+    "reverted": "प्रोजेक्ट के निर्देश वापस किए गए",
+    "historyTitle": "निर्देशों का इतिहास",
+    "historyDescription": "हर बदलाव, आपका या ऑर्केस्ट्रेटर का, उससे पहले के टेक्स्ट के साथ। ऑर्केस्ट्रेटर का बदलाव तुरंत लागू होता है और आपके रिव्यू की प्रतीक्षा करता है।",
+    "noChanges": "अभी कोई बदलाव नहीं।",
+    "changeBy": "{{name}} का बदलाव",
+    "aRevert": "वापसी",
+    "revertedBy": "{{name}} ने {{when}} वापस किया",
+    "reviewedBy": "{{name}} ने {{when}} रिव्यू किया",
+    "hideChange": "बदलाव छिपाएँ",
+    "showChange": "बदलाव दिखाएँ",
+    "reviewed": "रिव्यू हुआ",
+    "revertTip": "निर्देशों को इस बदलाव से पहले जैसा कर दें",
+    "revertBlocked": "निर्देश तब से फिर बदले हैं: पहले बाद का बदलाव वापस करें",
+    "revert": "वापस करें",
+    "diffLabel": "निर्देशों में क्या बदला",
+    "pageTitle": "निर्देश",
+    "pageDescription": "यहाँ काम करने से पहले हर एजेंट जो पढ़ता है। हर बदलाव नीचे रखा जाता है।",
+    "reposLine": "रेपो: <goto>रिपॉज़िटरी पेज</goto>। प्रोजेक्ट का नाम बदलें या मिटाएँ: प्रोजेक्ट मेनू → प्रोजेक्ट प्रबंधन।",
+    "sectionLabel": "प्रोजेक्ट के निर्देश",
+    "edit": "बदलें",
+    "placeholder": "रेपो कैसे चलाएँ, कौन से नियम मानें, क्या कभी न करें।",
+    "unsavedHint": "बदलाव सहेजे नहीं गए। Ctrl/⌘+Enter से सहेजें।",
+    "noChangesHint": "कोई बदलाव नहीं।",
+    "cancel": "रद्द करें",
+    "save": "सहेजें",
+    "saving": "सहेजा जा रहा है…",
+    "clickToEdit": "बदलने के लिए क्लिक करें",
+    "empty": "अभी कोई निर्देश नहीं। लिखने के लिए क्लिक करें।",
+    "discardTitle": "बदलाव छोड़ दें?",
+    "discardDescription": "प्रोजेक्ट के निर्देशों में सहेजे न गए बदलाव हैं। एजेंट सहेजे हुए निर्देश ही पढ़ते रहेंगे।",
+    "keepEditing": "बदलना जारी रखें",
+    "discard": "छोड़ें"
+  },
+  "repositories": {
+    "title": "रिपॉज़िटरी",
+    "description": "वे checkout जो यह प्रोजेक्ट पढ़ता है।",
+    "new": "नई रिपॉज़िटरी",
+    "baseLine": "बेस {{branch}} · <path>{{path}}</path>",
+    "empty": "इस प्रोजेक्ट में अभी कोई रिपॉज़िटरी नहीं। एक जोड़ें: किसी लोकल git checkout का पाथ।"
+  },
+  "reports": {
+    "status": {
+      "done": "पूर्ण",
+      "missing": "छूटी",
+      "upcoming": "आगामी",
+      "off": "बंद"
+    },
+    "weekday": {
+      "1": "सोमवार",
+      "2": "मंगलवार",
+      "3": "बुधवार",
+      "4": "गुरुवार",
+      "5": "शुक्रवार",
+      "6": "शनिवार",
+      "7": "रविवार"
+    },
+    "weekdayShort": {
+      "1": "सोम",
+      "2": "मंगल",
+      "3": "बुध",
+      "4": "गुरु",
+      "5": "शुक्र",
+      "6": "शनि",
+      "7": "रवि"
+    },
+    "weekOf": "{{date}} का सप्ताह",
+    "scheduleOff": "बंद",
+    "scheduleDaily": "रोज़ {{end}} तक, {{format}}",
+    "scheduleWeekly": "हर {{day}} {{end}} तक, {{format}}",
+    "formatFile": "फ़ाइल",
+    "formatText": "टेक्स्ट"
+  },
+  "daily": {
+    "title": "दैनिक",
+    "subtitle": "अवधि की रिपोर्ट, और घंटे-दर-घंटे क्या पूरा हुआ।",
+    "previousDay": "पिछला दिन",
+    "nextDay": "अगला दिन",
+    "opening": "दैनिक खुल रहा है…"
+  },
+  "reportDue": {
+    "region": "देय रिपोर्ट",
+    "notifyTitleDue": "{{project}}: रिपोर्ट देय",
+    "notifyTitleMissing": "{{project}}: रिपोर्ट छूटी",
+    "notifyBodyDaily": "{{label}} की दैनिक रिपोर्ट {{time}} तक देय है।",
+    "notifyBodyWeekly": "{{label}} की साप्ताहिक रिपोर्ट {{time}} तक देय है।",
+    "missing": ": रिपोर्ट छूटी, शिफ़्ट {{time}} पर ख़त्म हुई",
+    "due": ": रिपोर्ट {{left}} में देय, {{time}} पर",
+    "leftMinutes": "{{count}} मिनट",
+    "leftHours": "{{hours}} घंटे",
+    "leftHoursMinutes": "{{hours}} घंटे {{minutes}} मिनट",
+    "notificationsOn": "इस ब्राउज़र में सूचनाएँ चालू",
+    "notificationsBlocked": "इस ब्राउज़र में सूचनाएँ ब्लॉक हैं",
+    "notifyTip": "रिपोर्ट देय होने पर ब्राउज़र सूचना (जब बोर्ड का टैब खुला हो)",
+    "notifyMe": "मुझे सूचित करें"
+  },
+  "activityLog": {
+    "region": "गतिविधि",
+    "empty": "{{date}} को कुछ नहीं हुआ।",
+    "actions_one": "{{count}} कार्रवाई",
+    "actions_other": "{{count}} कार्रवाइयाँ",
+    "contributors_one": "{{count}} योगदानकर्ता द्वारा",
+    "contributors_other": "{{count}} योगदानकर्ताओं द्वारा",
+    "contributorsTitle": "योगदानकर्ता",
+    "by": "{{names}} द्वारा",
+    "openAll": "सब खोलें",
+    "closeAll": "सब बंद करें",
+    "openReview": "रिव्यू नतीजा खोलें",
+    "kind": {
+      "ticket_one": "{{count}} ticket",
+      "ticket_other": "{{count}} ticket",
+      "task_one": "{{count}} टास्क",
+      "task_other": "{{count}} टास्क",
+      "update_one": "{{count}} अपडेट",
+      "update_other": "{{count}} अपडेट",
+      "comment_one": "{{count}} टिप्पणी",
+      "comment_other": "{{count}} टिप्पणियाँ",
+      "pr_one": "{{count}} PR",
+      "pr_other": "{{count}} PR",
+      "review_one": "{{count}} रिव्यू",
+      "review_other": "{{count}} रिव्यू",
+      "workspace_one": "{{count}} workspace",
+      "workspace_other": "{{count}} workspace",
+      "agent_one": "{{count}} एजेंट",
+      "agent_other": "{{count}} एजेंट",
+      "project_one": "{{count}} प्रोजेक्ट",
+      "project_other": "{{count}} प्रोजेक्ट",
+      "summary_one": "{{count}} सारांश",
+      "summary_other": "{{count}} सारांश",
+      "report_one": "{{count}} रिपोर्ट",
+      "report_other": "{{count}} रिपोर्ट",
+      "handoff_one": "{{count}} hand-off",
+      "handoff_other": "{{count}} hand-off"
+    }
+  },
+  "generateReport": {
+    "wrote": "claude ने रिपोर्ट लिखी",
+    "loading": "लोड हो रहा है…",
+    "off": "रिपोर्ट बंद हैं: पहले रिपोर्ट सेटिंग्स में अंतराल तय करें",
+    "file": "इस प्रोजेक्ट की रिपोर्ट फ़ाइलें हैं: claude सिर्फ़ टेक्स्ट रिपोर्ट लिखता है",
+    "none": "इस दिन कोई रिपोर्ट नहीं माँगी गई",
+    "fix": "{{problem}}। उपाय: {{fix}}।",
+    "tip": "claude prompt, टेम्पलेट और गतिविधि से रिपोर्ट लिखता है",
+    "writing": "claude लिख रहा है…",
+    "generate": "claude से बनाएँ",
+    "failed": "claude इसे लिख नहीं सका: {{message}}"
+  },
+  "pushedToday": {
+    "commits_one": "{{count}} commit",
+    "commits_other": "{{count}} commit",
+    "label": "आज push हुआ: {{commits}}, {{added}} लाइनें जुड़ीं, {{removed}} हटीं",
+    "labelNone": "आज push हुआ: कुछ नहीं",
+    "nothing": "आज कुछ push नहीं हुआ",
+    "title": "आज push हुआ",
+    "checked": "origin जाँचा {{ago}}",
+    "notFetched": "origin अभी fetch नहीं हुआ",
+    "byRepo": "आज push हुआ, रेपो के अनुसार",
+    "emptyRepos": "आज इस प्रोजेक्ट के रेपो में origin तक कुछ नहीं पहुँचा।",
+    "hint": "वे commit जो आज origin की किसी branch तक पहुँचे, हर एक एक बार, merge छोड़कर।"
+  },
+  "reportCalendar": {
+    "region": "रिपोर्ट कैलेंडर",
+    "counts": "{{done}} पूर्ण · {{missing}} छूटी",
+    "openMissing": "{{period}} खोलें, सबसे नज़दीकी छूटी रिपोर्ट",
+    "nothingMissing": "कुछ छूटा नहीं है",
+    "nextMissing": "अगली छूटी",
+    "dayLabel": "{{day}}: {{status}}"
+  },
+  "reportCard": {
+    "region": "रिपोर्ट",
+    "title": "रिपोर्ट",
+    "off": "इस प्रोजेक्ट की रिपोर्ट बंद हैं: रिपोर्ट सेटिंग्स में चुनें कि कितनी बार एक देय हो।",
+    "notAsked": "{{date}} को कोई रिपोर्ट नहीं माँगी गई।",
+    "due": "देय {{date}}",
+    "replace": "बदलें",
+    "post": "रिपोर्ट पोस्ट करें",
+    "versions_one": "{{count}} संस्करण",
+    "versions_other": "{{count}} संस्करण",
+    "version": "संस्करण {{n}}",
+    "none": "{{label}} की अभी कोई रिपोर्ट नहीं।",
+    "history": "इतिहास ({{count}})",
+    "earlier": "पुराने संस्करण",
+    "forLabel": "{{label}} की रिपोर्ट",
+    "placeholderFile": "रिपोर्ट फ़ाइल जोड़ें; उसके बारे में एक लाइन वैकल्पिक है।",
+    "placeholderText": "रिपोर्ट, जैसा prompt माँगता है। फ़ाइलें जोड़ने के लिए पेस्ट करें या छोड़ें।",
+    "attach": "जोड़ें",
+    "cancel": "रद्द करें",
+    "attachFirst": "पहले रिपोर्ट फ़ाइल जोड़ें",
+    "posting": "पोस्ट हो रहा है…",
+    "replaceButton": "बदलें",
+    "postButton": "पोस्ट करें"
+  },
+  "reportSettings": {
+    "region": "रिपोर्ट सेटिंग्स",
+    "title": "रिपोर्ट सेटिंग्स",
+    "field": {
+      "prompt": "prompt",
+      "template": "टेम्पलेट"
+    },
+    "formatText": "टेक्स्ट",
+    "formatFile": "फ़ाइल (जैसे PDF)",
+    "prompt": "Prompt",
+    "promptKindFile": "फ़ाइल",
+    "promptKindText": "टेक्स्ट",
+    "edit": "बदलें",
+    "clickToEdit": "बदलने के लिए क्लिक करें",
+    "noPrompt": "अभी कोई रिपोर्ट prompt नहीं। क्लिक करके बताएँ कि रिपोर्ट में क्या और कैसे हो, और वह छोटा टेक्स्ट है या फ़ाइल।",
+    "promptLabel": "रिपोर्ट prompt",
+    "promptPlaceholder": "रिपोर्ट में क्या और कैसे कहना है: कौन पढ़ता है, लहजा, किस पर ज़ोर, छोटा टेक्स्ट या PDF।",
+    "as": "रूप",
+    "cancel": "रद्द करें",
+    "save": "सहेजें",
+    "saving": "सहेजा जा रहा है…",
+    "sections": "बनी हुई रिपोर्ट में ये सेक्शन इसी क्रम में होते हैं: {{headings}}।",
+    "noHeadings": "कोई हेडिंग नहीं: बनी हुई रिपोर्ट इससे नहीं जाँची जाती।",
+    "template": "टेम्पलेट",
+    "theDefault": "डिफ़ॉल्ट",
+    "templateLabel": "रिपोर्ट टेम्पलेट",
+    "useDefault": "डिफ़ॉल्ट इस्तेमाल करें",
+    "diffGroup": "रिपोर्ट {{field}} में क्या बदला",
+    "bothEmpty": "दोनों खाली हैं।",
+    "state": {
+      "pending": "आपकी प्रतीक्षा में",
+      "accepted": "रखा गया",
+      "reverted": "वापस किया गया"
+    },
+    "dialogTitle": "रिपोर्ट {{field}} का बदलाव",
+    "dialogTitleGeneric": "रिपोर्ट सेटिंग्स का बदलाव",
+    "loading": "लोड हो रहा है…",
+    "byAgent": "<who>{{name}}</who> द्वारा (एक एजेंट)",
+    "by": "<who>{{name}}</who> द्वारा",
+    "keptBy": "{{name}} ने रखा",
+    "revertedBy": "{{name}} ने वापस किया",
+    "showChange": "बदलाव दिखाएँ",
+    "noticesRegion": "एजेंट के बदलाव, रिव्यू के लिए",
+    "keptToast": "नया रिपोर्ट {{field}} रखा गया",
+    "revertedToast": "रिपोर्ट {{field}} वापस किया गया",
+    "noticeLabel": "रिपोर्ट {{field}} को {{name}} ने बदला",
+    "noticeText": "रिपोर्ट {{field}} को <who>{{name}}</who> ने बदला, वापस करें?",
+    "hideChange": "बदलाव छिपाएँ",
+    "showTheChange": "बदलाव दिखाएँ",
+    "accept": "स्वीकार करें",
+    "revert": "वापस करें",
+    "laterChange": "{{field}} तब से फिर बदला है: पहले वह बदलाव वापस करें"
+  },
+  "shift": {
+    "notWorkday": "कार्यदिवस नहीं",
+    "before": "शिफ़्ट से पहले",
+    "on": "शिफ़्ट पर",
+    "after": "शिफ़्ट के बाद",
+    "tip": "आज की शिफ़्ट {{span}}; अभी {{now}}, {{where}}। रिपोर्ट इसके अंत में देय है।",
+    "label": "शिफ़्ट {{span}}, अभी {{now}}: {{where}}",
+    "cadence": {
+      "off": "बंद",
+      "daily": "दैनिक",
+      "weekly": "साप्ताहिक"
+    },
+    "badOrder": "शिफ़्ट शुरू होने के बाद ख़त्म होनी चाहिए।",
+    "noWorkday": "कम से कम एक कार्यदिवस चुनें।",
+    "badAlert": "अंत से 0 से 720 मिनट पहले के बीच याद दिलाएँ।",
+    "schedule": "शेड्यूल",
+    "due": "देय",
+    "hintDaily": "शिफ़्ट: रिपोर्ट इसके ख़त्म होने पर देय है।",
+    "hintWeekly": "शिफ़्ट: रिपोर्ट इसके ख़त्म होने पर, ऊपर के दिन देय है।",
+    "start": "शिफ़्ट की शुरुआत",
+    "end": "शिफ़्ट का अंत",
+    "workdays": "कार्यदिवस",
+    "workdaysHint": "दैनिक रिपोर्ट इन दिनों माँगी जाती है; बाकी बंद रहते हैं, कभी छूटे नहीं गिने जाते।",
+    "remind": "इतने समय पहले से याद दिलाएँ (अंत से पहले मिनट)",
+    "save": "सहेजें",
+    "saving": "सहेजा जा रहा है…",
+    "weekdayLabel": "दिन"
+  },
+  "cleanup": {
+    "counts": {
+      "deleted_one": "{{count}} मिटाया",
+      "deleted_other": "{{count}} मिटाए",
+      "kept_one": "{{count}} रखा",
+      "kept_other": "{{count}} रखे",
+      "gone_one": "{{count}} पहले ही जा चुका",
+      "gone_other": "{{count}} पहले ही जा चुके"
+    },
+    "actions": {
+      "local": {
+        "row": "branch मिटाएँ",
+        "all": "हर योग्य लोकल branch मिटाएँ",
+        "title_one": "{{count}} लोकल branch मिटाएँ?",
+        "title_other": "{{count}} लोकल branch मिटाएँ?",
+        "confirm_one": "{{count}} लोकल branch मिटाएँ",
+        "confirm_other": "{{count}} लोकल branch मिटाएँ",
+        "what": "हर branch checkout से जाती है। origin में उसकी कॉपी रहती है।"
+      },
+      "remote": {
+        "row": "origin पर मिटाएँ",
+        "all": "origin की हर योग्य branch मिटाएँ",
+        "title_one": "origin की {{count}} branch मिटाएँ?",
+        "title_other": "origin की {{count}} branch मिटाएँ?",
+        "confirm_one": "origin की {{count}} branch मिटाएँ",
+        "confirm_other": "origin की {{count}} branch मिटाएँ",
+        "what": "हर branch origin से जाती है, उसके साथ काम करने वाले सभी के लिए। लोकल branch रहती हैं।"
+      },
+      "worktrees": {
+        "row": "worktree + branch हटाएँ",
+        "all": "हर योग्य worktree को उसकी branch सहित हटाएँ",
+        "title_one": "{{count}} branch के worktree और branch हटाएँ?",
+        "title_other": "{{count}} branch के worktree और branch हटाएँ?",
+        "confirm_one": "worktree हटाएँ और {{count}} branch मिटाएँ",
+        "confirm_other": "worktree हटाएँ और {{count}} branch मिटाएँ",
+        "what": "हर worktree फ़ोल्डर जाता है (उसके साथ node_modules जैसी अनदेखी फ़ाइलें भी), फिर लोकल branch। उसमें का लिंक लिंक के रूप में जाता है: जिस फ़ोल्डर की ओर वह ले जाता है और जो worktree से बाहर है, वह रहता है। origin में उसकी कॉपी रहती है।"
+      }
+    },
+    "previewState": {
+      "running": ":{{port}} पर चल रहा",
+      "building": "बन रहा",
+      "starting": "शुरू हो रहा"
+    },
+    "copied": "कॉपी हुआ",
+    "sweep": {
+      "partial_one": "{{count}} फ़ाइल मिटाई; {{failed}} नहीं मिट सकीं और अगले रन के लिए रहीं",
+      "partial_other": "{{count}} फ़ाइलें मिटाईं; {{failed}} नहीं मिट सकीं और अगले रन के लिए रहीं",
+      "done_one": "{{count}} फ़ाइल मिटाई ({{size}})",
+      "done_other": "{{count}} फ़ाइलें मिटाईं ({{size}})"
+    },
+    "toast": {
+      "keptSee": "{{counts}}: कारण नीचे देखें",
+      "jobFailed": "{{title}} विफल: {{reason}}"
+    },
+    "noReasonGiven": "कोई कारण नहीं दिया गया",
+    "title": "क्लीनअप",
+    "intro": "साफ़ करने लायक पूरा हुआ काम, उसके बेस से जाँचा हुआ।",
+    "refresh": "रीफ़्रेश",
+    "agentsNote": "एजेंट वे लोकल branch मिटा सकते हैं जो merge हो चुकीं (<tool>cleanup_delete</tool>); worktree हटाना और origin की branch मिटाना आपके हाथ में रहता है, इसी पेज से।",
+    "deleteOff": "मिटाना बंद है: {{reason}}।",
+    "repoError": "{{name}}: {{error}}। इसकी branch और worktree अज्ञात हैं, इसलिए इसमें कुछ मिटाया नहीं जा सकता।",
+    "progress": {
+      "label": "मिटाने की प्रगति",
+      "of": "{{total}} में से {{done}}",
+      "starting": "शुरू हो रहा है…",
+      "failed": "विफल · {{reason}}",
+      "succeeded": "सफल · {{counts}}"
+    },
+    "empty": "कुछ पीछे नहीं बचा। हर बंद ticket साफ़ है।",
+    "group": {
+      "safe": {
+        "title": "मिटाना सुरक्षित",
+        "hint": "हर commit, या वही पैच, बेस में हैं।"
+      },
+      "edited": {
+        "title": "बदले हुए पर मौजूद",
+        "hint": "commit आते समय बदल गए, पर branch को merge करने से कुछ नहीं जुड़ेगा।"
+      },
+      "unique": {
+        "title": "अब भी अनूठा काम है",
+        "hint": "branch में ऐसे बदलाव हैं जो उसके बेस में नहीं। इसे रखें, या देखें कि काम कहाँ गया।"
+      },
+      "kept": {
+        "title": "रखे गए",
+        "hint": "काम में चल रहे ticket या खुले PR, किसी बेस, रेपो की बेस branch, मुख्य checkout की branch या origin की डिफ़ॉल्ट branch के उपयोग में: यहाँ से कभी नहीं मिटाई जातीं।"
+      },
+      "other": {
+        "title": "तुलना को कुछ नहीं",
+        "hint": "बिना branch के अब भी रजिस्टर workspace, या ऐसी branch जिसका जाँचने को कोई बेस नहीं।"
+      }
+    },
+    "workspacesRegistered_one": "{{count}} workspace रजिस्टर",
+    "workspacesRegistered_other": "{{count}} workspace रजिस्टर",
+    "previewStop": "preview {{state}}: उसे ticket पर रोकें",
+    "notLocal": "लोकल नहीं",
+    "worktreeKept": "{{path}}: रखा गया, {{reason}}",
+    "mainCheckout": "मुख्य checkout",
+    "originSha": "origin {{sha}}",
+    "copyRestore": "रीस्टोर कमांड कॉपी करें: {{command}}",
+    "col": {
+      "ticket": "Ticket",
+      "branch": "Branch",
+      "reach": "पहुँच",
+      "worktree": "Worktree",
+      "origin": "Origin",
+      "branchOnOrigin": "origin पर branch"
+    },
+    "remote": {
+      "title": "origin पर बची branch",
+      "intro": "पिछले fetch के अनुसार; मिटाने से पहले बोर्ड origin दोबारा fetch करता है। हर एक को उसके अपने commit से, बेस की origin वाली कॉपी के सामने, या merge हुए ऐसे PR से परखा जाता है जिसका हेड ठीक वही commit है।"
+    },
+    "prMerged": "PR #{{number}} इसी commit पर merge हुआ",
+    "prWasMerged": "PR #{{number}} इसी commit पर merge हुआ था",
+    "untracked": {
+      "title": "बिना ट्रैक के worktree",
+      "intro": "ऐसे worktree जिनका हिसाब किसी ticket या workspace के पास नहीं। इन्हें उनके ticket पर रजिस्टर करें, या हटाएँ।"
+    },
+    "detached": "detached {{sha}}",
+    "uploads": {
+      "title": "बिना जुड़े अपलोड",
+      "intro": "एक दिन से पुरानी अपलोड की गई फ़ाइलें जिन्हें बोर्ड पर कोई इस्तेमाल नहीं करता: बिना बनाए बंद की गई नए ticket की विंडो, भेजने से पहले पोस्ट से हटाई गई फ़ाइल। बोर्ड इन्हें हर घंटे मिटाता है; एक दिन से नई फ़ाइलें छुई नहीं जातीं।",
+      "introRecent": "एक दिन से पुरानी अपलोड की गई फ़ाइलें जिन्हें बोर्ड पर कोई इस्तेमाल नहीं करता: बिना बनाए बंद की गई नए ticket की विंडो, भेजने से पहले पोस्ट से हटाई गई फ़ाइल। बोर्ड इन्हें हर घंटे मिटाता है; एक दिन से नई फ़ाइलें छुई नहीं जातीं (अभी {{recent}})।",
+      "summary_one": "{{count}} फ़ाइल, {{size}}",
+      "summary_other": "{{count}} फ़ाइलें, {{size}}",
+      "deleteNow": "अभी मिटाएँ",
+      "confirmTitle": "बिना जुड़े अपलोड मिटाएँ?",
+      "confirmText_one": "{{count}} फ़ाइल ({{size}}) जिसे कोई पोस्ट, जवाब, ticket या एजेंट की तस्वीर इस्तेमाल नहीं करती, एक दिन से पुरानी अपलोड। इसे पूर्ववत नहीं किया जा सकता।",
+      "confirmText_other": "{{count}} फ़ाइलें ({{size}}) जिन्हें कोई पोस्ट, जवाब, ticket या एजेंट की तस्वीर इस्तेमाल नहीं करती, एक दिन से पुरानी अपलोड। इसे पूर्ववत नहीं किया जा सकता।"
+    },
+    "keep": "रखें",
+    "delete": "मिटाएँ",
+    "keptReason": "रखा गया: {{reason}}",
+    "noLocalBranch": "कोई लोकल branch नहीं",
+    "kind": {
+      "remote": "origin पर",
+      "local": "लोकल",
+      "worktrees": "अपने worktree सहित"
+    },
+    "worktreePath": "worktree {{path}}",
+    "stopsPreview": "इसका preview रोकता है ({{state}})",
+    "stopsServer": "अगर :{{port}} का सर्वर इसी worktree से चलता है तो उसे रोकता है",
+    "confirmChecked": "हर एक जाने से ठीक पहले फिर जाँचा जाता है, और कुछ बदला हो तो रखा जाता है; कुछ ज़बरदस्ती नहीं होता। रीस्टोर कमांड बाद में दिखाए जाते हैं।",
+    "toDelete": "मिटाने को",
+    "toDeleteEdited": "मिटाने को, बदले हुए",
+    "editedOnTheWay": "आते समय बदले: ये commit बेस से अलग हैं, पर merge से कुछ नहीं जुड़ेगा",
+    "outcome": {
+      "deleted": "मिटाया",
+      "refused": "रखा",
+      "failed": "विफल",
+      "gone": "पहले ही जा चुका"
+    },
+    "advice": {
+      "changes": "worktree में उन्हें commit या stash करें, फिर रीफ़्रेश करें।",
+      "prune": "git worktree prune चलाएँ, फिर रीफ़्रेश करें।",
+      "moved": "रीफ़्रेश करें, फिर नए commit पर दोबारा पुष्टि करें।",
+      "checkedOut": "पहले वहाँ कोई दूसरी branch checkout करें।"
+    },
+    "removed": "{{path}} हटाया",
+    "removedLink": "लिंक {{path}} हटाया जो {{target}} की ओर था, वह रहता है",
+    "copyCommand": "कॉपी करें: {{command}}",
+    "results": {
+      "label": "मिटाने के नतीजे",
+      "title": "पिछला मिटाना",
+      "retry": "रखे गए फिर आज़माएँ",
+      "dismiss": "हटाएँ"
+    }
+  },
+  "gallery": {
+    "kind": {
+      "image": "चित्र",
+      "video": "वीडियो",
+      "pdf": "PDF",
+      "docs": "दस्तावेज़ और टेक्स्ट",
+      "other": "अन्य"
+    },
+    "sort": {
+      "newest": "नए पहले",
+      "oldest": "पुराने पहले",
+      "name": "नाम A से Z",
+      "name-desc": "नाम Z से A",
+      "largest": "बड़े पहले",
+      "smallest": "छोटे पहले",
+      "type": "प्रकार से"
+    },
+    "page": {
+      "title": "गैलरी",
+      "intro": "प्रोजेक्ट के ticket की हर फ़ाइल।",
+      "filters": "फ़िल्टर",
+      "fileType": "फ़ाइल का प्रकार",
+      "from": "से",
+      "to": "तक",
+      "sortTip": "क्रम: {{sort}}",
+      "sort": "क्रम",
+      "archivedTip": "आर्काइव किए ticket की फ़ाइलें भी",
+      "includeArchived": "आर्काइव शामिल करें",
+      "clearFilters": "फ़िल्टर साफ़ करें",
+      "loadError": "फ़ाइलें लोड नहीं हो सकीं: {{error}}",
+      "noMatch": "इन फ़िल्टर से कोई फ़ाइल नहीं मिली।",
+      "none": "इस प्रोजेक्ट में अभी कोई फ़ाइल नहीं।",
+      "loadingMore": "और फ़ाइलें लोड हो रही हैं…"
+    }
+  },
+  "files": {
+    "copyImage": {
+      "unsupported": "यह ब्राउज़र चित्र को क्लिपबोर्ड पर कॉपी नहीं कर सकता",
+      "failedNamed": "{{name}} कॉपी नहीं हो सका",
+      "copied": "कॉपी हुआ",
+      "failed": "कॉपी नहीं हो सका",
+      "copy": "चित्र कॉपी करें"
+    },
+    "attachments": {
+      "notesOn": "{{name}} पर नोट",
+      "sizeKb": "{{kb}} KB"
+    },
+    "grid": {
+      "open": "{{name}} खोलें",
+      "inLaneTip": "lane {{lane}} में",
+      "inLane": "lane {{lane}} में",
+      "openTicket": "ticket खोलें",
+      "replyTip": "वह जवाब जिसके साथ यह आया",
+      "postTip": "वह पोस्ट जिसके साथ यह आया",
+      "openThread": "थ्रेड खोलें"
+    },
+    "pending": {
+      "preview": "{{name}} देखें",
+      "uploading": "अपलोड हो रहा",
+      "remove": "हटाएँ",
+      "removeNamed": "{{name}} हटाएँ"
+    },
+    "viewer": {
+      "openInNewTab": "नए टैब में खोलें",
+      "download": "डाउनलोड",
+      "close": "बंद करें (Esc)",
+      "notes": "चित्र पर नोट",
+      "previous": "पिछला",
+      "next": "अगला",
+      "noPreview": "इस फ़ाइल प्रकार का प्रीव्यू नहीं।",
+      "zoomOut": "ज़ूम आउट (-)",
+      "fit": "फ़िट (0)",
+      "zoomIn": "ज़ूम इन (+)",
+      "loadFailed": "यह फ़ाइल लोड नहीं हो सकी।",
+      "empty": "(खाली फ़ाइल)",
+      "cut": "पहले {{limit}} अक्षर दिख रहे हैं। बाकी के लिए फ़ाइल डाउनलोड करें।"
+    }
+  },
+  "annotate": {
+    "cannotDraw": "यह ब्राउज़र चित्र नहीं बना सकता",
+    "couldNotSave": "चित्र सहेजा नहीं जा सका",
+    "title": "चित्र पर टिप्पणी",
+    "description": "{{name}}: इस पर बनाएँ और लिखें कि हर निशान का क्या मतलब है। चित्र वैसा ही जुड़ता है जैसा यहाँ दिखता है, और नोट उसके साथ जाते हैं।",
+    "toolbar": "ड्रॉइंग टूल",
+    "tool": {
+      "select": {
+        "label": "चुनें",
+        "hint": "निशान चुनकर हिलाएँ, घुमाएँ या मिटाएँ"
+      },
+      "pen": {
+        "label": "पेंसिल",
+        "hint": "हाथ से बनाएँ"
+      },
+      "rect": {
+        "label": "बॉक्स",
+        "hint": "किसी चीज़ के चारों ओर बॉक्स बनाएँ"
+      },
+      "arrow": {
+        "label": "तीर",
+        "hint": "किसी चीज़ की ओर इशारा करें"
+      },
+      "ellipse": {
+        "label": "दीर्घवृत्त",
+        "hint": "किसी चीज़ पर गोला लगाएँ"
+      },
+      "text": {
+        "label": "टेक्स्ट",
+        "hint": "चित्र पर लिखें"
+      },
+      "note": {
+        "label": "नोट",
+        "hint": "निशान पर क्लिक करके उसका नोट लिखें"
+      },
+      "line": {
+        "label": "रेखा",
+        "hint": "सीधी रेखा बनाएँ"
+      }
+    },
+    "colour": "रंग",
+    "strokeWidth": "रेखा की मोटाई",
+    "fill": "भराव",
+    "textToPlace": "रखने का टेक्स्ट",
+    "undo": "पूर्ववत करें",
+    "redo": "फिर करें",
+    "clear": "साफ़ करें",
+    "notePlaceholder": "इस निशान का क्या मतलब है?",
+    "notePlaceholderEmpty": "निशान बनाएँ, या नोट चुनकर किसी पर क्लिक करें",
+    "canvas": "टिप्पणी के लिए चित्र",
+    "cannotOpen": "यह चित्र कैनवास में खुल नहीं सकता।",
+    "opening": "चित्र खुल रहा है…",
+    "notes": "नोट",
+    "locked": "चित्र जुड़ने तक निशान लॉक हैं।",
+    "attachOriginal": "मूल जोड़ें",
+    "attaching": "जुड़ रहा है…",
+    "attach": "जोड़ें"
+  },
+  "reach": {
+    "merged": {
+      "label": "merge हुआ",
+      "title": "हर commit जस का तस बेस में है। मिटाना सुरक्षित।"
+    },
+    "rebased": {
+      "label": "rebase हुआ",
+      "title": "commit rebase या cherry-pick हुए; वही पैच बेस में हैं। मिटाना सुरक्षित।"
+    },
+    "edited": {
+      "label": "बदलकर आया",
+      "title": "पैच अलग हैं, पर branch merge करने से बेस में कुछ नहीं बदलेगा। मिटाना सुरक्षित।"
+    },
+    "unique": {
+      "label": "अनूठा काम",
+      "title": "branch में अब भी ऐसे बदलाव हैं जो बेस में नहीं। इसे रखें।"
+    }
+  },
+  "runsCard": {
+    "step": {
+      "install": "डिपेंडेंसी इंस्टॉल हो रही हैं",
+      "build": "बन रहा है",
+      "copy": "लाइव डेटा कॉपी हो रहा है",
+      "server": "शुरू हो रहा है"
+    },
+    "status": {
+      "stopped": "रुका",
+      "building": "बन रहा",
+      "buildingStep": "बन रहा · {{step}}",
+      "running": "चल रहा",
+      "failed": "विफल"
+    },
+    "notStarted_one": "{{count}} शुरू नहीं हुआ: {{list}}",
+    "notStarted_other": "{{count}} शुरू नहीं हुए: {{list}}",
+    "nothingRunning": "कुछ नहीं चल रहा था",
+    "startAllTip": "ticket के रेपो का हर वह रन शुरू करें जो अभी नहीं चल रहा",
+    "startAll": "सब शुरू करें",
+    "stopAllTip": "ticket का हर वह रन रोकें जो बन या चल रहा है",
+    "stopAll": "सब रोकें",
+    "inUse": "बोर्ड पर {{limit}} में से {{inUse}} रन चल रहे",
+    "primary": "प्राथमिक",
+    "workspaceTip": "{{path}} में workspace {{name}}",
+    "workspaceTipNoPath": "workspace {{name}}",
+    "noRuns": "कोई रन नहीं: इंसान उन्हें प्रोजेक्ट की सेटिंग्स में जोड़ता है।",
+    "orphaned": "अब इस ticket पर नहीं",
+    "orphanedHint": "इसे रोका जा सकता है, यहाँ से दोबारा शुरू नहीं किया जा सकता",
+    "alsoRunning": "यह भी चल रहे",
+    "alsoRunningHint": "इसे यहाँ रोका जा सकता है; इसकी पंक्ति वही शुरू करती है जो वह दिखाती है",
+    "links": "लिंक",
+    "openTip": "CrossBoard के अंदर, पेज के ऊपर preview दिखाएँ: बोर्ड जैसा था वैसा रहता है",
+    "open": "खोलें",
+    "openBrowser": "ब्राउज़र में खोलें",
+    "throughBoard": "बोर्ड के ज़रिए",
+    "startTipPreview": "ticket के worktree से इसे बनाकर किसी खाली पोर्ट पर चलाएँ",
+    "startTipJob": "ticket के worktree से इसे बनाकर बैकग्राउंड में शुरू करें",
+    "start": "शुरू करें",
+    "stop": "रोकें",
+    "restartTip": "इसे रोकें, फिर बनाएँ और शुरू करें",
+    "restart": "रीस्टार्ट",
+    "cannotStart": "शुरू नहीं हो सकता: {{reason}}",
+    "onPort": ":{{port}} पर",
+    "runningPlain": "चल रहा",
+    "since": ", {{time}} से",
+    "buildLog": "बिल्ड लॉग",
+    "runLog": "रन लॉग",
+    "logAria": "{{name}} लॉग"
+  },
+  "previews": {
+    "step": {
+      "install": "डिपेंडेंसी इंस्टॉल हो रही हैं",
+      "build": "बन रहा है",
+      "copy": "लाइव डेटा कॉपी हो रहा है",
+      "server": "सर्वर शुरू हो रहा है"
+    },
+    "group": {
+      "running": "चल रहे",
+      "runningHint": "बोर्ड द्वारा बनाए और चलाए गए, या इस मशीन का जवाब देने वाला लिंक।",
+      "stopped": "नहीं चल रहे",
+      "stoppedHint": "रुके, विफल, जवाब न देने वाला लिंक, या इस मशीन से बाहर का वह जिसे बोर्ड नहीं जाँचता।"
+    },
+    "subtitle": "हर preview, चल रहा हो या नहीं।",
+    "empty": "अभी कोई preview नहीं। एक यहाँ तब दिखता है जब कोई एजेंट ticket के workspace पर preview लिंक रजिस्टर करे, या बोर्ड उसे उसके worktree से चलाए।",
+    "noneIn": "{{name}} में कोई preview नहीं।",
+    "showAll": "सभी चरण दिखाएँ",
+    "allStages": "सभी चरण",
+    "stage": "चरण",
+    "stageTip": "इस चरण के ticket के preview दिखाता है",
+    "nothingToStop": "रोकने को कुछ नहीं",
+    "couldNotStop_one": "{{count}} नहीं रुक सका: {{list}}",
+    "couldNotStop_other": "{{count}} नहीं रुक सके: {{list}}",
+    "stoppedCount_one": "{{count}} रोका गया",
+    "stoppedCount_other": "{{count}} रोके गए",
+    "barTip": "बोर्ड जो preview बनाता या चलाता है, हर प्रोजेक्ट में, और एक साथ अधिकतम कितने चलाता है",
+    "bar": "बोर्ड के चलाए preview: <strong>{{limit}} में से {{inUse}} उपयोग में</strong> <muted>(पूरे बोर्ड में)</muted>",
+    "stopAllTitle": "इस प्रोजेक्ट के सभी चलते preview रोकें?",
+    "stopAllDescription": "बोर्ड के चलाए preview रुक जाते हैं और उनके पोर्ट खाली हो जाते हैं। लिंक तब रुकते हैं जब बोर्ड बता सके कि उनका सर्वर workspace के worktree से चलता है; बाकी चलते रहते हैं, और टोस्ट कारण बताता है। लिंक पेज पर रहते हैं।",
+    "keepThem": "रहने दें",
+    "uncheckedLink": "बोर्ड लिंक सिर्फ़ इसी मशीन पर जाँचता है",
+    "throughBoard": "बोर्ड के ज़रिए:",
+    "openThrough": "बोर्ड के ज़रिए खोलें",
+    "linkNotStopped": "बोर्ड इसे नहीं रोकेगा: {{reason}}",
+    "stoppedStillListening": "रुका, पर :{{port}} पर अब भी कुछ सुन रहा है",
+    "stopLinkTip": "इस लिंक के पीछे का सर्वर रोकें (जो workspace के worktree से चलता है) और उसका पोर्ट खाली करें",
+    "startTip": "इस worktree को बनाकर किसी खाली पोर्ट पर, लाइव डेटा की नई कॉपी के साथ चलाएँ",
+    "stopTip": "preview रोकें और उसका पोर्ट खाली करें",
+    "restartTip": "इसे रोकें, फिर बनाएँ और डेटा की नई कॉपी के साथ शुरू करें",
+    "answered": "{{time}} पर HTTP {{status}} से जवाब दिया",
+    "notRunning": "नहीं चल रहा",
+    "noAnswer": "{{time}} पर जवाब नहीं",
+    "notChecked": "जाँचा नहीं गया",
+    "checking": "जाँच हो रही है…",
+    "checkingTitle": "जाँच रहे हैं कि जवाब देता है या नहीं",
+    "fullLog": "पूरा लॉग",
+    "log": "लॉग",
+    "serverLog": "सर्वर लॉग",
+    "building": "बन रहा है…",
+    "buildingStep": "बन रहा है… {{step}}",
+    "startingOn": ":{{port}} पर शुरू हो रहा है…",
+    "startingOnStep": ":{{port}} पर शुरू हो रहा है… {{step}}",
+    "runBy": "बोर्ड द्वारा :{{port}} पर चलाया गया",
+    "runBySince": "बोर्ड द्वारा :{{port}} पर चलाया गया, {{time}} से",
+    "failed": "विफल: {{reason}}",
+    "stoppedReason": "रुका: {{reason}}",
+    "stopAllRuns": "सब रोकें"
+  },
+  "previewWindow": {
+    "building": "बन रहा है… चलने पर यहाँ दिखेगा।",
+    "failed": "preview विफल रहा। उसका लॉग ticket पर देखें।",
+    "failedReason": "preview विफल रहा: {{reason}}। उसका लॉग ticket पर देखें।",
+    "blocked": "यह preview बोर्ड के अंदर नहीं दिखाया जाएगा: वह फ़्रेम में आने से इनकार करता है।",
+    "blockedReason": "यह preview बोर्ड के अंदर नहीं दिखाया जाएगा: {{reason}}।",
+    "stoppedThrough": "यह preview रुका हुआ है। इसे ticket के रन कार्ड या Preview पेज से शुरू करें।",
+    "stoppedDirect": "preview इस मशीन पर जवाब नहीं देता। उसका सर्वर जहाँ चलता है वहाँ फिर शुरू करें।",
+    "frameTitle": "{{title}} का preview",
+    "copied": "लिंक कॉपी हुआ",
+    "couldNotCopy": "लिंक कॉपी नहीं हो सका",
+    "window": "Preview विंडो",
+    "openPreviews": "Preview खोलें",
+    "reloadTip": "preview फिर लोड करें",
+    "reload": "preview रीलोड करें",
+    "restoreTip": "तैरती विंडो पर लौटें",
+    "maximizeTip": "पूरी स्क्रीन इस्तेमाल करें",
+    "restore": "preview विंडो वापस लाएँ",
+    "maximize": "preview विंडो बड़ी करें",
+    "closeTip": "preview बंद करें (रन चलता रहता है)",
+    "close": "preview विंडो बंद करें",
+    "url": "Preview URL",
+    "copyTip": "preview का लिंक कॉपी करें",
+    "copy": "preview लिंक कॉपी करें"
+  },
+  "roleLabels": {
+    "human": "इंसान",
+    "orchestrator": "ऑर्केस्ट्रेटर",
+    "worker": "एजेंट",
+    "board": "बोर्ड"
+  },
+  "runReport": {
+    "section": {
+      "brief": "ब्रीफ़, और क्या वह काफ़ी था",
+      "readRan": "क्या पढ़ा और चलाया",
+      "problems": "रास्ते की समस्याएँ",
+      "gaps": "जो जाँच नहीं सका, और इसकी धारणाएँ",
+      "moreTime": "और समय मिलता तो क्या करता",
+      "improvements": "रन को क्या बेहतर बनाता",
+      "intent": "मंशा कहाँ से आई",
+      "inferences": "क्या अनुमान लगाना पड़ा",
+      "questions": "ticket जिन सवालों का जवाब नहीं दे सका",
+      "approach": "तरीका, और छोड़े गए विकल्प",
+      "alternatives": "जिन विकल्पों पर विचार हुआ और जो छोड़े गए",
+      "selfTests": "खुद क्या परखा, और कैसे",
+      "fixPass": "फ़िक्स राउंड ने क्या बदला, और पहला राउंड इसे क्यों चूका",
+      "scheduling": "चलाए गए फ़ेज़ का शेड्यूल कैसे बनाया",
+      "judging": "फ़ेज़ के लौटाए नतीजों को कैसे परखा",
+      "provisioning": "रनटाइम कैसे तैयार हुआ, और क्या विफल रहा",
+      "freshness": "ताज़गी कैसे साबित हुई",
+      "evidence": "हर स्वीकृति मानदंड कैसे जाँचा गया",
+      "unexercised": "जो मानदंड परख नहीं सका",
+      "techniques": "खामियाँ खोजने में अपनाई तकनीकें",
+      "surfaces": "जो सतहें कवर हुईं, और जो नहीं",
+      "candidates": "उम्मीदवार कैसे बने, और क्या छोड़ा गया",
+      "disproof": "हर निष्कर्ष को ग़लत ठहराने की कोशिश कैसे की",
+      "unsettled": "जो निष्कर्ष तय नहीं कर सका, और क्यों",
+      "asked": "इंसान ने अपने शब्दों में क्या माँगा",
+      "compared": "हर माँग की नतीजे से तुलना कैसे हुई",
+      "conflicts": "merge, उसके कॉन्फ़्लिक्ट, और उन्हें कैसे पढ़ा गया"
+    },
+    "label": "{{agent}} राउंड {{round}}",
+    "notReported": "बताया नहीं गया",
+    "effort": "{{effort}} प्रयास",
+    "briefedBy": "ब्रीफ़ करने वाला <actor />",
+    "duration": "अवधि",
+    "durationMeasured": "अवधि (मापी गई)",
+    "durationSelf": "अवधि (खुद बताई)",
+    "ownEstimate": "इसका अपना अनुमान",
+    "difficulty": "कठिनाई",
+    "confidence": "भरोसा",
+    "started": "शुरू",
+    "ended": "समाप्त",
+    "time": {
+      "readingMs": "पढ़ना",
+      "runningMs": "चलाना",
+      "waitingMs": "इंतज़ार",
+      "writingMs": "लिखना",
+      "otherMs": "अन्य"
+    },
+    "steps": "चरण",
+    "dialogTitle": "रन रिपोर्ट: {{label}}",
+    "dialogTitleEmpty": "रन रिपोर्ट",
+    "round": "राउंड {{round}}",
+    "difficultyShort": "कठिनाई {{n}}/5",
+    "confidenceShort": "भरोसा {{n}}/5"
+  },
+  "projectAgents": {
+    "title": "टीम",
+    "text": "वे भूमिकाएँ जिनमें एजेंट काम करते हैं। ticket किसी एक के लिए आरक्षित करने को उसे असाइन करें।",
+    "new": "नया एजेंट",
+    "empty": "अभी कोई एजेंट नहीं। हर ticket कनेक्टेड एजेंट में साझा है।",
+    "added": "{{names}} जोड़े गए",
+    "defaults": {
+      "title": "डिफ़ॉल्ट एजेंट",
+      "files": "मेकर काम की फ़ाइलें प्रोजेक्ट के फ़ोल्डर में बनाता है और ticket से जोड़ता है; इंसान उन्हें मंज़ूर करता है या ticket लौटा देता है। बाद में इसे बदलें। इस प्रोजेक्ट पर काम करने वाला एजेंट बोर्ड के पते पर <code>{{path}}</code> से जुड़ता है (वही MCP जो एजेंट कनेक्ट करें पेज पर है, इस प्रोजेक्ट के टेक्स्ट और टूल के साथ)।",
+      "software": "बिल्ड और रिव्यू का चक्र: <strong>spec</strong> स्वीकृति मानदंड लिखता है, <strong>builder</strong> कोड लिखता है, <strong>runner</strong> उसका रिव्यू करता है, और रिव्यू के फ़ेज़ (<strong>env</strong>, <strong>verify</strong>, <strong>hunt</strong>, <strong>refute</strong>, <strong>merge</strong>) उसे तोड़ने की कोशिश करते हैं; निष्कर्ष builder को लौटते हैं। फिर <strong>intent</strong> नतीजे को इंसान के अपने शब्दों से जाँचता है। हर एक अपने निर्देश और उन नोट के साथ आता है जिनसे ऑर्केस्ट्रेटर काम सौंपता है। बाद में किसी को भी बदलें।",
+      "addAll": "डिफ़ॉल्ट एजेंट जोड़ें",
+      "addNames": "{{names}} जोड़ें",
+      "allAdded": "सब जुड़ गए",
+      "skills": "इस चक्र को चलाने वाली skills, और एजेंट का MCP कनेक्शन, <goto>एजेंट कनेक्ट करें</goto> पर इंस्टॉल होते हैं।"
+    },
+    "noReserved": "इसके लिए कोई ticket आरक्षित नहीं",
+    "remove": "{{name}} हटाएँ",
+    "removeTitle": "{{name}} हटाएँ?",
+    "removeReserved_one": "इसका {{count}} आरक्षित ticket साझा और बिना असाइन हो जाता है।",
+    "removeReserved_other": "इसके {{count}} आरक्षित ticket साझा और बिना असाइन हो जाते हैं।",
+    "removeKept": "जो यह पहले पोस्ट कर चुका उस पर इसका नाम रहता है।",
+    "keep": "रखें",
+    "removeAction": "हटाएँ",
+    "instructions": "निर्देश",
+    "instructionsHint": "जिनके अनुसार एजेंट काम करता है",
+    "delegate": "कब सौंपें",
+    "delegateHint": "जिनसे ऑर्केस्ट्रेटर तय करता है",
+    "delegateEmpty": "अभी कोई delegation नोट नहीं: ऑर्केस्ट्रेटर नहीं जानेगा कि इसे कब बुलाना है।",
+    "report": "रन रिपोर्ट",
+    "reportHint": "वह टेम्पलेट जिसे हर रन लौटाने से पहले भरता है",
+    "nothingYet": "अभी कुछ नहीं।",
+    "lines_one": "{{count}} लाइन",
+    "lines_other": "{{count}} लाइनें",
+    "picture": "तस्वीर",
+    "choosePicture": "तस्वीर चुनें",
+    "removePicture": "तस्वीर हटाएँ",
+    "namePlaceholder": "reviewer, frontend, qa…",
+    "nameRule": "अक्षर, अंक, - और _, ताकि थ्रेड में @name काम करे",
+    "instructionsText": "जिनके अनुसार एजेंट काम करता है: वह कौन है, कैसे काम करता है, क्या कभी नहीं करता। ऑर्केस्ट्रेटर इसी से सबएजेंट को ब्रीफ़ करता है।",
+    "instructionsPlaceholder": "You are the Tester. You check every acceptance criterion against the running preview…",
+    "delegateText": "जिससे ऑर्केस्ट्रेटर तय करता है: इस एजेंट को काम कब सौंपना है, क्या देना है, वह क्या लौटाता है, और आगे क्या होता है।",
+    "delegatePlaceholder": "After the Builder finishes a step, with the preview link and the acceptance criteria. Returns PASS / FAIL per criterion. All pass: the Breaker next; a failure: back to the Builder.",
+    "templateLabel": "रन रिपोर्ट टेम्पलेट",
+    "templateText": "इस एजेंट का रन लौटाने से पहले जो भरता है, हर रन की एक रिपोर्ट। यह उस साझा हिस्से से शुरू होता है जो हर रिपोर्ट में रहता है (पहचान, समय, ब्रीफ़, चरण, रेटिंग, समस्याएँ, कमियाँ); इसमें वह जोड़ें जो यह एजेंट करता है। बोर्ड इसे एजेंट के साथ रखता है।",
+    "templatePlaceholder": "## The rule …",
+    "add": "एजेंट जोड़ें"
+  },
+  "gettingStarted": {
+    "agentEmpty": "अभी कोई प्रोजेक्ट नहीं। इंसान पहला प्रोजेक्ट होम पर शुरुआत करें से बनाता है।",
+    "title": "शुरुआत करें · {{total}} में से {{done}}",
+    "intro": "इस बोर्ड पर एजेंट के काम करने से पहले चार चरण। हर एक पूरा होने पर खुद टिक हो जाता है।",
+    "entryTip": "इस बोर्ड पर काम शुरू करने के चरण",
+    "entryAria": "शुरुआत करें, {{total}} में से {{done}} पूर्ण",
+    "entryShort": "शुरुआत करें ·",
+    "popoverIntro": "हर चरण पूरा होने पर खुद टिक हो जाता है।",
+    "dismissTip": "शुरुआत करें को हमेशा के लिए छिपाएँ",
+    "dismissAria": "शुरुआत करें हटाएँ",
+    "menuItem": "शुरुआत करें · {{done}}/{{total}}",
+    "stepsAria": "शुरुआत के चरण",
+    "stepAria": "{{title}}: {{state}}",
+    "titles": {
+      "tools": "इस मशीन के टूल",
+      "project": "प्रोजेक्ट बनाएँ और उसकी पहली रिपॉज़िटरी जोड़ें",
+      "agent": "एजेंट कनेक्ट करें",
+      "ticket": "पहला ticket लिखें और एजेंट को सौंपें"
+    },
+    "state": {
+      "done": "पूर्ण",
+      "checking": "जाँच हो रही है…",
+      "notDone": "पूर्ण नहीं"
+    },
+    "couldNotCheck": "यह चरण जाँचा नहीं जा सका: {{error}}",
+    "tools": {
+      "hint": "बोर्ड अपने PATH पर <code>git</code> और <code>gh</code> (साइन इन) चलाता है; <code>claude</code> वैकल्पिक है, सिर्फ़ बोर्ड की अपनी रिपोर्ट के लिए (रिपोर्ट → बनाएँ); <code>node</code> और <code>pnpm</code> सिर्फ़ preview के लिए।",
+      "missing": "<problem>{{problem}}</problem>। उपाय: {{fix}}।"
+    },
+    "project": {
+      "hint": "प्रोजेक्ट उन checkout को समूह में रखता है जिनमें एजेंट काम करते हैं। इसकी पहली रिपॉज़िटरी checkout का फ़ोल्डर, उसका GitHub रेपो और उसकी बेस branch लेती है।",
+      "addRepo": "{{name}} में रिपॉज़िटरी जोड़ें",
+      "new": "नया प्रोजेक्ट"
+    },
+    "agent": {
+      "hint": "एजेंट कनेक्ट करें पर, कमांड बनाएँ एजेंट का token और आपके टर्मिनल में चलाने के कमांड बनाता है: बोर्ड का MCP सर्वर कनेक्ट करें और बोर्ड skill इंस्टॉल करें।"
+    },
+    "ticket": {
+      "hint": "क्या करना है उसे प्रोजेक्ट के फ़ीचर पेज पर ticket के रूप में लिखें। फिर अपने रेपो में <code>claude</code> चलाएँ और <code>/board pick up the next ticket</code> कहें।",
+      "write": "ticket लिखें",
+      "createFirst": "पहले प्रोजेक्ट बनाएँ (चरण 2)।"
+    },
+    "checkAgain": "फिर जाँचें"
+  },
+  "projectSwitcher": {
+    "project": "प्रोजेक्ट",
+    "select": "प्रोजेक्ट चुनें",
+    "projects": "प्रोजेक्ट",
+    "repos_one": "{{count}} रेपो",
+    "repos_other": "{{count}} रेपो",
+    "tickets_one": "{{count}} ticket",
+    "tickets_other": "{{count}} ticket",
+    "openPrs_one": "{{count}} खुला PR",
+    "openPrs_other": "{{count}} खुले PR",
+    "newProject": "नया प्रोजेक्ट…",
+    "manage": "प्रोजेक्ट प्रबंधन…",
+    "newTitle": "नया प्रोजेक्ट",
+    "newDescription": "प्रोजेक्ट रिपॉज़िटरी को समूह में रखता है। इसके रेपो इसके रिपॉज़िटरी पेज से जोड़ें।",
+    "name": "नाम",
+    "create": "बनाएँ",
+    "manageDescription": "प्रोजेक्ट का नाम बदलें या उसे मिटाएँ। उसके रेपो जोड़ना, हटाना या हिलाना उसके रिपॉज़िटरी पेज पर है।",
+    "renamed": "नाम बदलकर {{name}} हुआ",
+    "nameOf": "{{name}} का नाम",
+    "rename": "नाम बदलें",
+    "deleteName": "{{name}} मिटाएँ",
+    "deleteTitle": "{{name}} मिटाएँ?",
+    "deleteText": "इसके साथ जाता है: {{repos}}, {{tickets}}, {{openPrs}}, और इसके रिव्यू और दैनिक लॉग। डिस्क के checkout जस के तस रहते हैं। रेपो रखना हो तो पहले उसे दूसरे प्रोजेक्ट में ले जाएँ।",
+    "keep": "रखें",
+    "delete": "मिटाएँ",
+    "noRepos": "कोई रेपो नहीं",
+    "counts": "{{tickets}} · {{openPrs}}"
+  },
+  "newTicket": {
+    "newTicket": "नया ticket",
+    "newLane": "नई lane",
+    "description": "इसे वैसे लिखें जैसे किसी सहकर्मी को ब्रीफ़ करते हैं: एजेंट शुरू करने से पहले इसे पढ़ते हैं।",
+    "laneDescription": "<parent>{{title}}</parent> का एक समानांतर हिस्सा, अपनी branch, असाइनी, टास्क और अपडेट के साथ।",
+    "title": "शीर्षक",
+    "instructions": "निर्देश",
+    "instructionsPlaceholder": "क्या करना है, कैसे जानें कि हो गया, क्या कभी नहीं करना। फ़ाइलें जोड़ने के लिए पेस्ट करें या छोड़ें।",
+    "initialTasks": "शुरुआती टास्क",
+    "phases": "यह प्रोजेक्ट के फ़ेज़ से शुरू होता है: {{phases}}। यहाँ लिखे टास्क {{first}} के नीचे जाते हैं।",
+    "stage": "चरण",
+    "complexity": "जटिलता",
+    "repository": "रिपॉज़िटरी",
+    "assignee": "असाइनी (वैकल्पिक)",
+    "tags": "टैग (वैकल्पिक)",
+    "tagsPlaceholder": "High, Forms",
+    "branchesOff": "उसी रेपो में हो तो <branch>{{branch}}</branch> से branch बनती है।",
+    "uploading": "अपलोड हो रहा है…",
+    "create": "बनाएँ",
+    "workflow": "Workflow"
+  },
+  "notes": {
+    "title": "नोट",
+    "manageAll": "सब प्रबंधित करें ({{count}})",
+    "add": "नोट जोड़ें",
+    "dialogTitle": "नोट ({{count}})",
+    "dialogDescription": "हर एक में एक छोटा तथ्य, पिन किए पहले। नोट को उसका लेखक, ऑर्केस्ट्रेटर या इंसान बदल सकता है।",
+    "empty": "नोट एक छोटा तथ्य है जिसे अगला सत्र दोबारा न खोजे — कमांड, पाथ, नियम, याद दिलाना। हर एक में एक ही तथ्य रखें, दस्तावेज़ नहीं।",
+    "exampleLabel": "रिलीज़ कमांड",
+    "exampleLabel2": "Preview पोर्ट",
+    "exampleBody2": "47101 से ऊपर, हर रन को एक",
+    "unpinTip": "इस नोट का पिन हटाएँ",
+    "pinTip": "इस नोट को बाकी के ऊपर पिन करें",
+    "unpin": "{{label}} का पिन हटाएँ",
+    "pin": "{{label}} पिन करें",
+    "editTip": "इस नोट को बदलें",
+    "edit": "{{label}} बदलें",
+    "deleteTip": "इस नोट को मिटाएँ",
+    "delete": "{{label}} मिटाएँ",
+    "labelAria": "नोट का लेबल",
+    "bodyAria": "नोट का मुख्य भाग",
+    "save": "नोट सहेजें",
+    "cancel": "रद्द करें"
+  },
+  "actor": {
+    "howBoard": "बोर्ड, अपने आप दर्ज",
+    "howHuman": "आप, passkey से साइन इन",
+    "howOrchestrator": "एक एजेंट, उस token से साइन इन जिसे इंसान ने ऑर्केस्ट्रेटर बनाया: वह प्रोजेक्ट के निर्देश भी बदलता है",
+    "howWorkerUnder": "एक एजेंट, {{parent}} के अंतर्गत वर्कर",
+    "howAgent": "एक एजेंट, token से साइन इन",
+    "projectAgent": "{{name}} (प्रोजेक्ट के एजेंट में से एक)",
+    "projectAgentVia": "{{name}} (प्रोजेक्ट के एजेंट में से एक, {{chain}} के ज़रिए पोस्ट किया)",
+    "via": "{{via}} के ज़रिए",
+    "tip": "{{chain}}: {{how}}",
+    "under": "{{parent}} के अंतर्गत",
+    "by": "<actor/> द्वारा"
+  },
+  "postTools": {
+    "editText": "टेक्स्ट बदलें",
+    "cancel": "रद्द करें",
+    "saving": "सहेजा जा रहा है…",
+    "save": "सहेजें",
+    "edited": "बदला गया",
+    "editedAt": "बदला गया {{when}}",
+    "editLabel": "बदलें",
+    "edit": "बदलें",
+    "deleteLabel": "मिटाएँ",
+    "delete": "मिटाएँ",
+    "deletePostTitle": "यह पोस्ट मिटाएँ?",
+    "deleteReplyTitle": "यह जवाब मिटाएँ?",
+    "deleteText": "इसके जवाब और फ़ाइलें भी चली जाती हैं। इसे पूर्ववत नहीं किया जा सकता।",
+    "keep": "रखें"
+  },
+  "pickers": {
+    "unassigned": "बिना असाइन",
+    "reserved": "{{name}} (आरक्षित)",
+    "projectAgents": "प्रोजेक्ट के एजेंट: सिर्फ़ वही इस पर काम करते हैं",
+    "connectedAgents": "कनेक्टेड एजेंट: साझा",
+    "noBranchYet": "— अभी कोई नहीं —",
+    "clear": "{{what}} साफ़ करें"
+  },
+  "prState": {
+    "merge": {
+      "clean": {
+        "label": "merge योग्य",
+        "title": "बेस से कोई कॉन्फ़्लिक्ट नहीं।"
+      },
+      "conflicts": {
+        "label": "कॉन्फ़्लिक्ट",
+        "title": "बेस branch से कॉन्फ़्लिक्ट: landing से पहले rebase या merge चाहिए।"
+      },
+      "behind": {
+        "label": "बेस से पीछे",
+        "title": "बेस आगे बढ़ गया और branch protection चाहता है कि branch पहले अप टू डेट हो।"
+      },
+      "blocked": {
+        "label": "अटका",
+        "title": "Branch protection: कोई ज़रूरी रिव्यू या जाँच अभी बाकी है।"
+      },
+      "checking": {
+        "label": "जाँच जारी",
+        "title": "GitHub अब भी तय कर रहा है कि यह merge होता है या नहीं (आम तौर पर push के तुरंत बाद)। थोड़ी देर में रीफ़्रेश करें।"
+      }
+    },
+    "ci": {
+      "passing": "CI पास",
+      "failing": "CI फ़ेल",
+      "pending": "CI चल रहा",
+      "none": "CI नहीं"
+    },
+    "review": {
+      "APPROVED": "मंज़ूर",
+      "CHANGES_REQUESTED": "बदलाव माँगे",
+      "REVIEW_REQUIRED": "रिव्यू चाहिए"
+    },
+    "checkedLocal": "{{title}} यहाँ origin/{{base}} से जाँचा गया।",
+    "checkedLocalAt": "{{title}} यहाँ origin/{{base}} से जाँचा गया, {{when}}।",
+    "outdated": "GitHub की बात के बाद origin/{{base}} आगे बढ़ा: GitHub के फिर देखने की प्रतीक्षा।",
+    "outdatedAt": "{{when}} की GitHub की बात के बाद origin/{{base}} आगे बढ़ा: GitHub के फिर देखने की प्रतीक्षा।",
+    "githubAt": "{{title}} GitHub की बात, {{when}} तक की।",
+    "githubLast": "{{title}} GitHub की बात, पिछले रीफ़्रेश तक की।",
+    "checks": "{{pass}} पास · {{failed}} फ़ेल · {{pending}} चल रहे · {{skipped}} छोड़े",
+    "noChecks": "हेड commit पर कोई जाँच नहीं।",
+    "draft": "ड्राफ़्ट",
+    "failed": "फ़ेल:",
+    "mergeConflicts": "merge कॉन्फ़्लिक्ट"
+  },
+  "pushDot": {
+    "pushed": "push हुआ",
+    "pushedBehind": "push हुआ, {{count}} पीछे",
+    "pushedBehindTitle_one": "push हुआ; origin में {{count}} commit ज़्यादा है",
+    "pushedBehindTitle_other": "push हुआ; origin में {{count}} commit ज़्यादा हैं",
+    "ahead": "{{count}} push नहीं हुए",
+    "aheadTitle_one": "push नहीं हुआ: {{count}} commit सिर्फ़ यहाँ है",
+    "aheadTitle_other": "push नहीं हुए: {{count}} commit सिर्फ़ यहाँ हैं",
+    "aheadBehindTitle_one": "push नहीं हुआ: {{count}} commit सिर्फ़ यहाँ है; origin में {{behind}} और हैं जो इस branch में नहीं",
+    "aheadBehindTitle_other": "push नहीं हुए: {{count}} commit सिर्फ़ यहाँ हैं; origin में {{behind}} और हैं जो इस branch में नहीं",
+    "localOnly": "origin पर नहीं",
+    "localOnlyTitle": "push नहीं हुआ: origin पर ऐसी कोई branch नहीं",
+    "localOnlyAheadTitle_one": "push नहीं हुआ: origin पर ऐसी कोई branch नहीं, {{count}} commit सिर्फ़ यहाँ है",
+    "localOnlyAheadTitle_other": "push नहीं हुआ: origin पर ऐसी कोई branch नहीं, {{count}} commit सिर्फ़ यहाँ हैं",
+    "itsBase": "इसका बेस",
+    "merged": "{{into}} में merge हुआ",
+    "mergedTitle": "{{into}} में merge हुआ; branch origin से जा चुकी है",
+    "remoteOnly": "सिर्फ़ origin पर",
+    "remoteOnlyTitle": "सिर्फ़ origin पर: कोई लोकल branch नहीं",
+    "none": "नहीं मिली",
+    "noneTitle": "यहाँ या origin पर ऐसी कोई branch नहीं",
+    "checked": "जाँचा {{ago}}",
+    "notFetched": "origin अभी fetch नहीं हुआ",
+    "fetchNow": "origin अभी fetch करें"
+  },
+  "clock": {
+    "typeTime": "{{label}} (समय लिखें)",
+    "amPm": "{{label}}: AM या PM",
+    "setHourOrMinute": "{{label}}: घंटा या मिनट तय करें",
+    "hour": "घंटा",
+    "minute": "मिनट"
+  },
+  "markdown": {
+    "agentChip": "{{name}}, प्रोजेक्ट के एजेंट में से एक",
+    "pages_one": "{{count}} पेज",
+    "pages_other": "{{count}} पेज"
+  },
+  "editor": {
+    "text": "टेक्स्ट",
+    "bold": "बोल्ड",
+    "italic": "इटैलिक",
+    "strikethrough": "स्ट्राइकथ्रू",
+    "inlineCode": "इनलाइन कोड",
+    "heading": "हेडिंग",
+    "bulletList": "बुलेट सूची",
+    "numberedList": "क्रमांकित सूची",
+    "checklist": "चेकलिस्ट",
+    "quote": "उद्धरण",
+    "codeBlock": "कोड ब्लॉक",
+    "link": "लिंक",
+    "linkTo": "लिंक का पता",
+    "attaching": "फ़ाइलें जुड़ रही हैं…",
+    "attach": "फ़ाइलें जोड़ें",
+    "formatting": "फ़ॉर्मैटिंग"
+  },
+  "projectNav": {
+    "homeText": "हर प्रोजेक्ट एक नज़र में: किस पर आपकी बारी है, क्या जारी है, आज क्या पूरा हुआ और आगे क्या है।",
+    "overviewText": "किस पर आपकी बारी है, क्या चल रहा है, आगे क्या है।",
+    "page": "प्रोजेक्ट पेज",
+    "toggle": {
+      "expanded": "साइडबार छोटा करें",
+      "shrunk": "साइडबार छिपाएँ",
+      "hidden": "साइडबार दिखाएँ"
+    }
+  },
+  "palette": {
+    "page": {
+      "overview": {
+        "title": "ओवरव्यू",
+        "subtitle": "प्रोजेक्ट का सारांश",
+        "keywords": "होम, प्रोजेक्ट, सारांश, आपकी बारी, home, overview, needs you"
+      },
+      "board": {
+        "title": "बोर्ड",
+        "subtitle": "चालू फ़ीचर",
+        "keywords": "ticket, फ़ीचर, कानबन, चरण, जारी, kanban, stages, in progress"
+      },
+      "roadmap": {
+        "title": "रोडमैप",
+        "subtitle": "काम की टाइमलाइन",
+        "keywords": "टाइमलाइन, काम, शेड्यूल, timeline, schedule"
+      },
+      "prs": {
+        "title": "PR कतार",
+        "subtitle": "रिव्यू के लिए और दूसरों की प्रतीक्षा वाले pull request",
+        "keywords": "prs, pull requests, रिव्यू, merge"
+      },
+      "reviews": {
+        "title": "रिव्यू",
+        "subtitle": "रिव्यू नतीजे, PR कतार में",
+        "keywords": "verdict, निष्कर्ष, रिव्यू नतीजे, findings, prs"
+      },
+      "previews": {
+        "title": "Preview",
+        "subtitle": "बोर्ड के चलाए preview",
+        "keywords": "रन, सर्वर, पोर्ट, runs, servers, ports"
+      },
+      "gallery": {
+        "title": "गैलरी",
+        "subtitle": "फ़ाइलें और स्क्रीनशॉट",
+        "keywords": "फ़ाइलें, चित्र, अपलोड, files, images, uploads"
+      },
+      "team": {
+        "title": "टीम",
+        "subtitle": "वे एजेंट जिनके साथ प्रोजेक्ट काम करता है",
+        "keywords": "एजेंट, भूमिका, आरक्षण, agents, personas, reservations"
+      },
+      "daily": {
+        "title": "दैनिक",
+        "subtitle": "प्रोजेक्ट का दिन",
+        "keywords": "गतिविधि, आज, रिपोर्ट, activity, today, report"
+      },
+      "cleanup": {
+        "title": "क्लीनअप",
+        "subtitle": "पीछे छूटी branch और worktree",
+        "keywords": "branch, worktree, मिटाएँ, बचा हुआ, delete, leftovers"
+      },
+      "repositories": {
+        "title": "रिपॉज़िटरी",
+        "subtitle": "वे checkout जो यह प्रोजेक्ट पढ़ता है",
+        "keywords": "रेपो, git, checkout, repos"
+      },
+      "instructions": {
+        "title": "निर्देश",
+        "subtitle": "सेटिंग्स: जो हर एजेंट पढ़ता है",
+        "keywords": "सेटिंग्स, प्रोजेक्ट सेटिंग्स, नियम, लेआउट, फ़ेज़, चरण, रन, settings, rules, layout, phases, stages, runs"
+      },
+      "home": {
+        "title": "होम",
+        "subtitle": "हर प्रोजेक्ट एक नज़र में",
+        "keywords": "प्रोजेक्ट, सारांश, बोर्ड, projects, summary, board"
+      },
+      "dailyGlobal": {
+        "title": "दैनिक",
+        "subtitle": "हर प्रोजेक्ट ने क्या किया",
+        "keywords": "गतिविधि, रिपोर्ट, आज, activity, reports, today"
+      },
+      "connect": {
+        "title": "कनेक्ट करें",
+        "subtitle": "एजेंट कनेक्ट करें और skill इंस्टॉल करें",
+        "keywords": "एजेंट, mcp, token, सेटअप, इंस्टॉल, agents, setup, install"
+      },
+      "settingsGlobal": {
+        "title": "सेटिंग्स",
+        "subtitle": "पूरे बोर्ड की पसंद",
+        "keywords": "पसंद, थीम, preview, डिवाइस, preferences, theme, devices"
+      },
+      "workflow": {
+        "title": "Workflow",
+        "subtitle": "ticket के लिए एजेंट के स्टेप, एक पेड़ के रूप में",
+        "keywords": "स्टेप, चरण, प्रीसेट, रिव्यू राउंड, hand-off, सौंपना, क्रम, workflow, steps, presets, review rounds, delegation, order"
+      }
+    },
+    "setting": {
+      "theme": {
+        "title": "थीम",
+        "subtitle": "सिस्टम, हल्की या गहरी",
+        "keywords": "रूप, रंग, गहरी, हल्की, सिस्टम, appearance, colour, color, dark, light, system"
+      },
+      "defaultAgent": {
+        "title": "डिफ़ॉल्ट एजेंट CLI",
+        "subtitle": "वह CLI जिस पर कनेक्ट खुलता है",
+        "keywords": "एजेंट, claude, codex, opencode, कनेक्ट, agent, connect"
+      },
+      "previewsLimit": {
+        "title": "Preview की सीमा",
+        "subtitle": "एक साथ कितने preview चलें",
+        "keywords": "preview, रन, सीमा, पोर्ट, runs, limit, ports"
+      },
+      "updates": {
+        "title": "अपडेट",
+        "subtitle": "बोर्ड ऐप के अपडेट",
+        "keywords": "संस्करण, रिलीज़, अपग्रेड, version, release, upgrade"
+      },
+      "agentRoles": {
+        "title": "एजेंट की भूमिकाएँ",
+        "subtitle": "वर्कर या ऑर्केस्ट्रेटर",
+        "keywords": "एजेंट, token, ऑर्केस्ट्रेटर, वर्कर, अनुमतियाँ, agents, orchestrator, worker, permissions"
+      },
+      "tailnet": {
+        "title": "Tailnet एंट्रेंस",
+        "subtitle": "दूसरे डिवाइस से बोर्ड तक पहुँचें",
+        "keywords": "tailscale, नेटवर्क, रिमोट, सार्वजनिक, network, remote, public"
+      },
+      "devices": {
+        "title": "डिवाइस और passkey",
+        "subtitle": "साइन इन करने वाले डिवाइस",
+        "keywords": "passkey, सत्र, साइन इन, सुरक्षा, sessions, sign in, security"
+      },
+      "instructions": {
+        "title": "प्रोजेक्ट के निर्देश",
+        "subtitle": "जो हर एजेंट पढ़ता है",
+        "keywords": "नियम, एजेंट, prompt, rules, agents"
+      },
+      "instructionsHistory": {
+        "title": "निर्देशों का इतिहास",
+        "subtitle": "निर्देशों का हर बदलाव",
+        "keywords": "संस्करण, इतिहास, बदलाव, versions, history, changes"
+      },
+      "defaultPhases": {
+        "title": "डिफ़ॉल्ट फ़ेज़",
+        "subtitle": "वे टास्क जिनसे हर नया ticket शुरू होता है",
+        "keywords": "टास्क, फ़ेज़, नया ticket, tasks, phases, new ticket"
+      },
+      "tagSuggestions": {
+        "title": "टैग सुझाव",
+        "subtitle": "ticket पर सुझाए जाने वाले टैग",
+        "keywords": "टैग, लेबल, tags, labels"
+      },
+      "stalledTickets": {
+        "title": "ठहरे हुए ticket",
+        "subtitle": "ticket कब ठहरा दिखे",
+        "keywords": "ठहरा, मिनट, निष्क्रिय, stall, minutes, idle"
+      },
+      "notifications": {
+        "title": "सूचनाएँ",
+        "subtitle": "इस प्रोजेक्ट में कौन से अलर्ट दिखें",
+        "keywords": "अलर्ट, म्यूट, घंटी, रिमाइंडर, alerts, mute, bell, reminders"
+      },
+      "stages": {
+        "title": "चरण",
+        "subtitle": "बोर्ड के कॉलम और उनका मतलब",
+        "keywords": "कॉलम, वर्कफ़्लो, स्थिति, columns, workflow, status, work stage"
+      },
+      "runs": {
+        "title": "रन",
+        "subtitle": "बोर्ड के चलाए preview और जॉब",
+        "keywords": "preview, जॉब, कमांड, बिल्ड, jobs, commands, build"
+      },
+      "layout": {
+        "title": "लेआउट",
+        "subtitle": "पेज, कार्ड और ticket के सेक्शन",
+        "keywords": "व्यवस्था, मेनू, साइडबार, arrange, menu, sidebar"
+      },
+      "agentTokens": {
+        "title": "एजेंट token",
+        "subtitle": "वे token जिनसे एजेंट साइन इन करते हैं",
+        "keywords": "token, एजेंट, कुंजी, रद्द, भूमिका, agents, keys, revoke, roles"
+      },
+      "skills": {
+        "title": "रिव्यू skills",
+        "subtitle": "रिव्यू skills इंस्टॉल करें (Claude Code)",
+        "keywords": "skills, रिव्यू, इंस्टॉल, review, install"
+      }
+    },
+    "kinds": {
+      "ticket": "Ticket",
+      "page": "पेज",
+      "setting": "सेटिंग्स",
+      "action": "कार्रवाइयाँ"
+    },
+    "keywords": {
+      "newTicket": "बनाएँ, जोड़ें, ticket, lane, नया, create, add, new",
+      "copyLink": "url, शेयर, क्लिपबोर्ड, लिंक, share, clipboard",
+      "startPreview": "रन, preview, शुरू, सर्वर, run, start, server",
+      "stopPreview": "रन, preview, रोकें, सर्वर, run, stop, server",
+      "switchProject": "प्रोजेक्ट, बदलें, खोलें, project, switch, open"
+    },
+    "recent": "हाल के",
+    "notStarted_one": "{{count}} शुरू नहीं हुआ: {{details}}",
+    "notStarted_other": "{{count}} शुरू नहीं हुए: {{details}}",
+    "notStopped_one": "{{count}} रुका नहीं: {{details}}",
+    "notStopped_other": "{{count}} रुके नहीं: {{details}}",
+    "nothingRunning": "कुछ नहीं चल रहा था",
+    "createIn": "{{name}} में ticket बनाएँ",
+    "createInThis": "इस प्रोजेक्ट में ticket बनाएँ",
+    "copyLink": "ticket लिंक कॉपी करें",
+    "copyLinkText": "इस ticket का पता क्लिपबोर्ड पर रखें",
+    "linkCopied": "ticket लिंक कॉपी हुआ",
+    "startPreview": "preview शुरू करें",
+    "startPreviewText": "ticket के preview और जॉब शुरू करें",
+    "stopPreview": "preview रोकें",
+    "stopPreviewText": "ticket के preview और जॉब रोकें",
+    "switchTo": "{{name}} पर जाएँ",
+    "currentProject": "मौजूदा प्रोजेक्ट",
+    "openOverview": "इसका ओवरव्यू खोलें",
+    "searchTip": "बोर्ड में खोजें (Ctrl+F)",
+    "search": "बोर्ड में खोजें",
+    "description": "ticket, पेज, सेटिंग्स और कार्रवाइयाँ खोजें। हिलने के लिए ऊपर-नीचे कुंजियाँ, चलाने के लिए Enter, और बंद करने के लिए Escape।",
+    "placeholder": "ticket, पेज, सेटिंग्स और कार्रवाइयाँ खोजें…",
+    "close": "खोज बंद करें",
+    "results": "खोज के नतीजे",
+    "searching": "खोज रहे हैं…",
+    "noMatches": "“{{query}}” के लिए कुछ नहीं मिला।",
+    "type": "बोर्ड में खोजने के लिए लिखें।",
+    "toMove": "हिलने के लिए",
+    "toOpen": "खोलने के लिए",
+    "toClose": "बंद करने के लिए",
+    "anywhere": "कहीं भी"
+  },
+  "signIn": {
+    "finishTitle": "होस्ट पर सेटअप पूरा करें",
+    "finishBody": "इस बोर्ड का अभी कोई खाता नहीं है। वह उस मशीन पर बनता है जिस पर बोर्ड चलता है: वहाँ {{url}} खोलें। फिर यहाँ लौटकर बोर्ड के लिंक से इस डिवाइस को जोड़ें।",
+    "setupTitle": "सेटअप",
+    "setupHeading": "CrossBoard सेट अप करें",
+    "setupIntro": "इस मशीन पर बोर्ड का खाता और उसकी पहली passkey बनाएँ। दूसरे डिवाइस बाद में सेटिंग्स से, एक बार वाले लिंक से जोड़े जाते हैं।",
+    "nameLabel": "बोर्ड पर आपका नाम",
+    "deviceLabel": "यह डिवाइस",
+    "deviceDefault": "यह कंप्यूटर",
+    "devicePlaceholder": "फ़ोन, लैपटॉप…",
+    "createPasskey": "passkey बनाएँ",
+    "loginTitle": "साइन इन",
+    "loginHeading": "साइन इन",
+    "loginWelcomeMachine": "वापस स्वागत है, {{name}}। इस मशीन की passkey से साइन इन करें।",
+    "loginWelcomeDevice": "वापस स्वागत है, {{name}}। इस डिवाइस की passkey से साइन इन करें।",
+    "loginButton": "passkey से साइन इन करें",
+    "enrollTitle": "डिवाइस जोड़ें",
+    "enrollNeedsLinkHeading": "डिवाइस जोड़ें",
+    "enrollNeedsLink": "इस पेज को बोर्ड का लिंक चाहिए: साइन इन डिवाइस पर सेटिंग्स, डिवाइस खोलें और डिवाइस जोड़ें दबाएँ।",
+    "enrollHeading": "यह डिवाइस जोड़ें",
+    "enrollIntro": "इस डिवाइस पर {{name}} के लिए passkey बनाएँ। लिंक 15 मिनट तक, एक बार चलता है।",
+    "noPasskeys": "यह ब्राउज़र यहाँ passkey इस्तेमाल नहीं कर सकता।",
+    "promptClosed": "passkey प्रॉम्प्ट बंद हुआ या समय समाप्त हो गया। फिर कोशिश करें।"
+  },
+  "ticketBoard": {
+    "stage": "चरण",
+    "archiveTip_one": "{{stage}} के {{count}} ticket को आर्काइव करें",
+    "archiveTip_other": "{{stage}} के {{count}} ticket को आर्काइव करें",
+    "archiveAll": "सब आर्काइव करें",
+    "archiveTitle_one": "{{count}} ticket आर्काइव करें?",
+    "archiveTitle_other": "{{count}} ticket आर्काइव करें?",
+    "archiveDescription": "{{stage}} का हर ticket अपनी lane समेत बोर्ड से हट जाता है। वे आर्काइव्ड में रहते हैं, जहाँ हर एक वापस लाया जा सकता है, और उनके पेज अब भी खुलते हैं।",
+    "cancel": "रद्द करें",
+    "archive": "आर्काइव करें",
+    "decisions_one": "फ़ैसला चाहिए",
+    "decisions_other": "{{count}} फ़ैसले चाहिए",
+    "tasksBlocked_one": "{{count}} टास्क अटका",
+    "tasksBlocked_other": "{{count}} टास्क अटके",
+    "previousStage": "पिछला चरण",
+    "nextStage": "अगला चरण",
+    "lanes_one": "{{count}} lane",
+    "lanes_other": "{{count}} lane",
+    "laneStage": "{{count}} {{stage}}",
+    "hitInstructions": "निर्देश",
+    "hitPost": "पोस्ट",
+    "hitReply": "जवाब",
+    "noTickets": "कोई ticket नहीं।",
+    "nothingArchived": "कुछ आर्काइव नहीं।",
+    "archived": "आर्काइव किया {{when}}",
+    "archivedBy": "<actor/> ने आर्काइव किया {{when}}",
+    "restore": "वापस लाएँ"
+  },
+  "ticketList": {
+    "archivedToast_one": "{{count}} ticket आर्काइव हुआ",
+    "archivedToast_other": "{{count}} ticket आर्काइव हुए",
+    "restoredToast": "#{{id}} बोर्ड पर वापस आया",
+    "title": "चालू फ़ीचर",
+    "board": "बोर्ड",
+    "list": "सूची",
+    "archived": "आर्काइव्ड",
+    "noMatch": "“{{query}}” से कोई ticket नहीं मिला।",
+    "clearSearch": "खोज साफ़ करें",
+    "state": "स्थिति",
+    "clearState": "स्थिति फ़िल्टर साफ़ करें",
+    "allTags": "सभी टैग",
+    "filterByTag": "टैग से फ़िल्टर करें",
+    "tags": "टैग",
+    "searchTags": "टैग खोजें",
+    "noTagsMatch": "कोई टैग नहीं मिला",
+    "tickets_one": "{{count}} ticket",
+    "tickets_other": "{{count}} ticket",
+    "showEveryTag": "हर टैग दिखाएँ",
+    "clearTag": "टैग फ़िल्टर साफ़ करें",
+    "loadingTags": "टैग लोड हो रहे हैं…",
+    "couldNotLoadTags": "टैग लोड नहीं हो सके।",
+    "retry": "फिर कोशिश करें",
+    "searchTickets": "ticket खोजें",
+    "searchPlaceholder": "नाम या थ्रेड से खोजें",
+    "clearSearchAria": "खोज साफ़ करें"
+  },
+  "needs": {
+    "titleIn": "#{{id}} {{title}}: {{branch}} {{into}} में है",
+    "titleNotIn": "#{{id}} {{title}}: {{branch}} {{into}} में merge नहीं हुई",
+    "titleDone": "#{{id}} {{title}}: पूर्ण",
+    "titleNotDone": "#{{id}} {{title}}: पूर्ण नहीं, कोई branch नहीं",
+    "markDoneAnyway": "फिर भी पूर्ण चिह्नित करें",
+    "mergeFirst": "पहले merge करें:\n{{list}}",
+    "badge": "{{list}} पर निर्भर",
+    "statusMerged": "#{{id}} पर निर्भर · merge हुआ",
+    "statusNotMerged": "#{{id}} पर निर्भर · अभी merge नहीं",
+    "removeNeed": "#{{id}} की निर्भरता हटाएँ",
+    "addPlaceholder": "ticket जोड़ें…",
+    "noOthers": "कोई और ticket नहीं",
+    "includes": "<goto>{{ref}}</goto> का बिना merge काम शामिल है",
+    "addAsNeed": "निर्भरता जोड़ें",
+    "autoTitle": "बोर्ड ने जोड़ा: इस ticket की branch में उस ticket के बिना merge commit हैं। branch में वे न रहें तो यह अपने आप हट जाता है, और यहाँ से हटाना टिका रहता है (उन्हीं commit के लिए यह दोबारा नहीं जुड़ता)।",
+    "addedByBoard": "बोर्ड ने जोड़ा",
+    "cannotBeDoneUnsure": "बोर्ड पक्का नहीं बता सकता कि ये commit किसके हैं, इसलिए उसने कोई निर्भरता नहीं जोड़ी। #{{id}} तब तक पूर्ण नहीं हो सकता जब तक #{{need}} की branch अपने बेस में merge नहीं हो जाती।"
+  },
+  "verdict": {
+    "approve": "मंज़ूर करें",
+    "disapprove": "नामंज़ूर करें",
+    "approved": "मंज़ूर",
+    "disapproved": "नामंज़ूर",
+    "disapproveTip": "नामंज़ूर: यह lane रद्द हो जाती है",
+    "approvedBy": "{{who}} ने {{when}} मंज़ूर किया। वापस लेने के लिए क्लिक करें।",
+    "disapprovedBy": "{{who}} ने {{when}} नामंज़ूर किया। वापस लेने के लिए क्लिक करें (फिर खुल जाती है)।"
+  },
+  "reviewResult": {
+    "pr": "PR #{{number}}",
+    "counts": "{{confirmed}} पुष्ट · {{plausible}} संभावित · {{unverified}} असत्यापित",
+    "title": "रिव्यू नतीजा"
+  },
+  "thread": {
+    "replyActions": "जवाब की कार्रवाइयाँ",
+    "replyLabel": "जवाब",
+    "reply": "जवाब दें",
+    "ask": " · @{{name}} उस एजेंट से पूछता है",
+    "empty": "अभी कोई टिप्पणी नहीं।",
+    "replyingTo": "{{name}} को जवाब",
+    "cancel": "रद्द करें",
+    "placeholderCompact": "जवाब…{{ask}}",
+    "placeholder": "जवाब लिखें{{ask}}",
+    "sending": "भेजा जा रहा है…"
+  },
+  "prQueue": {
+    "title": "PR कतार",
+    "subtitle": "रिव्यू के लिए PR और आपके अपने, रिव्यू की स्थिति के अनुसार।",
+    "filters": {
+      "me": {
+        "label": "रिव्यू के लिए",
+        "title": "दूसरों के वे PR जिनका आप रिव्यू करते हैं: आपकी मंज़ूरी बाकी, आपके द्वारा मंज़ूर, या आपकी टिप्पणियों पर रुके"
+      },
+      "others": {
+        "label": "दूसरों की प्रतीक्षा में",
+        "title": "आपके PR (एजेंट के भी): मंज़ूरी बाकी, हर रिव्यूअर द्वारा मंज़ूर, या उनकी टिप्पणियों पर रुके"
+      },
+      "all": {
+        "label": "सभी PR",
+        "title": "रिपॉज़िटरी के हर खुले PR, चाहे किसी ने लिखा हो और चाहे उसमें आप शामिल हों या नहीं"
+      }
+    },
+    "reviewers": {
+      "mine": "सिर्फ़ मैं रिव्यूअर",
+      "involving": "मुझे शामिल करने वाले"
+    },
+    "tabs": {
+      "pending": "बाकी",
+      "reviewed": "रिव्यू हुए",
+      "on_hold": "रुके",
+      "done": "पूर्ण"
+    },
+    "empty": {
+      "me": "रिव्यू के लिए कुछ {{stage}} नहीं।",
+      "others": "दूसरों की प्रतीक्षा में कुछ {{stage}} नहीं।",
+      "all": "खुले PR में कुछ {{stage}} नहीं।"
+    },
+    "refresh": "रीफ़्रेश",
+    "mergeAfterTip": "इसके ticket को ये पहले merge चाहिए:\n{{list}}",
+    "mergeAfterItem": "PR #{{number}} (#{{ticketId}} {{title}} से)",
+    "mergeAfter": "<refs/> के बाद merge करें",
+    "updated": "अपडेट हुआ {{when}}",
+    "merged": "merge हुआ {{when}}",
+    "myReview": "मेरा रिव्यू: {{state}}",
+    "myReviewState": {
+      "approved": "मंज़ूर",
+      "changes_requested": "बदलाव माँगे",
+      "commented": "टिप्पणी की",
+      "dismissed": "ख़ारिज",
+      "pending": "बाकी"
+    },
+    "forYourReview": "आपके रिव्यू के लिए",
+    "yourPr": "आपका PR",
+    "fromTicket": "#{{id}} {{title}} से",
+    "reviewFresh": "इसी SHA पर रिव्यू हुआ",
+    "reviewStale": "रिव्यू पुराने SHA का है",
+    "openTicket": "ticket खोलें",
+    "release": "छोड़ें",
+    "hold": "रोकें",
+    "holdTitle": "#{{number}} को रोकें",
+    "holdText": "आपके और एजेंट के लिए एक नोट। GitHub को छुआ नहीं जाता।",
+    "holdPlaceholder": "यह क्यों रुका है…",
+    "holdConfirm": "रोकें",
+    "notInvolvingYou": "आप शामिल नहीं"
+  },
+  "workStatus": {
+    "state": {
+      "waiting": "आपकी प्रतीक्षा में",
+      "yourTurn": "आपकी बारी",
+      "lost": "संपर्क टूटा",
+      "noWord": "कोई ख़बर नहीं",
+      "quiet": "शांत",
+      "working": "अभी काम पर",
+      "nothing": "कुछ खुला नहीं"
+    },
+    "line": {
+      "yourTurn": "आपकी बारी · प्रतीक्षा {{duration}}",
+      "lost": "संपर्क टूटा · {{duration}}",
+      "noWord": "कोई ख़बर नहीं {{duration}}",
+      "quiet": "शांत {{duration}}",
+      "working": "अभी काम पर · आख़िरी ख़बर {{duration}}"
+    },
+    "unit": {
+      "m": "{{count}} मि",
+      "h": "{{count}} घं",
+      "d": "{{count}} दि"
+    },
+    "since": "{{time}} से",
+    "minutes": "{{count}} मिनट",
+    "lastWord": "आख़िरी ख़बर {{count}} मिनट पहले",
+    "noWordYet": "अभी कोई ख़बर नहीं",
+    "why": {
+      "inStage": "{{stage}} में, {{time}} से किसी एजेंट की ख़बर नहीं",
+      "waitingOn": "{{on}} की प्रतीक्षा में, {{time}} से किसी की ख़बर नहीं",
+      "nothingOpen": "{{time}} से कुछ खुला नहीं",
+      "work": "काम",
+      "ended": "{{time}} पर {{phase}} ख़त्म होने के बाद से कुछ खुला नहीं",
+      "endedQuote": "{{time}} पर {{phase}} ख़त्म होने के बाद से कुछ खुला नहीं ('{{quote}}')",
+      "noProgress": "{{time}} से कोई प्रगति पोस्ट नहीं"
+    },
+    "verb": {
+      "spec": "spec लिख रहा",
+      "build": "बना रहा",
+      "review": "रिव्यू कर रहा",
+      "verify": "जाँच रहा",
+      "pr": "PR खोल रहा",
+      "preview": "preview चला रहा",
+      "merge": "merge कर रहा",
+      "work": "काम कर रहा"
+    },
+    "nobodyHeard": "अभी किसी की ख़बर नहीं",
+    "lastHeard": "आख़िरी ख़बर {{time}}",
+    "worked": "काम किया",
+    "waited": "इंतज़ार किया",
+    "onYou": "आप पर",
+    "defs": {
+      "worked": "काम किया: वह समय जब एजेंट के पास काम खुला था, किसी व्यक्ति की प्रतीक्षा में नहीं।",
+      "waited": "इंतज़ार किया: वह समय जब ticket पर कुछ नहीं हिला और किसी व्यक्ति की प्रतीक्षा भी नहीं थी।",
+      "onYou": "आप पर: किसी व्यक्ति की प्रतीक्षा का समय (इंसान की प्रतीक्षा, या अटका चरण)।"
+    }
+  },
+  "workTimeline": {
+    "noWork": "अभी कोई काम दर्ज नहीं।",
+    "now": "अभी",
+    "board": "बोर्ड",
+    "unnamed": "बिना नाम",
+    "work": "काम",
+    "theHuman": "इंसान",
+    "running": "चल रहा",
+    "neverClosed": "कभी बंद नहीं हुआ",
+    "phaseRound": "{{phase}} राउंड {{round}}",
+    "phaseRoundShort": "{{phase}} रा{{round}}",
+    "delegatedTo": "{{on}} को सौंपा",
+    "subAgentOf": "{{name}}, {{parent}} का सबएजेंट",
+    "created": "काम से {{count}} मिनट पहले बना",
+    "notToScaleNote": "यह समय छोटे ब्लॉक में दिखाया गया है, असली लंबाई में नहीं।",
+    "alsoThenItem": "{{name}}, {{time}}",
+    "duration": {
+      "seconds": "{{count}} से",
+      "minutes": "{{count}} मि",
+      "hours": "{{count}} घं",
+      "hoursMinutes": "{{h}} घं {{m}} मि"
+    },
+    "spoken": {
+      "underMinute": "एक मिनट से कम",
+      "days": "{{count}} दिन",
+      "minutes": "{{count}} मिनट",
+      "hours": "{{count}} घंटे",
+      "hoursMinutes": "{{h}} घंटे {{m}} मिनट"
+    },
+    "mark": {
+      "push": "push",
+      "pr": "pull request",
+      "preview": "preview",
+      "merge": "merge",
+      "other": "बोर्ड घटना"
+    },
+    "label": {
+      "via": " ({{by}} के ज़रिए)",
+      "open": ", खुला",
+      "span": "{{agent}} द्वारा {{phase}}{{via}}, {{from}} से {{to}}, {{duration}}{{open}}",
+      "wait": "प्रतीक्षा: {{reason}} ({{agent}}), {{from}} से {{to}}, {{duration}}{{open}}{{note}}",
+      "delegation": "{{agent}} ने {{on}} को सौंपा, {{from}} से {{to}}, {{duration}}{{open}}{{note}}",
+      "handoff": "{{from}} ने काम {{to}} को सौंपा, {{time}}{{note}}",
+      "mark": "{{name}}{{note}}, {{time}}",
+      "collapsed": "{{label}}, {{from}} से {{to}}, {{duration}}, पैमाने के अनुसार नहीं"
+    },
+    "fact": {
+      "delegatedTo": "किसे सौंपा",
+      "by": "किसने",
+      "started": "शुरू",
+      "ended": "समाप्त",
+      "note": "नोट",
+      "waiting": "प्रतीक्षा",
+      "waitingFor": "प्रतीक्षा किसकी",
+      "on": "किसकी",
+      "duration": "अवधि",
+      "who": "कौन",
+      "work": "काम",
+      "from": "से",
+      "to": "को",
+      "at": "समय",
+      "event": "घटना",
+      "notToScale": "पैमाने के अनुसार नहीं",
+      "alsoThen": "उसी समय"
+    },
+    "summary": {
+      "noAgentWork": "एजेंट का कोई काम दर्ज नहीं।",
+      "worked": "{{duration}} काम किया",
+      "waited": "{{target}} की {{duration}} प्रतीक्षा की",
+      "delegated": "{{on}}, सौंपा",
+      "clause": "{{agent}} {{parts}}",
+      "workBy_one": "{{over}} में {{count}} एजेंट का काम: {{clauses}}।{{live}}{{scale}}",
+      "workBy_other": "{{over}} में {{count}} एजेंट का काम: {{clauses}}।{{live}}{{scale}}",
+      "activityBy_one": "{{over}} में {{count}} एजेंट की गतिविधि: {{clauses}}।{{live}}{{scale}}",
+      "activityBy_other": "{{over}} में {{count}} एजेंट की गतिविधि: {{clauses}}।{{live}}{{scale}}",
+      "stillGoing": " अभी जारी है।",
+      "notToScale": " पैमाने के अनुसार नहीं: {{skipped}}।"
+    },
+    "card": {
+      "title": "टाइमलाइन",
+      "showMore": "और दिखाएँ",
+      "showLess": "कम दिखाएँ",
+      "story": "टाइमलाइन की कहानी"
+    },
+    "story": {
+      "waitingFor": "{{who}} की प्रतीक्षा · {{duration}}",
+      "waitedFor": "{{who}} की प्रतीक्षा की · {{duration}}{{note}}",
+      "started": "{{phase}} शुरू किया{{note}}",
+      "ended": "{{phase}} ख़त्म किया{{note}}",
+      "handoff": "काम{{from}} {{to}} को सौंपा{{note}}",
+      "handoffFrom": " {{name}} से",
+      "someone": "कोई",
+      "waiting": "{{who}} की प्रतीक्षा",
+      "stoppedWaiting": "{{who}} की प्रतीक्षा रोकी{{note}}",
+      "movedTo": "{{stage}} में गया",
+      "createdIn": "{{stage}} में बना",
+      "pushed": "push हुआ",
+      "openedPr": "PR खोला{{note}}",
+      "merged": "merge हुआ",
+      "preview": "preview {{note}}",
+      "somethingElse": "कुछ और",
+      "lockNote": "लॉक ({{note}})",
+      "lock": "लॉक",
+      "you": "आप",
+      "mcp": "MCP सर्वर",
+      "seconds": "{{count}} से",
+      "minutes": "{{count}} मिनट",
+      "minutesSeconds": "{{m}} मिनट {{s}} से",
+      "hours": "{{count}} घंटे",
+      "hoursMinutes": "{{h}} घंटे {{m}} मिनट"
+    },
+    "stretch": {
+      "start": "शुरू होने की प्रतीक्षा",
+      "blocked": "अटका",
+      "human": "इंसान की प्रतीक्षा में",
+      "review": "रिव्यू में",
+      "merge": "merge की प्रतीक्षा",
+      "decision": "फ़ैसले की प्रतीक्षा"
+    },
+    "skipped": {
+      "start": "{{duration}} शुरू होने की प्रतीक्षा",
+      "blocked": "{{duration}} अटका",
+      "human": "{{duration}} इंसान की प्रतीक्षा में",
+      "review": "{{duration}} रिव्यू में",
+      "merge": "{{duration}} merge की प्रतीक्षा"
+    },
+    "openReport": "{{agent}} की रिपोर्ट खोलें: {{label}}",
+    "openReportRound": "{{agent}} की रिपोर्ट खोलें, राउंड {{round}}: {{label}}",
+    "reportDescription": "इस रन के लिए लिखी गई रिपोर्ट",
+    "factsDescription": "इस रन के तथ्य",
+    "loadingReport": "रन रिपोर्ट लोड हो रही है…",
+    "reportsFailed": "रिपोर्ट लोड नहीं हो सकीं।",
+    "noReport": "इस रन की कोई रिपोर्ट नहीं।",
+    "noReportYet": "इस रन की अभी कोई रिपोर्ट नहीं।"
+  },
+  "roadmap": {
+    "title": "रोडमैप",
+    "subtitle": "चल रहा हर ticket: पूर्ण, अभी, आगे।",
+    "filter": {
+      "all": "सभी",
+      "blocked": "अटके",
+      "review": "रिव्यू चाहिए"
+    },
+    "timeAxis": "समय अक्ष, हर पंक्ति:",
+    "window": {
+      "today": "आज",
+      "24h": "24 घं",
+      "7d": "7 दिन",
+      "fit": "सभी पंक्तियाँ समाएँ"
+    },
+    "range": "{{start}} से अभी तक",
+    "stat": {
+      "tickets_one": "ticket",
+      "tickets_other": "ticket",
+      "lanes_one": "lane",
+      "lanes_other": "lane",
+      "workingNow": "अभी काम पर",
+      "blocked": "अटके",
+      "inReview": "रिव्यू में",
+      "noWord": "कोई ख़बर नहीं"
+    },
+    "projectWork": "प्रोजेक्ट का काम, हर ticket और lane:",
+    "empty": {
+      "all": "कोई ticket जारी, अटका या रिव्यू में नहीं है।",
+      "blocked": "कुछ अटका नहीं है।",
+      "review": "कोई ticket रिव्यू की प्रतीक्षा में नहीं।"
+    },
+    "lanes_one": "{{count}} lane",
+    "lanes_other": "{{count}} lane",
+    "unassigned": "बिना असाइन",
+    "progress": "{{total}} में से {{done}} पूर्ण",
+    "workTimeline": "काम की टाइमलाइन",
+    "noTasks": "अभी कोई टास्क नहीं।",
+    "tasks": "टास्क",
+    "step": {
+      "done": "पूर्ण",
+      "now": "अभी",
+      "next": "आगे",
+      "later": "बाद में",
+      "blocked": "अटका"
+    }
+  },
+  "overview": {
+    "loadError": "सारांश लोड नहीं हो सका: {{error}}",
+    "projectOverview": "{{name}}: ओवरव्यू",
+    "headline": {
+      "waiting": "{{count}} आपकी प्रतीक्षा में",
+      "inProgress": "{{count}} जारी",
+      "doneToday": "{{count}} आज पूर्ण"
+    },
+    "allHidden": "इस ओवरव्यू का हर कार्ड छिपा है। <goto>उन्हें लेआउट सेटिंग्स में फिर दिखाएँ</goto>।",
+    "showFewer": "कम दिखाएँ",
+    "viewAll": "सभी {{count}} देखें",
+    "unassigned": "बिना असाइन",
+    "projectAgent": "{{name}} (प्रोजेक्ट के एजेंट में से एक)",
+    "sinceDate": "{{date}} से",
+    "laneOf": "#{{id}} की lane",
+    "draft": "ड्राफ़्ट",
+    "pr": "PR #{{number}}",
+    "prTitle": "PR #{{number}} {{title}}",
+    "openOnGithub": "GitHub पर खोलें",
+    "option_one": "{{count}} विकल्प",
+    "option_other": "{{count}} विकल्प",
+    "lane_one": "{{count}} lane",
+    "lane_other": "{{count}} lane",
+    "previewOf": "{{workspace}} का preview",
+    "preview": "Preview",
+    "needsYou": {
+      "title": "आपकी बारी",
+      "empty": "आपकी प्रतीक्षा में कुछ नहीं।",
+      "decide": "फ़ैसला करें: {{question}}",
+      "asked": "{{options}} · {{author}} ने {{ago}} पूछा",
+      "waitingOnYou": "आपकी प्रतीक्षा में {{since}} · {{agent}}",
+      "reviewPr": "PR #{{number}} {{title}} का रिव्यू करें",
+      "prBy": "{{author}} द्वारा · अपडेट हुआ {{ago}}",
+      "newReplies": "{{count}} नए · ",
+      "blocked": "अटका",
+      "instructionsChanged": "प्रोजेक्ट के निर्देश बदले",
+      "changedBy": "<actor/> द्वारा",
+      "reviewed": "रिव्यू हुआ",
+      "revertTip": "निर्देशों को इस बदलाव से पहले जैसा कर दें",
+      "revertBlockedTip": "निर्देश तब से फिर बदले हैं: पहले बाद का बदलाव वापस करें",
+      "revert": "वापस करें",
+      "last": "आख़िरी"
+    },
+    "lost": {
+      "title": "संपर्क टूटा",
+      "empty": "किसी का संपर्क नहीं टूटा।",
+      "lastHeardTip": "आख़िरी बार सुना {{when}}",
+      "lastHeard": "आख़िरी बार {{duration}} पहले सुना"
+    },
+    "inProgress": {
+      "title": "जारी",
+      "empty": "कुछ जारी नहीं।"
+    },
+    "doneToday": {
+      "title": "आज पूर्ण",
+      "empty": "आज अभी कुछ पूरा नहीं हुआ।",
+      "closedTip": "merge या बंद हुआ: रिव्यू कतार से निकल गया",
+      "closed": "बंद हुआ {{time}}",
+      "activity_one": "आज {{count}} बात हुई: दैनिक",
+      "activity_other": "आज {{count}} बातें हुईं: दैनिक"
+    },
+    "carryingOver": {
+      "title": "पिछला बकाया",
+      "startedTip": "इस पर काम {{when}} शुरू हुआ",
+      "days_one": "{{count}} दिन से जारी",
+      "days_other": "{{count}} दिन से जारी",
+      "emptyShown": "आज से पहले का कुछ भी अटका या रिव्यू में नहीं।"
+    }
+  },
+  "notifications": {
+    "title": "सूचनाएँ",
+    "clearFinished": "पूरी हुई साफ़ करें",
+    "empty": "कुछ नहीं चल रहा",
+    "dismiss": "{{label}} हटाएँ",
+    "of": "{{total}} में से {{done}}",
+    "starting": "शुरू हो रहा है…",
+    "noReason": "कोई कारण नहीं दिया गया",
+    "failed": "{{title}} विफल",
+    "finished": "{{title}} पूरा हुआ",
+    "finishedWith": "{{title}} पूरा हुआ · {{summary}}",
+    "failedLine": "विफल · {{elapsed}} · {{reason}}",
+    "succeededLine": "सफल · {{elapsed}}",
+    "retryKept": "रखे गए फिर आज़माएँ",
+    "youAsked": "{{actor}} · आपने कहा: {{request}}",
+    "stale": "{{since}} से कोई अपडेट नहीं · शायद रुक गया",
+    "trackedFailed": "विफल · {{reason}}",
+    "succeeded": "सफल",
+    "notice": "सूचना",
+    "cannotWait": "प्रतीक्षा नहीं हो सकती: {{reason}}",
+    "muted": "इस प्रोजेक्ट में \"{{name}}\" म्यूट किया गया",
+    "new": "नया",
+    "snooze": "स्नूज़ करें",
+    "snoozeFor": "स्नूज़ करें:",
+    "mute": "इस प्रोजेक्ट में इस तरह के अलर्ट म्यूट करें",
+    "copied": "कॉपी हुआ",
+    "copyFailed": "कॉपी नहीं हो सका: टेक्स्ट चुनकर कॉपी करें",
+    "unit": {
+      "s": "{{value}} से",
+      "min": "{{value}} मिनट",
+      "h": "{{value}} घंटे",
+      "d": "{{value}} दिन"
+    },
+    "severity": {
+      "info": "जानकारी",
+      "warning": "चेतावनी",
+      "problem": "समस्या"
+    }
+  },
+  "ticketPage": {
+    "archivedToast": "आर्काइव हुआ: बोर्ड से हटा, आर्काइव्ड में",
+    "restoredToast": "बोर्ड पर वापस आया",
+    "disapprovedToast": "#{{id}} नामंज़ूर और रद्द",
+    "undo": "पूर्ववत करने पर नामंज़ूरी वापस होती है और यह {{stage}} में लौटता है।",
+    "undoAction": "पूर्ववत करें",
+    "summary": "सारांश",
+    "updated": "अपडेट हुआ {{when}}",
+    "archivedBy": "{{name}} ने {{when}} आर्काइव किया",
+    "archivedByLane": "{{name}} ने {{when}} आर्काइव किया, उस ticket के साथ जिसकी यह lane है",
+    "someone": "कोई",
+    "archivedBadge": "आर्काइव्ड",
+    "decisionNeeded": "फ़ैसला चाहिए",
+    "archiveTip": "इसे इसकी lane समेत बोर्ड से हटाएँ; फ़ीचर पेज पर आर्काइव्ड इसे वापस लाता है",
+    "deleteTitle": "यह ticket मिटाएँ?",
+    "deleteBody": "टास्क, अपडेट, अटैचमेंट और थ्रेड भी चले जाते हैं।",
+    "deleteLanes_one": "इसकी {{count}} lane है: उसे भी मिटाएँ, या रखकर एक स्तर ऊपर ले जाएँ।",
+    "deleteLanes_other": "इसकी {{count}} lane हैं: उन्हें भी मिटाएँ, या रखकर एक स्तर ऊपर ले जाएँ।",
+    "deleteKeepLanes": "मिटाएँ, lane रखें",
+    "deleteWithLanes": "lane समेत मिटाएँ",
+    "title": "शीर्षक",
+    "clickToRename": "नाम बदलने के लिए क्लिक करें",
+    "tagsAria": "टैग, अल्पविराम से अलग",
+    "tagsPlaceholder": "High, Forms",
+    "editTagsTip": "टैग बदलने के लिए क्लिक करें",
+    "addTags": "+ टैग",
+    "instructions": "निर्देश",
+    "attaching": "जुड़ रहा है…",
+    "attach": "जोड़ें",
+    "edit": "बदलें",
+    "instructionsPlaceholder": "क्या करना है, कैसे जानें कि हो गया, क्या कभी नहीं करना। फ़ाइलें जोड़ने के लिए पेस्ट करें या छोड़ें।",
+    "showLess": "कम दिखाएँ",
+    "showFull": "पूरे निर्देश दिखाएँ",
+    "removeNamed": "{{name}} हटाएँ",
+    "otherReposTip": "प्रोजेक्ट के दूसरे रेपो में ticket का काम, हर एक अपनी branch पर: वे branch और रन में दिखते हैं",
+    "otherRepos": "अन्य रिपॉज़िटरी",
+    "repositoryNamed": "रिपॉज़िटरी {{name}}",
+    "takeOffTip": "{{name}} को ticket से हटाएँ (ticket के इसके रन रुक जाते हैं)",
+    "addRepo": "रिपॉज़िटरी जोड़ें",
+    "addRepoPlaceholder": "रिपॉज़िटरी जोड़ें…",
+    "details": "विवरण",
+    "assignee": "असाइनी",
+    "reservedTip": "इस प्रोजेक्ट एजेंट के लिए आरक्षित: दूसरे एजेंट इसे नहीं ले सकते, सिर्फ़ आप दोबारा असाइन कर सकते हैं",
+    "reserved": "आरक्षित",
+    "repository": "रिपॉज़िटरी",
+    "branch": "Branch",
+    "baseBranch": "बेस branch",
+    "needsTip": "वे ticket जिनकी branch पूर्ण होने से पहले इसके बेस में merge होनी चाहिए",
+    "needs": "निर्भर",
+    "neededBy": "इस पर निर्भर",
+    "autoTip": {
+      "Pushed": "बोर्ड ने git से टिक किया (branch अपने हर लोकल commit के साथ origin पर है)",
+      "PR": "बोर्ड ने GitHub से टिक किया (ticket का खुला या merge हुआ PR)",
+      "CI": "बोर्ड ने GitHub से टिक किया (PR की जाँच हरी, या हेड SHA पर \"CI run locally: green\" टिप्पणी)",
+      "Preview": "बोर्ड ने preview से टिक किया (ticket का कोई workspace preview चलाता है, या उसका preview लिंक जवाब देता है)",
+      "Summary": "बोर्ड ने ticket के पोस्ट से टिक किया (branch के आख़िरी commit के बाद किसी एजेंट ने सारांश लिखा या अपडेट किया)",
+      "Merged": "बोर्ड ने GitHub और git से टिक किया (PR merge हुआ, या branch अपने बेस में merge हुई)"
+    },
+    "tickedAuto": "अपने आप टिक हुआ",
+    "blocked": "अटका",
+    "subtasksBlocked_one": "{{count}} सबटास्क अटका",
+    "subtasksBlocked_other": "{{count}} सबटास्क अटके",
+    "unblock": "{{name}} को अटका न रखें",
+    "markBlockedNamed": "{{name}} को अटका चिह्नित करें",
+    "addSubtask": "सबटास्क जोड़ें",
+    "addSubtaskTo": "{{name}} में सबटास्क जोड़ें",
+    "removeTask": "हटाएँ",
+    "removeTaskSubtasks": "सबटास्क समेत हटाएँ",
+    "blockedPlaceholder": "इंसान को क्या करना है (वैकल्पिक)",
+    "whyBlocked": "{{name}} क्यों अटका है",
+    "markBlocked": "अटका चिह्नित करें",
+    "tasks": "टास्क",
+    "noTasks": "अभी कोई टास्क नहीं। वे फ़ेज़ जोड़ें जिनसे नया ticket शुरू होता है: Implementation, फिर hand-off के (Pushed, PR, CI, Preview, Summary, Merged)। ठोस चरण Implementation के नीचे सबटास्क के रूप में जाते हैं। Pushed, PR, CI, Preview, Summary और Merged को बोर्ड खुद टिक करता है।",
+    "subtasksOf": "{{name}} के सबटास्क",
+    "newSubtaskOf": "{{name}} का नया सबटास्क",
+    "add": "जोड़ें",
+    "addPhase": "फ़ेज़ जोड़ें: Implementation, Pushed, PR…",
+    "all": "सभी",
+    "nounLane": "lane",
+    "laneOf": "{{count}} में से lane {{n}}",
+    "filtered": "(फ़िल्टर किया)",
+    "nounTicketIn": "{{stage}} में ticket",
+    "stageOf": "{{stage}} में {{count}} में से {{n}}",
+    "previousNoun": "पिछला: {{noun}}",
+    "nextNoun": "अगला: {{noun}}",
+    "stepKeysTip": "[ और ] से पीछे और आगे जाएँ",
+    "lanesCancelled": "{{count}} रद्द",
+    "allTasks": "सभी टास्क {{done}}/{{total}}",
+    "noLanes": "कोई lane नहीं। जब ticket के हिस्से समानांतर चलें तो इसे lane में बाँटें: हर lane की अपनी branch, असाइनी, टास्क और अपडेट होते हैं।",
+    "filterStage": "चरण",
+    "filterTags": "टैग",
+    "showing": "{{total}} में से {{shown}} दिख रहे",
+    "clearFilters": "फ़िल्टर साफ़ करें",
+    "activity": "गतिविधि",
+    "feed": "फ़ीड",
+    "mainTip": "आपके लिए: आपके पोस्ट और उनके नीचे जवाब, फ़ैसले और सवाल",
+    "main": "मुख्य",
+    "agentsTip": "एजेंट का काम का रिकॉर्ड: प्रगति, रिव्यू फ़ेज़, builder के नोट",
+    "agents": "एजेंट",
+    "includeLanePosts": "lane के पोस्ट शामिल करें",
+    "newCount_one": "{{count}} नया",
+    "newCount_other": "{{count}} नए",
+    "newPost": "नया पोस्ट",
+    "postPlaceholder": "पोस्ट लिखें: सवाल, जवाब, प्रगति। स्क्रीनशॉट और रिकॉर्डिंग पेस्ट करें या छोड़ें।",
+    "agentsPlaceholder": "एजेंट के रिकॉर्ड में लिखें: जो इस पर काम करे उसके लिए एक नोट। फ़ाइलें पेस्ट करें या छोड़ें।",
+    "posting": "पोस्ट हो रहा है…",
+    "post": "पोस्ट करें",
+    "postInAgents": "एजेंट में पोस्ट करें",
+    "noPosts": "अभी कोई पोस्ट नहीं।",
+    "noPostsHere": "यहाँ अभी कोई पोस्ट नहीं।",
+    "noAgentPosts": "अभी एजेंट का कोई पोस्ट नहीं।",
+    "sections": "ticket के सेक्शन",
+    "summaryPosted": "पोस्ट किया {{when}}",
+    "summaryUpdated": "अपडेट हुआ {{when}}",
+    "summaryWritten": "लिखा {{when}}",
+    "history": "इतिहास ({{count}})",
+    "noSummary": "अभी कोई सारांश नहीं: एजेंट के लिखने तक ताज़ा प्रगति पोस्ट उसकी जगह है।",
+    "earlierVersions": "पुराने संस्करण",
+    "firstVersion": "पहला संस्करण",
+    "replies_one": "{{count}} जवाब",
+    "replies_other": "{{count}} जवाब",
+    "summaryActions": "सारांश की कार्रवाइयाँ",
+    "hideRepliesLabel": "जवाब छिपाएँ",
+    "replyLabel": "जवाब",
+    "hideReplies": "जवाब छिपाएँ",
+    "showReplies": "{{replies}} दिखाएँ",
+    "replySummary": "सारांश को जवाब",
+    "laneSummaryTip": "lane का सारांश: उसका काम कहाँ तक पहुँचा, जैसा उसके एजेंट रखते हैं",
+    "summaryChip": "सारांश",
+    "progress": "प्रगति",
+    "postActions": "पोस्ट की कार्रवाइयाँ",
+    "notProgressLabel": "प्रगति नहीं",
+    "markProgressLabel": "प्रगति चिह्नित करें",
+    "notProgressTip": "प्रगति नहीं: इसे सामान्य पोस्ट बनाएँ",
+    "markProgressTip": "प्रगति के रूप में चिह्नित करें",
+    "decisionArchived": "{{ids}} आर्काइव हुए: बोर्ड से हटे, आर्काइव्ड में",
+    "notArchived": "आर्काइव नहीं हुआ: {{why}}",
+    "decision": "फ़ैसला",
+    "decidedInChat": "आपने चैट में तय किया ·",
+    "relayedTip": "ऑर्केस्ट्रेटर ने आपका जवाब चैट से दर्ज किया। कार्ड पर कुछ क्लिक नहीं हुआ।",
+    "relayed": "आगे पहुँचाया",
+    "relayedBy": "<actor/> ने {{when}} ·",
+    "decidedBy": "<actor/> ने {{when}} तय किया ·",
+    "change": "बदलें",
+    "decisionNeededHere": "आपका फ़ैसला चाहिए",
+    "recommended": "सुझाया गया",
+    "saidInChat": "आपने चैट में कहा:",
+    "agentNotePlaceholder": "एजेंट के लिए एक नोट (वैकल्पिक)",
+    "agentNote": "एजेंट के लिए नोट",
+    "decide": "तय करें",
+    "vsBase": "बेस से +{{ahead}} / −{{behind}} ·",
+    "branchNotInCheckout": "branch अभी checkout में नहीं",
+    "reviewOlder": "रिव्यू पुराने SHA का है",
+    "latestReview": "ताज़ा रिव्यू",
+    "branchIn": "{{name}} में branch",
+    "base": "बेस {{name}}",
+    "noBranch": "अभी कोई branch नहीं: ऊपर से चुनें, या एजेंट तय करता है।",
+    "workspaces": "Workspace",
+    "workspacesDesc": "वे worktree, उप-branch और सबएजेंट सैंडबॉक्स जो एजेंट ने इस ticket के लिए खोले।",
+    "workspacesDescLanes": "वे worktree, उप-branch और सबएजेंट सैंडबॉक्स जो एजेंट ने इस ticket और इसकी lane के लिए खोले।",
+    "noneYet": "अभी कोई नहीं।",
+    "breadcrumb": "ब्रेडक्रम्ब",
+    "scrollSideUp": "साइड कॉलम ऊपर स्क्रॉल करें",
+    "scrollSideDown": "साइड कॉलम नीचे स्क्रॉल करें",
+    "workflow": "Workflow",
+    "workflowOwn": "इस ticket पर चुने {{workflow}} workflow का पालन करता है।",
+    "workflowProject": "प्रोजेक्ट के workflow ({{workflow}}) का पालन करता है।",
+    "workflowSteps": "स्टेप देखें",
+    "lanesProgress": "{{done}}/{{total}} पूर्ण",
+    "workflowDeleted": "इस ticket पर सेट किया गया workflow हटा दिया गया, इसलिए यह प्रोजेक्ट के workflow ({{workflow}}) को फ़ॉलो करता है।"
+  },
+  "complexity": {
+    "label": {
+      "low": "कम",
+      "mid": "मध्यम",
+      "high": "उच्च",
+      "max": "अधिकतम"
+    },
+    "workflowHint": "कम: Standard workflow में कोई spec या रिव्यू नहीं। मध्यम, उच्च और अधिकतम: प्रोजेक्ट के workflow के तय रिव्यू राउंड (Standard: एक, तीन, दस तक)। अधिकतम शुरू से बने काम के लिए है; मौजूदा codebase का फ़ीचर कितना भी कठिन हो, अधिकतम नहीं होता।",
+    "levelHint": {
+      "low": "कम: प्रोजेक्ट के workflow के तय रिव्यू राउंड (Standard: कोई नहीं)। builder खुद इसे verify करता है।",
+      "mid": "मध्यम: प्रोजेक्ट के workflow के तय रिव्यू राउंड (Standard: एक)।",
+      "high": "उच्च: प्रोजेक्ट के workflow के तय रिव्यू राउंड (Standard: तीन तक)।",
+      "max": "अधिकतम: प्रोजेक्ट के workflow के तय रिव्यू राउंड (Standard: दस तक), शुरू से बनी पूरी साइट या ऐप, नए प्रोडक्ट या अलग सेवा के लिए, और यह पहले ऐसे राउंड पर रुक जाता है जो टिक जाए। मौजूदा codebase का फ़ीचर कितना भी कठिन हो, अधिकतम उच्च ही होता है।"
+    }
+  },
+  "agentsAtWork": {
+    "title": "काम पर एजेंट",
+    "error": "पढ़ा नहीं जा सका कि कौन काम कर रहा है।",
+    "empty": "कोई एजेंट काम पर नहीं",
+    "more_one": "+{{count}} और",
+    "more_other": "+{{count}} और",
+    "round": "{{phase}} राउंड {{round}}",
+    "waiting": "प्रतीक्षा: {{what}}",
+    "blocked": "अटका",
+    "quiet": "शांत",
+    "lastHeard": "आख़िरी ख़बर {{time}}",
+    "label": "#{{id}} {{title}} — {{phase}}, {{since}}, {{state}}",
+    "labelAgent": "#{{id}} {{title}} — एजेंट {{agent}}, {{phase}}, {{since}}, {{state}}",
+    "state": {
+      "working": "काम पर",
+      "waiting": "प्रतीक्षा में",
+      "asleep": "निष्क्रिय"
+    }
+  },
+  "notificationSettings": {
+    "title": "सूचनाएँ",
+    "intro": "इस प्रोजेक्ट के लिए घंटी जो अलर्ट दिखा सकती है। किसी को बंद करें तो वह यहाँ नहीं दिखेगा; बोर्ड फिर भी उस पर नज़र रखता है, और दूसरे प्रोजेक्ट की अपनी पसंद रहती है।",
+    "none": "अभी कोई अलर्ट नहीं",
+    "show": "{{label}} दिखाएँ"
+  },
+  "alerts": {
+    "group": {
+      "setup": "सेटअप और वर्ज़न",
+      "work": "काम",
+      "machine": "यह मशीन",
+      "housekeeping": "साफ़-सफ़ाई"
+    },
+    "snooze": {
+      "minutes_one": "{{count}} मिनट",
+      "minutes_other": "{{count}} मिनट",
+      "hours_one": "{{count}} घंटा",
+      "hours_other": "{{count}} घंटे",
+      "days_one": "{{count}} दिन",
+      "days_other": "{{count}} दिन"
+    }
+  },
+  "workflowChips": {
+    "selfTip": "ticket एजेंट यह खुद करता है",
+    "agentTip": {
+      "picked": "इसके लिए चुना गया टीम एजेंट। उसके निर्देश टीम पेज पर लिखे हैं। भूमिका ({{agent}}) उसके span और रन रिपोर्ट का नाम तय करती है।",
+      "role": "भूमिका ({{agent}}) के नाम वाला टीम एजेंट। उसके निर्देश टीम पेज पर लिखे हैं। भूमिका ({{agent}}) उसके span और रन रिपोर्ट का नाम तय करती है।",
+      "default": "{{agent}} नाम का कोई टीम एजेंट नहीं है: यह बिल्ट-इन {{agent}} भूमिका के रूप में चलता है। उसके निर्देश टीम पेज पर लिखे हैं। भूमिका ({{agent}}) उसके span और रन रिपोर्ट का नाम तय करती है।"
+    },
+    "agentMissing": "एजेंट नहीं मिला",
+    "missingTip": "इसके लिए {{picked}} चुना गया था, पर टीम में अब इस नाम का कोई एजेंट नहीं है: एजेंट के लौटने या दूसरा चुने जाने तक यह {{name}} के रूप में चलता है।",
+    "locked": "लॉक",
+    "lockedAboveLow": "कम से ऊपर लॉक",
+    "skippedOnLow": "कम पर छोड़ा जाता है",
+    "changed": "बदला",
+    "changedTip": "प्रीसेट से बदला गया: {{what}}"
+  },
+  "workflowCustom": {
+    "name": "नाम",
+    "new": "नया workflow",
+    "newDescription": "इस प्रोजेक्ट के workflow की एक प्रति, जिसे आप अपने तौर पर बदलते हैं: चरण जोड़ें और हटाएँ, उनका क्रम बदलें, तय करें कि हर चरण कौन चलाएगा। इसके अंदर की रिव्यू उसी प्रीसेट के साथ आती है जिससे इसे कॉपी किया गया था।",
+    "startFrom": "यहाँ से शुरू करें",
+    "create": "workflow बनाएँ",
+    "rename": "नाम बदलें",
+    "renameTitle": "workflow का नाम बदलें",
+    "renameDescription": "ticket और प्रोजेक्ट नए नाम से इसे फ़ॉलो करते रहते हैं।",
+    "deleteTitle": "{{name}} workflow हटाएँ?",
+    "deleteDescription": "अगर प्रोजेक्ट इसे फ़ॉलो करता है, तो प्रोजेक्ट {{standard}} पर वापस चला जाता है, और जो ticket इसका नाम लेता है वह इसके बजाय प्रोजेक्ट के workflow को फ़ॉलो करता है। प्रीसेट नहीं बदले जाते। यह वापस नहीं हो सकता।",
+    "deleteWorkflow": "workflow हटाएँ",
+    "addStep": "चरण जोड़ें",
+    "allIn": "सभी प्रकार पहले से हैं"
+  },
+  "workflowGraph": {
+    "label": "{{complexity}} ticket के लिए {{label}} workflow",
+    "complexity": {
+      "low": "कम",
+      "mid": "मध्यम",
+      "high": "उच्च",
+      "max": "अधिकतम"
+    },
+    "roundSurvives": "राउंड टिकता है",
+    "roundFails": "राउंड विफल",
+    "inParallel": "समानांतर",
+    "reviewRound": "रिव्यू राउंड",
+    "noRoundsOn": "{{complexity}} पर कोई रिव्यू राउंड नहीं"
+  },
+  "workflowPanel": {
+    "idle": "ग्राफ़ में कोई स्टेप चुनें और देखें कि वह क्या करता है, उसे कौन चलाए, उसका effort, वह चले या नहीं, और क्रम में उसकी जगह बदलें।",
+    "runnerAgents": "ticket एजेंट /feature-review खुद चलाता है। उसके फ़ेज़ अपने टीम एजेंट चलाते हैं, जो फ़ेज़ नोड पर चुने जाते हैं।",
+    "selfAgent": "ticket एजेंट यह खुद करता है: चुनने के लिए कोई टीम एजेंट नहीं है।",
+    "whatItDoes": "यह क्या करता है",
+    "handoffTo": "{{next}} को hand-off",
+    "result": "नतीजा",
+    "team": {
+      "title": "टीम एजेंट",
+      "default": "डिफ़ॉल्ट ({{name}})",
+      "notInTeam": "{{name}} (टीम में नहीं)",
+      "missing": "इसके लिए {{picked}} चुना गया था, पर टीम में अब इस नाम का कोई एजेंट नहीं है। एजेंट के लौटने या दूसरा चुने जाने तक यह {{name}} के रूप में चलता है। चुनाव हटाने के लिए डिफ़ॉल्ट चुनें।",
+      "runsAs": "{{name}} के रूप में चलता है। उसके निर्देश टीम पेज पर लिखे हैं; भूमिका ({{role}}) उसके span और रन रिपोर्ट का नाम तय करती है।",
+      "runsAsDefault": "{{name}} के रूप में चलता है (बिल्ट-इन एजेंट: टीम में इस नाम का कोई नहीं)। उसके निर्देश टीम पेज पर लिखे हैं; भूमिका ({{role}}) उसके span और रन रिपोर्ट का नाम तय करती है।"
+    },
+    "placeInOrder": "क्रम में जगह",
+    "moveUp": "ऊपर ले जाएँ",
+    "moveDown": "नीचे ले जाएँ",
+    "moveUpTip": "ऊपर ले जाएँ: {{step}} पहले चलता है",
+    "moveDownTip": "नीचे ले जाएँ: {{step}} बाद में चलता है",
+    "runs": "चलता है",
+    "run": "{{step}} चलाएँ",
+    "alsoRunOnLow": "कम वाले ticket पर भी {{step}} चलाएँ",
+    "aboveLowNote": "यह स्विच सिर्फ़ तय करता है कि यह कम वाले ticket पर भी चले या नहीं।",
+    "effort": "Effort",
+    "effortHint": "Agent tool के effort के रूप में आगे भेजा जाता है। {{hint}}।",
+    "reviewRuns": "हर राउंड में {{total}} अलग /feature-review रन चलते हैं: {{runs}}, हर एक अपने एजेंट नाम से और दूसरे के निष्कर्ष कभी देखे बिना।",
+    "survival": "<strong>राउंड तब टिकता है जब</strong> {{survival}}।",
+    "inThisWorkflow": "इस workflow में",
+    "removeStep": "चरण हटाएँ",
+    "takesOut": "{{step}} को इस workflow से हटाएँ। ग्राफ़ के ऊपर \"चरण जोड़ें\" से इसे फिर जोड़ सकते हैं।",
+    "alwaysFirst": "{{step}} हमेशा पहला चरण होता है, इसलिए इसे हटाया नहीं जा सकता।",
+    "alwaysLast": "{{step}} हमेशा आखिरी चरण होता है, इसलिए इसे हटाया नहीं जा सकता।",
+    "lockedStep": "{{step}} लॉक है, इसलिए इसे हटाया नहीं जा सकता।"
+  },
+  "workflowPage": {
+    "title": "Workflow",
+    "intro": "ticket To do से hand-off तक कैसे पहुँचता है: उसके एजेंट के चलाए स्टेप, क्रम से, हर एक को कौन चलाता है और हर एक अगले को क्या सौंपता है। प्रोजेक्ट एक workflow का पालन करता है; ticket अपने पेज पर दूसरा चुन सकता है। एजेंट इसे बोर्ड से पढ़ते हैं, इसलिए यहाँ का बदलाव उनके अगले रन से लागू होता है।",
+    "graphShows": "ग्राफ़ {{complexity}} ticket दिखाता है।",
+    "projectFollows": "प्रोजेक्ट इसी workflow का पालन करता है",
+    "use": "यह workflow इस्तेमाल करें",
+    "resetThis": "यह workflow रीसेट करें",
+    "resetTitle": "{{label}} workflow रीसेट करें?",
+    "resetBody": "इसका क्रम, स्विच, effort, टीम एजेंट और रिव्यू राउंड वापस वही हो जाते हैं जो {{label}} प्रीसेट के साथ आता है। बाकी प्रीसेट में किए बदलाव बने रहते हैं।",
+    "cancel": "रद्द करें",
+    "reset": "रीसेट करें",
+    "sectionLabel": "{{label}} workflow",
+    "projects": "प्रोजेक्ट का",
+    "summary_one": "{{complexity}} ticket के लिए {{count}} स्टेप · रिव्यू: {{rounds}}",
+    "summary_other": "{{complexity}} ticket के लिए {{count}} स्टेप · रिव्यू: {{rounds}}",
+    "created": "workflow बनाया गया",
+    "renamed": "नाम बदला गया",
+    "deleted": "workflow हटाया गया",
+    "resetBodyCustom": "इसके चरण, क्रम, स्विच, प्रयास, टीम एजेंट और रिव्यू राउंड वापस उसी हालत में आ जाएँगे जैसे {{label}} workflow बना था। नाम वैसा ही रहेगा और दूसरे workflows में जो बदला गया है वह रहेगा।",
+    "fellBack": "जिस workflow को यह प्रोजेक्ट फ़ॉलो करता था वह हटा दिया गया, इसलिए अब यह {{standard}} को फ़ॉलो करता है। जो ticket उसका नाम लेते थे, वे प्रोजेक्ट के workflow को फ़ॉलो करते हैं। यह सूचना बंद करने के लिए {{standard}} रहने दें, या नीचे कोई और workflow चुनकर \"यह workflow इस्तेमाल करें\" दबाएँ।",
+    "notOwn": "यह workflow इस प्रोजेक्ट का नहीं है (शायद हटाया गया हो), इसलिए प्रोजेक्ट का अपना workflow दिखाया जा रहा है।",
+    "keepStandard": "{{label}} रखें",
+    "customNote": "आपका अपना workflow, {{base}} से कॉपी किया गया। सूची में दिए प्रकार के चरण जोड़ें, जो लॉक नहीं हैं उन्हें हटाएँ, और हर चरण जितनी इजाज़त दे उतने दायरे में उन्हें आगे-पीछे करें। इसके अंदर की रिव्यू (इसके फ़ेज़ और वे क्या चलाते हैं) {{base}} के साथ आती है।"
+  },
+  "workflowPresets": {
+    "group": "Workflow प्रीसेट",
+    "active": "चालू",
+    "tweaked": "बदला हुआ",
+    "complexity": "जटिलता",
+    "stats_one": "{{count}} स्टेप · रिव्यू राउंड {{rounds}}",
+    "stats_other": "{{count}} स्टेप · रिव्यू राउंड {{rounds}}",
+    "light": {
+      "label": "Light",
+      "description": "बिल्ड, गेट, एक रिव्यूअर, intent जाँच और hand-off: न spec एजेंट, न env, न अलग hunt।"
+    },
+    "standard": {
+      "label": "Standard",
+      "description": "पूरा चक्र: spec, बिल्ड, गेट, spec, env, verify, दो स्वतंत्र hunt, refute और merge जाँच वाले रिव्यू राउंड, फिर intent जाँच, PR, CI, preview और hand-off।"
+    },
+    "thorough": {
+      "label": "Thorough",
+      "description": "Standard के साथ टेस्ट लिखने का अलग पास, सुरक्षा चेकलिस्ट वाला तीसरा hunt, हर रिव्यू राउंड के अंत में intent जाँच, और कम से ऊपर हर स्तर पर एक और रिव्यू राउंड।"
+    },
+    "maximum": {
+      "label": "Maximum",
+      "description": "Thorough के साथ दूसरा स्वतंत्र spec, हर राउंड की दूसरी पूरी रिव्यू एक अलग एजेंट से जो पहली कभी नहीं देखता, और हर एजेंट पर उच्च effort।"
+    },
+    "content": {
+      "label": "कंटेंट",
+      "description": "क्लेम, एक ड्राफ़्ट बनाया और खुद जाँचा गया, ड्राफ़्ट पर इंसानी राउंड, सारांश और हैंड-ऑफ़: कोई spec नहीं, कोई PR नहीं, CI, preview या रिव्यू फ़ेज़ नहीं।"
+    },
+    "custom": "कस्टम",
+    "copiedFrom": "आपका अपना, {{base}} से कॉपी किया गया।"
+  },
+  "workflowReview": {
+    "legend": "जटिलता के अनुसार रिव्यू राउंड",
+    "changed": "बदला",
+    "notSaved": "सहेजा नहीं गया: {{reason}}",
+    "default": "डिफ़ॉल्ट {{value}}"
+  },
+  "workflowReads": {
+    "title": "एजेंट क्या पढ़ते हैं",
+    "hint": "वह टेक्स्ट जो get_workflow इस workflow के लिए देता है",
+    "textLabel": "Workflow टेक्स्ट"
+  },
+  "workflowSelect": {
+    "project": "प्रोजेक्ट का workflow ({{label}})",
+    "hint": "वह workflow जिसे इसका एजेंट फ़ॉलो करता है: प्रोजेक्ट का अपना, या सिर्फ़ इस ticket के लिए प्रोजेक्ट का कोई और workflow। प्रोजेक्ट का workflow बदलने से वह ticket नहीं हिलता जो कोई और नाम देता है।",
+    "deleted": "हटाया गया workflow (प्रोजेक्ट का फ़ॉलो करता है)"
+  },
+  "workflowTags": {
+    "title": "वे टैग जो workflow चुनते हैं",
+    "empty": "अभी तक कोई टैग workflow नहीं चुनता। एजेंट set_workflow_tags से यह मैप सेट करते हैं: जिस ticket पर इनमें से कोई टैग हो और उसका अपना workflow न हो, वह टैग से जुड़े workflow को फ़ॉलो करता है, नहीं तो प्रोजेक्ट के workflow को।",
+    "tag": "टैग",
+    "workflow": "workflow",
+    "notOne": "प्रोजेक्ट के workflows में से नहीं है"
+  },
+  "workflowView": {
+    "noRounds": "कोई रिव्यू राउंड नहीं",
+    "rounds_one": "{{count}} राउंड",
+    "rounds_other": "{{count}} राउंड",
+    "complexity": {
+      "low": "कम",
+      "mid": "मध्यम",
+      "high": "उच्च",
+      "max": "अधिकतम"
+    },
+    "effort": {
+      "auto": "ऑटो",
+      "low": "कम",
+      "medium": "मध्यम",
+      "high": "उच्च"
+    },
+    "effortLevel": {
+      "low": "कम",
+      "medium": "मध्यम",
+      "high": "उच्च"
+    },
+    "autoLevel": "ऑटो: {{level}}",
+    "autoEffortHint": "ऑटो ticket के अनुसार चलता है: कम ticket पर कम, मध्यम और उच्च पर मध्यम, अधिकतम पर उच्च",
+    "separator": ", ",
+    "you": "आप",
+    "skippedNoRounds": "कोई रिव्यू राउंड नहीं",
+    "skippedOff": "बंद",
+    "changed": {
+      "moved": "क्रम में उसकी जगह",
+      "off": "बंद किया गया",
+      "effort": "उसका effort",
+      "agent": "उसका टीम एजेंट"
+    },
+    "name": {
+      "agent": "एजेंट {{name}}",
+      "locked": "लॉक",
+      "skipsOnLow": "कम वाले ticket पर छोड़ा जाता है"
+    },
+    "lockReason": {
+      "claim": "लॉक: ticket पढ़े और claim किए बिना कुछ शुरू नहीं हो सकता।",
+      "build": "लॉक: बदलाव बने बिना कुछ नहीं सौंपा जाता।",
+      "gate": "लॉक: कोई बदलाव बिना जाँचे आगे नहीं जाता।",
+      "intent": "कम से ऊपर लॉक: कम से ऊपर हर ticket को सौंपने से पहले इंसान के अपने शब्दों से मिलाकर जाँचा जाता है।",
+      "rounds": "लॉक: हैंड-ऑफ़ से पहले इंसान ड्राफ़्ट की समीक्षा करता है।",
+      "always": "लॉक: इसके बिना ticket सौंपा नहीं जा सकता।"
+    },
+    "survival": {
+      "light": "रिव्यूअर ने कोई निष्कर्ष दोहराया नहीं और builder के प्रमाण हर स्वीकृति मानदंड को कवर करते हैं",
+      "standard": "verdict SHIP है, works जाँच YES है, base जाँच NO है और हर स्वीकृति मानदंड निष्पादन से PASS है (UNVERIFIED सिर्फ़ उस कारण से जो escalation नियमों में नामित है और जिसे पार नहीं किया जा सका)",
+      "thoroughIntent": "verdict SHIP है, works जाँच YES है, base जाँच NO है और हर स्वीकृति मानदंड निष्पादन से PASS है (UNVERIFIED सिर्फ़ उस कारण से जो escalation नियमों में नामित है और जिसे पार नहीं किया जा सका), और राउंड के अंत की intent जाँच मेल खाती है",
+      "maximum": "दोनों रिव्यू टिकती हैं ({{standard}}) और मिलान कोई निष्कर्ष खुला नहीं छोड़ता",
+      "maximumIntent": "दोनों रिव्यू टिकती हैं ({{standard}}), मिलान कोई निष्कर्ष खुला नहीं छोड़ता और राउंड के अंत की intent जाँच मेल खाती है"
+    },
+    "move": {
+      "after": "{{step}} को {{other}} के बाद आना चाहिए",
+      "stayFirst": "{{step}} को पहले ही रहना चाहिए",
+      "stayLast": "{{step}} को आख़िर में ही रहना चाहिए",
+      "alreadyFirst": "{{step}} पहले ही पहला है",
+      "alreadyLast": "{{step}} पहले ही आख़िरी है"
+    }
+  },
+  "backToModule": {
+    "back": "{{label}} पर वापस",
+    "home": "होम"
+  },
+  "ticketLine": {
+    "openedBy": "{{name}} ({{role}}) ने {{when}} खोला",
+    "updated": "{{when}} को अपडेट हुआ",
+    "opened": "{{when}} को खोला गया"
+  },
+  "resumeSettings": {
+    "title": "फिर शुरू करें",
+    "intro": "सवाल पूछने वाला एजेंट अपनी बारी खत्म कर देता है। यहाँ कमांड होने पर, जब आप बोर्ड पर फ़ैसले के कार्ड का जवाब देते हैं, या ticket को अटके या रिव्यू चरण से वापस सक्रिय चरण में ले जाते हैं, तो बोर्ड काम खुद आगे बढ़ाता है: वह कमांड इसी मशीन पर, ticket के worktree में चलाता है, जिसके standard input में और <code>BOARD_RESUME_PROMPT_FILE</code> में नामित फ़ाइल में सवाल और आपका जवाब (या आपके ताज़ा शब्द) होते हैं; <code>BOARD_URL</code>, <code>BOARD_PROJECT_ID</code>, <code>BOARD_TICKET_ID</code> और <code>BOARD_AGENT_NAME</code> सेट होते हैं। जिस ticket पर एजेंट चालू है या जो पहले से फिर शुरू हो रहा है, उसके लिए कुछ शुरू नहीं होता। यह बोर्ड के उपयोगकर्ता के अधिकारों से चलता है, और इसे सिर्फ़ आप सेट कर सकते हैं। खाली का मतलब बंद।",
+    "presets": "प्रीसेट",
+    "found": "मिला",
+    "notFound": "नहीं मिला",
+    "command": "फिर शुरू करने की कमांड",
+    "commandPlaceholder": "claude -p (खाली: बंद)",
+    "timeout": "इतने मिनट बाद रोकें",
+    "save": "सहेजें",
+    "saving": "सहेजा जा रहा है…",
+    "timeoutProblem": "{{min}} से {{max}} तक कोई पूर्ण संख्या।",
+    "unsaved": "बदलाव सहेजे नहीं गए।",
+    "noChanges": "कोई बदलाव नहीं।",
+    "off": "फिर शुरू करना बंद है।"
+  },
+  "resumeCard": {
+    "title": "फिर शुरू करें",
+    "resume": "फिर शुरू करें",
+    "retry": "दोबारा कोशिश करें",
+    "started": "बोर्ड ने काम फिर शुरू किया",
+    "empty": "अभी किसी ने इस ticket को फिर शुरू नहीं किया।",
+    "setInSettings": "इंसान इसे प्रोजेक्ट की सेटिंग्स में सेट करता है।",
+    "failed": "बोर्ड फिर शुरू नहीं कर सका: {{reason}}",
+    "log": "लॉग",
+    "state": {
+      "queued": "शुरू हो रहा है",
+      "running": "चल रहा है",
+      "succeeded": "पूरा हुआ",
+      "failed": "विफल",
+      "skipped": "शुरू नहीं हुआ"
+    }
+  },
+  "runReportsWindow": {
+    "reports": "रिपोर्ट",
+    "reportsCount": "रिपोर्ट ({{n}})",
+    "title": "रन रिपोर्ट",
+    "description": "इस ticket की रन रिपोर्ट, फ़िल्टर और क्रम के साथ। एक खोलने पर वह पूरी दिखती है।",
+    "back": "रिपोर्ट पर वापस",
+    "none": "अभी कोई रन रिपोर्ट नहीं।",
+    "noMatch": "इन फ़िल्टर से कोई रिपोर्ट नहीं मिलती।",
+    "count_one": "{{count}} रिपोर्ट में से {{shown}}",
+    "count_other": "{{count}} रिपोर्ट में से {{shown}}",
+    "clearFilters": "फ़िल्टर साफ़ करें",
+    "filter": {
+      "agent": "एजेंट",
+      "round": "राउंड",
+      "time": "समय",
+      "difficulty": "कठिनाई",
+      "confidence": "भरोसा",
+      "duration": "अवधि",
+      "sortBy": "क्रम"
+    },
+    "items": {
+      "allAgents": "सभी एजेंट",
+      "allRounds": "सभी राउंड",
+      "round": "राउंड {{n}}",
+      "noRound": "कोई राउंड नहीं"
+    },
+    "time": {
+      "any": "कभी भी",
+      "hour": "पिछला घंटा",
+      "today": "आज",
+      "week": "पिछले 7 दिन"
+    },
+    "duration": {
+      "any": "कोई भी",
+      "reported": "दर्ज",
+      "unreported": "दर्ज नहीं"
+    },
+    "rating": {
+      "any": "कोई भी",
+      "unrated": "रेटिंग नहीं"
+    },
+    "sort": {
+      "newest": "सबसे नया",
+      "oldest": "सबसे पुराना",
+      "longest": "सबसे लंबा",
+      "difficulty": "सबसे अधिक कठिनाई",
+      "confidence": "सबसे अधिक भरोसा"
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import { ArrowLeft, ClipboardList } from 'lucide-react'
 import { useId, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { RunReportRowButton, RunReportView, runReportLabel } from '#/components/RunReport'
 import { Button } from '#/components/ui/button'
@@ -25,24 +26,24 @@ import { onServerClock } from '#/lib/workStatus'
 
 const ANY = 'any'
 
-const TIME_ITEMS = { any: 'Any time', hour: 'Last hour', today: 'Today', week: 'Last 7 days' }
-const DURATION_ITEMS = { any: 'Any', reported: 'Reported', unreported: 'Not reported' }
-const SORT_ITEMS: Record<ReportSort, string> = {
-  newest: 'Newest',
-  oldest: 'Oldest',
-  longest: 'Longest',
-  difficulty: 'Highest difficulty',
-  confidence: 'Highest confidence',
-}
-const RATING_ITEMS = {
-  [ANY]: 'Any',
-  '1': '1',
-  '2': '2',
-  '3': '3',
-  '4': '4',
-  '5': '5',
-  unrated: 'Unrated',
-}
+const TIME_KEYS = {
+  any: 'runReportsWindow.time.any',
+  hour: 'runReportsWindow.time.hour',
+  today: 'runReportsWindow.time.today',
+  week: 'runReportsWindow.time.week',
+} as const
+const DURATION_KEYS = {
+  any: 'runReportsWindow.duration.any',
+  reported: 'runReportsWindow.duration.reported',
+  unreported: 'runReportsWindow.duration.unreported',
+} as const
+const SORT_KEYS = {
+  newest: 'runReportsWindow.sort.newest',
+  oldest: 'runReportsWindow.sort.oldest',
+  longest: 'runReportsWindow.sort.longest',
+  difficulty: 'runReportsWindow.sort.difficulty',
+  confidence: 'runReportsWindow.sort.confidence',
+} as const satisfies Record<ReportSort, string>
 
 /** A rating filter as its select value, and back. */
 const ratingValue = (v: RatingFilter) => (v === null ? ANY : String(v))
@@ -101,6 +102,7 @@ function ReportList({
   serverNow?: string | null
 }) {
   // Presets count from the server's clock (report times are the server's), refreshed while the window is open.
+  const { t } = useTranslation()
   const now = onServerClock(useNow(30_000), useServerOffset(serverNow))
   const agents = useMemo(() => agentOptions(reports), [reports])
   const rounds = useMemo(() => roundOptions(reports), [reports])
@@ -109,65 +111,95 @@ function ReportList({
     [reports, filters, sort, now],
   )
   const set = (change: Partial<ReportFilters>) => onFilters({ ...filters, ...change })
+  const timeItems = {
+    any: t(TIME_KEYS.any),
+    hour: t(TIME_KEYS.hour),
+    today: t(TIME_KEYS.today),
+    week: t(TIME_KEYS.week),
+  }
+  const durationItems = {
+    any: t(DURATION_KEYS.any),
+    reported: t(DURATION_KEYS.reported),
+    unreported: t(DURATION_KEYS.unreported),
+  }
+  const sortItems = {
+    newest: t(SORT_KEYS.newest),
+    oldest: t(SORT_KEYS.oldest),
+    longest: t(SORT_KEYS.longest),
+    difficulty: t(SORT_KEYS.difficulty),
+    confidence: t(SORT_KEYS.confidence),
+  }
+  const ratingItems = {
+    [ANY]: t('runReportsWindow.rating.any'),
+    '1': '1',
+    '2': '2',
+    '3': '3',
+    '4': '4',
+    '5': '5',
+    unrated: t('runReportsWindow.rating.unrated'),
+  }
 
-  if (!reports.length) return <p className="text-sm text-muted-foreground">No run reports yet.</p>
+  if (!reports.length) return <p className="text-sm text-muted-foreground">{t('runReportsWindow.none')}</p>
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3 lg:grid-cols-4">
         <FilterSelect
-          label="Agent"
+          label={t('runReportsWindow.filter.agent')}
           value={filters.agent ?? ANY}
-          items={{ [ANY]: 'All agents', ...Object.fromEntries(agents.map((a) => [a, a])) }}
+          items={{
+            [ANY]: t('runReportsWindow.items.allAgents'),
+            ...Object.fromEntries(agents.map((a) => [a, a])),
+          }}
           onChange={(v) => set({ agent: v === ANY ? null : v })}
         />
         <FilterSelect
-          label="Round"
+          label={t('runReportsWindow.filter.round')}
           value={filters.round === null ? ANY : String(filters.round)}
           items={{
-            [ANY]: 'All rounds',
-            ...Object.fromEntries(rounds.map((n) => [String(n), `Round ${n}`])),
-            ...(hasUnroundedReport(reports) ? { none: 'No round' } : {}),
+            [ANY]: t('runReportsWindow.items.allRounds'),
+            ...Object.fromEntries(rounds.map((n) => [String(n), t('runReportsWindow.items.round', { n })])),
+            ...(hasUnroundedReport(reports) ? { none: t('runReportsWindow.items.noRound') } : {}),
           }}
           onChange={(v) => set({ round: v === ANY ? null : v === 'none' ? 'none' : Number(v) })}
         />
         <FilterSelect
-          label="Time"
+          label={t('runReportsWindow.filter.time')}
           value={filters.time}
-          items={TIME_ITEMS}
+          items={timeItems}
           onChange={(v) => set({ time: v as ReportFilters['time'] })}
         />
         <FilterSelect
-          label="Difficulty"
+          label={t('runReportsWindow.filter.difficulty')}
           value={ratingValue(filters.difficulty)}
-          items={RATING_ITEMS}
+          items={ratingItems}
           onChange={(v) => set({ difficulty: ratingOf(v) })}
         />
         <FilterSelect
-          label="Confidence"
+          label={t('runReportsWindow.filter.confidence')}
           value={ratingValue(filters.confidence)}
-          items={RATING_ITEMS}
+          items={ratingItems}
           onChange={(v) => set({ confidence: ratingOf(v) })}
         />
         <FilterSelect
-          label="Duration"
+          label={t('runReportsWindow.filter.duration')}
           value={filters.duration}
-          items={DURATION_ITEMS}
+          items={durationItems}
           onChange={(v) => set({ duration: v as ReportFilters['duration'] })}
         />
         <FilterSelect
-          label="Sort by"
+          label={t('runReportsWindow.filter.sortBy')}
           value={sort}
-          items={SORT_ITEMS}
+          items={sortItems}
           onChange={(v) => onSort(v as ReportSort)}
         />
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <p aria-live="polite" className="text-xs text-muted-foreground">
-          {shown.length} of {reports.length} report{reports.length === 1 ? '' : 's'}
+          {t('runReportsWindow.count', { shown: shown.length, count: reports.length })}
         </p>
         {hasFilters(filters) && (
           <Button variant="ghost" size="xs" onClick={() => onFilters(NO_REPORT_FILTERS)}>
-            Clear filters
+            {t('runReportsWindow.clearFilters')}
           </Button>
         )}
       </div>
@@ -180,7 +212,7 @@ function ReportList({
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-muted-foreground">No report matches these filters.</p>
+        <p className="text-sm text-muted-foreground">{t('runReportsWindow.noMatch')}</p>
       )}
     </div>
   )
@@ -198,6 +230,7 @@ export function RunReportsWindow({
   reports: RunReport[]
   serverNow?: string | null
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [openId, setOpenId] = useState<number | null>(null)
   const [filters, setFilters] = useState(NO_REPORT_FILTERS)
@@ -214,12 +247,16 @@ export function RunReportsWindow({
   }
   return (
     <>
-      <Tip content="Reports">
+      <Tip content={t('runReportsWindow.reports')}>
         <Button
           variant="ghost"
           size="icon-sm"
           className="relative"
-          aria-label={reports.length ? `Reports (${reports.length})` : 'Reports'}
+          aria-label={
+            reports.length
+              ? t('runReportsWindow.reportsCount', { n: reports.length })
+              : t('runReportsWindow.reports')
+          }
           onClick={() => show(true)}
         >
           <ClipboardList aria-hidden />
@@ -237,16 +274,18 @@ export function RunReportsWindow({
       <Dialog open={open} onOpenChange={show}>
         <DialogContent className="top-0 left-0 h-dvh max-h-dvh max-w-none translate-x-0 translate-y-0 content-start overflow-y-auto rounded-none sm:top-1/2 sm:left-1/2 sm:h-auto sm:max-h-[85vh] sm:max-w-4xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl">
           <DialogHeader className="pr-8">
-            <DialogTitle>{report ? `Run report: ${runReportLabel(report)}` : 'Run reports'}</DialogTitle>
-            <DialogDescription className="sr-only">
-              The run reports of this ticket, with filters and a sort. Opening one shows it in full.
-            </DialogDescription>
+            <DialogTitle>
+              {report
+                ? t('runReport.dialogTitle', { label: runReportLabel(report) })
+                : t('runReportsWindow.title')}
+            </DialogTitle>
+            <DialogDescription className="sr-only">{t('runReportsWindow.description')}</DialogDescription>
           </DialogHeader>
           {report ? (
             <div className="min-w-0 space-y-3">
               <Button variant="ghost" size="sm" className="-ml-2" onClick={() => setOpenId(null)}>
                 <ArrowLeft aria-hidden />
-                Back to reports
+                {t('runReportsWindow.back')}
               </Button>
               <RunReportView r={report} />
             </div>

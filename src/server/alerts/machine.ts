@@ -542,7 +542,7 @@ function restartedAlerts(ctx: AlertContext): AlertCandidate[] {
     .from(schema.tickets)
     .where(and(eq(schema.tickets.projectId, projectId), isNull(schema.tickets.archivedAt)))
     .all()
-    .filter((t) => stageKind(t) === 'review')
+    .filter((t) => ['review', 'approved'].includes(stageKind(t)))
   if (!tickets.length) return []
   const byId = new Map(tickets.map((t) => [t.id, t]))
   const workspaces = db

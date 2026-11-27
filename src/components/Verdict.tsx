@@ -1,4 +1,5 @@
 import { Check, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import { Tip } from '#/components/ui/tooltip'
 import { ago } from '#/lib/format'
@@ -35,18 +36,19 @@ export function VerdictButtons({
   disabled?: boolean
   compact?: boolean
 }) {
+  const { t: tr } = useTranslation()
   const current = verdictOf(t)
   const button = (v: 'approved' | 'disapproved') => {
     const on = current === v
     const Icon = v === 'approved' ? Check : X
-    const label = v === 'approved' ? 'Approve' : 'Disapprove'
+    const label = v === 'approved' ? tr('verdict.approve') : tr('verdict.disapprove')
     const title = on
       ? v === 'approved'
-        ? `Approved by ${t.approvedBy} ${ago(t.approvedAt)}. Click to take it back.`
-        : `Disapproved by ${t.disapprovedBy} ${ago(t.disapprovedAt)}. Click to take it back (reopens it).`
+        ? tr('verdict.approvedBy', { who: t.approvedBy, when: ago(t.approvedAt) })
+        : tr('verdict.disapprovedBy', { who: t.disapprovedBy, when: ago(t.disapprovedAt) })
       : v === 'approved'
-        ? 'Approve'
-        : 'Disapprove: cancels this lane'
+        ? tr('verdict.approve')
+        : tr('verdict.disapproveTip')
     return (
       <Tip content={title}>
         <button
@@ -60,7 +62,7 @@ export function VerdictButtons({
           } ${on ? ON[v] : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'}`}
         >
           <Icon className={compact ? 'size-3.5' : 'size-3.5'} />
-          {!compact && (on ? (v === 'approved' ? 'Approved' : 'Disapproved') : label)}
+          {!compact && (on ? (v === 'approved' ? tr('verdict.approved') : tr('verdict.disapproved')) : label)}
         </button>
       </Tip>
     )

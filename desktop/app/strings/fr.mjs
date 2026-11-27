@@ -1,0 +1,38 @@
+// The desktop app's own texts in fr (see ../strings.mjs). Every key of en.mjs, the same {{placeholders}} and <tags>.
+export default {
+  open: 'Ouvrir',
+  openInBrowser: 'Ouvrir dans le navigateur',
+  retryNow: 'Réessayer maintenant',
+  startAtLogin: 'Lancer à l’ouverture de session',
+  quit: 'Quitter',
+  openSettings: 'Ouvrir le fichier de paramètres',
+  openLogs: 'Ouvrir le dossier des journaux',
+  openHome: 'Ouvrir le dossier de l’application',
+  startAtLoginFailed: 'Impossible de modifier le lancement à l’ouverture de session.',
+  cannotStart: 'Le tableau ne peut pas démarrer.',
+  settingsInvalid: 'Les paramètres du tableau ne sont pas valides.',
+  homeUnusable:
+    'Le dossier de l’application {{home}} est inutilisable : {{error}}\n\nDéfinissez AGENT_BOARD_HOME sur un dossier accessible en écriture, ou retirez-le pour utiliser celui par défaut.',
+  homeLine: '{{error}}\n\nLe dossier de l’application : {{home}}',
+  dataFolderUnusable:
+    'Son dossier de données {{dir}} est inutilisable : {{error}}\n\nDéfinissez un autre DATA_DIR dans {{file}}, ou dans l’environnement, puis relancez l’application.',
+  logsLine: '{{detail}}\n\nJournaux : {{logs}}',
+  stopped: 'Le tableau s’est arrêté.',
+  restartedTimes_one: ' Il a été relancé {{count}} fois.',
+  restartedTimes_other: ' Il a été relancé {{count}} fois.',
+  noOutput: '(aucune sortie)',
+  exitedSignal: 'Il a été tué par {{signal}} à {{time}}.',
+  exitedCode: 'Il s’est arrêté avec le code {{code}} à {{time}}.',
+  exited: 'Il s’est arrêté à {{time}}.',
+  reasonCode: 'code de sortie {{code}}',
+  reasonSignal: 'signal {{signal}}',
+  reasonNone: 'aucun code de sortie',
+  tipRestarting: '{{name}} : redémarrage du tableau ({{reason}})',
+  tipRestarted: '{{name}} : {{url}} (redémarré à {{time}} après {{reason}})',
+  notifyRestarted: 'Le tableau a redémarré ({{reason}}).',
+  didNotStart: 'Le tableau n’a pas démarré.',
+  didNotAnswer: 'Il n’a pas répondu sur {{url}} en une minute.',
+  unreachableHeading: 'Le tableau sur <code>{{address}}</code> est injoignable.',
+  unreachableBody:
+    'Le tableau tourne sur une autre machine : vérifiez que celle-ci est en ligne et que le tableau y est lancé. L’application réessaie d’elle-même, et {{retry}} réessaie tout de suite.',
+}

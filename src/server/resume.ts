@@ -709,14 +709,15 @@ export function resumeAfterAnswer(
 }
 
 /**
- * The human moved a ticket out of a blocked or review stage into an active one. `from` is the stage it
+ * The human moved a ticket out of a blocked, review or approved stage into an active one. `from` is the stage it
  * left: its time of arrival is when the agent that put it there was last working.
  */
 export function resumeAfterMove(ticketId: number, from: string, to: string) {
   const ticket = ticketOf(ticketId)
   const stages = listStages(ticket.projectId)
   const left = kindOf(stages, from)
-  if ((left !== 'blocked' && left !== 'review') || kindOf(stages, to) !== 'active') return null
+  if ((left !== 'blocked' && left !== 'review' && left !== 'approved') || kindOf(stages, to) !== 'active')
+    return null
   const arrived = db
     .select({ at: schema.ticketEvents.at })
     .from(schema.ticketEvents)

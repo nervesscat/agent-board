@@ -196,7 +196,7 @@ const ticketStalled: AlertType = {
 function reviewTickets(projectId: number) {
   const stages = listStages(projectId)
   return projectTickets(projectId).flatMap((t) => {
-    if (t.prId !== null || kindOf(stages, t.status) !== 'review') return []
+    if (t.prId !== null || !['review', 'approved'].includes(kindOf(stages, t.status))) return []
     const pr = prForTicket(t)
     return pr?.queue?.open ? [{ ticket: t, queue: pr.queue, number: pr.number }] : []
   })
@@ -215,7 +215,7 @@ const approvedNotMerged: AlertType = {
   check(ctx) {
     const projectId = projectOf(ctx)
     return reviewTickets(projectId).flatMap(({ ticket, queue, number }): AlertCandidate[] => {
-      if (ticket.status !== 'approved') return []
+      if (kindOf(listStages(projectId), ticket.status) !== 'approved') return []
       const why = [
         ...(queue.merge === 'conflicts' ? ['it conflicts with its base'] : []),
         ...(queue.ci === 'failing' && !queue.localCi ? ['its checks are failing'] : []),
@@ -245,7 +245,7 @@ const prChecksFailed: AlertType = {
   check(ctx) {
     const projectId = projectOf(ctx)
     return reviewTickets(projectId).flatMap(({ ticket, queue, number }): AlertCandidate[] => {
-      if (ticket.status === 'approved') return []
+      if (kindOf(listStages(projectId), ticket.status) === 'approved') return []
       // A "CI run locally: green" comment naming the head counts as green, as the board's CI phase does.
       const failing = queue.ci === 'failing' && !queue.localCi
       const conflicts = queue.merge === 'conflicts'
@@ -587,7 +587,8 @@ const onlyHere: AlertType = {
     const projectId = projectOf(ctx)
     const stages = listStages(projectId)
     const tickets = projectTickets(projectId).filter(
-      (t) => t.branch && t.prId === null && ['review', 'blocked'].includes(kindOf(stages, t.status)),
+      (t) =>
+        t.branch && t.prId === null && ['review', 'approved', 'blocked'].includes(kindOf(stages, t.status)),
     )
     const byRepo = new Map<number, { repoPath: string; tickets: typeof tickets }>()
     for (const t of tickets) {

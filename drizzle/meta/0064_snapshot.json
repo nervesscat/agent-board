@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3dd212da-d3ed-46e5-9d5f-cd6c320fa64d",
+  "id": "0d85d055-caec-4c98-b5e2-f83541e13421",
   "prevId": "9e79969a-ffc8-40e2-a3db-b980df185077",
   "tables": {
     "account": {
@@ -1617,21 +1617,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": 240
-        },
-        "workflow_preset": {
-          "name": "workflow_preset",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'standard'"
-        },
-        "workflow_tweaks": {
-          "name": "workflow_tweaks",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {},
@@ -3985,13 +3970,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
-        },
-        "workflow_preset": {
-          "name": "workflow_preset",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {
