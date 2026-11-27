@@ -340,8 +340,12 @@ export interface MissingRunReport {
  * hand-off, matched in time order. A hand-off that fits no span is its own run, with no round, and only
  * a report written after it covers it, one report each: a report from before it never does. A group is
  * flagged when it has fewer reports than runs. The orchestrator's own spans name no such agent, so a
- * ticket worked only by the orchestrator has an empty list. Enforcement is a flag: a move to review
- * goes through and answers with this.
+ * ticket worked only by the orchestrator has an empty list. The records of a round's shape
+ * (`REVIEW_ROUND_RECORDS`, matched by phase and trimmed note as `missingReviewPhases` matches them) are
+ * no run, whatever the name they are written under: a review's orchestrator named like a run kind (a
+ * `runner`) owes no report for them. The one such span that stays a run is a phase agent's own, a
+ * `merge` agent's `merge` span. Enforcement is a flag: a move to review goes through and answers with
+ * this.
  */
 export function missingReports(ticketId: number): MissingRunReport[] {
   const t = db.select().from(schema.tickets).where(eq(schema.tickets.id, ticketId)).get()
@@ -351,10 +355,20 @@ export function missingReports(ticketId: number): MissingRunReport[] {
   type Span = { id: number; round: number | null; start: string }
   const groups = new Map<string, Group>()
   const spansByKind = new Map<string, Span[]>()
-  const { timeline } = ticketTimeline(ticketId)
+  const { events, timeline } = ticketTimeline(ticketId)
+  const records = Object.values(REVIEW_ROUND_RECORDS)
+  const recordSpans = new Set(
+    events
+      .filter(
+        (e) =>
+          e.kind === 'span_start' && records.some((r) => e.phase === r.phase && e.note.trim() === r.note),
+      )
+      .map((e) => e.id),
+  )
   for (const span of timeline.spans) {
     const kind = runKindOf(span.agent, known)
     if (!kind) continue
+    if (recordSpans.has(span.id) && kind !== span.phase) continue
     const key = `span|${kind}|${span.round ?? ''}`
     const found = groups.get(key)
     if (found) {

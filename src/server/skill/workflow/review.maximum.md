@@ -28,4 +28,5 @@ of the two reviews (it is in the `phases=` of both).{{end}}
   (`WORKDIR/round-<n>-reconcile.md`) and post it `progress: true`.
 - **The round survives** only when both reviews survive and the reconciliation leaves no finding open{{if roundIntent}}, and
   the intent check at the end of the round matches. A `does not match` is an ordinary round of the
-  budget (the budget rule above: it replaces the intent step's rule that it is outside the budget){{end}}.
+  budget (the budget rule above: it replaces the intent step's rule that it is outside the budget), and
+  the round after it is a full round for both reviews, never a delta round{{end}}.

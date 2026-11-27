@@ -372,30 +372,123 @@ describe('review rounds converge: a severity scale, delta rounds, a spec written
       "**A delta round** follows, after round 1, a round whose confirmed findings refute rated all `minor` (the Severity column of that round's `04-verdicts.md`)",
     )
     expect(wf).toContain(
-      "verify runs only the fixed findings' criteria, one hunt runs on the fix commits' diff only",
+      "verify runs the fixed findings' criteria and every criterion no earlier round passed, one hunt runs on the fix commits' diff only",
     )
-    expect(wf).toContain('**A full round** follows a round with any `medium` or `major` confirmed finding')
+    expect(wf).toContain(
+      '**A full round** follows every other round that did not survive: one with any `medium` or `major` confirmed finding',
+    )
     expect(wf).toContain('**Round 1 is always a full round** with every phase the workflow lists')
     const text = skill()
     expect(text).toContain(
-      "After round 1, a round whose confirmed findings refute rated all `minor` (the Severity column of that round's `04-verdicts.md`) is followed by a **delta round** (`delta`): verify runs only the acceptance criteria of the findings the fix pass fixed",
+      "After round 1, a round whose confirmed findings refute rated all `minor` (the Severity column of that round's `04-verdicts.md`) is followed by a **delta round** (`delta`), and only such a round: it had at least one confirmed finding and no intent `does not match` sent it back. In a delta round verify runs the acceptance criteria of the findings the fix pass fixed",
     )
     expect(text).toContain("one hunt runs on the fix commits' diff only")
     expect(text).toContain(
-      'Any `medium` or `major` confirmed finding is followed by a full round with every phase the workflow lists; round 1 is always a full round.',
+      'Every other round that did not survive is followed by a full round with every phase the workflow lists: one with any `medium` or `major` confirmed finding,',
     )
+    expect(text).toContain("whatever the severity of that round's findings; round 1 is always a full round.")
     expect(text).toContain(
       'The one hunt reviews the fix diff (`00-diff.patch`, `<last reviewed sha>..HEAD`) only',
     )
     expect(text).toContain('| `delta` | this run is a **delta round**')
     expect(flat(review('agents/feature-review-verify.md'))).toContain(
-      '**In a delta round** (the prompt says `delta`) you run only the acceptance criteria of the findings the fix pass fixed',
+      '**In a delta round** (the prompt says `delta`) you run the acceptance criteria of the findings the fix pass fixed',
     )
     // The served arguments: round 1, a full later round and a delta round, each its own.
     expect(wf).toContain('Pass to /feature-review in round 1: phases=spec,env,verify,hunt,hunt,refute,merge')
     expect(wf).toContain('In a full round after the first: phases=env,verify,hunt,hunt,refute,merge')
     expect(wf).toContain('In a delta round: phases=verify,hunt,refute,merge agents=verify,hunt,refute,merge')
     expect(wf).toMatch(/round=<n> delta\./)
+  })
+
+  it('lets a criterion stand in a delta round only when a round passed it: the delta verify runs the ones none did', async () => {
+    const wf = flat(await workflowText('standard', 'high'))
+    expect(wf).toContain(
+      '**What survives a delta round**: the survival rule, with "every acceptance criterion" read as the ones its verify ran plus the ones an earlier round\'s verify recorded `PASS`. A criterion stands only when a round actually passed it: one that no round passed (a `FAIL` whose candidate was refuted, an `UNVERIFIED`) is run by the delta round\'s verify and counts with that result.',
+    )
+    expect(wf).not.toContain('the others stand from the round that passed them')
+    expect(wf).toContain(
+      "`/feature-review` lists in it, under **Not yet passed**, every earlier criterion that no round's verify has recorded `PASS`.",
+    )
+    const text = skill()
+    expect(text).toContain(
+      "and every criterion no earlier round passed (the spec's **Not yet passed** list, Phase 1), one hunt runs on the fix commits' diff only",
+    )
+    expect(text).toContain(
+      "A criterion stands in a later round only when a round's verify actually recorded it `PASS`.",
+    )
+    expect(text).toContain(
+      "every criterion no earlier round passed (the spec's **Not yet passed** list) and the scoped checks; a criterion it does not run stands only because an earlier round's verify recorded it `PASS`.",
+    )
+    // The list is kept by the orchestrator, from the round before, and a refuted FAIL stays on it.
+    expect(text).toContain(
+      "first note from the old `WORKDIR/02-verification.md` every criterion whose result is not `PASS`, for the spec's **Not yet passed** list",
+    )
+    expect(text).toContain(
+      "Then write the spec's **Not yet passed** list anew: every earlier criterion that no round's verify has recorded `PASS`",
+    )
+    expect(text).toContain(
+      "A criterion leaves the list only when a round's verify passes it, so a `FAIL` whose candidate refute refuted stays on it.",
+    )
+    expect(flat(review('agents/feature-review-verify.md'))).toContain(
+      "every criterion no earlier round passed (the ones `01-spec.md` lists under **Not yet passed**), and the scoped checks. A criterion outside those two sets stands because an earlier round's verify recorded it `PASS`, and is not re-run.",
+    )
+    expect(flat(review('run-reports/verify.md'))).toContain(
+      "in a delta round, the criteria you ran: the fixed findings' and the ones no earlier round passed",
+    )
+  })
+
+  it('names a shape for every round that did not survive, and a full round after an intent return', async () => {
+    const full =
+      '**A full round** follows every other round that did not survive: one with any `medium` or `major` confirmed finding, and one with no confirmed finding at all, whatever sent it back (a plausible finding, a criterion that is not `PASS`, the works check or a merge-check failure).'
+    const afterIntent =
+      "**A round that follows an intent `does not match` is always a full round**, whatever the severity of that round's findings."
+    for (const preset of ['standard', 'thorough', 'maximum'] as const) {
+      const wf = flat(await workflowText(preset, 'high'))
+      expect(wf, preset).toContain(
+        "(the Severity column of that round's `04-verdicts.md`), and only such a round: it had at least one confirmed finding and no intent `does not match` sent it back.",
+      )
+      expect(wf, preset).toContain(`${full} ${afterIntent} A full round runs every phase the workflow lists`)
+      // The intent step's own sentence gives the same shape.
+      expect(wf, preset).toContain('ONE more full review round')
+    }
+    // The presets with a round-end intent check say it where they describe that check.
+    expect(flat(await workflowText('thorough', 'high'))).toContain(
+      'the next round is an ordinary round of the budget and always a full round, never a delta round (the review step\'s "Rounds after the first").',
+    )
+    expect(flat(await workflowText('maximum', 'high'))).toContain(
+      'and the round after it is a full round for both reviews, never a delta round.',
+    )
+    const text = skill()
+    expect(text).toContain(
+      "one with no confirmed finding at all, whatever sent it back (a plausible finding, a criterion that is not `PASS`, the works check or a merge-check failure). A round that follows an intent `does not match` is always a full round, whatever the severity of that round's findings",
+    )
+    expect(text).toContain(
+      "then ONE more review round of the ticket's workflow, always a full round, never a delta round (numbering continues from the last round",
+    )
+  })
+
+  it('gives a delta round’s env file the scoped checks its verify and merge check run from', () => {
+    const text = skill()
+    expect(text).toContain(
+      "A delta round has no env phase: the run prepares the worktree itself and writes the small `00-env.md` as the single-reviewer plan does (**The plan**), plus the **Scoped checks** section its verify and its merge check run from, written as the env agent writes it: the typecheck, lint and format, migration, related unit test and end-to-end commands on the changed files, which of them are heavy, and the `CI:` line, taken from the runbook in the carried-over `01-spec.md` or else from the project's own scripts.",
+    )
+    expect(text).toContain(
+      "When `build=` was given and the build record's SHA is the commit under review, the run copies that `.output-e2e` into the worktree and records `E2E_SKIP_BUILD=1` there, as the env agent does.",
+    )
+    // The section is the one the env agent's format names and the two phases read.
+    expect(review('agents/feature-review-env.md')).toContain('## Scoped checks (run from the worktree)')
+    expect(flat(review('agents/feature-review-verify.md'))).toContain(
+      'Run the scoped checks once with the commands from `00-env.md` (**Scoped checks**)',
+    )
+    expect(flat(review('agents/feature-review-merge.md'))).toContain(
+      'Run the scoped checks from `00-env.md` once on the merged tree.',
+    )
+    // The run starts a delta round's server itself, and the sentence after it no longer forbids that.
+    expect(text).toContain(
+      'Where an env phase ran, do not start anything yourself (the server of a delta round, above, is the one thing the run starts), and never reuse anything that was already running.',
+    )
+    expect(text).not.toContain('Do not start anything yourself, and do not reuse')
   })
 
   it('lets no agent widen or narrow a round on its own', async () => {

@@ -19,7 +19,8 @@
   preview running and reuses it: a head is never built twice for the preview, and a new commit (a fix round) is
   the only thing that starts a new one.{{else}}The preview step is skipped for this ticket, so there is no preview.{{end}} A `does not match` makes the
   round not survive: its lines go to the builder as the round's findings, and the next round is an
-  ordinary round of the budget. **This is the budget rule in this workflow**: it replaces the intent step's
+  ordinary round of the budget and always a full round, never a delta round (the review step's "Rounds
+  after the first"). **This is the budget rule in this workflow**: it replaces the intent step's
   rule that a `does not match` is outside the budget (and the review step's sentence about an intent
   return); the intent step's second-`does not match` rule still holds. The round survives only when the
   review's survival rule holds and the intent check matches.{{end}}

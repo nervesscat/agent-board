@@ -141,11 +141,18 @@ verify and every hunt at once, then refute, then the merge check), not by the or
 spec is written once, in round 1, so no round after the first has a `spec` phase (the workflow's
 `phases=` for a later round has no `spec` token). A full round after the first runs every other
 phase. After round 1, a round whose confirmed findings refute rated all `minor` (the Severity column
-of that round's `04-verdicts.md`) is followed by a **delta round** (`delta`): verify runs only the
-acceptance criteria of the findings the fix pass fixed (the ones the orchestrator appended, Phase 1),
-one hunt runs on the fix commits' diff only, refute rates what those two raise, and the merge check
-runs as in any round (Phase 3b). Any `medium` or `major` confirmed finding is followed by a full
-round with every phase the workflow lists; round 1 is always a full round. No agent widens a round
+of that round's `04-verdicts.md`) is followed by a **delta round** (`delta`), and only such a round:
+it had at least one confirmed finding and no intent `does not match` sent it back. In a delta round
+verify runs the acceptance criteria of the findings the fix pass fixed (the ones the orchestrator
+appended, Phase 1) and every criterion no earlier round passed (the spec's **Not yet passed** list,
+Phase 1), one hunt runs on the fix commits' diff only, refute rates what those two raise, and the
+merge check runs as in any round (Phase 3b). Every other round that did not survive is followed by a
+full round with every phase the workflow lists: one with any `medium` or `major` confirmed finding,
+and one with no confirmed finding at all, whatever sent it back (a plausible finding, a criterion
+that is not `PASS`, the works check or a merge-check failure). A round that follows an intent
+`does not match` is always a full round, whatever the severity of that round's findings; round 1 is
+always a full round. A criterion stands in a later round only when a round's verify actually
+recorded it `PASS`. No agent widens a round
 or narrows one beyond what this rule gives, and no phase the round's plan lists is skipped.
 
 **The single-reviewer plan (`phases=reviewer`).** One reviewer, no spec, env, verify, refute or merge
@@ -194,7 +201,9 @@ checks each read `not run: single-reviewer plan`.
    is live, or `git -C MAIN worktree list` already registers `WORKTREE`, stop with the
    error "review of <target> already in flight (see WORKDIR/CLAIM.md)" and do nothing else. Otherwise remove and recreate `WORKDIR`
    (in a round after the first, copy `WORKDIR/01-spec.md` aside first and put it back into the new
-   `WORKDIR`: round 1's spec, with the criteria appended since, is the spec of every later round)
+   `WORKDIR`: round 1's spec, with the criteria appended since, is the spec of every later round;
+   and first note from the old `WORKDIR/02-verification.md` every criterion whose result is not
+   `PASS`, for the spec's **Not yet passed** list, Phase 1)
    and write `WORKDIR/CLAIM.md` with the target, the start time, and the session or
    runner identity. Teardown deletes the claim file last.
 2. Resolve the **commit under review** and the **base**. Run every `git fetch` here and
@@ -293,7 +302,12 @@ orchestrator, extend it** before the round's phases start: append one acceptance
 finding the fix pass fixed (its claim turned into the observable outcome that shows it is fixed,
 source `finding C<n>, round <n-1>`, method the one that reproduced it), and apply every decision the
 human answered on the ticket since (`get_ticket`: the decided option rewrites the criterion or the
-open question it settles). No agent edits the spec after round 1.
+open question it settles). Then write the spec's **Not yet passed** list anew: every earlier
+criterion that no round's verify has recorded `PASS` (the ones on the list before, less those the
+previous round's `02-verification.md` records `PASS`, plus those it ran and records `FAIL` or
+`UNVERIFIED`, noted in Setup step 1; `none` when every one was passed). A criterion leaves the list
+only when a round's verify passes it, so a `FAIL` whose candidate refute refuted stays on it. No
+agent edits the spec after round 1.
 
 Spawn `feature-review-spec` with paths to `00-diff.patch`, `00-context.md`, `00-focus.md`, and
 the output path `01-spec.md`. It writes what it establishes — the changed files, their tests,
@@ -343,14 +357,21 @@ ignored and it builds once. It records the repo's test slot folders and N in `00
 marks which of its scoped commands are heavy.
 
 A delta round has no env phase: the run prepares the worktree itself and writes the small
-`00-env.md` exactly as the single-reviewer plan does (**The plan**). When a criterion verify must run
+`00-env.md` as the single-reviewer plan does (**The plan**), plus the **Scoped checks** section its
+verify and its merge check run from, written as the env agent writes it: the typecheck, lint and
+format, migration, related unit test and end-to-end commands on the changed files, which of them are
+heavy, and the `CI:` line, taken from the runbook in the carried-over `01-spec.md` or else from the
+project's own scripts. When `build=` was given and the build record's SHA is the commit under review,
+the run copies that `.output-e2e` into the worktree and records `E2E_SKIP_BUILD=1` there, as the env
+agent does. When a criterion verify must run
 in it needs a server (`run+http`, `browser`), the run starts that server as the env agent would: from
 the worktree, on a free port from the range, its PID and log recorded in `00-env.md` and stopped at
 Teardown.
 
 Read `00-env.md`. If nothing could be started, continue: the verify agent will record
-runtime criteria as `UNVERIFIED` and the hunt still runs on the code. Do not start
-anything yourself, and do not reuse anything that was already running.
+runtime criteria as `UNVERIFIED` and the hunt still runs on the code. Where an env phase ran, do
+not start anything yourself (the server of a delta round, above, is the one thing the run starts),
+and never reuse anything that was already running.
 
 ## Phase 2: Verify and the hunts (in parallel; tokens `verify`, `hunt`, `hunt-security`)
 
@@ -384,9 +405,11 @@ and refute's targeted unit tests and probes; a targeted end-to-end spec is heavy
 end-to-end run, so it takes a slot the same way, released right after it. With `E2E_SKIP_BUILD=1`
 in `00-env.md`, verify's end-to-end command reuses the caller's build instead of building again.
 
-**In a delta round** (`delta`) the plan has one verify and one hunt. Verify runs only the
-acceptance criteria of the findings the fix pass fixed (the ones appended to `01-spec.md` for this
-round, Phase 1) plus the scoped checks; the other criteria stand from the round that passed them.
+**In a delta round** (`delta`) the plan has one verify and one hunt. Verify runs the acceptance
+criteria of the findings the fix pass fixed (the ones appended to `01-spec.md` for this round,
+Phase 1), every criterion no earlier round passed (the spec's **Not yet passed** list) and the
+scoped checks; a criterion it does not run stands only because an earlier round's verify recorded it
+`PASS`.
 The one hunt reviews the fix diff (`00-diff.patch`, `<last reviewed sha>..HEAD`) only, with the
 checklist sections the strategy table gives; code outside that diff is out of its scope.
 
@@ -609,7 +632,7 @@ plan first, then the result with its proofs.
    the evidence) and a verdict, `matches` or `does not match`. `matches` hands off. When the ticket's workflow lists the intent step as skipped (a low ticket with the check
    turned off on the Workflow page), no check runs and none is required. `does not match`
    goes back to the builder with the intent check's lines as the brief, then the gate, then ONE more
-   review round of the ticket's workflow (numbering continues from the last round; a ticket whose
+   review round of the ticket's workflow, always a full round, never a delta round (numbering continues from the last round; a ticket whose
    workflow lists no review has only the gate), then the intent check again. A `does not match` is
    outside the complexity's round budget. After the SECOND `does not match` on one ticket, the ticket
    agent asks the human with `ask_decision` (keep going, ship as is, drop), with the intent check's
@@ -619,8 +642,9 @@ plan first, then the result with its proofs.
 
 6. **The round's records**, which the board's check of the review phases (`missingReviewPhases`)
    reads, written with the calls you already make, as yourself: `agent` left out (or your own name,
-   never a phase's name, so no phase is credited and no run report is owed), each a span you end at
-   once:
+   never a phase's name, so no phase is credited and no run report is owed: the board leaves these
+   records out of the runs it expects a report for, whatever your own name is), each a span you end
+   at once:
    - a **delta round** (`delta`), before its phases start: `start_span` with `phase: "review"`,
      `round: <ROUND>`, `note: "delta round"`, then `end_span` on the `spanId` it returns. The board
      then expects one `verify` and one `hunt` in this round (two of each when the workflow reviews a

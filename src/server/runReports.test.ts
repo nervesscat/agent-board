@@ -987,6 +987,53 @@ describe('the review phases flag in the rounds after the first', () => {
     ])
   })
 
+  it('owes no run report for the records of an orchestrator named like a run kind, and still one for its real runs', async () => {
+    const RUNNER = `${AGENT}/runner-1`
+    const pid = newProject()
+    const t = ticketOf(pid)
+    const asRunner = (name: string, args: Record<string, unknown>) =>
+      tool(name, { projectId: pid, ticketId: t.id, agentName: RUNNER, ...args })
+    /** A span the runner starts and ends through the tools, as itself (no `agent`). */
+    const runnerSpan = async (phase: string, round: number, note?: string) => {
+      const started = await asRunner('start_span', { phase, round, ...(note ? { note } : {}) })
+      expect(started.spanId).toBeTypeOf('number')
+      await asRunner('end_span', { spanId: started.spanId })
+    }
+    const round = async (n: number, phases: string[], records: (keyof typeof REVIEW_ROUND_RECORDS)[]) => {
+      // The runner's own review span of the round and its one report; each phase agent's span and report.
+      await runnerSpan('review', n)
+      await asRunner('write_run_report', { agent: 'runner', round: n })
+      spans(pid, t.id, n, phases)
+      for (const agent of phases)
+        await tool('write_run_report', { projectId: pid, ticketId: t.id, agent, round: n })
+      for (const which of records)
+        await runnerSpan(REVIEW_ROUND_RECORDS[which].phase, n, ` ${REVIEW_ROUND_RECORDS[which].note} `)
+    }
+    await round(1, ['spec', 'env', 'verify', 'hunt', 'hunt', 'refute'], ['baseUnchanged'])
+    await round(2, ['verify', 'hunt'], ['delta', 'baseUnchanged'])
+    const moved = await toReview(t.id)
+    expect(moved.missingReviewPhases).toEqual([])
+    expect(moved.missingRunReports).toEqual([])
+
+    // Control: a second review span of round 2 that is no record is a run, and it has no report.
+    await runnerSpan('review', 2, 'delta round, again')
+    expect((await call('GET', `/api/tickets/${t.id}`)).body.missingRunReports).toMatchObject([
+      { agent: 'runner', round: 2, runs: 2, spans: 2, reports: 1 },
+    ])
+    // Control: a merge agent's own merge span is its run, whatever its note says.
+    const other = ticketOf(pid)
+    const merge = work.startSpan(
+      pid,
+      other.id,
+      { phase: 'merge', round: 1, agent: 'merge', note: REVIEW_ROUND_RECORDS.baseUnchanged.note },
+      AGENT,
+    )
+    work.endSpan(pid, other.id, { spanId: merge.spanId, agent: 'merge' }, AGENT)
+    expect((await toReview(other.id)).missingRunReports).toMatchObject([
+      { agent: 'merge', round: 1, runs: 1, spans: 1, reports: 0 },
+    ])
+  })
+
   it('takes the delta round of each preset: Thorough verify and one hunt, Maximum two of each, Light none', async () => {
     const thorough = newProject()
     await preset(thorough, 'thorough')
