@@ -218,7 +218,7 @@ describe('review findings', () => {
       },
       'claude',
     )
-    const updated = reviews.setFindingFixed(row.id, 'F1', 'abc1234')
+    const updated = reviews.setFindingFixed(projectId, row.id, 'F1', 'abc1234')
     expect(updated.findings.map((f) => [f.id, f.fixedIn])).toEqual([
       ['F1', 'abc1234'],
       ['F2', null],
@@ -227,9 +227,30 @@ describe('review findings', () => {
       ['F1', 'abc1234'],
       ['F2', null],
     ])
-    expectHttp(() => reviews.setFindingFixed(row.id, 'F2', 'not-a-sha'), 400)
-    expectHttp(() => reviews.setFindingFixed(row.id, 'F9', 'abc1234'), 404)
-    expect(reviews.setFindingFixed(row.id, 'F1', null).findings[0]!.fixedIn).toBeNull()
+    expectHttp(() => reviews.setFindingFixed(projectId, row.id, 'F2', 'not-a-sha'), 400)
+    expectHttp(() => reviews.setFindingFixed(projectId, row.id, 'F9', 'abc1234'), 404)
+    expect(reviews.setFindingFixed(projectId, row.id, 'F1', null).findings[0]!.fixedIn).toBeNull()
+  })
+
+  it('setFindingFixed reaches a result only through its own project: another project gets 404 and the row is unchanged', () => {
+    const a = project()
+    const b = project()
+    const row = reviews.postResult(
+      a.projectId,
+      {
+        prNumber: 8,
+        sha: 'abc1234',
+        verdict: 'FIX',
+        summaryMd: '',
+        repoId: a.repoId,
+        round: 1,
+        findings: [finding('F1')],
+      },
+      'claude',
+    )
+    expectHttp(() => reviews.setFindingFixed(b.projectId, row.id, 'F1', 'abc1234'), 404)
+    expect(reviews.getResult(row.id).findings.map((f) => [f.id, f.fixedIn])).toEqual([['F1', null]])
+    expect(reviews.setFindingFixed(a.projectId, row.id, 'F1', 'abc1234').findings[0]!.fixedIn).toBe('abc1234')
   })
 
   it('the REST routes post a result with findings and set fixedIn on one finding', async () => {
@@ -256,7 +277,9 @@ describe('review findings', () => {
     expect(bad.status).toBe(400)
 
     const id = posted.body.id as number
-    const set = await call('PATCH', `/api/reviews/results/${id}/findings/F1`, { fixedIn: 'abc1234' })
+    const set = await call('PATCH', `/api/projects/${projectId}/reviews/results/${id}/findings/F1`, {
+      fixedIn: 'abc1234',
+    })
     expect(set.status).toBe(200)
     const read = await call('GET', `/api/reviews/results/${id}`)
     expect(read.body.findings.map((f: { id: string; fixedIn: string | null }) => [f.id, f.fixedIn])).toEqual([
@@ -264,7 +287,11 @@ describe('review findings', () => {
       ['F2', null],
     ])
     expect(
-      (await call('PATCH', `/api/reviews/results/${id}/findings/F9`, { fixedIn: 'abc1234' })).status,
+      (
+        await call('PATCH', `/api/projects/${projectId}/reviews/results/${id}/findings/F9`, {
+          fixedIn: 'abc1234',
+        })
+      ).status,
     ).toBe(404)
   })
 

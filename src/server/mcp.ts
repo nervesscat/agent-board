@@ -515,8 +515,14 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
   tool(
     'set_finding_fixed',
     'Set which change fixed one finding of a review result (fixedIn: its SHA, or null to clear it). The other findings are unchanged; returns the result.',
-    { resultId: z.number().int(), findingId: z.string(), fixedIn: z.string().nullable() },
-    ({ resultId, findingId, fixedIn }) => reviews.setFindingFixed(resultId, findingId, fixedIn),
+    {
+      projectId: z.number().int(),
+      resultId: z.number().int(),
+      findingId: z.string(),
+      fixedIn: z.string().nullable(),
+    },
+    ({ projectId, resultId, findingId, fixedIn }) =>
+      reviews.setFindingFixed(projectId, resultId, findingId, fixedIn),
   )
 
   // run reports: how one subagent run went, written before it hands back (runReports.ts, and the

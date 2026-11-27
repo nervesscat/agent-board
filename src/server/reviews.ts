@@ -129,10 +129,16 @@ export function postResult(
 }
 
 /** Sets one finding's fixing commit (or clears it) and returns the result with the change. */
-export function setFindingFixed(resultId: number, findingId: string, fixedIn: string | null) {
+export function setFindingFixed(
+  projectId: number,
+  resultId: number,
+  findingId: string,
+  fixedIn: string | null,
+) {
   if (fixedIn !== null && !SHA_PATTERN.test(fixedIn))
     throw new HttpError(400, 'fixedIn must be a commit SHA or null')
   const r = getResult(resultId)
+  if (r.projectId !== projectId) throw notFound('review result')
   if (!r.findings.some((f) => f.id === findingId)) throw notFound('finding')
   const findings = r.findings.map((f) => (f.id === findingId ? { ...f, fixedIn } : f))
   return db

@@ -1633,9 +1633,9 @@ api.post('/api/projects/:id/reviews/results', async ({ request, params, actor })
   return json(reviews.postResult(id(params), body, actor), 201)
 })
 api.get('/api/reviews/results/:id', ({ params }) => json(reviews.getResult(id(params))))
-api.patch('/api/reviews/results/:id/findings/:findingId', async ({ request, params }) => {
+api.patch('/api/projects/:id/reviews/results/:resultId/findings/:findingId', async ({ request, params }) => {
   const body = await readJson(request, z.object({ fixedIn: z.string().max(64).nullable() }))
-  return json(reviews.setFindingFixed(id(params), params.findingId!, body.fixedIn))
+  return json(reviews.setFindingFixed(id(params), id(params, 'resultId'), params.findingId!, body.fixedIn))
 })
 
 // --- run reports: how each subagent run went, written before it hands back (runReports.ts) ---
