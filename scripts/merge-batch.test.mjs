@@ -343,6 +343,39 @@ describe('pushes never replace a train', () => {
     )
     expect(err.message).toContain('drop PR #12 (adds-bad-migration)')
   })
+
+  it('names no entry to drop when the base itself fails its migration check', () => {
+    const { work } = fixture()
+    fs.writeFileSync(path.join(work, 'drizzle', '0001_base.sql'), 'select 3;\n')
+    git(work, 'add', '-A')
+    git(work, 'commit', '-q', '-m', 'dev adds a migration with no journal entry')
+    git(work, 'push', '-q', 'origin', 'dev')
+    branch(work, 'adds-migration', { 'drizzle/0002_a.sql': 'select 2;\n' })
+
+    const err = thrownBy(() => buildTrain({ repo: work, entries: [{ pr: 13, branch: 'adds-migration' }] }))
+    expect(err).toMatchObject({ code: 'migrations' })
+    expect(err.pr).toBeUndefined()
+    expect(err.message).toContain('dev itself does not check')
+    expect(err.message).toContain('0001_base.sql: no journal entry')
+    expect(err.message).not.toContain('drop PR')
+  })
+
+  it('accepts a batch whose migrations repair a base that does not check', () => {
+    const { work } = fixture()
+    fs.writeFileSync(path.join(work, 'drizzle', '0001_base.sql'), 'select 3;\n')
+    git(work, 'add', '-A')
+    git(work, 'commit', '-q', '-m', 'dev adds a migration with no journal entry')
+    git(work, 'push', '-q', 'origin', 'dev')
+    branch(work, 'journals-base-migration', {
+      'drizzle/meta/_journal.json': journal([
+        ['0000_init', 0, 1],
+        ['0001_base', 1, 2],
+      ]),
+    })
+
+    const built = buildTrain({ repo: work, entries: [{ pr: 14, branch: 'journals-base-migration' }] })
+    expect(built.merged).toEqual([expect.objectContaining({ pr: 14 })])
+  })
 })
 
 describe('train names and unrelated histories', () => {
