@@ -1194,29 +1194,26 @@ describe('the review texts the board ships', () => {
     }
   })
 
-  it('takes a slot with a plain mkdir and a holder line, releases it with rm -r, and never deletes another holder', () => {
+  it('takes its slots with the slot script, never by hand: it claims, releases and never deletes another holder', () => {
     const text = flat(ticketAgent)
     expect(text).toContain(
-      '`mkdir SLOTS/tests-<REPO_ID>-<n>` for n from 1 to N (a plain `mkdir`, never `mkdir -p`: the create must fail when the folder exists)',
+      'node ~/.claude/board-slot.mjs run --locks SLOTS --repo REPO_ID --project PROJECT --ticket TICKET --step <name> -- <command>',
     )
-    expect(text).toContain('`SLOTS/tests-<REPO_ID>-<n>/holder.txt` with `#<TICKET> <step> <ISO time>`')
-    expect(text).toContain('**Release it** with `rm -r` on that folder as soon as the heavy command ends')
-    expect(text).toContain('Never keep a slot from one check through the next')
-    expect(text).toContain('Never delete a folder whose `holder.txt` names another ticket.')
-    expect(text).toContain('only its holder removes it, and the orchestrator once that holder')
+    expect(text).toContain('It takes the first free slot of `SLOTS` for this repo, waits in a queue while none is free')
+    expect(text).toContain('and frees the slot when the command ends, however it ends.')
+    expect(text).toContain('no `mkdir` of a slot folder, no holder file written by hand, no `rm -r` of a slot')
+    expect(text).toContain('**Never remove a slot another ticket holds**, however old it looks.')
+    expect(text).toContain('The script reclaims a slot only when its holder')
     expect(flat(todoReview)).toContain(
       "You are the only one besides the holder who clears a dead run's slot, and only when its `holder.txt` names that ticket.",
     )
   })
 
-  it('runs a full suite alone: it takes tests-<repo id>-full first, and a scoped run that sees it gives its slot back', () => {
+  it('runs a full suite alone: run --full waits for every numbered slot, and a scoped claim backs off while it runs', () => {
     const text = flat(ticketAgent)
-    expect(text).toContain(
-      'take `mkdir SLOTS/tests-<REPO_ID>-full` first (a plain `mkdir`; when it fails, a full run is in flight: wait and try again), then wait until every `tests-<REPO_ID>-<n>` slot is free',
-    )
-    expect(text).toContain(
-      'then checks for `tests-<REPO_ID>-full`: when that folder appeared, release its slot and wait for the full run to end before taking a slot again.',
-    )
+    expect(text).toContain('Pass `--full` to `run` for the full unit suite or the full')
+    expect(text).toContain('It waits until every numbered slot is free, and new numbered claims wait while')
+    expect(text).toContain("A scoped run's claim backs off by itself when a full run starts, so the two never overlap.")
     expect(flat(todoReview)).toContain('`QUEUE/locks/tests-<repo id>-full` for a full suite')
   })
 
