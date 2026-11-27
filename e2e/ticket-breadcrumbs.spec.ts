@@ -1,6 +1,6 @@
 import type { APIRequestContext, Page } from '@playwright/test'
 
-import { expect, test } from './fixtures'
+import { expect, ok, test } from './fixtures'
 import { addPosts, box, longTicket, openLong, scrollTo, ticketHeader } from './scrolling'
 
 const title = (page: Page) => page.getByRole('heading', { level: 1 })
@@ -93,6 +93,53 @@ test("the links in the floating header go where the page's do", async ({ page, a
   await expect(barCrumbs(page)).toBeVisible()
   await barCrumbs(page).getByRole('link', { name: 'Ongoing features' }).click()
   await expect(page).toHaveURL(new RegExp(`/projects/${t.projectId}/features$`))
+})
+
+test('moving to another ticket through a need shows one breadcrumb at a time, never two, and none stuck in the header', async ({
+  page,
+  api,
+  human,
+}) => {
+  const base = await api.ticket({ title: 'Foundation for the breadcrumbs', status: 'todo' })
+  const t = await longTicket(api, human, 'Built on the foundation')
+  await ok(human.patch(`/api/tickets/${t.id}`, { data: { needs: [base.id] } }))
+  // The next ticket's data comes late, so the page draws its skeleton and unmounts its breadcrumbs.
+  await page.route(new RegExp(`/api/tickets/${base.id}(\\?.*)?$`), async (route) => {
+    await new Promise((done) => setTimeout(done, 400))
+    await route.continue()
+  })
+  await openLong(page, `/projects/${t.projectId}/features/${t.id}`)
+  await scrollTo(page, 'bottom')
+  await expect(barCrumbs(page)).toBeVisible()
+
+  // Every animation frame from here on: how many breadcrumbs are on screen.
+  await page.evaluate(() => {
+    const frames: number[] = []
+    Object.assign(window, { breadcrumbFrames: frames })
+    const onScreen = () =>
+      Array.from(document.querySelectorAll<HTMLElement>('main nav[aria-label="Breadcrumb"]')).filter((n) => {
+        const r = n.getBoundingClientRect()
+        return r.height > 0 && r.bottom > 0 && r.top < window.innerHeight
+      }).length
+    const sample = () => {
+      frames.push(onScreen())
+      requestAnimationFrame(sample)
+    }
+    requestAnimationFrame(sample)
+  })
+
+  await page.getByRole('link', { name: new RegExp(`Needs #${base.id}`) }).click()
+  await expect(page).toHaveURL(new RegExp(`/features/${base.id}$`))
+  await expect(title(page)).toContainText('Foundation for the breadcrumbs')
+  await expect(pageCrumbs(page)).toBeInViewport()
+  await expect(barCrumbs(page)).toHaveCount(0)
+  expect(await crumbsOnScreen(page)).toEqual([false])
+
+  const frames = await page.evaluate(
+    () => (window as Window & { breadcrumbFrames?: number[] }).breadcrumbFrames ?? [],
+  )
+  expect(frames.length).toBeGreaterThan(0)
+  expect(Math.max(...frames)).toBeLessThanOrEqual(1)
 })
 
 async function longLane(

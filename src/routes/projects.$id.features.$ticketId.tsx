@@ -319,8 +319,9 @@ function TicketPage() {
   const anchoredPost = anchorId(anchor?.holder ?? anchor?.target, 'post')
   const foldedFor = useRef<string | null>(null)
   // The page's own breadcrumbs: the floating header shows them while these are scrolled out of view.
-  const crumbs = useRef<HTMLElement>(null)
-  const crumbsAway = useCrumbsAway(crumbs, t !== undefined)
+  // A state, not a ref: after the skeleton the page draws a new nav, and the observer must watch that one.
+  const [crumbs, setCrumbs] = useState<HTMLElement | null>(null)
+  const crumbsAway = useCrumbsAway(crumbs, t !== undefined, ticketId)
   useEffect(() => {
     if (!drawn || !anchor || anchoredPost === null || laneFeed || foldedFor.current === anchor.hash) return
     if (t.lanes.length && !t.updates.some((u) => u.id === anchoredPost)) {
@@ -429,7 +430,7 @@ function TicketPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Breadcrumbs ref={crumbs} projectId={id} t={t} filter={filter} />
+      <Breadcrumbs ref={setCrumbs} projectId={id} t={t} filter={filter} />
 
       {/* The header stays in view once scrolled up to the top bar (h-12 and its border), with the
             page scrolling under it: opaque, above the feed's positioned bits, below the top bar.
@@ -664,12 +665,17 @@ function Breadcrumbs({
  * Whether the page's own breadcrumbs (`page`) are scrolled out of view, up under the top bar: the floating
  * header then shows them, and only then, so they are never on screen twice. The header's stuck offset is the
  * top bar's height, which is where the page's breadcrumbs go out of sight. `drawn`: the page has its
- * breadcrumbs and header.
+ * breadcrumbs and header. `ticketId`: a new ticket starts out not scrolled away, whatever the last one was.
  */
-function useCrumbsAway(page: RefObject<HTMLElement | null>, drawn: boolean) {
+function useCrumbsAway(crumbs: HTMLElement | null, drawn: boolean, ticketId: string) {
   const [away, setAway] = useState(false)
+  const [shownFor, setShownFor] = useState(ticketId)
+  if (shownFor !== ticketId) {
+    setShownFor(ticketId)
+    setAway(false)
+  }
   useEffect(() => {
-    const crumbs = page.current
+    // The header is read here, not when the hook renders: a detached nav has no header beside it.
     const header = crumbs?.parentElement?.querySelector('header')
     if (!drawn || !crumbs || !header) return
     let seen: IntersectionObserver | undefined
@@ -688,7 +694,7 @@ function useCrumbsAway(page: RefObject<HTMLElement | null>, drawn: boolean) {
       window.removeEventListener('resize', watch)
       seen?.disconnect()
     }
-  }, [page, drawn])
+  }, [crumbs, drawn, ticketId])
   return away
 }
 
