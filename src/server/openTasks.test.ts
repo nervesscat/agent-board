@@ -187,3 +187,32 @@ describe('moving a ticket to review', () => {
     expect((await tool('get_ticket', { ticketId: b.id })).open).toBeNull()
   })
 })
+
+describe('the open list of a workflow with no push, PR, CI or preview step (A13)', () => {
+  it('leaves out the phases the workflow does not run, and keeps every other one', async () => {
+    const p = newProject('no-push-steps')
+    dbm.db
+      .update(dbm.schema.projects)
+      .set({ workflowTags: { Brand: 'content' } })
+      .where(eq(dbm.schema.projects.id, p))
+      .run()
+    const content = await newTicket(p, { title: 'draft', tags: ['Brand'], tasks: ['write the draft'] })
+    const code = await newTicket(p, { title: 'feature', tasks: ['write the code'] })
+    const moved = await needs.changeTicket(content.id, { status: 'review' }, 'claude', { agent: true })
+    expect('open' in moved && moved.open).toEqual([
+      row(content.id, 'Implementation'),
+      row(content.id, 'write the draft'),
+      row(content.id, 'Summary', true),
+    ])
+    const standard = await needs.changeTicket(code.id, { status: 'review' }, 'claude', { agent: true })
+    expect('open' in standard && standard.open).toEqual([
+      row(code.id, 'Implementation'),
+      row(code.id, 'write the code'),
+      row(code.id, 'Pushed', true),
+      row(code.id, 'PR', true),
+      row(code.id, 'CI', true),
+      row(code.id, 'Preview', true),
+      row(code.id, 'Summary', true),
+    ])
+  })
+})

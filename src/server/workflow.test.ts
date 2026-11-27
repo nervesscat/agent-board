@@ -133,7 +133,7 @@ describe('a project that never opened the workflow (B2)', () => {
 })
 
 describe('the project workflow routes (C1 to C5)', () => {
-  it('answers the active preset and all four presets with their steps as a tree (C1)', async () => {
+  it('answers the active preset and all five presets with their steps as a tree (C1)', async () => {
     const pid = await newProject()
     const res = await call('GET', `/api/projects/${pid}/workflow`)
     expect(res.status).toBe(200)
@@ -143,6 +143,7 @@ describe('the project workflow routes (C1 to C5)', () => {
       'standard',
       'thorough',
       'maximum',
+      'content',
     ])
     for (const p of res.body.presets) {
       expect(p.tweaked).toBe(false)
@@ -342,7 +343,7 @@ describe('the effective workflow (C6, C7, C9, D1 to D3)', () => {
     const b = await get(own.id)
     expect([b.preset, b.source, b.projectPreset, b.complexity, b.ticketId]).toEqual([
       'light',
-      'ticket',
+      'own',
       'thorough',
       'high',
       own.id,
@@ -404,7 +405,7 @@ describe('the effective workflow (C6, C7, C9, D1 to D3)', () => {
     const light = (await view('?preset=light&complexity=mid')).body
     expect([light.preset, light.source, light.projectPreset, light.complexity]).toEqual([
       'light',
-      'ticket',
+      'own',
       'standard',
       'mid',
     ])
@@ -1198,7 +1199,7 @@ describe('the Team agent of a node (B1 to B4, B6 to B8, B10, B13)', () => {
     await put(pid, 'light', { agents: { build: 'acme-dev' } })
     const own = ticket(pid, 'mid', { workflowPreset: 'light' })
     const light = await effective(pid, `ticketId=${own.id}`)
-    expect([light.source, nodeOf(light, 'build').teamAgent.source]).toEqual(['ticket', 'picked'])
+    expect([light.source, nodeOf(light, 'build').teamAgent.source]).toEqual(['own', 'picked'])
     expect(nodeOf(rest, 'build').teamAgent.source).toBe('picked')
   })
 
@@ -1236,5 +1237,212 @@ describe('the Team agent of a node (B1 to B4, B6 to B8, B10, B13)', () => {
     const res = await put(pid, 'standard', { agents: { build: 'acme-dev' } })
     expect(res.status).toBe(400)
     expect(res.body.error).toContain('the workflow module is for software projects')
+  })
+})
+
+describe("the tag map and the rule that picks a ticket's workflow", () => {
+  const tagsUrl = (pid: number) => `/api/projects/${pid}/workflow-tags`
+  const projectRow = (pid: number) =>
+    dbm.db.select().from(dbm.schema.projects).where(eq(dbm.schema.projects.id, pid)).get()!
+  const effective = (pid: number, ticketId: number) =>
+    call('GET', `/api/projects/${pid}/workflow/effective?ticketId=${ticketId}`)
+  const listTools = async () => {
+    const { handleMcp } = await import('./mcp')
+    const res = await handleMcp(
+      new Request('http://localhost/api/mcp', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          authorization: 'Bearer gate_test',
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method: 'tools/list', params: {} }),
+      }),
+      AGENT,
+    )
+    return (
+      (await res.json()) as { result: { tools: { name: string; description: string; inputSchema: any }[] } }
+    ).result.tools
+  }
+
+  it('is unset at first, and an agent sets it as a patch that get_project reads back (A1, A2)', async () => {
+    const pid = await newProject()
+    expect(projectRow(pid).workflowTags).toBeNull()
+    expect((await call('GET', `/api/projects/${pid}`)).body.workflowTags).toEqual({})
+    const set = await call(
+      'PUT',
+      tagsUrl(pid),
+      { tags: { Brand: 'light', LinkedIn: 'light', Implementation: 'standard' } },
+      'agent',
+    )
+    expect(set.status).toBe(200)
+    expect(set.body).toEqual({ Brand: 'light', LinkedIn: 'light', Implementation: 'standard' })
+    const next = await call('PUT', tagsUrl(pid), { tags: { brand: 'content', LinkedIn: null } }, 'agent')
+    expect(next.body).toEqual({ Brand: 'content', Implementation: 'standard' })
+    expect((await call('GET', `/api/projects/${pid}`)).body.workflowTags).toEqual(next.body)
+    // The overview carries the map for the Workflow page.
+    expect((await call('GET', `/api/projects/${pid}/workflow`)).body.tags).toEqual(next.body)
+  })
+
+  it('refuses each patch that breaks a rule with a 400, and saves none of it (A3)', async () => {
+    const pid = await newProject()
+    await call('PUT', tagsUrl(pid), { tags: { Brand: 'light' } }, 'agent')
+    const fifty = Object.fromEntries(Array.from({ length: 50 }, (_, i) => [`tag${i}`, 'light']))
+    const bad: unknown[] = [
+      { tags: { '   ': 'light' } },
+      { tags: { ['x'.repeat(41)]: 'light' } },
+      { tags: { UI: 'nope' } },
+      { tags: { UI: 'light', ui: 'standard' } },
+      { tags: { UI: 'light', Brand: 'nope' } },
+      { tags: fifty },
+      { tags: ['Brand'] },
+      {},
+    ]
+    for (const body of bad) {
+      const res = await call('PUT', tagsUrl(pid), body, 'agent')
+      expect(res.status, JSON.stringify(body).slice(0, 80)).toBe(400)
+    }
+    expect((await call('GET', `/api/projects/${pid}`)).body.workflowTags).toEqual({ Brand: 'light' })
+  })
+
+  it("takes this project's custom workflow ids and refuses another project's (A3)", async () => {
+    const pid = await newProject()
+    const other = await newProject()
+    const made = await call('POST', `/api/projects/${pid}/workflow/custom`, { name: 'Mine', from: 'light' })
+    const foreign = await call('POST', `/api/projects/${other}/workflow/custom`, {
+      name: 'Theirs',
+      from: 'light',
+    })
+    expect((await call('PUT', tagsUrl(pid), { tags: { UI: made.body.created } }, 'agent')).status).toBe(200)
+    const refused = await call('PUT', tagsUrl(pid), { tags: { UI: foreign.body.created } }, 'agent')
+    expect(refused.status).toBe(400)
+    expect(refused.body.error).toContain('give null or one of light, standard, thorough, maximum, content')
+  })
+
+  it('accepts no other field: each is a 400 and the stored project columns stay as they were (A4)', async () => {
+    const pid = await newProject()
+    await call('PUT', tagsUrl(pid), { tags: { Brand: 'light' } }, 'agent')
+    const keys = [
+      'workflowPreset',
+      'workflowTweaks',
+      'workflowCustom',
+      'defaultPhases',
+      'resumeCommand',
+    ] as const
+    const before = JSON.stringify(keys.map((k) => projectRow(pid)[k]))
+    for (const extra of ['workflowPreset', 'defaultPhases', 'stages', 'resumeCommand', 'workflowTweaks']) {
+      const res = await call('PUT', tagsUrl(pid), { tags: { UI: 'content' }, [extra]: 'light' }, 'agent')
+      expect(res.status, extra).toBe(400)
+    }
+    expect(JSON.stringify(keys.map((k) => projectRow(pid)[k]))).toBe(before)
+    expect(projectRow(pid).workflowTags).toEqual({ Brand: 'light' })
+  })
+
+  it("leaves the project's own workflow, its tweaks and its custom workflows to the human routes (A5)", async () => {
+    const pid = await newProject()
+    expect((await call('PUT', `/api/projects/${pid}/workflow`, { preset: 'light' }, 'agent')).status).toBe(
+      403,
+    )
+    expect(
+      (await call('PUT', `/api/projects/${pid}/workflow/standard`, { rounds: { mid: 2 } }, 'agent')).status,
+    ).toBe(403)
+    expect(
+      (await call('POST', `/api/projects/${pid}/workflow/custom`, { name: 'Agent', from: 'light' }, 'agent'))
+        .status,
+    ).toBe(403)
+  })
+
+  it('serves the tool and the route with the same map, and the tool changes only the map (A2, A4, A8)', async () => {
+    const pid = await newProject()
+    await call('PUT', `/api/projects/${pid}/workflow`, { preset: 'light' })
+    const viaTool = await tool('set_workflow_tags', {
+      projectId: pid,
+      tags: { Design: 'light', Security: 'standard' },
+    })
+    expect(viaTool).toEqual({ Design: 'light', Security: 'standard' })
+    // An argument the tool does not take is left out: the project's own workflow stays.
+    await tool('set_workflow_tags', { projectId: pid, tags: { UI: 'content' }, workflowPreset: 'maximum' })
+    expect(projectRow(pid).workflowPreset).toBe('light')
+    expect(projectRow(pid).workflowTags).toEqual({ Design: 'light', Security: 'standard', UI: 'content' })
+    const tools = await listTools()
+    expect(tools.find((t) => t.name === 'get_project')!.description).toContain('workflowTags')
+    expect(tools.find((t) => t.name === 'get_workflow')!.description).toContain('tag')
+    expect(tools.find((t) => t.name === 'set_workflow_tags')).toBeDefined()
+  })
+
+  it('resolves a ticket by its own workflow, then its first matching tag, then the project, and says which (A6, A8)', async () => {
+    const pid = await newProject()
+    await call('PUT', tagsUrl(pid), { tags: { Brand: 'light', UI: 'maximum' } }, 'agent')
+    const byTag = await ticket(pid, 'mid', { tags: ['ui', 'Brand'] })
+    const plain = await ticket(pid, 'mid', { tags: ['Implementation'] })
+    const own = await ticket(pid, 'mid', { tags: ['Brand'], workflowPreset: 'thorough' })
+    const a = (await effective(pid, byTag.id)).body
+    expect([a.preset, a.source, a.tag, a.fellBack]).toEqual(['maximum', 'tag', 'ui', null])
+    expect(a.text).toContain("# Workflow: Maximum (matched tag `ui`; the project's workflow is Standard)")
+    expect((await effective(pid, plain.id)).body).toMatchObject({
+      preset: 'standard',
+      source: 'project',
+      tag: null,
+    })
+    const o = (await effective(pid, own.id)).body
+    expect([o.preset, o.source, o.tag]).toEqual(['thorough', 'own', null])
+    expect(o.text).toContain("# Workflow: Thorough (set on the ticket; the project's workflow is Standard)")
+    // A stale own id is skipped for the tag, and named.
+    dbm.db
+      .update(dbm.schema.tickets)
+      .set({ workflowPreset: 'custom-deadbeef00' })
+      .where(eq(dbm.schema.tickets.id, plain.id))
+      .run()
+    await call('PUT', tagsUrl(pid), { tags: { Implementation: 'light' } }, 'agent')
+    const stale = (await effective(pid, plain.id)).body
+    expect([stale.source, stale.preset, stale.fellBack]).toEqual([
+      'tag',
+      'light',
+      { id: 'custom-deadbeef00', of: 'ticket' },
+    ])
+    // The same answer on MCP.
+    expect(await tool('get_workflow', { projectId: pid, ticketId: byTag.id })).toEqual(a)
+  })
+
+  it("falls through a tag whose custom workflow the human deleted, to the project's (A6)", async () => {
+    const pid = await newProject()
+    const made = await call('POST', `/api/projects/${pid}/workflow/custom`, { name: 'Gone', from: 'light' })
+    await call('PUT', tagsUrl(pid), { tags: { UI: made.body.created } }, 'agent')
+    const t = await ticket(pid, 'mid', { tags: ['UI'] })
+    expect((await effective(pid, t.id)).body).toMatchObject({ source: 'tag', preset: made.body.created })
+    await call('DELETE', `/api/projects/${pid}/workflow/custom/${made.body.created}`)
+    expect((await effective(pid, t.id)).body).toMatchObject({
+      source: 'project',
+      preset: 'standard',
+      tag: null,
+    })
+  })
+
+  it('serves the Content preset as its six steps, with no PR, CI, preview or review procedure (A10, A11)', async () => {
+    const pid = await newProject()
+    const body = (await call('GET', `/api/projects/${pid}/workflow/effective?preset=content&complexity=mid`))
+      .body
+    expect(body.steps.map((s: { id: string }) => s.id)).toEqual([
+      'claim',
+      'build',
+      'gate',
+      'rounds',
+      'summary',
+      'handoff',
+    ])
+    const headings = body.text.match(/^## \d+\. .*$/gm) as string[]
+    expect(
+      headings.map((h) =>
+        h
+          .replace(/^## \d+\. /, '')
+          .split(' - ')[0]!
+          .replace(/ \[locked\]$/, ''),
+      ),
+    ).toEqual(['Read and claim', 'Build', 'Gate', 'Human rounds', 'Summary', 'Hand-off'])
+    expect(body.text).not.toMatch(/feature-review/)
+    expect(body.text).not.toMatch(/pull request/i)
+    expect(body.text).not.toMatch(/\bCI\b/)
+    expect(body.text).not.toMatch(/preview/i)
+    expect(body.text).toContain('Review: none.')
   })
 })

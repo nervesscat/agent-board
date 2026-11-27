@@ -467,6 +467,15 @@ api.put('/api/projects/:id/workflow', async ({ request, params, actor }) => {
   const body = await readJson(request, z.object({ preset: z.string().max(40) }))
   return json(workflow.setActivePreset(id(params), body.preset, actor))
 })
+// The tag map: which workflow a ticket follows by its tags when it names none of its own. Agents set it (the
+// set_workflow_tags tool); the body is a patch ({tags: {tag: workflow id | null}}) and nothing else is accepted.
+api.put('/api/projects/:id/workflow-tags', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({ tags: z.record(z.string(), z.string().nullable()) }).strict(),
+  )
+  return json(workflow.setWorkflowTags(id(params), body, actor))
+})
 // The project's own workflows: duplicate a workflow ({name, from}), rename one ({name}) or delete one.
 api.post('/api/projects/:id/workflow/custom', async ({ request, params, actor }) => {
   humanWorkflow(request)

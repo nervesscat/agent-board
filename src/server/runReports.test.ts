@@ -1187,3 +1187,34 @@ describe('the review phases flag follows the ticket’s workflow', () => {
     expect(missingReviewPhases(song.id)).toEqual([])
   })
 })
+
+describe('the review flags of a workflow with no review (A12)', () => {
+  const toReview = (id: number) => needs.changeTicket(id, { status: 'review' }, HUMAN, { agent: false })
+  const drafted = (pid: number, tags: string[]) =>
+    features.createTicket(pid, { title: 'draft', status: 'in_progress', complexity: 'high', tags }, HUMAN)
+
+  it('flags nothing for a content-tagged ticket with build spans and no review, and still flags a Standard one', async () => {
+    const pid = newProject()
+    dbm.db
+      .update(dbm.schema.projects)
+      .set({ workflowTags: { Brand: 'content' } })
+      .where(eq(dbm.schema.projects.id, pid))
+      .run()
+    const content = drafted(pid, ['brand'])
+    const standard = drafted(pid, ['Implementation'])
+    for (const t of [content, standard]) {
+      closedSpan(pid, t.id, 'build', 1, 600)
+      closedSpan(pid, t.id, 'gate', 1, 500)
+    }
+    expect((await toReview(content.id)).missingReviewPhases).toEqual([])
+    expect(missingReviewPhases(content.id)).toEqual([])
+    expect((await toReview(standard.id)).missingReviewPhases.map((m: { phase: string }) => m.phase)).toEqual([
+      'spec',
+      'env',
+      'verify',
+      'hunt',
+      'refute',
+      'merge',
+    ])
+  })
+})

@@ -12,10 +12,13 @@ import {
   WORKFLOW_PRESET_DEFS,
   customNameProblem,
   customSource,
+  applyTagPatch,
   isWorkflowPreset,
   normalizeTweaks,
+  pickWorkflow,
   readCustomWorkflows,
   readProjectTweaks,
+  readWorkflowTags,
   resolveWorkflow,
   validateTweaks,
   type CustomWorkflow,
@@ -27,6 +30,7 @@ import {
   type ResolvedWorkflow,
   type WorkflowPresetId,
   type WorkflowRef,
+  type WorkflowTags,
 } from '#/lib/workflow'
 import { logActivity } from './activity'
 import { HttpError, notFound } from './http'
@@ -60,7 +64,11 @@ const VARIANT_CHAIN: Record<WorkflowPresetId, readonly WorkflowPresetId[]> = {
   standard: [],
   thorough: ['thorough'],
   maximum: ['thorough', 'maximum'],
+  content: ['content'],
 }
+
+/** The presets whose step variants replace the base procedure of the step rather than add to it: their own wording throughout. */
+const REPLACES_BASE: readonly WorkflowPresetId[] = ['content']
 
 const TAG = /\{\{(if !?\w+|else|end)\}\}/g
 
@@ -117,6 +125,10 @@ export function applyFlow(text: string, flow: FlowState): string {
 export function stepProcedure(stepId: string, preset: WorkflowPresetId, flow: FlowState): string {
   const base = procedureFiles[`./skill/workflow/${stepId}.md`]
   if (base === undefined) throw new Error(`the workflow has no procedure file for ${stepId}`)
+  if (REPLACES_BASE.includes(preset)) {
+    const own = procedureFiles[`./skill/workflow/${stepId}.${preset}.md`]
+    if (own !== undefined) return applyFlow(clean(own), flow).trim()
+  }
   const variants = VARIANT_CHAIN[preset].flatMap((id) => {
     const variant = procedureFiles[`./skill/workflow/${stepId}.${id}.md`]
     return variant === undefined ? [] : [clean(variant)]
@@ -162,6 +174,7 @@ export function projectWorkflow(projectId: number) {
     fellBack: known(customs, stored) ? null : { id: stored },
     tweaks: readProjectTweaks(row.workflowTweaks),
     customs,
+    tags: readWorkflowTags(row.workflowTags),
   }
 }
 
@@ -175,7 +188,10 @@ function findWorkflow(w: ProjectWorkflow, id: string) {
   return { source: customSource(custom) as WorkflowRef, tweak: custom.tweak as unknown, custom }
 }
 
-/** The ids a workflow can be named by in this project: the four presets, then its own workflows. */
+/** Which rule picked the workflow a ticket follows (`pickWorkflow`), or `project` for the project's as such. */
+type WorkflowSource = 'own' | 'tag' | 'project'
+
+/** The ids a workflow can be named by in this project: the presets, then its own workflows. */
 const validIds = (w: ProjectWorkflow) => [...WORKFLOW_PRESETS, ...w.customs.map((c) => c.id)]
 const unknownWorkflow = (field: string, w: ProjectWorkflow) =>
   new HttpError(400, `${field}: one of ${validIds(w).join(', ')}`)
@@ -210,6 +226,7 @@ export function workflowOverview(projectId: number) {
       label: r.label,
       description: r.description,
       custom: found.custom ? { base: found.custom.base } : null,
+      pickable: isWorkflowPreset(id) ? WORKFLOW_PRESET_DEFS[id].pickable : true,
       tweaked: r.tweaked,
       tweaks: r.tweak,
       rounds: r.rounds,
@@ -223,8 +240,32 @@ export function workflowOverview(projectId: number) {
     active: w.active,
     fellBack: w.fellBack,
     team,
+    tags: w.tags,
     presets: validIds(w).map(entry),
   }
+}
+
+/**
+ * Sets the project's tag map: `input.tags` is a patch (a tag set to a workflow id, a tag set to null removed, the
+ * tags it does not name left as they are). It is the only writer of the map and changes nothing else of the
+ * workflow: not a step, the project's own workflow, its tweaks or its custom workflows. A patch that breaks a
+ * rule is a 400 naming the problems, and nothing is saved. Returns the map as stored.
+ */
+export function setWorkflowTags(projectId: number, input: unknown, actor: string): WorkflowTags {
+  softwareProject(projectId)
+  const w = projectWorkflow(projectId)
+  const body = (typeof input === 'object' && input !== null ? input : {}) as { tags?: unknown }
+  const checked = applyTagPatch(w.tags, body.tags, validIds(w))
+  if (!checked.ok) throw new HttpError(400, checked.errors.join('; '))
+  if (JSON.stringify(checked.tags) !== JSON.stringify(w.tags)) {
+    db.update(schema.projects)
+      .set({ workflowTags: Object.keys(checked.tags).length ? checked.tags : null })
+      .where(eq(schema.projects.id, projectId))
+      .run()
+    const named = Object.keys(body.tags as Record<string, unknown>).join(', ')
+    note(projectId, actor, `set the workflow tags: ${named}`)
+  }
+  return checked.tags
 }
 
 /** The human sets which workflow (a preset or one of the project's own) the project's tickets follow. */
@@ -373,8 +414,7 @@ export function renameCustom(projectId: number, id: string, input: unknown, acto
   const w = projectWorkflow(projectId)
   const custom = w.customs.find((c) => c.id === id)
   if (!custom) {
-    if (isWorkflowPreset(id))
-      throw new HttpError(400, `${id} is one of the four presets: it cannot be renamed`)
+    if (isWorkflowPreset(id)) throw new HttpError(400, `${id} is one of the presets: it cannot be renamed`)
     throw notFound('workflow')
   }
   const body = (typeof input === 'object' && input !== null ? input : {}) as { name?: unknown }
@@ -403,8 +443,7 @@ export function deleteCustom(projectId: number, id: string, actor: string) {
   const w = projectWorkflow(projectId)
   const custom = w.customs.find((c) => c.id === id)
   if (!custom) {
-    if (isWorkflowPreset(id))
-      throw new HttpError(400, `${id} is one of the four presets: it cannot be deleted`)
+    if (isWorkflowPreset(id)) throw new HttpError(400, `${id} is one of the presets: it cannot be deleted`)
     throw notFound('workflow')
   }
   writeCustoms(
@@ -444,7 +483,8 @@ export function effectiveWorkflow(
   softwareProject(projectId)
   const w = projectWorkflow(projectId)
   let id = w.active
-  let source: 'ticket' | 'project' = 'project'
+  let source: WorkflowSource = 'project'
+  let tag: string | null = null
   let complexity: Complexity | null = null
   let fellBack: { id: string; of: 'project' | 'ticket' } | null = w.fellBack
     ? { id: w.fellBack.id, of: 'project' }
@@ -460,16 +500,26 @@ export function effectiveWorkflow(
     if (ticket.projectId !== projectId)
       throw new HttpError(403, `#${ticketId} is not a ticket of this project`)
     complexity = ticket.complexity
-    if (known(w.customs, ticket.workflowPreset)) {
-      id = ticket.workflowPreset
-      source = 'ticket'
-      fellBack = null
-    } else if (ticket.workflowPreset) fellBack = { id: ticket.workflowPreset, of: 'ticket' }
+    const pick = pickWorkflow({
+      own: ticket.workflowPreset,
+      tags: ticket.tags,
+      tagMap: w.tags,
+      live: (x) => known(w.customs, x),
+      project: w.active,
+    })
+    id = pick.id
+    source = pick.source
+    tag = pick.tag
+    fellBack = pick.fellBack
+      ? { id: pick.fellBack, of: 'ticket' }
+      : pick.source === 'project' && w.fellBack
+        ? { id: w.fellBack.id, of: 'project' }
+        : null
   } else {
     if (view.preset) {
       if (!known(w.customs, view.preset)) throw unknownWorkflow('preset', w)
       id = view.preset
-      if (id !== w.active) source = 'ticket'
+      if (id !== w.active) source = 'own'
     }
     if (view.complexity) {
       if (!(COMPLEXITIES as readonly string[]).includes(view.complexity))
@@ -481,6 +531,7 @@ export function effectiveWorkflow(
   const workflow = resolveWorkflow(found.source, found.tweak, complexity, teamNames(projectId))
   const context = {
     source,
+    tag,
     projectPreset: w.active,
     projectLabel: labelOf(w, w.active),
     ticketId: ticketId ?? null,
@@ -493,6 +544,8 @@ export function ticketWorkflow(ticket: {
   id: number
   projectId: number
   complexity: Complexity
+  /** The ticket's tags, in its own order: the first the tag map names picks the workflow when it names none of its own. */
+  tags?: readonly string[]
 }): ResolvedWorkflow {
   const w = projectWorkflow(ticket.projectId)
   const own = db
@@ -500,8 +553,15 @@ export function ticketWorkflow(ticket: {
     .from(schema.tickets)
     .where(eq(schema.tickets.id, ticket.id))
     .get()?.workflowPreset
-  // A ticket naming a workflow that is gone follows the project's.
-  const found = findWorkflow(w, known(w.customs, own) ? own : w.active)!
+  // The same rule as `effectiveWorkflow`: own, else the first tag the map names, else the project's.
+  const pick = pickWorkflow({
+    own,
+    tags: ticket.tags ?? [],
+    tagMap: w.tags,
+    live: (x) => known(w.customs, x),
+    project: w.active,
+  })
+  const found = findWorkflow(w, pick.id)!
   return resolveWorkflow(found.source, found.tweak, ticket.complexity, teamNames(ticket.projectId))
 }
 
@@ -636,7 +696,9 @@ function reviewLines(step: ResolvedStep): string[] {
 export function renderWorkflowText(
   workflow: ResolvedWorkflow,
   context: {
-    source: 'ticket' | 'project'
+    source: WorkflowSource
+    /** The ticket's spelling of the tag that matched, when `source` is `tag`. */
+    tag?: string | null
     /** The id of the project's workflow, and its name when it is not a preset's (a custom workflow's). */
     projectPreset: string
     projectLabel?: string
@@ -653,9 +715,11 @@ export function renderWorkflowText(
     ? `a custom workflow of the project, based on ${WORKFLOW_PRESET_DEFS[workflow.base].label}: its review and wording are that preset's; `
     : ''
   const where =
-    context.source === 'ticket'
+    context.source === 'own'
       ? `${own}set on the ticket; the project's workflow is ${projectLabel}`
-      : `${own}the project's workflow`
+      : context.source === 'tag'
+        ? `${own}matched tag \`${context.tag}\`; the project's workflow is ${projectLabel}`
+        : `${own}the project's workflow`
   const complexity = workflow.complexity
   const budget = !review
     ? 'Review: none.'

@@ -112,7 +112,7 @@ const effective = async (pid: string | number, query = '') =>
   (await call('GET', `/api/projects/${pid}/workflow/effective${query}`)).body
 
 describe('making, renaming and deleting a custom workflow', () => {
-  it('duplicates a preset into a new workflow listed after the four presets, and the human only', async () => {
+  it('duplicates a preset into a new workflow listed after the presets, and the human only', async () => {
     const pid = await newProject()
     const before = (await call('GET', `/api/projects/${pid}/workflow`)).body
     expect(before.presets.map((p: { id: string }) => p.id)).toEqual([
@@ -120,6 +120,7 @@ describe('making, renaming and deleting a custom workflow', () => {
       'standard',
       'thorough',
       'maximum',
+      'content',
     ])
     expect(before.presets.every((p: { custom: unknown }) => p.custom === null)).toBe(true)
 
@@ -128,14 +129,15 @@ describe('making, renaming and deleting a custom workflow', () => {
       from: 'light',
     })
     expect(made.status).toBe(201)
-    expect(made.body.presets.map((p: { id: string }) => p.id).slice(0, 4)).toEqual([
+    expect(made.body.presets.map((p: { id: string }) => p.id).slice(0, 5)).toEqual([
       'light',
       'standard',
       'thorough',
       'maximum',
+      'content',
     ])
-    expect(made.body.presets).toHaveLength(5)
-    const mine = made.body.presets[4]
+    expect(made.body.presets).toHaveLength(6)
+    const mine = made.body.presets[5]
     expect(mine.id).toBe(made.body.created)
     expect(mine.id).toMatch(/^custom-[a-z0-9]{10}$/)
     expect([mine.label, mine.custom, mine.tweaked]).toEqual(['Ours', { base: 'light' }, false])
@@ -146,7 +148,7 @@ describe('making, renaming and deleting a custom workflow', () => {
     )
     // Another project has none of it.
     const other = await newProject()
-    expect((await call('GET', `/api/projects/${other}/workflow`)).body.presets).toHaveLength(4)
+    expect((await call('GET', `/api/projects/${other}/workflow`)).body.presets).toHaveLength(5)
     // An agent reads but does not write.
     for (const [method, url, body] of [
       ['POST', `/api/projects/${pid}/workflow/custom`, { name: 'Agent', from: 'light' }],
@@ -211,9 +213,9 @@ describe('making, renaming and deleting a custom workflow', () => {
       from: 'custom-zzzzzzzzzz',
     })
     expect(bad.status).toBe(400)
-    expect(bad.body.error).toContain('from: one of light, standard, thorough, maximum, custom-')
+    expect(bad.body.error).toContain('from: one of light, standard, thorough, maximum, content, custom-')
     expect((await call('POST', `/api/projects/${pid}/workflow/custom`, { name: 'Fine' })).status).toBe(400)
-    expect((await call('GET', `/api/projects/${pid}/workflow`)).body.presets).toHaveLength(5)
+    expect((await call('GET', `/api/projects/${pid}/workflow`)).body.presets).toHaveLength(6)
     // The joiners of a Persian word stay as typed, while the marks that draw nothing go.
     const persian = await call('POST', `/api/projects/${pid}/workflow/custom`, {
       name: 'گردش\u200cکار\u200b',
@@ -251,7 +253,7 @@ describe('making, renaming and deleting a custom workflow', () => {
     for (const preset of ['light', 'standard', 'thorough', 'maximum']) {
       const res = await call('PATCH', `/api/projects/${pid}/workflow/custom/${preset}`, { name: 'Mine' })
       expect(res.status).toBe(400)
-      expect(res.body.error).toBe(`${preset} is one of the four presets: it cannot be renamed`)
+      expect(res.body.error).toBe(`${preset} is one of the presets: it cannot be renamed`)
     }
     expect(
       (await call('PATCH', `/api/projects/${pid}/workflow/custom/custom-zzzzzzzzzz`, { name: 'x' })).status,
@@ -265,7 +267,7 @@ describe('making, renaming and deleting a custom workflow', () => {
     for (const preset of ['light', 'standard', 'thorough', 'maximum']) {
       const res = await call('DELETE', `/api/projects/${pid}/workflow/custom/${preset}`)
       expect(res.status).toBe(400)
-      expect(res.body.error).toBe(`${preset} is one of the four presets: it cannot be deleted`)
+      expect(res.body.error).toBe(`${preset} is one of the presets: it cannot be deleted`)
     }
     const gone = await call('DELETE', `/api/projects/${pid}/workflow/custom/${a}`)
     expect(gone.status).toBe(200)
@@ -274,6 +276,7 @@ describe('making, renaming and deleting a custom workflow', () => {
       'standard',
       'thorough',
       'maximum',
+      'content',
       b,
     ])
     expect((await call('DELETE', `/api/projects/${pid}/workflow/custom/${a}`)).status).toBe(404)
@@ -703,7 +706,9 @@ describe('using a custom workflow', () => {
     for (const bad of [foreign, 'custom-zzzzzzzzzz', 'mega']) {
       const patch = await call('PATCH', `/api/tickets/${plain.id}`, { workflowPreset: bad })
       expect(patch.status, bad).toBe(400)
-      expect(patch.body.error).toContain(`workflowPreset: one of light, standard, thorough, maximum, ${w}`)
+      expect(patch.body.error).toContain(
+        `workflowPreset: one of light, standard, thorough, maximum, content, ${w}`,
+      )
       expect(
         (await call('POST', `/api/projects/${pid}/tickets`, { title: 'c', workflowPreset: bad })).status,
       ).toBe(400)
@@ -739,7 +744,7 @@ describe('using a custom workflow', () => {
     expect(await tool('get_workflow', { projectId: pid, ticketId: t.id })).toEqual(rest)
     expect([rest.preset, rest.source, rest.projectPreset, rest.fellBack]).toEqual([
       w,
-      'ticket',
+      'own',
       'standard',
       null,
     ])

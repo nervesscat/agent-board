@@ -38,6 +38,13 @@ interface Combo {
 const off = (...ids: WorkflowStepId[]): PresetTweak['steps'] =>
   Object.fromEntries(ids.map((id) => [id, { enabled: false }]))
 
+/**
+ * The presets that have a step: the checks of the intent check, the preview and the review's screenshots read only the
+ * presets that run those steps (Content runs none of them).
+ */
+const presetsWith = (id: WorkflowStepId) =>
+  WORKFLOW_PRESETS.filter((p) => WORKFLOW_PRESET_DEFS[p].steps.includes(id))
+
 /** Every tweak set the matrix renders for a preset: none, each switch off alone and in pairs, and the rounds. */
 function combos(preset: WorkflowPresetId): Combo[] {
   const switchable = WORKFLOW_PRESET_DEFS[preset].steps.filter((id) => WORKFLOW_STEPS[id].lock !== 'always')
@@ -61,6 +68,8 @@ function combos(preset: WorkflowPresetId): Combo[] {
   list.push({ name: 'rounds.mid 0, preview off', tweak: { rounds: { mid: 0 }, steps: off('preview') } })
   list.push({ name: 'rounds all 0', tweak: { rounds: { low: 0, mid: 0, high: 0, max: 0 } } })
   // The Preview step moved before the Review, which the order rules allow: the text must follow the order.
+  // A preset with no review step has no Review to move it before.
+  if (!WORKFLOW_PRESET_DEFS[preset].steps.includes('review')) return list
   const previewFirst = previewBeforeReview(preset)
   list.push({ name: 'preview before review', tweak: { order: previewFirst } })
   list.push({
@@ -187,8 +196,9 @@ function inconsistencies(w: ResolvedWorkflow, text: string): string[] {
   }
 
   // (b) The review's phases never include an intent phase when the intent step is skipped.
-  const review = w.steps.find((s) => s.id === 'review')!
-  if (skippedIds.has('intent') && review.review) {
+  // A preset with no review step (Content) has no review to check.
+  const review = w.steps.find((s) => s.id === 'review')
+  if (review && skippedIds.has('intent') && review.review) {
     const labels: string[] = []
     const walk = (list: typeof review.review.phases) => {
       for (const p of list) {
@@ -206,7 +216,7 @@ function inconsistencies(w: ResolvedWorkflow, text: string): string[] {
   }
 
   // (c) A review that is skipped has no phases line, survival rule, round count or between-rounds text.
-  if (review.skipped) {
+  if (review?.skipped) {
     for (const marker of [
       'phases=',
       'Survives when',
@@ -332,7 +342,9 @@ describe('the served workflow text for every preset, complexity and tweak', () =
               else expect(text, `${at} ${s.id}`).toContain(`${sentence}, never by \`${s.teamAgent!.name}\`:`)
             }
             // Without a review no phase of it is named, with or without a Team.
-            if (w.steps.find((s) => s.id === 'review')!.skipped) expect(text, at).not.toContain('agents=')
+            const review = w.steps.find((s) => s.id === 'review')
+            if (!review) expect(text, at).not.toContain('agents=')
+            else if (review.skipped) expect(text, at).not.toContain('agents=')
             else expect(text, at).toContain('agents=')
             // The shape of the text outside who runs what is the same as with no Team (headings of skipped steps too).
             expect(text.match(/^- .* - skipped.*$/gm), at).toEqual(base.match(/^- .* - skipped.*$/gm))
@@ -380,7 +392,7 @@ describe('the served workflow text for every preset, complexity and tweak', () =
   })
 
   it('has the intent hand-off of a ticket with no review go back to the builder and the gate, then the check again (C3)', () => {
-    for (const preset of WORKFLOW_PRESETS)
+    for (const preset of presetsWith('intent'))
       for (const complexity of ['low', 'mid'] as const) {
         const w = resolveWorkflow(
           preset,
@@ -426,7 +438,7 @@ describe('the served workflow text for every preset, complexity and tweak', () =
 
   it('says nothing of the preview step being later in the order when it comes first, and has the intent check see a preview of its own head (C2)', () => {
     const intentOf = (text: string) => flat(text.slice(text.indexOf('Intent check')))
-    for (const preset of WORKFLOW_PRESETS) {
+    for (const preset of presetsWith('preview')) {
       for (const [name, order] of [
         ['preview after review', undefined],
         ['preview before review', previewBeforeReview(preset)],
@@ -461,7 +473,7 @@ describe('the served workflow text for every preset, complexity and tweak', () =
   })
 
   it('has a turned-off preview leave the screenshots to the review, in the summary, the hand-off and the intent brief (C3)', () => {
-    for (const preset of WORKFLOW_PRESETS) {
+    for (const preset of presetsWith('preview')) {
       const on = flat(render(resolveWorkflow(preset, undefined, 'mid')))
       const text = flat(render(resolveWorkflow(preset, { steps: off('preview') }, 'mid')))
       const at = `${preset}/mid`
@@ -481,7 +493,7 @@ describe('the served workflow text for every preset, complexity and tweak', () =
       expect(on, at).not.toContain('With no preview, the screenshots')
     }
     // A ticket with no review has none of the review's screenshots to name as a source: the builder's own, if any.
-    for (const preset of WORKFLOW_PRESETS) {
+    for (const preset of presetsWith('preview')) {
       const low = flat(render(resolveWorkflow(preset, { steps: off('preview') }, 'low')))
       const at = `${preset}/low`
       expect(low, at).toContain(

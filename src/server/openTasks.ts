@@ -1,8 +1,18 @@
 import { asc, eq, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
-import { autoPhaseOf } from '#/lib/autoPhases'
+import { autoPhaseOf, type AutoPhase } from '#/lib/autoPhases'
+import type { WorkflowStepId } from '#/lib/workflow'
 import { kindOf, listStages } from './stages'
+import { ticketWorkflow } from './workflow'
+
+/** The automatic phases that only a workflow step runs: a ticket whose workflow has no such step does not hold for it. */
+const PHASE_STEP: Partial<Record<AutoPhase, WorkflowStepId>> = {
+  Pushed: 'push',
+  PR: 'pr',
+  CI: 'ci',
+  Preview: 'preview',
+}
 
 /**
  * What a ticket in review still has open, from its tasks: every task and subtask not done, of it and of
@@ -25,7 +35,14 @@ export function openTasks(ticketId: number): OpenTask[] {
   if (!t) return []
   const stages = listStages(t.projectId)
   const all = db
-    .select({ id: schema.tickets.id, parentId: schema.tickets.parentId, status: schema.tickets.status })
+    .select({
+      id: schema.tickets.id,
+      parentId: schema.tickets.parentId,
+      status: schema.tickets.status,
+      projectId: schema.tickets.projectId,
+      complexity: schema.tickets.complexity,
+      tags: schema.tickets.tags,
+    })
     .from(schema.tickets)
     .where(eq(schema.tickets.projectId, t.projectId))
     .orderBy(asc(schema.tickets.id))
@@ -46,12 +63,16 @@ export function openTasks(ticketId: number): OpenTask[] {
     .all()
   return ids.flatMap((id) => {
     const own = rows.filter((task) => task.ticketId === id)
+    // Each ticket (a lane included) is held to the steps its own workflow runs.
+    const row = all.find((x) => x.id === id)!
+    const steps = new Set(ticketWorkflow(row).steps.map((step) => step.id))
     return own
       .filter((task) => !task.parentId)
       .flatMap((task) => [task, ...own.filter((sub) => sub.parentId === task.id)])
       .flatMap((task) => {
         const phase = autoPhaseOf(task)
         if (task.done || phase === 'Merged') return []
+        if (phase && PHASE_STEP[phase] && !steps.has(PHASE_STEP[phase]!)) return []
         return [{ taskId: task.id, ticketId: id, text: task.text, auto: phase !== null }]
       })
   })

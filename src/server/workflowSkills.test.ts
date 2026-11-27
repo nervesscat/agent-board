@@ -5,7 +5,7 @@ import path from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import { COMPLEXITIES } from '#/lib/constants'
-import { WORKFLOW_PRESETS, resolveWorkflow } from '#/lib/workflow'
+import { WORKFLOW_PRESET_DEFS, WORKFLOW_PRESETS, resolveWorkflow } from '#/lib/workflow'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-workflow-skills-'))
@@ -1042,7 +1042,7 @@ describe('a step runs the Team agent the workflow names (B9, B11, B14)', () => {
   })
 
   it('serves the review step as the skill the ticket agent runs itself, with no Team agent of its own (C2)', async () => {
-    for (const preset of WORKFLOW_PRESETS)
+    for (const preset of WORKFLOW_PRESETS.filter((p) => WORKFLOW_PRESET_DEFS[p].steps.includes('review')))
       for (const complexity of ['mid', 'high', 'max']) {
         const text = await workflowText(preset, complexity)
         const at = `${preset}/${complexity}`

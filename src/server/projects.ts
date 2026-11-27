@@ -4,7 +4,12 @@ import { and, asc, count, eq, isNull, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db, schema } from '#/db'
-import { DEFAULT_WORKFLOW_PRESET, isWorkflowPreset, readCustomWorkflows } from '#/lib/workflow'
+import {
+  DEFAULT_WORKFLOW_PRESET,
+  isWorkflowPreset,
+  readCustomWorkflows,
+  readWorkflowTags,
+} from '#/lib/workflow'
 import { cleanKinds, DEFAULT_KINDS, hasGitSide, KINDS, type Kind, presetPhases } from '#/lib/kinds'
 import { LAYOUT_AREAS, LAYOUT_ELEMENTS, mergeLayout } from '#/lib/layout'
 import {
@@ -117,6 +122,8 @@ export function getProjectFull(id: number) {
     // Where the work of a project with no git side is kept: a plain folder, no repo.
     workFolder: hasGitSide(project.kinds) ? null : ensureProjectWorkFolder(id),
     usedTags: usedTags(tickets.map((t) => t.tags)),
+    // The tag map that picks a ticket's workflow by its tags (set by agents: set_workflow_tags).
+    workflowTags: readWorkflowTags(project.workflowTags),
     tagWeek: recentTagCounts(tickets, new Date()),
     repos: listRepos(id),
     stages: listStages(id),
