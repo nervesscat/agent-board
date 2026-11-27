@@ -321,7 +321,7 @@ describe('the board skill, AGENTS.md, the session skill and review-queue point a
       'Run exactly the steps it lists, in its order, each as its text says; a workflow change made while you work is read at your next relaunch.',
       'None is skipped because findings look obvious, the change looks small or a finding was already reproduced; each phase posts its result, so a skipped phase is visible.',
       "then one more review round of the project's workflow (the numbering continues), then the intent check again.",
-      "a review that does not survive after the workflow's last round goes to a human decision",
+      "a review that does not survive after the workflow's last round goes to one fix pass by the builder and the gate, with no review after it, then to the hand-off, the summary's first line naming the unreviewed fix (a fix that still fails goes to a human decision)",
       'the build goes to hand-off only with evidence for every criterion',
       "the **intent** agent runs at its workflow step's effort (`low` by default in every preset) before the hand-off",
       'Max is for work built from scratch (a whole site or app, a new product or standalone service); a feature in an existing codebase is at most high, however difficult.',

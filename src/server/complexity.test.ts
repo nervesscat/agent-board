@@ -798,24 +798,141 @@ describe('the review texts the board ships', () => {
     )
   })
 
-  it('todo-review-ticket ends the cycle at a round that survives, and asks the human after the last round that does not', async () => {
+  it('todo-review-ticket ends the cycle at a round that survives, and sends the fix after the last round that does not out unreviewed', async () => {
     const wf = await workflowText('standard', 'mid')
     expect(wf).toContain('A surviving round ends the cycle')
-    expect(wf).toContain('(ship as is, keep going, drop) and stop: `BLOCKER: decision`')
-    // As a rule of every workflow, the ticket agent keeps the ask after the rounds are used up.
-    expect(flat(ticketAgent)).toContain(
-      "a review round that does not survive when the workflow's rounds are used up",
+    // Running out of rounds is no card: one fix pass and the gate, then the hand-off.
+    expect(wf).not.toContain('(ship as is, keep going, drop) and stop: `BLOCKER: decision`. Never')
+    expect(wf).toContain('the budget asks the human nothing')
+    // As a rule of every workflow, the ticket agent asks only after a second return, never for the budget.
+    const rules = flat(between(ticketAgent, '### Two rules the workflow', '## '))
+    expect(rules).not.toContain(
+      "a review round that does not survive when the workflow's rounds are used up: stop",
     )
-    expect(flat(ticketAgent)).toContain('`ask_decision`')
-    expect(flat(ticketAgent)).toContain('`BLOCKER: decision`')
+    expect(rules).toContain(
+      'After the second gate return on one ticket, or the second `does not match` of the intent check on one ticket: stop',
+    )
+    expect(rules).toContain(
+      "A review round that does not survive when the workflow's rounds are used up is not a decision",
+    )
+    expect(rules).toContain(
+      "goes to one fix pass by the builder, then the gate, with no review after it. A gate that passes goes on through the workflow's next steps to the hand-off, with the summary's first line `Unreviewed fix: <what>, at <sha>` and a one-line offer of one more review round.",
+    )
+    // A real decision still blocks.
+    expect(rules).toContain(
+      'A real decision still blocks (`ask_decision`, `BLOCKER: decision`): two valid behaviours, a scope call, or a fix that still fails.',
+    )
+    expect(rules).toContain(
+      'A finding or a criterion the builder could not fix is a fix that still fails: `ask_decision` (keep going, ship as is, drop), and no hand-off',
+    )
   })
 
-  it('mid runs one build-and-review round, with no fix pass after its review: a round that does not survive goes to a decision', async () => {
+  it('the post-budget fix pass is not a review round: no review follows it unless the human asks, and the gate still blocks after two returns', async () => {
+    const budgetOf = (text: string) =>
+      text.slice(text.indexOf('**The budget**'), text.indexOf('**Who runs each phase.**'))
+    for (const [preset, level] of [
+      ['standard', 'mid'],
+      ['standard', 'high'],
+      ['standard', 'max'],
+      ['thorough', 'mid'],
+      ['maximum', 'high'],
+    ] as const) {
+      const text = await workflowText(preset, level)
+      const budget = budgetOf(text)
+      const at = `${preset} ${level}`
+      expect(budget, at).toContain(
+        "When a round does not survive and no round is left, the budget asks the human nothing: its confirmed and plausible findings, its failed criteria and the merge check's conflicts or new failures go to one fix pass by the builder, then your gate, with no review after it.",
+      )
+      expect(budget, at).toContain('That fix pass is not a review round.')
+      expect(budget, at).toContain("A gate that passes goes on to the workflow's next steps (")
+      expect(budget, at).toContain('the push, the PR, CI, the summary and the hand-off)')
+      expect(budget, at).not.toContain(
+        '`ask_decision` (ship as is, keep going, drop) and stop: `BLOCKER: decision`',
+      )
+      expect(budget, at).toContain(
+        'A finding or a criterion the builder could not fix is a fix that still fails: post what is still open, `ask_decision` (keep going, ship as is, drop) and stop: `BLOCKER: decision`',
+      )
+      expect(budget, at).toContain(
+        'Never start one more round on your own. No review follows that fix pass unless the human asks for one more round.',
+      )
+      expect(budget, at).toContain('the rounds are a ceiling, not a quota')
+      expect(budget, at).toContain('A surviving round ends the cycle at every level.')
+      expect(budget, at).toContain('a `deep` review earns no extra round')
+      // The gate's own decision after its second return stays.
+      expect(text, at).toContain('`ask_decision` (keep going or drop) and stop: `BLOCKER: decision`')
+    }
+    // The step list follows what runs: with the intent check on, it is named among the next steps.
+    expect(budgetOf(await workflowText('standard', 'mid'))).toContain('the intent check, the push')
+  })
+
+  it('the summary opens with the unreviewed-fix line and its one-line offer only for a ticket with a review', async () => {
+    const mid = await workflowText('standard', 'mid')
+    expect(mid).toContain(
+      "When the hand-off carries a fix made after the workflow's last review round (the review step's budget: a round that did not survive, its one fix pass and a gate that passed, with no review after it), the summary's first line is exactly `Unreviewed fix: <what>, at <sha>`",
+    )
+    expect(mid).toContain('`<what>` names the findings that fix addressed')
+    expect(mid).toContain('`<sha>` is the head commit handed off')
+    expect(mid).toContain('The next line is a one-line offer of one more review round')
+    expect(mid).toContain('Reply here asking for one more review round to have it reviewed once more.')
+    expect(mid).toContain('The human takes it by replying asking for it, under the summary or in a comment')
+    expect(mid).toContain('A summary with no such fix has no such line')
+    // A low ticket has no review, so no fix can come after its last round.
+    const low = await workflowText('standard', 'low')
+    expect(low).not.toContain('Unreviewed fix')
+  })
+
+  it('the hand-off after an unreviewed fix stands on the gate, the intent check and the summary line, with no card for the budget', async () => {
+    const mid = await workflowText('standard', 'mid')
+    expect(mid).toContain(
+      "the hand-off stands only when the gate passed on that fix's head and the intent check returned `matches` on that same head, as for any hand-off, and the summary's first line is the `Unreviewed fix: <what>, at <sha>` line naming that head",
+    )
+    expect(mid).toContain(
+      "The ticket goes to `review` with no decision card open for the budget: the summary's offer of one more review round is the human's override, never a card.",
+    )
+    // The hand-off's other rules are as they were.
+    expect(mid).toContain('Only after the intent check returned `matches` on the head being handed off.')
+    expect(mid).toContain('Also read `missingReviewPhases`')
+    // A pushed head whose review did not survive is never recorded as reviewed.
+    expect(mid).toContain("When a review ran and the PR's head SHA is the SHA whose review survived")
+    expect(await workflowText('standard', 'low')).not.toContain('After a fix no review saw')
+  })
+
+  it('todo-review-ticket runs exactly one more review round when the human replies asking for it, and never a second without another reply', () => {
+    const escalation = flat(between(ticketAgent, '## Escalation', '## Output'))
+    expect(escalation).toContain(
+      "Relaunched with the human's reply asking for one more review round after an unreviewed-fix hand-off (under the summary, or a comment; the ticket may still be in review), move the ticket back to In progress yourself and run exactly one more review round of the workflow's phases on the current head",
+    )
+    expect(escalation).toContain(
+      "That round is outside the budget and is not a fresh budget, even though the board's count restarts.",
+    )
+    expect(escalation).toContain(
+      'if the round survives, the summary is the normal one, with no `Unreviewed fix:` line; if not, its findings get the same one fix pass and gate, and a new `Unreviewed fix:` line.',
+    )
+    expect(escalation).toContain('Never run a second extra round without another reply asking for it.')
+  })
+
+  it("todo-review relaunches a ticket for one more round on the human's reply, and no longer takes the rounds used up as a decision", () => {
+    const t = flat(todoReview)
+    const decision = flat(between(todoReview, '- `decision`:', '- `credential`:'))
+    expect(decision).not.toContain("the workflow's rounds used up")
+    expect(decision).toContain(
+      "two valid behaviours, a product or scope call, the gate's two returns used up, or a fix that still fails",
+    )
+    expect(decision).toContain("Running out of the workflow's rounds is not one")
+    expect(decision).toContain('an unattended run never answers it (`answer_decision`)')
+    expect(t).toContain(
+      "A relaunch after the human's answer, or after a comment that moved the ticket back to In progress, is not a send-back and does not count toward that limit. Nor is a relaunch after the human's reply asking for one more review round on a handed-off ticket",
+    )
+    expect(t).toContain('relaunch its ticket agent for exactly one more round, briefed with that reply.')
+  })
+
+  it('mid runs one build-and-review round: a round that does not survive gets one fix pass and the gate, with no review after it', async () => {
     const text = await workflowText('standard', 'mid')
     expect(text).toContain('Review: up to 1 round.')
     expect(text).toContain(
-      'When a round does not survive and no round is left: post what is still open, `ask_decision` (ship as is, keep going, drop) and stop: `BLOCKER: decision`.',
+      'When a round does not survive and no round is left, the budget asks the human nothing',
     )
+    expect(text).toContain('with no review after it. That fix pass is not a review round.')
     // No other sentence gives mid a second round.
     for (const phrase of [
       'mid two',
@@ -829,6 +946,9 @@ describe('the review texts the board ships', () => {
     }
     const { instructions } = await served()
     expect(flat(instructions)).toContain(
+      "a review that does not survive after the workflow's last round goes to one fix pass by the builder and the gate, with no review after it",
+    )
+    expect(flat(instructions)).not.toContain(
       "a review that does not survive after the workflow's last round goes to a human decision",
     )
   })
@@ -847,7 +967,7 @@ describe('the review texts the board ships', () => {
     expect(text).not.toContain('round 4')
   })
 
-  it('max runs up to ten rounds: round 1 the first build, later rounds fix passes, a decision after the last and never one more', async () => {
+  it('max runs up to ten rounds: round 1 the first build, later rounds fix passes, an unreviewed fix after the last and never one more', async () => {
     const text = await workflowText('standard', 'max')
     // The counts are the workflow's: the agent file's description no longer lists them.
     expect(ticketAgent).not.toMatch(/^description: .*max up to ten/m)
@@ -855,10 +975,13 @@ describe('the review texts the board ships', () => {
     expect(text).toContain('rounds: 10. Each round runs these phases')
     expect(text).toContain('the rounds are a ceiling, not a quota')
     expect(text).toContain('A surviving round ends the cycle at every level.')
-    // Running out: the last round is the end, the decision the only human check-in, and no round after it.
+    // Running out: the last round is the end, its fix goes out unreviewed, and no round after it.
     const budget = text.slice(text.indexOf('**The budget**'), text.indexOf('**The effort**'))
     expect(budget).toContain('When a round does not survive and no round is left')
-    expect(budget).toContain('`ask_decision` (ship as is, keep going, drop) and stop: `BLOCKER: decision`')
+    expect(budget).toContain('one fix pass by the builder, then your gate, with no review after it')
+    expect(budget).not.toContain(
+      '`ask_decision` (ship as is, keep going, drop) and stop: `BLOCKER: decision`',
+    )
     expect(budget).toContain('Never start one more round on your own')
     expect(budget).not.toContain('before round')
     expect(budget).not.toContain('check in with the human')
@@ -969,8 +1092,9 @@ describe('the review texts the board ships', () => {
     expect(byName.builder).toContain(
       "How many review rounds the ticket gets is its workflow's (`get_workflow`; the rounds follow its complexity), round 1 being the first build and its review",
     )
+    expect(byName.builder).not.toContain('(ship as is, keep going, or drop)')
     expect(byName.builder).toContain(
-      'a round that does not survive after the last one goes to the human (ship as is, keep going, or drop)',
+      "a round that does not survive after the last one goes to one more fix pass and the gate, with no review after it, then to hand-off with the summary's first line naming the unreviewed fix (a fix that still fails goes to the human)",
     )
     expect(byName.builder).toContain('With no review, its checks return the build at most twice')
     expect(byName.builder).toContain(
@@ -991,9 +1115,10 @@ describe('the review texts the board ships', () => {
     expect(byName.runner).toContain(
       "except a low ticket's build, which goes to hand-off on the project's checks and the builder's evidence, with no runner",
     )
-    // A review that does not survive the last round goes to a human decision, not to another builder.
+    // A review that does not survive the last round gets one fix pass and the gate, then hand-off, never another review.
+    expect(byName.runner).not.toContain('(ship as is, keep going, or drop)')
     expect(byName.runner).toContain(
-      'with the findings while the ticket has a round left, and with none left the human decides (ship as is, keep going, or drop).',
+      "with the findings while the ticket has a round left, and with none left to one fix pass by the **builder** and the gate, with no review after it, then to hand-off with the summary's first line naming the unreviewed fix (a fix that still fails goes to the human).",
     )
     for (const [name, text] of Object.entries(byName)) expect(text, name).not.toContain('three fix rounds')
   })
@@ -1014,7 +1139,7 @@ describe('the review texts the board ships', () => {
     }
   })
 
-  it('board.md, the MCP instructions and AGENTS.md say a review that does not survive the last round goes to a human, and max is for work built from scratch', async () => {
+  it('board.md, the MCP instructions and AGENTS.md say a review that does not survive the last round goes to one fix pass and the hand-off, and max is for work built from scratch', async () => {
     const { instructions } = await served()
     for (const [name, text] of Object.entries({
       'board.md': boardSkill,
@@ -1022,8 +1147,12 @@ describe('the review texts the board ships', () => {
       'AGENTS.md': agentsDoc,
     })) {
       expect(flat(text), name).toContain(
-        "a review that does not survive after the workflow's last round goes to a human decision",
+        "a review that does not survive after the workflow's last round goes to one fix pass by the builder and the gate, with no review after it, then to the hand-off, the summary's first line naming the unreviewed fix (a fix that still fails goes to a human decision)",
       )
+      expect(flat(text), name).not.toContain(
+        "a review that does not survive after the workflow's last round goes to a human decision;",
+      )
+      expect(flat(text), name).not.toContain('ship as is or not')
       expect(flat(text), name).not.toContain('a mid ticket stops after its review')
       expect(flat(text), name).toContain(
         'a feature in an existing codebase is at most high, however difficult',

@@ -127,8 +127,9 @@ build goes to hand-off on the project's checks and the builder's evidence, with 
 **intent** check, which every build gets). A question it returns → \`ask_decision\`. How many review
 rounds the ticket gets is its workflow's (\`get_workflow\`; the rounds follow its complexity), round 1
 being the first build and its review: a fix pass follows each round that does not survive, each with
-the checks and a new review, and a round that does not survive after the last one goes to the human
-(ship as is, keep going, or drop). It stops at the first round that survives. Max is for work built
+the checks and a new review, and a round that does not survive after the last one goes to one more
+fix pass and the gate, with no review after it, then to hand-off with the summary's first line naming
+the unreviewed fix (a fix that still fails goes to the human). It stops at the first round that survives. Max is for work built
 from scratch (a whole site or app, a new product or service), never for a feature in an existing
 codebase, however difficult: that is at most high. With no review, its checks return the build at
 most twice, and after the second return, when the checks still fail or a criterion still has no
@@ -155,7 +156,9 @@ answers, the attachments), its port range, whether it may use the browser and th
 
 **Next:** a PR → the result is recorded (\`post_review_result\`; record it from the summary if it
 is missing). A build → SHIP goes to the **intent** check, and then hands off (the ticket's summary rewritten to where it stands, never a new hand-off post); anything else goes back to **builder** with the findings while
-the ticket has a round left, and with none left the human decides (ship as is, keep going, or drop).
+the ticket has a round left, and with none left to one fix pass by the **builder** and the gate, with
+no review after it, then to hand-off with the summary's first line naming the unreviewed fix (a fix
+that still fails goes to the human).
 Error or STALE → run it again once, alone.`,
   },
   {

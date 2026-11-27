@@ -4,6 +4,15 @@ turned off on the Workflow page.{{end}} Every item, in order, as the board skill
 Merged itself as their facts hold (a tick by hand is refused); you tick Implementation and its steps
 (`set_task_done`).
 
+{{if review}}
+**After a fix no review saw** (the review step's budget: the last round did not survive, and its one fix
+pass had no review after it), the hand-off stands only when the gate passed on that fix's head{{if intent}} and the
+intent check returned `matches` on that same head, as for any hand-off{{end}}, and the summary's first line is the
+`Unreviewed fix: <what>, at <sha>` line naming that head (the summary step). The ticket goes to `review`
+with no decision card open for the budget: the summary's offer of one more review round is the human's
+override, never a card.
+{{end}}
+
 1. Implementation and its subtasks ticked (`set_task_done`); the workspace registered.
 2. `update_ticket` to `review`, and read its answer: `missingRunReports` names each subagent run the
    timeline recorded without its report — a span, a hand-off, or one run too many for the reports of that

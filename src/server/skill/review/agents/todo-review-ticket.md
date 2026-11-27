@@ -88,13 +88,22 @@ Every step in the text has the same parts:
 
 ### Two rules the workflow's steps refer to
 
-- **Asking the human after a second return.** After the second gate return on one ticket, the second
-  `does not match` of the intent check on one ticket, or a review round that does not survive when
-  the workflow's rounds are used up: stop, post what is still open and `ask_decision` (the options
-  the step names: keep going, ship as is or drop) with `BLOCKER: decision`. Never start one more
-  round, or one more return, on your own. The review's rounds are the workflow's count for this
-  ticket's complexity, at every review depth: a `deep` review earns no extra round and a `light` one
-  loses none.
+- **Asking the human after a second return.** After the second gate return on one ticket, or the
+  second `does not match` of the intent check on one ticket: stop, post what is still open and
+  `ask_decision` (the options the step names: keep going, ship as is or drop) with
+  `BLOCKER: decision`. Never start one more round, or one more return, on your own. The review's
+  rounds are the workflow's count for this ticket's complexity, at every review depth: a `deep`
+  review earns no extra round and a `light` one loses none.
+- **When the rounds are used up, the fix goes out unreviewed.** A review round that does not survive
+  when the workflow's rounds are used up is not a decision: what the round would send to a fix pass
+  (its confirmed and plausible findings, failed criteria, the merge check's conflicts or new failures)
+  goes to one fix pass by the builder, then the gate, with no review after it. A gate that passes goes
+  on through the workflow's next steps to the hand-off, with the summary's first line
+  `Unreviewed fix: <what>, at <sha>` and a one-line offer of one more review round. A real decision
+  still blocks (`ask_decision`, `BLOCKER: decision`): two valid behaviours, a scope call, or a fix
+  that still fails. A finding or a criterion the builder could not fix is a fix that still fails:
+  `ask_decision` (keep going, ship as is, drop), and no hand-off; a gate that returns twice is the
+  gate's decision above (keep going or drop).
 - **The intent check's brief is blind.** The intent agent (the Team agent the intent step names in
   the project's workflow, `get_workflow`: by default the project's agent named `intent`, else the built-in
   `feature-review-intent`) is started at the intent step's effort: it runs at the effort its workflow step gives (`low` by default in every preset), whatever the ticket's complexity. It runs on every ticket where the workflow
@@ -350,7 +359,14 @@ you; a plain asking post needs `update_ticket` with `status: blocked`); update t
 (`set_ticket_summary`) with the state, the next steps and how to resume (branch, worktree,
 commands); then end your run. When the human answers, or comments and moves the ticket back to In
 progress, you are relaunched briefed with it and reply under that post (plan first, then the
-result). A decision card stays open for the human: this agent never answers a decision, and the
+result). Relaunched with the human's reply asking for one more review round after an
+unreviewed-fix hand-off (under the summary, or a comment; the ticket may still be in review), move the
+ticket back to In progress yourself and run exactly one more review round of the workflow's phases on
+the current head, with `round=` as the board counts it after the move. That round is outside the
+budget and is not a fresh budget, even though the board's count restarts. Then hand off again: if the
+round survives, the summary is the normal one, with no `Unreviewed fix:` line; if not, its findings get
+the same one fix pass and gate, and a new `Unreviewed fix:` line. Never run a second extra round
+without another reply asking for it. A decision card stays open for the human: this agent never answers a decision, and the
 BLOCKER line of your result names the question. A blocker the orchestrator finds weak comes back to
 you as `RETRY`.
 
