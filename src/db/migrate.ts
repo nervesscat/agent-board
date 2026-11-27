@@ -59,9 +59,11 @@ export const MIGRATIONS_SEEN = 'alertMigrationsSeen'
 
 /**
  * Rewrites the migration marker from the old shape `{ at }` (only the newest applied time) to `{ at, announced }`,
- * with `announced` every migration applied so far. Run before applyMigrations: a migration the boot applies
- * afterwards is not in `announced`, so it stays unannounced across restarts until the human answers it. A
- * database with no settings table yet (a fresh one), or no marker, is left as it is.
+ * where `announced` lists the migrations applied at or before `at`, the ones the old build had already told the
+ * human about. Migrations newer than `at` are left out, so they stay unannounced and their alert stays until the
+ * human answers it. Run before applyMigrations, so a migration the boot applies afterwards is not in `announced`
+ * either, and stays unannounced across restarts. A database with no settings table yet (a fresh one), no marker,
+ * or a marker whose value is not JSON is left as it is.
  */
 export function upgradeLegacyMarker(sqlite: Database.Database): void {
   const tables = new Set(
@@ -74,12 +76,21 @@ export function upgradeLegacyMarker(sqlite: Database.Database): void {
     | { value: string }
     | undefined
   if (!row) return
-  const value = JSON.parse(row.value) as { at?: unknown; announced?: unknown } | null
+  let value: { at?: unknown; announced?: unknown } | null
+  try {
+    value = JSON.parse(row.value) as { at?: unknown; announced?: unknown } | null
+  } catch {
+    // Edited outside the app: left as it is, and the alert check reads it as it did before.
+    return
+  }
   if (typeof value?.at !== 'number' || Array.isArray(value.announced)) return
+  const at = value.at
   const announced = (
     sqlite.prepare('SELECT created_at FROM "__drizzle_migrations"').all() as { created_at: number | null }[]
-  ).map((r) => Number(r.created_at))
+  )
+    .map((r) => Number(r.created_at))
+    .filter((when) => when <= at)
   sqlite
     .prepare('UPDATE settings SET value = ? WHERE key = ?')
-    .run(JSON.stringify({ at: value.at, announced }), MIGRATIONS_SEEN)
+    .run(JSON.stringify({ at, announced }), MIGRATIONS_SEEN)
 }

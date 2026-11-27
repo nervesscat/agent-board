@@ -2507,31 +2507,67 @@ describe('applyMigrations on a database at 0056', () => {
 })
 
 describe('upgradeLegacyMarker', () => {
+  const TAG_0055 = '0055_project_kinds'
   const TAG_0056 = '0056_closed_by_approval'
+
+  const markerOf = (sqlite: Database.Database) =>
+    JSON.parse(
+      (sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(MIGRATIONS_SEEN) as { value: string })
+        .value,
+    )
 
   it('turns an old alert marker into the new shape before the loader, so the migrations it applies stay unannounced', () => {
     const dir = folderWith(LAST)
     const sqlite = databaseAt(TAG_0056)
-    const at = journalOf(dir).find((e) => e.tag === TAG_0056)!.when
+    // The marker is the 0055 time: 0056 is newer than what the old build had announced, so it is not announced either.
+    const at = journalOf(dir).find((e) => e.tag === TAG_0055)!.when
     sqlite
       .prepare('INSERT INTO settings (key, value) VALUES (?, ?)')
       .run(MIGRATIONS_SEEN, JSON.stringify({ at }))
     const beforeLoader = recorded(sqlite)
+    const announced = beforeLoader.filter((when) => when <= at)
+    expect(announced.length).toBeGreaterThan(0)
+    expect(announced.length).toBeLessThan(beforeLoader.length)
 
     upgradeLegacyMarker(sqlite)
-    const marker = () =>
-      JSON.parse(
-        (sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(MIGRATIONS_SEEN) as { value: string })
-          .value,
-      )
-    expect(marker()).toEqual({ at, announced: beforeLoader })
+    expect(markerOf(sqlite)).toEqual({ at, announced })
 
     applyMigrations(sqlite, dir)
     expect(recorded(sqlite)).toEqual(journalOf(dir).map((e) => e.when))
-    expect(marker()).toEqual({ at, announced: beforeLoader })
+    // 0056 to 0066 were applied by the boot after the marker: none of them is announced.
+    expect(markerOf(sqlite)).toEqual({ at, announced })
     // A second upgrade leaves the new shape alone.
     upgradeLegacyMarker(sqlite)
-    expect(marker()).toEqual({ at, announced: beforeLoader })
+    expect(markerOf(sqlite)).toEqual({ at, announced })
+  })
+
+  it('announces only the migrations at or before the marker time, so a newer row keeps its alert', () => {
+    const sqlite = new Database(':memory:')
+    sqlite.exec(
+      'CREATE TABLE settings (key text PRIMARY KEY, value text NOT NULL); CREATE TABLE "__drizzle_migrations" (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric);',
+    )
+    for (const when of [100, 200, 300]) {
+      sqlite.prepare('INSERT INTO "__drizzle_migrations" (hash, created_at) VALUES (?, ?)').run('h', when)
+    }
+    sqlite
+      .prepare('INSERT INTO settings (key, value) VALUES (?, ?)')
+      .run(MIGRATIONS_SEEN, JSON.stringify({ at: 200 }))
+
+    upgradeLegacyMarker(sqlite)
+    expect(markerOf(sqlite)).toEqual({ at: 200, announced: [100, 200] })
+  })
+
+  it('leaves a marker whose value is not JSON as it is, and does not throw', () => {
+    const sqlite = new Database(':memory:')
+    sqlite.exec(
+      'CREATE TABLE settings (key text PRIMARY KEY, value text NOT NULL); CREATE TABLE "__drizzle_migrations" (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric);',
+    )
+    sqlite.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(MIGRATIONS_SEEN, 'not json')
+
+    expect(() => upgradeLegacyMarker(sqlite)).not.toThrow()
+    expect(sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(MIGRATIONS_SEEN)).toEqual({
+      value: 'not json',
+    })
   })
 
   it('does nothing and does not throw on a fresh database with no settings table', () => {
