@@ -13,8 +13,9 @@
 // moved gets a new name and never has to replace the old branch. Without --push nothing leaves this machine:
 // the train is built, checked and reported, then discarded.
 //
-// Exit codes: 0 built (pushed with --push); 1 anything else; 2 the input is wrong (also --help and an
-// unreadable batch file, which print the usage); 3 a pull request conflicts with the train built so far
+// Exit codes: 0 built (pushed with --push), or --help, which prints the usage; 1 anything else; 2 the input
+// is wrong (an unreadable or malformed batch file, a missing file name, a bad needs list); 3 a pull request
+// conflicts with the train built so far
 // (drop it, or rebase it onto the base, then run again); 4 the migrations do not check on the train (drop
 // the newest entry named in the message, then run again).
 import { execFileSync } from 'node:child_process'
