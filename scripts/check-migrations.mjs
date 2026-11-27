@@ -9,8 +9,10 @@
 //   that are frozen at 0000..0066: each has a number of its own, and an entry's idx is its number and its
 //   place in the journal;
 // - every journal entry has its .sql file, and every .sql file its journal entry;
-// - idx is unique across the journal, and `when` is an integer unique across it: the loader (src/db/migrate.ts)
-//   applies by `when` and records it as the migration's key, so two entries sharing one would be told apart by nothing;
+// - every tag is listed once, and `when` is an integer unique across the journal: the loader (src/db/migrate.ts)
+//   applies by `when` and records it as the migration's key, so two entries sharing one would be told apart by nothing.
+//   idx need not be unique (drizzle-kit writes last + 1, and two branches can each write the same one): the loader
+//   ignores it, so a merge that gives two entries one idx is fine;
 // - no two snapshots in meta/ follow the same snapshot (prevId): a merge of two branches that each generated one from
 //   the same parent forks the chain, and drizzle-kit then refuses to generate the next migration.
 import fs from 'node:fs'
@@ -89,11 +91,12 @@ export function checkMigrations(dir) {
   if (!Array.isArray(entries)) return [...problems, 'meta/_journal.json: no entries list']
 
   const tags = new Set()
-  const idxOf = new Map()
   const whenOf = new Map()
   entries.forEach((entry, i) => {
     const { tag, idx, when } = entry ?? {}
     const name = `journal entry ${i} (${tag ?? 'no tag'})`
+    if (tags.has(tag))
+      problems.push(`${name}: the tag is also an earlier entry, so the migration would run twice`)
     tags.add(tag)
     if (!sql.includes(`${tag}.sql`)) problems.push(`${name}: ${tag}.sql is missing`)
     const number = /^(\d{4})_/.exec(tag ?? '')?.[1]
@@ -102,8 +105,6 @@ export function checkMigrations(dir) {
     if (number !== undefined && idx !== i)
       problems.push(`${name}: idx ${idx} is not its place in the journal (${i})`)
     if (!Number.isInteger(idx)) problems.push(`${name}: idx ${idx} is not an integer`)
-    else if (idxOf.has(idx)) problems.push(`${name}: idx ${idx} is also used by ${idxOf.get(idx)}`)
-    else idxOf.set(idx, name)
     if (typeof when !== 'number') problems.push(`${name}: when is not a number`)
     else if (!Number.isInteger(when)) problems.push(`${name}: when ${when} is not an integer`)
     else if (whenOf.has(when))

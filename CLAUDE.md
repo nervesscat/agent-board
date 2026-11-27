@@ -106,8 +106,8 @@ Unattached uploads older than a day are deleted hourly: a new reference to an up
 
 Edit `src/db/schema.ts`, then `pnpm db:generate`. It writes `drizzle/YYYYMMDDHHMMSS_slug.sql` (UTC time,
 then a slug), its journal entry and its snapshot: commit all of them, and do not rename or renumber them.
-`pnpm check:migrations` runs before the PR (it refuses a non-timestamp new name, duplicate `when` or
-`idx` in the journal, and two snapshots that follow one). Migrations run when the server starts, in journal order.
+`pnpm check:migrations` runs before the PR (it refuses a non-timestamp new name, a duplicate `when` or tag
+in the journal, and two snapshots that follow one). Migrations run when the server starts, in journal order.
 If a merge forks the snapshot chain (`pnpm check:migrations` names two snapshots that follow one, or `pnpm db:generate`
 reports a snapshot collision), delete the later branch's migration file, its journal entry and its snapshot (the one
 whose journal entry comes last), keep its schema change, run `pnpm db:generate` again, check and commit

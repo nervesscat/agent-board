@@ -111,7 +111,7 @@ describe('checkMigrations', () => {
     ])
   })
 
-  it('finds two entries with one idx', () => {
+  it('accepts two timestamp entries with one idx, since the loader never reads it', () => {
     const dir = fixture(
       ['0000_init.sql', '20261127093012_a.sql', '20261127093100_b.sql'],
       [
@@ -120,8 +120,20 @@ describe('checkMigrations', () => {
         ['20261127093100_b', 3, 300],
       ],
     )
+    expect(checkMigrations(dir)).toEqual([])
+  })
+
+  it('finds a journal that lists one tag twice, which would run the migration twice', () => {
+    const dir = fixture(
+      ['0000_init.sql', '20261127093012_a.sql'],
+      [
+        ['0000_init', 0, 100],
+        ['20261127093012_a', 1, 200],
+        ['20261127093012_a', 2, 300],
+      ],
+    )
     expect(checkMigrations(dir)).toEqual([
-      'journal entry 2 (20261127093100_b): idx 3 is also used by journal entry 1 (20261127093012_a)',
+      'journal entry 2 (20261127093012_a): the tag is also an earlier entry, so the migration would run twice',
     ])
   })
 

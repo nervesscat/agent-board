@@ -1511,7 +1511,7 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
   `E2E_SKIP_BUILD=1` reuses the last build; `E2E_PORT` picks the port.
 - **Migrations** (`pnpm check:migrations`): new files are `drizzle/YYYYMMDDHHMMSS_slug.sql`, written by
   `pnpm db:generate` (the older `NNNN_*.sql` files stay as they are, up to 0066). Every file has a journal
-  entry and every entry its file; `when` and `idx` are unique across the journal. The server applies every
+  entry and every entry its file; `when` is unique across the journal and each tag is listed once. The server applies every
   entry it has not applied, in journal order, so a migration merged after a later one still runs.
 - **Desktop app** (`pnpm desktop:smoke`, after `pnpm desktop:package`; `--app <folder>`, `--port`,
   `--screenshot <png>`, `--busy-screenshot <png>`, `--data-dir-screenshot <png>`,
