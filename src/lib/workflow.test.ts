@@ -777,6 +777,13 @@ describe('the Content preset (A6, A10, A11, A14)', () => {
 describe('the tag map (A3, A6)', () => {
   const VALID = ['light', 'standard', 'thorough', 'maximum', 'content', 'custom-abcdef12']
 
+  it('refuses a patch longer than the map holds before reading it, so its cost stays linear', () => {
+    const big: Record<string, string> = {}
+    for (let i = 0; i < WORKFLOW_TAGS_MAX + 1; i++) big[`tag${i}`] = 'light'
+    const r = applyTagPatch({}, big, VALID)
+    expect(r).toEqual({ ok: false, errors: [`tags: a patch names at most ${WORKFLOW_TAGS_MAX} tags`] })
+  })
+
   it('refuses a tag named __proto__ instead of reporting it saved', () => {
     const r = applyTagPatch({}, JSON.parse('{"__proto__":"light","Brand":"content"}'), VALID)
     expect(r.ok).toBe(false)

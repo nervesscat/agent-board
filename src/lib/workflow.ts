@@ -1960,6 +1960,9 @@ export function applyTagPatch(
 ): { ok: true; tags: WorkflowTags } | { ok: false; errors: string[] } {
   if (!isRecord(patch))
     return { ok: false, errors: ['tags: an object of tag -> workflow id (null removes a tag)'] }
+  // A patch names at most as many tags as a map holds: a longer one is refused before any entry is read, so the work stays linear in its size.
+  if (Object.keys(patch).length > WORKFLOW_TAGS_MAX)
+    return { ok: false, errors: [`tags: a patch names at most ${WORKFLOW_TAGS_MAX} tags`] }
   const tags: WorkflowTags = { ...stored }
   const errors: string[] = []
   const sent = new Set<string>()
