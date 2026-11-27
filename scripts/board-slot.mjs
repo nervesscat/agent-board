@@ -16,7 +16,14 @@
 // written by hand), and a folder with no holder.txt is reclaimed once it is older than a minute.
 // Waiters queue in <locks>/queue, first in first served, and poll. A wait is recorded on the ticket:
 // wait_start (reason lock, the slot name as the note) when queued, wait_end with its waitId when the
-// wait ends. Without a project and ticket the wait is not recorded.
+// wait ends. Without a project and ticket the wait is not recorded. A newcomer queues behind a live
+// waiter instead of taking a free slot, so the queue is served in order.
+// Every claim and reclaim runs under one lock: the folder `<locks>/claim.lock` (a plain mkdir, its pid
+// written inside). A lock whose pid is dead is taken over; a live one makes the caller poll. Releasing
+// does not take the lock.
+// A caller that keeps a long-lived process passes `--pid <its pid>` to `claim` (the default is its
+// parent process, which is gone once the caller's shell exits). Heavy commands use `run`, which holds
+// the slot for as long as its command lives.
 //
 //   BOARD_URL         the server as http(s)://host[:port] (PORT, or BOARD_PORT on this machine)
 //   BOARD_TOKEN       the agent token (Authorization: Bearer); read from the environment, never printed
@@ -182,13 +189,33 @@ function takeDir(dir, ctx) {
   return false
 }
 
+/** Writes a file through a temp file renamed over it, so a reader sees the old text or the new, never half. */
+function writeFileAtomic(file, text) {
+  const tmp = `${file}.${process.pid}-${randomBytes(3).toString('hex')}.tmp`
+  fs.writeFileSync(tmp, text)
+  fs.renameSync(tmp, file)
+}
+
 function writeHolder(dir, { holder, pid, now }) {
   const token = randomBytes(8).toString('hex')
   const started = new Date(now()).toISOString()
-  const tmp = path.join(dir, `holder.txt.${process.pid}-${token.slice(0, 6)}.tmp`)
-  fs.writeFileSync(tmp, formatHolder({ holder, pid, token, started }))
-  fs.renameSync(tmp, path.join(dir, 'holder.txt'))
+  writeFileAtomic(path.join(dir, 'holder.txt'), formatHolder({ holder, pid, token, started }))
   return token
+}
+
+/** Points a held slot's holder at another pid (a run's command, once spawned); false when the token is not its. */
+export function setHolderPid(dir, token, pid) {
+  const slot = readSlot(dir)
+  if (slot === null || !token || slot.holder?.token !== token) return false
+  let found = false
+  const lines = slot.text.split(/\r?\n/).map((line) => {
+    if (!line.startsWith('pid ')) return line
+    found = true
+    return `pid ${pid}`
+  })
+  if (!found) lines.splice(1, 0, `pid ${pid}`)
+  writeFileAtomic(path.join(dir, 'holder.txt'), lines.join('\n'))
+  return true
 }
 
 /**
@@ -226,19 +253,102 @@ export function tryClaim({ locks, repo, holder, pid, full = false, now, isAlive,
   return null
 }
 
-/** The waiter files in the queue, oldest first; a waiter whose process is dead is removed from it. */
-function isHead(queueDir, mine, isAlive) {
-  const me = path.basename(mine)
-  for (const name of fs.readdirSync(queueDir).sort()) {
-    if (name === me) return true
+/** The live waiter files in the queue, oldest first; a waiter whose process is dead is removed. */
+function liveWaiters(queueDir, isAlive) {
+  const live = []
+  let names
+  try {
+    names = fs.readdirSync(queueDir).sort()
+  } catch {
+    return live
+  }
+  for (const name of names) {
     const pid = Number(name.slice(name.lastIndexOf('-') + 1))
-    if (!Number.isInteger(pid) || !isAlive(pid)) {
-      fs.rmSync(path.join(queueDir, name), { force: true })
+    if (Number.isInteger(pid) && isAlive(pid)) live.push(name)
+    else fs.rmSync(path.join(queueDir, name), { force: true })
+  }
+  return live
+}
+
+/** Whether this waiter is first in line: no live waiter ahead of it. */
+function isHead(queueDir, mine, isAlive) {
+  const live = liveWaiters(queueDir, isAlive)
+  return live.length === 0 || live[0] === path.basename(mine)
+}
+
+const LOCK_FOLDER = 'claim.lock'
+const TIMED_OUT = Symbol('timed out waiting for the claim lock')
+
+/** Whether the claim lock's holder is gone: its pid is dead, or it has no pid file a minute after it was made. */
+function lockStale(lockDir, { now, isAlive }) {
+  let text = null
+  try {
+    text = fs.readFileSync(path.join(lockDir, 'pid'), 'utf8')
+  } catch {}
+  if (text === null) {
+    try {
+      return now() - fs.statSync(lockDir).mtimeMs > GRACE_MS
+    } catch {
+      return false
+    }
+  }
+  const pid = Number(text.trim())
+  return Number.isInteger(pid) && pid > 0 && !isAlive(pid)
+}
+
+/** Moves a stale claim lock away and removes it, or puts it back when a live claim took it meanwhile. */
+function reclaimLock(lockDir, ctx) {
+  const away = `${lockDir}.stale-${process.pid}-${randomBytes(4).toString('hex')}`
+  try {
+    fs.renameSync(lockDir, away)
+  } catch {
+    return
+  }
+  if (lockStale(away, ctx)) {
+    fs.rmSync(away, { recursive: true, force: true })
+    return
+  }
+  try {
+    fs.renameSync(away, lockDir)
+  } catch (err) {
+    log(`could not put the claim lock back (${err.message}); it is at ${away}`)
+  }
+}
+
+/** Takes the claim lock with a plain mkdir and writes this process's pid inside it; false while a live one holds it. */
+function takeClaimLock(lockDir, owner, ctx) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      fs.mkdirSync(lockDir)
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err
+      if (!lockStale(lockDir, ctx)) return false
+      reclaimLock(lockDir, ctx)
       continue
     }
-    return false
+    fs.writeFileSync(path.join(lockDir, 'pid'), `${owner}\n`)
+    return true
   }
-  return true
+  return false
+}
+
+/**
+ * Runs `fn` holding the claim lock, the one lock every claim and reclaim of every slot runs under. A
+ * live holder makes the caller poll (not a slot wait, so nothing is recorded). Answers TIMED_OUT when
+ * `deadline` passes before the lock is taken.
+ */
+async function withClaimLock(locks, fn, { owner, now, sleep, isAlive, pollMs, deadline }) {
+  const lockDir = path.join(locks, LOCK_FOLDER)
+  const ctx = { now, isAlive }
+  while (!takeClaimLock(lockDir, owner, ctx)) {
+    if (now() >= deadline) return TIMED_OUT
+    await sleep(pollMs)
+  }
+  try {
+    return fn()
+  } finally {
+    fs.rmSync(lockDir, { recursive: true, force: true })
+  }
 }
 
 /** The holder.txt lines of each slot of this repo that is held, for the message that gives up. */
@@ -278,11 +388,27 @@ export async function claim({
   recorder = null,
   queuePid = process.pid,
 }) {
-  const attempt = () => tryClaim({ locks, repo, holder, pid, full, now, isAlive, beforeRename })
-  const first = attempt()
-  if (first) return { ok: true, ...first }
-
+  const deadline = now() + timeoutMs
+  const attempt = () =>
+    withClaimLock(locks, () => tryClaim({ locks, repo, holder, pid, full, now, isAlive, beforeRename }), {
+      owner: queuePid,
+      now,
+      sleep,
+      isAlive,
+      pollMs,
+      deadline,
+    })
+  const gaveUp = () => ({ ok: false, holders: holderLines(locks, repo, full) })
+  fs.mkdirSync(locks, { recursive: true })
   const queueDir = path.join(locks, 'queue')
+
+  // A newcomer takes a free slot only when no live waiter is queued ahead of it.
+  if (liveWaiters(queueDir, isAlive).length === 0) {
+    const first = await attempt()
+    if (first === TIMED_OUT) return gaveUp()
+    if (first) return { ok: true, ...first }
+  }
+
   fs.mkdirSync(queueDir, { recursive: true })
   const mine = path.join(queueDir, `${new Date(now()).toISOString().replace(/[:.]/g, '-')}-${queuePid}`)
   fs.writeFileSync(mine, `${queuePid}\n`)
@@ -292,25 +418,24 @@ export async function claim({
   const endWait = async () => {
     if (recorder && waitId !== null) await recorder.end(waitId)
   }
-  const deadline = now() + timeoutMs
   try {
     for (;;) {
       if (isHead(queueDir, mine, isAlive)) {
-        const got = attempt()
+        const got = await attempt()
+        if (got === TIMED_OUT) break
         if (got) {
           await endWait()
           return { ok: true, ...got }
         }
       }
-      if (now() >= deadline) {
-        await endWait()
-        return { ok: false, holders: holderLines(locks, repo, full) }
-      }
+      if (now() >= deadline) break
       await sleep(pollMs)
     }
   } finally {
     fs.rmSync(mine, { force: true })
   }
+  await endWait()
+  return gaveUp()
 }
 
 /** Frees a slot when its holder.txt carries this token; false (nothing removed) otherwise. */
@@ -453,7 +578,7 @@ function reportGaveUp(result) {
 }
 
 async function runCommand(cfg) {
-  // The holder is this process: it lives as long as the command, and a dead one frees the slot to others.
+  // This process holds the slot only until its command starts; the command holds it after that.
   const got = await claim({ ...cfg, pid: process.pid })
   if (!got.ok) {
     reportGaveUp(got)
@@ -461,6 +586,9 @@ async function runCommand(cfg) {
   }
   const [file, ...args] = cfg.command
   const child = spawn(file, args, { stdio: 'inherit' })
+  // The command holds the slot from here: if this process is killed, the slot stays held while it lives.
+  if (child.pid !== undefined && !setHolderPid(got.dir, got.token, child.pid))
+    log(`the slot ${got.slot} still names this process: its holder file changed`)
   const forward = (signal) => () => child.kill(signal)
   const forwarded = ['SIGINT', 'SIGTERM', 'SIGHUP']
   for (const signal of forwarded) process.on(signal, forward(signal))

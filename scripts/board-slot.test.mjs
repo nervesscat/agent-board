@@ -90,6 +90,41 @@ function cli(args, env = {}) {
   })
 }
 
+/** Resolves once `check` is true; fails after `ms` (a poll every 10 ms). */
+async function waitFor(check, ms = 5000) {
+  const until = Date.now() + ms
+  while (!check()) {
+    if (Date.now() > until) throw new Error('timed out waiting for the condition')
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}
+
+/**
+ * Starts `run` on a command that prints its pid and lives for `ms`. `state.childPid` is that pid once it
+ * prints, `state.exited` is set when the run process exits.
+ */
+function startRun(locks, ms) {
+  const command = `console.log('pid ' + process.pid); setTimeout(() => {}, ${ms})`
+  const child = spawn(
+    process.execPath,
+    [SCRIPT, 'run', '--locks', locks, '--repo', '1', '--', process.execPath, '-e', command],
+    {
+      env: { ...process.env, BOARD_PROJECT: '', BOARD_TICKET: '', BOARD_URL: '', BOARD_TOKEN: '' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  )
+  const state = { out: '', childPid: null, exited: null }
+  child.stdout.on('data', (c) => {
+    state.out += c
+    const match = /^pid (\d+)$/m.exec(state.out)
+    if (match && state.childPid === null) state.childPid = Number(match[1])
+  })
+  child.on('exit', (code, signal) => {
+    state.exited = { code, signal }
+  })
+  return { child, state }
+}
+
 describe('claim', () => {
   it('claim takes the first free slot', async () => {
     const locks = newLocks()
@@ -300,6 +335,75 @@ describe('claim', () => {
     expect(fs.existsSync(one)).toBe(true)
   })
 
+  it('a stale claim lock of a dead pid is taken over', async () => {
+    const locks = newLocks()
+    const lock = path.join(locks, 'claim.lock')
+    fs.mkdirSync(lock)
+    fs.writeFileSync(path.join(lock, 'pid'), `${deadPid()}\n`)
+    const got = await claim({ locks, repo: '1', holder: '7 smoke', pid: process.pid, pollMs: 1 })
+    expect(got.ok).toBe(true)
+    expect(fs.existsSync(lock)).toBe(false)
+  })
+
+  it('a claim lock held by a live pid is waited on, and the wait is not recorded as a slot wait', async () => {
+    const locks = newLocks()
+    const lock = path.join(locks, 'claim.lock')
+    fs.mkdirSync(lock)
+    fs.writeFileSync(path.join(lock, 'pid'), `${process.pid}\n`)
+    const recorder = createRecorder({ url, token: 'secret-token', project: 1, ticket: 7 })
+    let done = false
+    const pending = claim({
+      locks,
+      repo: '1',
+      holder: '7 smoke',
+      pid: process.pid,
+      pollMs: 10,
+      recorder,
+    }).then((got) => {
+      done = true
+      return got
+    })
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(done).toBe(false)
+    expect(fs.existsSync(path.join(locks, 'tests-1-1'))).toBe(false)
+    fs.rmSync(lock, { recursive: true })
+    const got = await pending
+    expect(got.slot).toBe('tests-1-1')
+    expect(seen).toEqual([])
+  })
+
+  it('a newcomer queues behind a waiting claim: a freed slot goes to the queued claim', async () => {
+    const locks = newLocks()
+    const one = holdSlot(locks, 'tests-1-1', { token: 'held-1' })
+    holdSlot(locks, 'tests-1-2', { token: 'held-2' })
+    const queued = claim({
+      locks,
+      repo: '1',
+      holder: '7 smoke',
+      pid: process.pid,
+      pollMs: 5,
+      timeoutMs: 2000,
+    })
+    const queue = path.join(locks, 'queue')
+    await waitFor(() => fs.existsSync(queue) && fs.readdirSync(queue).length === 1)
+    fs.rmSync(one, { recursive: true })
+    const newcomer = claim({
+      locks,
+      repo: '1',
+      holder: '8 smoke',
+      pid: process.pid,
+      pollMs: 5,
+      timeoutMs: 2000,
+    })
+    const firstOut = await Promise.race([queued.then(() => 'queued'), newcomer.then(() => 'newcomer')])
+    expect(firstOut).toBe('queued')
+    const got = await queued
+    expect(got.slot).toBe('tests-1-1')
+    expect(release(got.dir, got.token)).toBe(true)
+    const next = await newcomer
+    expect(next.slot).toBe('tests-1-1')
+  })
+
   it('a reclaim that raced a new claim gives the live slot back', () => {
     const locks = newLocks()
     const dir = holdSlot(locks, 'tests-1-1', { pid: deadPid() })
@@ -387,6 +491,52 @@ describe('run', () => {
     expect(killed.code).toBe(128 + 9)
     expect(fs.readdirSync(locks)).toEqual([])
   })
+
+  it('run hands the slot to its command: holder.txt names the command pid', async () => {
+    const locks = newLocks()
+    const { state } = startRun(locks, 1500)
+    const holderFile = path.join(locks, 'tests-1-1', 'holder.txt')
+    const holderPid = () =>
+      fs.existsSync(holderFile) ? parseHolder(fs.readFileSync(holderFile, 'utf8')).pid : null
+    await waitFor(() => state.childPid !== null && holderPid() === state.childPid)
+    expect(holderPid()).toBe(state.childPid)
+    await waitFor(() => state.exited !== null)
+    expect(state.exited.code).toBe(0)
+    expect(fs.readdirSync(locks)).toEqual([])
+  })
+
+  it('a killed run keeps its slot while its command lives, and frees it when the command exits', async () => {
+    const locks = newLocks()
+    const { child, state } = startRun(locks, 2500)
+    // Slot 2 is held by this test process, so the run's slot (slot 1) is the only one a claim could take.
+    holdSlot(locks, 'tests-1-2')
+    const holderFile = path.join(locks, 'tests-1-1', 'holder.txt')
+    const holderPid = () =>
+      fs.existsSync(holderFile) ? parseHolder(fs.readFileSync(holderFile, 'utf8')).pid : null
+    await waitFor(() => state.childPid !== null && holderPid() === state.childPid)
+    child.kill('SIGKILL')
+    await waitFor(() => state.exited !== null)
+    const held = await claim({
+      locks,
+      repo: '1',
+      holder: '8 smoke',
+      pid: process.pid,
+      timeoutMs: 200,
+      pollMs: 20,
+    })
+    expect(held.ok).toBe(false)
+    await waitFor(() => !pidAlive(state.childPid), 10_000)
+    const got = await claim({
+      locks,
+      repo: '1',
+      holder: '8 smoke',
+      pid: process.pid,
+      timeoutMs: 2000,
+      pollMs: 20,
+    })
+    expect(got.ok).toBe(true)
+    expect(got.slot).toBe('tests-1-1')
+  }, 20_000)
 })
 
 describe('the slots under concurrency and full runs', () => {

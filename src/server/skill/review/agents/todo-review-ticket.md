@@ -215,7 +215,8 @@ has N = 2 of them, and a light run holds none.
   `pid` line is never reclaimed.
 - **A slot held across several commands** (a long-lived process you keep up) is the one case for
   `claim` and `release`: `claim` prints the slot folder and a token, and `release <slot dir> <token>`
-  frees it as soon as that process ends. Use `run` for everything else.
+  frees it as soon as that process ends. Pass `--pid <its pid>` to `claim`, or the slot is held by
+  the caller's parent process, which is gone once its shell exits. Use `run` for everything else.
 - **Never remove a slot another ticket holds**, however old it looks. The script reclaims a slot
   only when its holder's process is dead, or when it has no holder file a minute after it was made.
   Waited more than three hours (the script gives up then and prints the holder lines on stderr):
