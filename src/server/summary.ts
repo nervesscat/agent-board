@@ -316,6 +316,8 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         status: t.status,
         assignee: t.assignee,
         parent: parentOf(t),
+        // In a review stage (else in To do): the review list counts it, the To do one does not.
+        review: inReview,
         // When the ticket entered its stage, and how long it has waited since (milliseconds).
         since,
         waitedMs,

@@ -452,8 +452,8 @@ const needsDigest: AlertType = {
     const counts: [number, string, string][] = [
       [n.decisions.length - archive.size, 'decision', 'decisions'],
       [archive.size, 'archive request', 'archive requests'],
-      [n.reviews.length, 'review', 'reviews'],
-      [n.waitingLong.length, 'ticket waiting too long', 'tickets waiting too long'],
+      // A review waiting past the setting is in `waitingLong`: counted here with the reviews, as before.
+      [n.reviews.length + n.waitingLong.filter((w) => w.review).length, 'review', 'reviews'],
       [n.prs.length, 'PR to review', 'PRs to review'],
       [n.blockedTasks.length, 'blocked task', 'blocked tasks'],
       [n.threads.length, 'thread', 'threads'],
