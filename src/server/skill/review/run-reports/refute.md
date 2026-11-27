@@ -59,7 +59,11 @@ or counted has its own field; only what needs a sentence goes in a section.
 - **disproof** (`disproof`): for each finding, how you tried to disprove it — reproduction, reading
   the code, a counter-example — and what it took to confirm or refute it.
 - **unsettled** (`unsettled`): findings you could not settle, and why.
-- **counts**: `counts` with `candidates`, `confirmed`, `plausible`, `refuted`.
+- **severity** (`severity`): the level each `CONFIRMED` or `PLAUSIBLE` finding got from the Severity
+  scale in the refute agent's file (`major`, `medium` or `minor`) and why, in a line each: the
+  orchestrator decides the next round from these levels.
+- **counts**: `counts` with `candidates`, `confirmed`, `plausible`, `refuted`, and `major`, `medium`,
+  `minor` (the confirmed and plausible findings at each level).
 
 ## Where it goes
 

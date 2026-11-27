@@ -17,7 +17,10 @@ of the two reviews (it is in the `phases=` of both).{{end}}
   folder: the second review must not inherit the first one's reading. They may run at once, but each
   takes its own test slots, one heavy run at a time.
 - **The two reviews each carry the round number** (`round=<n>`), so the board counts the phases of both:
-  the last round needs twice the runs of one review (`missingReviewPhases` says how many).
+  the last round needs twice the runs of one review (`missingReviewPhases` says how many). In a delta
+  round each of the two reviews is a delta review (each passed `delta` and the delta arguments), so the
+  board needs two `verify` and two `hunt` runs; a merge recorded `base unchanged` by a review counts as
+  that review's merge check.
 - **Reconcile** before deciding the round, yourself: read both reviews' verdicts, findings and failed
   criteria, from each review's own `review.md` in its folder above (the first's and the second's). A finding either review confirmed goes to the builder; a finding only one review reported is
   read against the code and kept when it reproduces. Where the two verdicts differ, the worse one decides

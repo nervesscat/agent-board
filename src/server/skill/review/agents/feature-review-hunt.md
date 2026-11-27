@@ -82,7 +82,7 @@ stand alone. No reasoning, no hedging, no "possibly". Start with the heading:
 - Scenario: <input or state> produces <wrong outcome>
 - Evidence: <repro command and output excerpt, or traced path with line refs>
 - Reproduced: yes | no
-- Severity: blocker | bug
+- Severity: major | medium | minor (the scale in `feature-review-refute.md`, **Severity scale**)
 ```
 
 If there are none, write `# Candidates` followed by `None.`

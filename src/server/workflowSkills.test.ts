@@ -5,7 +5,7 @@ import path from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import { COMPLEXITIES } from '#/lib/constants'
-import { WORKFLOW_PRESETS, resolveWorkflow } from '#/lib/workflow'
+import { REVIEW_ROUND_RECORDS, WORKFLOW_PRESETS, resolveWorkflow } from '#/lib/workflow'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-workflow-skills-'))
@@ -293,6 +293,251 @@ describe('the feature-review skill runs the phases of its plan (E5)', () => {
     const maximum = await workflowText('maximum', 'mid')
     expect(maximum).toContain('phases=spec,env,verify,hunt,hunt,hunt-security,refute,merge')
     expect(maximum).toContain('agent=<your name>/review-first')
+  })
+})
+
+describe('review rounds converge: a severity scale, delta rounds, a spec written once', () => {
+  const skill = () => flat(review('skills/feature-review/SKILL.md'))
+  const refute = () => review('agents/feature-review-refute.md')
+  const section = (text: string, heading: string) => {
+    const at = text.indexOf(heading)
+    expect(at, heading).toBeGreaterThan(-1)
+    const next = text.indexOf('\n## ', at + heading.length)
+    return text.slice(at, next === -1 ? undefined : next)
+  }
+
+  it('has the refute agent rate from one scale of three levels, each with a definition and an example', () => {
+    const text = refute()
+    expect(text.match(/^## Severity scale$/gm)).toHaveLength(1)
+    const scale = section(text, '## Severity scale')
+    const rows = scale.split('\n').filter((l) => /^\| `\w+` \|/.test(l))
+    expect(rows.map((l) => /^\| `(\w+)`/.exec(l)![1])).toEqual(['major', 'medium', 'minor'])
+    for (const row of rows) {
+      const [, definition, example] = row.split(' | ')
+      expect(definition!.length, row).toBeGreaterThan(40)
+      expect(example!.length, row).toBeGreaterThan(30)
+    }
+    expect(scale).toContain('| Level | Definition | Example |')
+    // No other level is left anywhere in the agent file.
+    expect(text).not.toMatch(/\bblocker\b|`bug`|\bbug \|/)
+  })
+
+  it('gives every CONFIRMED or PLAUSIBLE finding a level from that scale, in the table and per candidate', () => {
+    const text = flat(refute())
+    expect(text).toContain('| ID | Verdict | Severity (`major` \\| `medium` \\| `minor`, `-` when refuted) |')
+    expect(text).toContain(
+      '- Final severity: `major` | `medium` | `minor` (from the Severity scale; for `CONFIRMED` and `PLAUSIBLE`)',
+    )
+    expect(text).toContain(
+      "Rate every `CONFIRMED` or `PLAUSIBLE` candidate from the **Severity scale** below, this file's scale and no other",
+    )
+    expect(text).not.toContain("using the contract's definitions")
+  })
+
+  it('has the orchestrator read the severities from the verdict table, and the refute report count them', () => {
+    expect(skill()).toContain(
+      "Its verdict table in `04-verdicts.md` is where you read each finding's severity: the Severity column gives every `CONFIRMED` and `PLAUSIBLE` candidate one of `major`, `medium` or `minor`",
+    )
+    expect(flat(review('run-reports/refute.md'))).toContain(
+      '`counts` with `candidates`, `confirmed`, `plausible`, `refuted`, and `major`, `medium`, `minor`',
+    )
+  })
+
+  it('keeps the verdict line decidable: every rule names a level refute assigns', () => {
+    const text = skill()
+    expect(text).toContain(
+      "| Severity | `major`, `medium` or `minor`, from the fixed scale in the refute agent's file",
+    )
+    expect(text).toContain(
+      'Verdict line: `DO NOT SHIP` if any confirmed `major`. `SHIP AFTER FIXES` if any confirmed `medium` or `minor`, or any plausible `major`.',
+    )
+    expect(text).toContain(
+      'the verdict is `DO NOT SHIP` for a confirmed `major`, `SHIP AFTER FIXES` for a confirmed `medium` or `minor` or a plausible `major`, else `SHIP`',
+    )
+    for (const text of [
+      skill(),
+      flat(review('agents/feature-review-hunt.md')),
+      flat(review('skills/feature-review/summary-template.md')),
+      flat(review('skills/feature-review/report-template.md')),
+    ])
+      expect(text).not.toMatch(
+        /`blocker`|`bug`|confirmed blocker|confirmed bug|plausible blocker|blocker \| ?bug|blocker\|bug/,
+      )
+    expect(flat(review('agents/feature-review-hunt.md'))).toContain('- Severity: major | medium | minor')
+  })
+
+  it('follows an all-minor round with a delta round, and anything else with a full round, round 1 always full', async () => {
+    const wf = flat(await workflowText('standard', 'high'))
+    expect(wf).toContain(
+      "**A delta round** follows, after round 1, a round whose confirmed findings refute rated all `minor` (the Severity column of that round's `04-verdicts.md`)",
+    )
+    expect(wf).toContain(
+      "verify runs only the fixed findings' criteria, one hunt runs on the fix commits' diff only",
+    )
+    expect(wf).toContain('**A full round** follows a round with any `medium` or `major` confirmed finding')
+    expect(wf).toContain('**Round 1 is always a full round** with every phase the workflow lists')
+    const text = skill()
+    expect(text).toContain(
+      "After round 1, a round whose confirmed findings refute rated all `minor` (the Severity column of that round's `04-verdicts.md`) is followed by a **delta round** (`delta`): verify runs only the acceptance criteria of the findings the fix pass fixed",
+    )
+    expect(text).toContain("one hunt runs on the fix commits' diff only")
+    expect(text).toContain(
+      'Any `medium` or `major` confirmed finding is followed by a full round with every phase the workflow lists; round 1 is always a full round.',
+    )
+    expect(text).toContain(
+      'The one hunt reviews the fix diff (`00-diff.patch`, `<last reviewed sha>..HEAD`) only',
+    )
+    expect(text).toContain('| `delta` | this run is a **delta round**')
+    expect(flat(review('agents/feature-review-verify.md'))).toContain(
+      '**In a delta round** (the prompt says `delta`) you run only the acceptance criteria of the findings the fix pass fixed',
+    )
+    // The served arguments: round 1, a full later round and a delta round, each its own.
+    expect(wf).toContain('Pass to /feature-review in round 1: phases=spec,env,verify,hunt,hunt,refute,merge')
+    expect(wf).toContain('In a full round after the first: phases=env,verify,hunt,hunt,refute,merge')
+    expect(wf).toContain('In a delta round: phases=verify,hunt,refute,merge agents=verify,hunt,refute,merge')
+    expect(wf).toMatch(/round=<n> delta\./)
+  })
+
+  it('lets no agent widen or narrow a round on its own', async () => {
+    expect(flat(await workflowText('standard', 'high'))).toContain(
+      "Each round's shape comes from this rule, never from your judgement or a phase agent's: you may not widen a round, narrow one or skip a phase on your own.",
+    )
+    expect(skill()).toContain(
+      "No agent widens a round or narrows one beyond what this rule gives, and no phase the round's plan lists is skipped.",
+    )
+  })
+
+  it('gives a later round the fix diff, with the full diff for reference', () => {
+    const text = skill()
+    expect(text).toContain(
+      'In a round after the first (`round=` above 1), `00-diff.patch` is instead the **fix diff**, `git -C WORKTREE diff <last reviewed sha> <commit>`, and the full diff above goes to `00-diff-full.patch` for reference.',
+    )
+    expect(text).toContain('`<last reviewed sha>` is the commit the previous round reviewed')
+    expect(text).toContain('Round 1 has only the full diff, as `00-diff.patch`.')
+    expect(text).toContain(
+      "`00-diff.patch` as the round's diff (the fix diff in a round after the first, with the absolute path of `00-diff-full.patch` for reference)",
+    )
+    expect(text).toContain('"round": <ROUND>')
+  })
+
+  it('takes a later round’s depth from the fix diff by a written rule, and nothing says the depth only moves up', async () => {
+    const wf = flat(await workflowText('standard', 'high'))
+    expect(wf).toContain(
+      '**The depth of a full round after the first** comes from the size of the fix diff, not of the branch: measure `git diff --numstat <last reviewed sha>..HEAD`',
+    )
+    expect(wf).toContain(
+      '(`deep` at 500 lines or 15 files or the class `auth` or `data-model`; `light` at most 50 lines in at most 3 files',
+    )
+    expect(wf).toContain('A delta round has no depth.')
+    const ticketAgent = flat(review('agents/todo-review-ticket.md'))
+    expect(ticketAgent).not.toContain('The depth only moves up')
+    expect(ticketAgent).not.toContain('even when the fixes made the diff smaller')
+    expect(ticketAgent).toContain('a full round after the first measures the fix diff instead')
+  })
+
+  it('asks for a class-level fix after two rounds of the same class, and the summary says so', async () => {
+    expect(flat(await workflowText('standard', 'high'))).toContain(
+      "After two consecutive rounds with confirmed findings of the same class (the same checklist item the hunt filed them under, or the same root cause refute's verdict names), the next fix pass is a **class-level fix**: the builder's brief asks it to narrow the change or redesign the part that keeps producing that class, not to patch the one finding again, and the ticket's summary says the fix pass was class-level and names the class.",
+    )
+    expect(flat(refute())).toContain('Root cause: one line naming the cause')
+  })
+
+  it('writes the spec once, in round 1, and has the orchestrator extend it afterwards', async () => {
+    const text = skill()
+    expect(text).toContain(
+      'The spec is written once, in round 1. In a round after the first no spec agent is spawned (the plan has no `spec` token)',
+    )
+    expect(text).toContain('**you, the orchestrator, extend it**')
+    expect(text).toContain('append one acceptance criterion per finding the fix pass fixed')
+    expect(text).toContain('apply every decision the human answered on the ticket since')
+    expect(text).toContain(
+      'in a round after the first, copy `WORKDIR/01-spec.md` aside first and put it back into the new `WORKDIR`',
+    )
+    expect(flat(await workflowText('standard', 'high'))).toContain(
+      'It is the only round with a `spec` phase: the spec is written once.',
+    )
+    expect(flat(review('agents/feature-review-spec.md'))).toContain('You run once per review, in round 1')
+    expect(flat(review('run-reports/spec.md'))).toContain('A spec runs once per review, in round 1')
+    // No later round's served arguments carry the spec.
+    for (const preset of WORKFLOW_PRESETS)
+      for (const run of resolveWorkflow(preset, undefined, 'high').steps.find((s) => s.id === 'review')!
+        .review!.runs) {
+        expect(run.later.phasesArg.split(','), preset).not.toContain('spec')
+        expect(run.delta?.phasesArg.split(',') ?? [], preset).not.toContain('spec')
+      }
+  })
+
+  it('spawns the merge check only when the base moved, and records base unchanged otherwise', () => {
+    const text = skill()
+    expect(text).toContain(
+      'Fetch the base (`GIT_TERMINAL_PROMPT=0 git -C MAIN fetch origin <base>`, as in Setup), then run `git -C WORKTREE merge-base --is-ancestor origin/<base> HEAD`, in any round, round 1 included',
+    )
+    expect(text).toContain('**It passes** (exit 0)')
+    expect(text).toContain(
+      'Spawn no merge agent. Write `05-merge.md` with `Result: NO ISSUE (base unchanged)`',
+    )
+    expect(text).toContain("record the round's merge as skipped with the literal `base unchanged`")
+    expect(text).toContain('**It fails** (exit 1): the base moved. Spawn the merge agent as below.')
+    expect(flat(review('agents/feature-review-merge.md'))).toContain(
+      'You are spawned only when the base moved',
+    )
+    expect(flat(review('run-reports/merge.md'))).toContain('A merge agent runs only when the base moved')
+  })
+
+  it('reads a merge skipped as base unchanged as no base issue', () => {
+    const text = skill()
+    expect(text).toContain(
+      'when no merge agent ran because the base was unchanged, it is the `NO ISSUE (base unchanged)` file Phase 3b wrote',
+    )
+    expect(text).toContain(
+      '**NO** when the merge check result is `NO ISSUE` (`NO ISSUE (up to date)` and `NO ISSUE (base unchanged)`',
+    )
+  })
+
+  it('briefs every phase with the ticket, the full head SHA, the round, the browser flag and the template path', () => {
+    const text = skill()
+    expect(text).toContain(
+      'Every agent prompt from here on includes: `MAIN`, `WORKTREE`, `WORKDIR`, `SLUG`, `projectId` and `ticketId` (on a board ticket), the full 40-character head SHA',
+    )
+    expect(text).toContain(
+      "the review round (`ROUND`), the browser flag, the absolute path of the phase's run-report template",
+    )
+    // The single-reviewer plan's brief names them too.
+    expect(text).toContain(
+      'what every agent prompt includes (Setup: `projectId`, `ticketId`, the full 40-character head SHA, the round, the browser flag and the absolute path of its run-report template among them)',
+    )
+    for (const agent of ['refute', 'spec', 'verify', 'merge']) {
+      const input = flat(section(review(`agents/feature-review-${agent}.md`), '## Input'))
+      for (const field of ['`projectId`', '`ticketId`', '40-character head SHA', 'the round', 'browser flag'])
+        expect(input, `${agent}: ${field}`).toContain(field)
+      expect(input, agent).toContain(
+        `absolute path of your run-report template (\`run-reports/${agent}.md\`)`,
+      )
+    }
+  })
+
+  it('gives the round records as the exact calls the board reads', () => {
+    const text = skill()
+    const call = ({ phase, note }: { phase: string; note: string }) =>
+      `\`start_span\` with \`phase: "${phase}"\`, \`round: <ROUND>\`, \`note: "${note}"\`, then \`end_span\` on the \`spanId\``
+    expect(text).toContain(call(REVIEW_ROUND_RECORDS.delta))
+    expect(text).toContain(call(REVIEW_ROUND_RECORDS.baseUnchanged))
+    expect(text).toContain('in round 1 the record counts for nothing')
+  })
+
+  it('says in the served texts what the check accepts in a later round', async () => {
+    const standard = flat(await workflowText('standard', 'high'))
+    expect(standard).toContain(
+      "round 1 needs every phase; a later round every phase but the spec; a delta round, recorded as one by `/feature-review`, one verify and one hunt per review of the round; a merge recorded as `base unchanged` counts as the round's merge check.",
+    )
+    expect(flat(await workflowText('maximum', 'high'))).toContain(
+      "so the board needs two `verify` and two `hunt` runs; a merge recorded `base unchanged` by a review counts as that review's merge check",
+    )
+    expect(flat(await workflowText('thorough', 'high'))).toContain('A delta round runs no security hunt')
+    const light = flat(await workflowText('light', 'high'))
+    expect(light).toContain('expects one `hunt` run in the last round and nothing else, in every round')
+    expect(light).toContain('this review has no delta round and no merge check')
+    expect(light).toContain('Pass to /feature-review: phases=reviewer')
   })
 })
 

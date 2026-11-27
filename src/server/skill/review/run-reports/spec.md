@@ -56,6 +56,9 @@ or counted has its own field; only what needs a sentence goes in a section.
 
 ## This agent's part: what a spec's report adds
 
+A spec runs once per review, in round 1: there is one spec report per review, with `round: 1`. In a
+later round no spec agent runs; the orchestrator appends the criteria for the fixed findings itself.
+
 - **intent** (`intent`): where the intent came from (the ticket, its posts, replies, decisions and
   attachments) and what it says.
 - **inferences** (`inferences`): what you had to infer, and what you based each inference on.

@@ -5,6 +5,8 @@ import path from 'node:path'
 import { and, count, eq } from 'drizzle-orm'
 import { beforeAll, describe, expect, it } from 'vitest'
 
+import { REVIEW_ROUND_RECORDS } from '#/lib/workflow'
+
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-run-reports-'))
 
@@ -821,6 +823,201 @@ describe('the review phases flag', () => {
     const moved = await needs.changeTicket(t.id, { title: 'renamed' }, HUMAN, { agent: false })
     expect(moved.missingReviewPhases).toEqual([])
     expect((await call('GET', `/api/tickets/${t.id}`)).body.missingReviewPhases).toEqual([])
+  })
+})
+
+describe('the review phases flag in the rounds after the first', () => {
+  const ticketOf = (pid: number, complexity: 'mid' | 'high' = 'high') =>
+    features.createTicket(pid, { title: 'work', status: 'in_progress', complexity }, HUMAN)
+  const toReview = (id: number) => needs.changeTicket(id, { status: 'review' }, HUMAN, { agent: false })
+  const spans = (pid: number, id: number, round: number, phases: string[]) =>
+    phases.forEach((phase, i) => closedSpan(pid, id, phase, round, 600 - i * 10))
+  const preset = (pid: number, id: string) => call('PUT', `/api/projects/${pid}/workflow`, { preset: id })
+  const FULL = ['spec', 'env', 'verify', 'hunt', 'hunt', 'refute', 'merge']
+  /** A record exactly as the review skill tells its orchestrator to write it: a span of the record's phase, noted, ended at once. */
+  const record = async (pid: number, id: number, round: number, which: keyof typeof REVIEW_ROUND_RECORDS) => {
+    const { phase, note } = REVIEW_ROUND_RECORDS[which]
+    const started = await tool('start_span', { projectId: pid, ticketId: id, phase, round, note })
+    expect(started.spanId).toBeTypeOf('number')
+    await tool('end_span', { projectId: pid, ticketId: id, spanId: started.spanId })
+  }
+
+  it('names the records once, with the literals the review skill writes', () => {
+    expect(REVIEW_ROUND_RECORDS).toEqual({
+      delta: { phase: 'review', note: 'delta round' },
+      baseUnchanged: { phase: 'merge', note: 'base unchanged' },
+    })
+  })
+
+  it('accepts a delta round of verify and one hunt, also through the move to review', async () => {
+    const pid = newProject()
+    const t = ticketOf(pid)
+    spans(pid, t.id, 1, FULL)
+    await record(pid, t.id, 2, 'delta')
+    spans(pid, t.id, 2, ['verify', 'hunt'])
+    expect(missingReviewPhases(t.id)).toEqual([])
+    const moved = await toReview(t.id)
+    expect(moved.missingReviewPhases).toEqual([])
+    // The record is the orchestrator's own span: no phase agent's run, so no report is owed for it.
+    expect(moved.missingRunReports.map((r: { agent: string }) => r.agent)).not.toContain(AGENT)
+  })
+
+  it('still flags a delta round that lacks its verify or its hunt, with the delta round’s expectations', async () => {
+    const pid = newProject()
+    const noHunt = ticketOf(pid)
+    spans(pid, noHunt.id, 1, FULL)
+    await record(pid, noHunt.id, 2, 'delta')
+    spans(pid, noHunt.id, 2, ['verify'])
+    expect(missingReviewPhases(noHunt.id)).toEqual([{ round: 2, phase: 'hunt', expected: 1, found: 0 }])
+    const noVerify = ticketOf(pid)
+    spans(pid, noVerify.id, 1, FULL)
+    await record(pid, noVerify.id, 2, 'delta')
+    spans(pid, noVerify.id, 2, ['hunt'])
+    expect(missingReviewPhases(noVerify.id)).toEqual([{ round: 2, phase: 'verify', expected: 1, found: 0 }])
+    // A delta record with nothing run yet makes its round the last one: both phases are missing.
+    const bare = ticketOf(pid)
+    spans(pid, bare.id, 1, FULL)
+    await record(pid, bare.id, 2, 'delta')
+    expect(missingReviewPhases(bare.id)).toEqual([
+      { round: 2, phase: 'verify', expected: 1, found: 0 },
+      { round: 2, phase: 'hunt', expected: 1, found: 0 },
+    ])
+  })
+
+  it('reads a later round of verify and one hunt with no delta record as a full round, and a delta record on round 1 as nothing', async () => {
+    const pid = newProject()
+    const unmarked = ticketOf(pid)
+    spans(pid, unmarked.id, 1, FULL)
+    spans(pid, unmarked.id, 2, ['verify', 'hunt'])
+    expect(missingReviewPhases(unmarked.id)).toEqual([
+      { round: 2, phase: 'env', expected: 1, found: 0 },
+      { round: 2, phase: 'hunt', expected: 2, found: 1 },
+      { round: 2, phase: 'refute', expected: 1, found: 0 },
+      { round: 2, phase: 'merge', expected: 1, found: 0 },
+    ])
+    const first = ticketOf(pid)
+    await record(pid, first.id, 1, 'delta')
+    spans(pid, first.id, 1, ['verify', 'hunt'])
+    expect(missingReviewPhases(first.id)).toEqual([
+      { round: 1, phase: 'spec', expected: 1, found: 0 },
+      { round: 1, phase: 'env', expected: 1, found: 0 },
+      { round: 1, phase: 'hunt', expected: 2, found: 1 },
+      { round: 1, phase: 'refute', expected: 1, found: 0 },
+      { round: 1, phase: 'merge', expected: 1, found: 0 },
+    ])
+    // Another note, or the literal on another phase, is no delta record.
+    const near = ticketOf(pid)
+    spans(pid, near.id, 1, FULL)
+    const started = await tool('start_span', {
+      projectId: pid,
+      ticketId: near.id,
+      phase: 'review',
+      round: 2,
+      note: 'delta',
+    })
+    await tool('end_span', { projectId: pid, ticketId: near.id, spanId: started.spanId })
+    const wrongPhase = await tool('start_span', {
+      projectId: pid,
+      ticketId: near.id,
+      phase: 'verify',
+      round: 2,
+      note: REVIEW_ROUND_RECORDS.delta.note,
+    })
+    await tool('end_span', { projectId: pid, ticketId: near.id, spanId: wrongPhase.spanId })
+    spans(pid, near.id, 2, ['verify', 'hunt'])
+    expect(missingReviewPhases(near.id).map((m) => m.phase)).toEqual(['env', 'hunt', 'refute', 'merge'])
+  })
+
+  it('counts a merge recorded as base unchanged as the round’s merge check, and only with the record', async () => {
+    const pid = newProject()
+    const skipped = ticketOf(pid)
+    spans(pid, skipped.id, 1, ['spec', 'env', 'verify', 'hunt', 'hunt', 'refute'])
+    await record(pid, skipped.id, 1, 'baseUnchanged')
+    expect((await toReview(skipped.id)).missingReviewPhases).toEqual([])
+    const plain = ticketOf(pid)
+    spans(pid, plain.id, 1, ['spec', 'env', 'verify', 'hunt', 'hunt', 'refute'])
+    expect(missingReviewPhases(plain.id)).toEqual([{ round: 1, phase: 'merge', expected: 1, found: 0 }])
+    // A record of an earlier round does not stand in for the last round's merge check.
+    const earlier = ticketOf(pid)
+    spans(pid, earlier.id, 1, FULL)
+    await record(pid, earlier.id, 1, 'baseUnchanged')
+    spans(pid, earlier.id, 2, ['env', 'verify', 'hunt', 'hunt', 'refute'])
+    expect(missingReviewPhases(earlier.id)).toEqual([{ round: 2, phase: 'merge', expected: 1, found: 0 }])
+    await record(pid, earlier.id, 2, 'baseUnchanged')
+    expect(missingReviewPhases(earlier.id)).toEqual([])
+  })
+
+  it('does not flag a full later round for the spec it no longer runs, and still flags round 1 without one', async () => {
+    const pid = newProject()
+    const t = ticketOf(pid)
+    spans(pid, t.id, 1, FULL)
+    spans(pid, t.id, 2, ['env', 'verify', 'hunt', 'hunt', 'refute', 'merge'])
+    expect((await toReview(t.id)).missingReviewPhases).toEqual([])
+    const first = ticketOf(pid)
+    spans(pid, first.id, 1, ['env', 'verify', 'hunt', 'hunt', 'refute', 'merge'])
+    expect(missingReviewPhases(first.id)).toEqual([{ round: 1, phase: 'spec', expected: 1, found: 0 }])
+  })
+
+  it('does not count records from before a send-back', async () => {
+    const pid = newProject()
+    const t = ticketOf(pid)
+    spans(pid, t.id, 1, FULL)
+    await record(pid, t.id, 2, 'delta')
+    await record(pid, t.id, 2, 'baseUnchanged')
+    // The records were written 500 seconds ago, before the send-back 300 seconds ago.
+    dbm.db
+      .update(dbm.schema.ticketEvents)
+      .set({ at: ago(500) })
+      .where(and(eq(dbm.schema.ticketEvents.ticketId, t.id), eq(dbm.schema.ticketEvents.by, AGENT)))
+      .run()
+    await toReview(t.id)
+    await needs.changeTicket(t.id, { status: 'in_progress' }, HUMAN, { agent: false })
+    dbm.db
+      .update(dbm.schema.ticketEvents)
+      .set({ at: ago(300) })
+      .where(and(eq(dbm.schema.ticketEvents.ticketId, t.id), eq(dbm.schema.ticketEvents.kind, 'stage')))
+      .run()
+    // A re-run of round 2 with verify and one hunt and no record of its own is a full later round.
+    for (const [i, phase] of ['verify', 'hunt'].entries()) closedSpan(pid, t.id, phase, 2, 100 - i * 5)
+    expect(missingReviewPhases(t.id)).toEqual([
+      { round: 2, phase: 'env', expected: 1, found: 0 },
+      { round: 2, phase: 'hunt', expected: 2, found: 1 },
+      { round: 2, phase: 'refute', expected: 1, found: 0 },
+      { round: 2, phase: 'merge', expected: 1, found: 0 },
+    ])
+  })
+
+  it('takes the delta round of each preset: Thorough verify and one hunt, Maximum two of each, Light none', async () => {
+    const thorough = newProject()
+    await preset(thorough, 'thorough')
+    const t = ticketOf(thorough)
+    spans(thorough, t.id, 1, ['spec', 'env', 'verify', 'hunt', 'hunt', 'hunt-security', 'refute', 'merge'])
+    await record(thorough, t.id, 2, 'delta')
+    spans(thorough, t.id, 2, ['verify', 'hunt'])
+    expect(missingReviewPhases(t.id)).toEqual([])
+
+    const maximum = newProject()
+    await preset(maximum, 'maximum')
+    const m = ticketOf(maximum)
+    spans(maximum, m.id, 1, [...FULL, 'hunt', ...FULL, 'hunt'])
+    expect(missingReviewPhases(m.id)).toEqual([])
+    // Each of the two reviews records its round as a delta round.
+    await record(maximum, m.id, 2, 'delta')
+    await record(maximum, m.id, 2, 'delta')
+    spans(maximum, m.id, 2, ['verify', 'hunt', 'verify'])
+    expect(missingReviewPhases(m.id)).toEqual([{ round: 2, phase: 'hunt', expected: 2, found: 1 }])
+    closedSpan(maximum, m.id, 'hunt', 2, 100)
+    expect(missingReviewPhases(m.id)).toEqual([])
+
+    // Light has no refute and so no delta round: its one reviewer runs in every round, record or not.
+    const light = newProject()
+    await preset(light, 'light')
+    const l = ticketOf(light)
+    spans(light, l.id, 1, ['hunt'])
+    await record(light, l.id, 2, 'delta')
+    expect(missingReviewPhases(l.id)).toEqual([{ round: 2, phase: 'hunt', expected: 1, found: 0 }])
+    closedSpan(light, l.id, 'reviewer', 2, 100)
+    expect(missingReviewPhases(l.id)).toEqual([])
   })
 })
 

@@ -13,8 +13,8 @@ not name that review, its depth or its findings. Then go on with that review.
 Otherwise run `/feature-review` through the Skill tool, unattended:
 `repo=<REPO> <branch> ticket=<TICKET> round=<n> ports=<PORTS> browser=<BROWSER> effort=<this step's effort>`,
 `slots=<SLOTS> build=<WORKDIR/02-build.md> repoId=<REPO_ID>`, `phases=<the phases argument this
-workflow gives for the run>` and `agents=<the agents argument it gives for the same run>`, then `scoped`, plus `light` when the depth is `light` and `deep` when it is
-`deep` (nothing more for `standard`). With `scoped`, its phases run only the scoped checks, since CI runs
+workflow gives for the run and the round's shape>` and `agents=<the agents argument it gives for the same run and shape>`, then `scoped`, plus `light` when the depth is `light` and `deep` when it is
+`deep` (nothing more for `standard`), and `delta` in a delta round (below). With `scoped`, its phases run only the scoped checks, since CI runs
 the full suites on the PR. With `slots=`, its verify phase takes a test slot around the end-to-end run
 and the full suite and its merge check around a heavy test run; its typecheck, lint and scoped unit runs
 and the hunt's and refute's targeted unit and probe tests take none, so hold no slot while you wait for
@@ -33,6 +33,41 @@ The change **survives** a round when the survival rule this workflow gives for t
 surviving round ends the cycle: go on to the next step. Otherwise the confirmed and plausible findings,
 the failed criteria, and the merge check's conflicts or new failures go back to the builder, then your
 gate, then the review again, as the next round, while the budget below allows one.
+
+**Rounds after the first.** Each round's shape comes from this rule, never from your judgement or a
+phase agent's: you may not widen a round, narrow one or skip a phase on your own.
+- **Round 1 is always a full round** with every phase the workflow lists. It is the only round with a
+  `spec` phase: the spec is written once.
+- **A delta round** follows, after round 1, a round whose confirmed findings refute rated all `minor`
+  (the Severity column of that round's `04-verdicts.md`). It runs the delta arguments this workflow gives
+  (`delta`): verify runs only the fixed findings' criteria, one hunt runs on the fix commits' diff only,
+  refute rates what they raise and the merge check runs as in any round. A delta round has no depth.
+- **A full round** follows a round with any `medium` or `major` confirmed finding (or a plausible one,
+  a failed criterion or a merge-check failure with no confirmed finding): every phase the workflow lists
+  but the spec, with the arguments it gives for a full round after the first.
+- **The diff.** In every round after the first, `/feature-review` gives each phase agent the fix-commit
+  diff, `<last reviewed sha>..HEAD` (the commit the previous round reviewed to the head), as its diff,
+  plus the path of the full branch diff for reference.
+- **The depth of a full round after the first** comes from the size of the fix diff, not of the branch:
+  measure `git diff --numstat <last reviewed sha>..HEAD` with the same exclusions as the review depth
+  (lockfiles and generated files) and take the depth table's first matching row with its thresholds
+  (`deep` at 500 lines or 15 files or the class `auth` or `data-model`; `light` at most 50 lines in at
+  most 3 files and none of the classes `auth`, `data-model`, `background-job`, `dependency`,
+  `config-infra`; else `standard`), the classes from `01-spec.md` when there is one. Write the line to `WORKDIR/depth.md`.
+- **The spec of a later round**, when there is one, is round 1's `01-spec.md`, extended by you (no agent edits it): append one
+  acceptance criterion per finding the fix pass fixed (what shows it fixed, checked by the next round's
+  verify) and apply every decision the human answered on the ticket since.
+- **The merge check is spawned only when the base moved.** `/feature-review` first runs
+  `git merge-base --is-ancestor origin/BASE HEAD` on a freshly fetched base; when it passes it spawns no
+  merge agent and records the round's merge as `base unchanged`, which reads as no base issue in the
+  survival rule.
+- **The same class twice.** After two consecutive rounds with confirmed findings of the same class (the
+  same checklist item the hunt filed them under, or the same root cause refute's verdict names), the next
+  fix pass is a **class-level fix**: the builder's brief asks it to narrow the change or redesign the part
+  that keeps producing that class, not to patch the one finding again, and the ticket's summary says the
+  fix pass was class-level and names the class.
+- **What survives a delta round**: the survival rule, with "every acceptance criterion" read as the ones
+  its verify ran; the others stand from the round that passed them.
 
 **The budget** is the `rounds` this workflow lists for the ticket's complexity. A round is one build or
 fix pass, your gate and one review. Round 1 is the first build with its gate and its review; every later
@@ -56,10 +91,12 @@ yours. A phase's span, its run report and its `agentName` carry its role (`spec`
 it. The fix pass after a round that did not survive{{if intent}} (and the one after an intent return){{end}} is run and posted `as` the agent the
 `Between rounds` line names for it, briefed as the build step briefs the builder, with the round's findings.
 
-**Every phase this workflow lists for a round runs in every round.** None is skipped because the findings
-look obvious, the change looks small or a finding was already reproduced, and each phase posts its
-result, so a skipped phase is visible. The board checks it at the hand-off (`missingReviewPhases`: the
-phases of this workflow's round that the last round lacks).
+**Every phase the round's shape lists runs.** None is skipped because the findings look obvious, the
+change looks small or a finding was already reproduced, and each phase posts its result, so a skipped
+phase is visible. The board checks it at the hand-off (`missingReviewPhases`: the phases of this
+workflow's round that the last round lacks): round 1 needs every phase; a later round every phase but the
+spec; a delta round, recorded as one by `/feature-review`, one verify and one hunt per review of the
+round; a merge recorded as `base unchanged` counts as the round's merge check.
 
 **The effort** is this step's effort. Pass it as the Agent tool's `effort` on every subagent you start
 for the round, and give it to `/feature-review` as `effort=<level>`, so its phase agents run at it.{{if intent}} The

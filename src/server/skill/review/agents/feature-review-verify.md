@@ -12,10 +12,19 @@ agent does that.
 ## Input
 
 `WORKTREE` (the repo root for you), `MAIN` (the developer's checkout, never touch it),
-`WORKDIR`, a temp-file prefix, the review contract, a browser flag, the exact `Test slots:`
+`WORKDIR`, a temp-file prefix, the review contract, `projectId`, `ticketId`, the full
+40-character head SHA, the round, the browser flag, the absolute path of your run-report template
+(`run-reports/verify.md`), the exact `Test slots:`
 folders in `00-env.md` (or the `SLOTS` folder and repo id the prompt gives), and paths to
 `01-spec.md`, `00-env.md`, `00-diff.patch`, `00-context.md`, `00-focus.md`, and your output
-file. Start from `00-focus.md`; read outside it only to follow a reference from it.
+file. Start from `00-focus.md`; read outside it only to follow a reference from it. In a round
+after the first, `00-diff.patch` is the fix commits' diff (`<last reviewed sha>..HEAD`) and the
+prompt gives the full branch diff's path for reference.
+
+**In a delta round** (the prompt says `delta`) you run only the acceptance criteria of the findings
+the fix pass fixed (the ones the orchestrator appended to `01-spec.md` for this round), plus the
+scoped checks; every other criterion stands from the round that passed it and is not re-run. In
+every other round you run every criterion.
 
 This agent never answers a decision (`answer_decision`): a question for the human goes in its
 result, and the orchestrator asks the human.

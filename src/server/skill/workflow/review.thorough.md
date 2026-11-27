@@ -6,7 +6,9 @@
   input, secrets and tokens in code, logs or responses, data exposed to the wrong caller, and a weaker
   default than before. Like the other hunts it is independent (never shown their findings), reports
   candidates with a concrete failure scenario and goes through the refute phase with the rest. The board
-  counts it as a `hunt`: the last round needs three.
+  counts it as a `hunt`: the last round needs three. A delta round runs no security hunt: its one hunt
+  is the delta arguments' (the board then needs one verify and one hunt){{if roundIntent}}, and the
+  round-end intent check below still runs{{end}}.
 {{if roundIntent}}- **The intent check at the end of every round**, not only before the hand-off. After the round's review
   returns, run the intent step's check on the head as it stands, by the agent the review's `intent` phase line names, and post it `as` that agent, none for a built-in one ({{if preview}}the preview and screenshots of that head,
   the diff, the human's own words; nothing else{{else}}the review's own screenshots, the diff, the human's own words;
