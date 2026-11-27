@@ -98,7 +98,7 @@ test('a name that is taken or a preset’s is refused where it is typed, and not
   }
   await expect(dialog).toBeVisible()
   await page.keyboard.press('Escape')
-  expect((await overview(human, project.id)).presets).toHaveLength(5)
+  expect((await overview(human, project.id)).presets).toHaveLength(6)
 })
 
 test('a workflow is renamed, and the four presets have no way to be renamed or deleted (C3)', async ({
@@ -336,7 +336,7 @@ test('the project follows a workflow of its own, a ticket names one, and deletin
   )
   expect([served.preset, served.source, served.label, served.base]).toEqual([
     id,
-    'ticket',
+    'own',
     'Our flow',
     'thorough',
   ])

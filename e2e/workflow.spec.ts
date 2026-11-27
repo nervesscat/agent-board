@@ -1745,10 +1745,10 @@ test('the ticket page sets its own workflow, which the project can change under 
 
   // G3: the ticket's workflow is its own; the project's can change without moving it.
   let w = await effective(t.id)
-  expect([w.preset, w.source, w.projectPreset]).toEqual(['thorough', 'ticket', 'standard'])
+  expect([w.preset, w.source, w.projectPreset]).toEqual(['thorough', 'own', 'standard'])
   await ok(human.put(`/api/projects/${project.id}/workflow`, { data: { preset: 'maximum' } }))
   w = await effective(t.id)
-  expect([w.preset, w.source, w.projectPreset]).toEqual(['thorough', 'ticket', 'maximum'])
+  expect([w.preset, w.source, w.projectPreset]).toEqual(['thorough', 'own', 'maximum'])
   await page.reload()
   await expect(page.getByRole('combobox', { name: 'Workflow' })).toContainText('Thorough')
   await page.getByRole('combobox', { name: 'Workflow' }).click()
