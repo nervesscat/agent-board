@@ -53,3 +53,33 @@ export function applyMigrations(sqlite: Database.Database, migrationsFolder: str
   }
   return applying
 }
+
+/** The settings key of the alerts' record of the migrations the human has been told about. */
+export const MIGRATIONS_SEEN = 'alertMigrationsSeen'
+
+/**
+ * Rewrites the migration marker from the old shape `{ at }` (only the newest applied time) to `{ at, announced }`,
+ * with `announced` every migration applied so far. Run before applyMigrations: a migration the boot applies
+ * afterwards is not in `announced`, so it stays unannounced across restarts until the human answers it. A
+ * database with no settings table yet (a fresh one), or no marker, is left as it is.
+ */
+export function upgradeLegacyMarker(sqlite: Database.Database): void {
+  const tables = new Set(
+    (sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map(
+      (t) => t.name,
+    ),
+  )
+  if (!tables.has('settings') || !tables.has('__drizzle_migrations')) return
+  const row = sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(MIGRATIONS_SEEN) as
+    | { value: string }
+    | undefined
+  if (!row) return
+  const value = JSON.parse(row.value) as { at?: unknown; announced?: unknown } | null
+  if (typeof value?.at !== 'number' || Array.isArray(value.announced)) return
+  const announced = (
+    sqlite.prepare('SELECT created_at FROM "__drizzle_migrations"').all() as { created_at: number | null }[]
+  ).map((r) => Number(r.created_at))
+  sqlite
+    .prepare('UPDATE settings SET value = ? WHERE key = ?')
+    .run(JSON.stringify({ at: value.at, announced }), MIGRATIONS_SEEN)
+}

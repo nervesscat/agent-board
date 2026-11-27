@@ -4,7 +4,8 @@ import path from 'node:path'
 
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 
-import { appliedAtBoot, db, schema } from '#/db'
+import { db, schema } from '#/db'
+import { MIGRATIONS_SEEN } from '#/db/migrate'
 import { lastHuman } from '../actors'
 import { config, servedEntrance, type PublicEntrance } from '../config'
 import { LOCAL_RP_ID } from '../entrance'
@@ -105,8 +106,6 @@ export interface MachineEdges {
   store: () => FileStore
   /** The migrations the database applied, oldest first: when each was made and its name. */
   migrations: () => { at: number; name: string }[]
-  /** The `when` of each migration this process's boot applied. */
-  migrationsAtBoot: () => number[]
 }
 
 export const edges: MachineEdges = {
@@ -126,7 +125,6 @@ export const edges: MachineEdges = {
   memory: () => ({ free: os.freemem(), total: os.totalmem() }),
   store: () => fileStore,
   migrations: appliedMigrations,
-  migrationsAtBoot: () => appliedAtBoot.map((m) => m.when),
 }
 
 // --- helpers ---
@@ -593,8 +591,6 @@ const previewRestarted: AlertType = {
 
 // --- 13: a migration applied ---
 
-const MIGRATIONS_SEEN = 'alertMigrationsSeen'
-
 /** The migrations the database applied, with the names the journal gives them. */
 function appliedMigrations(): { at: number; name: string }[] {
   const rows = db.$client
@@ -627,6 +623,14 @@ const migrationsSeen = (): MigrationsSeen | null => {
   }
 }
 
+/**
+ * A migration is announced when the marker names it. An old marker only has the newest one, so every
+ * migration up to its `at` counts as announced. The boot converts an old marker before it applies anything,
+ * so a migration applied late stays unannounced in the new shape until "Got it".
+ */
+const wasAnnounced = (at: number, seen: MigrationsSeen) =>
+  seen.announced ? seen.announced.has(at) : at <= seen.at
+
 const writeMigrationsSeen = (at: number, announced: number[]) => {
   const value = { at, announced }
   db.insert(schema.settings)
@@ -644,21 +648,6 @@ const markMigrationsSeen = (applied: { at: number }[]) => {
   )
 }
 
-/**
- * An old marker only has the newest `at`, so every migration up to it was announced, except the ones this
- * boot applied late: those are new to the human. The marker is written back in the new shape, so a restart
- * keeps them unannounced until "Got it".
- */
-function upgradeLegacyMarker(
-  seen: MigrationsSeen,
-  applied: { at: number }[],
-  bootApplied: ReadonlySet<number>,
-): Set<number> {
-  const announced = applied.filter((m) => m.at <= seen.at && !bootApplied.has(m.at)).map((m) => m.at)
-  writeMigrationsSeen(seen.at, announced)
-  return new Set(announced)
-}
-
 function migrationAlerts(): AlertCandidate[] {
   const applied = edges.migrations()
   const newest = applied.at(-1)
@@ -671,9 +660,7 @@ function migrationAlerts(): AlertCandidate[] {
   }
   // A migration can be applied late, from a merged branch, with an older `when` than the newest: it
   // is fresh too, so the set of announced ones is checked, not only the watermark.
-  const bootApplied = new Set(edges.migrationsAtBoot())
-  const announced = seen.announced ?? upgradeLegacyMarker(seen, applied, bootApplied)
-  const fresh = applied.filter((m) => !announced.has(m.at))
+  const fresh = applied.filter((m) => !wasAnnounced(m.at, seen))
   if (!fresh.length) return []
   return [
     {

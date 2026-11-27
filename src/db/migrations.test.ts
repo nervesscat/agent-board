@@ -7,7 +7,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { afterAll, describe, expect, it } from 'vitest'
 
-import { applyMigrations } from './migrate'
+import { applyMigrations, MIGRATIONS_SEEN, upgradeLegacyMarker } from './migrate'
 
 /**
  * Migrations that move data, run against a database that has rows: migrate a fresh one up to the
@@ -2503,6 +2503,41 @@ describe('applyMigrations on a database at 0056', () => {
     applyMigrations(sqlite, dir)
     expect(columns(sqlite, '__drizzle_migrations')).toEqual(columnsBefore)
     expect(columnsBefore).toEqual(['id', 'hash', 'created_at'])
+  })
+})
+
+describe('upgradeLegacyMarker', () => {
+  const TAG_0056 = '0056_closed_by_approval'
+
+  it('turns an old alert marker into the new shape before the loader, so the migrations it applies stay unannounced', () => {
+    const dir = folderWith(LAST)
+    const sqlite = databaseAt(TAG_0056)
+    const at = journalOf(dir).find((e) => e.tag === TAG_0056)!.when
+    sqlite
+      .prepare('INSERT INTO settings (key, value) VALUES (?, ?)')
+      .run(MIGRATIONS_SEEN, JSON.stringify({ at }))
+    const beforeLoader = recorded(sqlite)
+
+    upgradeLegacyMarker(sqlite)
+    const marker = () =>
+      JSON.parse(
+        (sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(MIGRATIONS_SEEN) as { value: string })
+          .value,
+      )
+    expect(marker()).toEqual({ at, announced: beforeLoader })
+
+    applyMigrations(sqlite, dir)
+    expect(recorded(sqlite)).toEqual(journalOf(dir).map((e) => e.when))
+    expect(marker()).toEqual({ at, announced: beforeLoader })
+    // A second upgrade leaves the new shape alone.
+    upgradeLegacyMarker(sqlite)
+    expect(marker()).toEqual({ at, announced: beforeLoader })
+  })
+
+  it('does nothing and does not throw on a fresh database with no settings table', () => {
+    const sqlite = new Database(':memory:')
+    expect(() => upgradeLegacyMarker(sqlite)).not.toThrow()
+    expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all()).toEqual([])
   })
 })
 
