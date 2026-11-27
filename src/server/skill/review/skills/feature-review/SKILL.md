@@ -304,8 +304,9 @@ source `finding C<n>, round <n-1>`, method the one that reproduced it), and appl
 human answered on the ticket since (`get_ticket`: the decided option rewrites the criterion or the
 open question it settles). Then write the spec's **Not yet passed** list anew: every earlier
 criterion that no round's verify has recorded `PASS` (the ones on the list before, less those the
-previous round's `02-verification.md` records `PASS`, plus those it ran and records `FAIL` or
-`UNVERIFIED`, noted in Setup step 1; `none` when every one was passed). A criterion leaves the list
+previous round's `02-verification.md` records `PASS`, plus those it ran and records anything but
+plain `PASS` (`PASS (traced)`, `FAIL`, `FAIL (traced)`, `UNVERIFIED`), noted in Setup step 1; `none`
+when every one was passed). A criterion leaves the list
 only when a round's verify passes it, so a `FAIL` whose candidate refute refuted stays on it. No
 agent edits the spec after round 1.
 

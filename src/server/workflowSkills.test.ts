@@ -436,6 +436,12 @@ describe('review rounds converge: a severity scale, delta rounds, a spec written
     expect(flat(review('run-reports/verify.md'))).toContain(
       "in a delta round, the criteria you ran: the fixed findings' and the ones no earlier round passed",
     )
+    expect(flat(review('run-reports/verify.md'))).toContain(
+      "(a criterion outside those stands only because an earlier round's verify recorded it `PASS`)",
+    )
+    expect(flat(review('run-reports/verify.md'))).not.toContain(
+      'the others stand from the round that passed them',
+    )
   })
 
   it('names a shape for every round that did not survive, and a full round after an intent return', async () => {

@@ -60,7 +60,8 @@ or counted has its own field; only what needs a sentence goes in a section.
   and a traced read only as a last resort — and what evidence you accepted.
 - **unexercised** (`unexercised`): criteria you could not exercise, and why.
 - **scope** (`scope`): in a delta round, the criteria you ran: the fixed findings' and the ones no
-  earlier round passed (the others stand from the round that passed them); otherwise `every criterion`.
+  earlier round passed (a criterion outside those stands only because an earlier round's verify
+  recorded it `PASS`); otherwise `every criterion`.
 - **counts**: `counts` with `criteria`, `passed`, `failed`, `unverified`.
 
 ## Where it goes
