@@ -1626,11 +1626,17 @@ api.post('/api/projects/:id/reviews/results', async ({ request, params, actor })
       checks: z.record(z.string(), z.string()).optional(),
       counts: z.record(z.string(), z.number()).optional(),
       repoId: z.number().int().optional(),
+      round: z.number().int().min(1).optional(),
+      findings: z.array(z.record(z.string(), z.unknown())).optional(),
     }),
   )
   return json(reviews.postResult(id(params), body, actor), 201)
 })
 api.get('/api/reviews/results/:id', ({ params }) => json(reviews.getResult(id(params))))
+api.patch('/api/reviews/results/:id/findings/:findingId', async ({ request, params }) => {
+  const body = await readJson(request, z.object({ fixedIn: z.string().max(64).nullable() }))
+  return json(reviews.setFindingFixed(id(params), params.findingId!, body.fixedIn))
+})
 
 // --- run reports: how each subagent run went, written before it hands back (runReports.ts) ---
 // ?agent=&ticketId=&round=&limit= narrow the project's list (newest first, each with its ticket's title).

@@ -12,9 +12,9 @@
 
 ## Findings
 
-- **<claim, one sentence>** (<major|medium|minor>, <confirmed|plausible>). <Why it matters, one sentence.> Fix: <a few words>. `<path:line>`
+- **<claim, one sentence>** (<major|medium|minor>, <confirmed|plausible>). id `<F1>` · title `<claim>` · severity `<major|medium|minor>` · verdict `<confirmed|plausible>` · origin `<original-build|previous-fix|pre-existing>` · finder `<hunt-a|hunt-b|verify>` · round `<n>` · fixedIn `<sha, blank until fixed>`. <Why it matters, one sentence.> Fix: <a few words>. `<path:line>`
 
-<Each bullet at most 50 words. If there are none, a single line: "No findings. <n> checklist items passed with citations, <m> candidates refuted, <k> of <t> criteria executed.">
+<Each bullet at most 80 words. If there are none, a single line: "No findings. <n> checklist items passed with citations, <m> candidates refuted, <k> of <t> criteria executed.">
 
 <Optionally, one more line of at most 30 words starting with "Before merging:" for an operational step the author or an operator must take (run a migration, set a variable, rotate a key). Only when the review established it, never as advice.>
 

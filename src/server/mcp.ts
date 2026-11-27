@@ -478,6 +478,18 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
       checks: z.record(z.string(), z.string()).optional(),
       counts: z.record(z.string(), z.number()).optional(),
       repoId: z.number().int().optional().describe('required when the project has more than one repo'),
+      round: z
+        .number()
+        .int()
+        .min(1)
+        .optional()
+        .describe('the review round (1, 2, ...) this result is; required with findings'),
+      findings: z
+        .array(z.record(z.string(), z.unknown()))
+        .optional()
+        .describe(
+          "the confirmed and plausible findings of this round: {id, title, severity: major|medium|minor, verdict: confirmed|plausible, origin: original-build|previous-fix|pre-existing, finder: hunt-a|hunt-b|verify}; a finding may carry its round only when it is the result's",
+        ),
     },
     ({ projectId, ...rest }) => reviews.postResult(projectId, rest, actor),
   )
@@ -499,6 +511,12 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
     'One review result in full: verdict, markdown summary, checks and counts.',
     { resultId: z.number().int() },
     ({ resultId }) => reviews.getResult(resultId),
+  )
+  tool(
+    'set_finding_fixed',
+    'Set which change fixed one finding of a review result (fixedIn: its SHA, or null to clear it). The other findings are unchanged; returns the result.',
+    { resultId: z.number().int(), findingId: z.string(), fixedIn: z.string().nullable() },
+    ({ resultId, findingId, fixedIn }) => reviews.setFindingFixed(resultId, findingId, fixedIn),
   )
 
   // run reports: how one subagent run went, written before it hands back (runReports.ts, and the

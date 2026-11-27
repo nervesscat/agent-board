@@ -146,6 +146,7 @@ function prRow(projectId: number, n: number, extra: Partial<PrRow> = {}): PrRow 
     localCiSha: null,
     leftAs: null,
     status: 'pending',
+    reviewRounds: [],
     latestReview: null,
     tickets: [],
     mergeAfter: [],

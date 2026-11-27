@@ -254,6 +254,7 @@ function prRow(
     repo: null,
     ticket: null,
     number: n,
+    reviewRounds: [],
     title: `PR ${n} ${waitingOn} ${status}`,
     url: `https://github.com/example/repo/pull/${n}`,
     author: waitingOn === 'me' ? 'someone' : 'me',

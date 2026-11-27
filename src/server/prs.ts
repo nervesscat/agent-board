@@ -28,6 +28,7 @@ import {
   type PrTicketStatus,
 } from './prTickets'
 import { listRepos, ticketRepo } from './repos'
+import { roundsOf } from './reviews'
 import { ticketRepoList, ticketRepoRows } from './ticketRepos'
 import { kindOf, listStages } from './stages'
 import { noteBoardEvent } from './workTimeline'
@@ -787,6 +788,10 @@ export async function listPrs(projectId: number, opts: { refresh?: boolean; invo
       latestReview: r
         ? { id: r.id, verdict: r.verdict, sha: r.sha, fresh: r.sha === pr.headSha, createdAt: r.createdAt }
         : null,
+      // Its results per review round, each with its findings (reviews.ts roundsOf).
+      reviewRounds: roundsOf(
+        results.filter((x) => x.prNumber === pr.number && (x.repoId ?? pr.repoId) === pr.repoId),
+      ),
       ticket: opens ? { id: opens.id, title: opens.title, status: opens.status } : null,
       // The feature tickets that name this PR: by its number, or on its head branch when they name none.
       tickets: from.map((t) => ({
