@@ -12,7 +12,8 @@ run (its `shots/` folder, the verify phase){{if !review}}, if it took any (this 
 **A fix no review saw.** When the hand-off carries a fix made after the workflow's last review round (the
 review step's budget: a round that did not survive, its one fix pass and a gate that passed, with no
 review after it), the summary's first line is exactly `Unreviewed fix: <what>, at <sha>`: `<what>` names
-the findings that fix addressed, in a few words, and `<sha>` is the head commit handed off (its short SHA,
+the findings that fix addressed and the criteria it fixed (each one that round failed, with the
+builder's evidence checked at the gate), in a few words, and `<sha>` is the head commit handed off (its short SHA,
 at least 7 characters). The next line is a one-line offer of one more review round, such as "Reply here
 asking for one more review round to have it reviewed once more." The human takes it by replying asking
 for it, under the summary or in a comment; no decision card is posted for it and the ticket does not

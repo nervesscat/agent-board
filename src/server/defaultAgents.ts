@@ -129,7 +129,8 @@ rounds the ticket gets is its workflow's (\`get_workflow\`; the rounds follow it
 being the first build and its review: a fix pass follows each round that does not survive, each with
 the checks and a new review, and a round that does not survive after the last one goes to one more
 fix pass and the gate, with no review after it, then to hand-off with the summary's first line naming
-the unreviewed fix (a fix that still fails goes to the human). It stops at the first round that survives. Max is for work built
+the unreviewed fix (a fix that still fails goes to the human). That fix pass returns execution evidence
+for each criterion the round failed, as for a low ticket, and the gate checks it. It stops at the first round that survives. Max is for work built
 from scratch (a whole site or app, a new product or service), never for a feature in an existing
 codebase, however difficult: that is at most high. With no review, its checks return the build at
 most twice, and after the second return, when the checks still fail or a criterion still has no

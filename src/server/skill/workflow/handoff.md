@@ -8,7 +8,9 @@ Merged itself as their facts hold (a tick by hand is refused); you tick Implemen
 **After a fix no review saw** (the review step's budget: the last round did not survive, and its one fix
 pass had no review after it), the hand-off stands only when the gate passed on that fix's head{{if intent}} and the
 intent check returned `matches` on that same head, as for any hand-off{{end}}, and the summary's first line is the
-`Unreviewed fix: <what>, at <sha>` line naming that head (the summary step). The ticket goes to `review`
+`Unreviewed fix: <what>, at <sha>` line naming that head (the summary step). Each criterion that round
+failed stands only on the builder's execution evidence, checked at the gate as for a ticket with no review:
+without it there is no hand-off. The ticket goes to `review`
 with no decision card open for the budget: the summary's offer of one more review round is the human's
 override, never a card.
 {{end}}

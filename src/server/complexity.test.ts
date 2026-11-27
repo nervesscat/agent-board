@@ -865,6 +865,77 @@ describe('the review texts the board ships', () => {
     expect(budgetOf(await workflowText('standard', 'mid'))).toContain('the intent check, the push')
   })
 
+  it('a RETRY or re-queued run on the post-budget fix head runs no review: the skip rule gives way to the budget', async () => {
+    const budgetOf = (text: string) =>
+      text.slice(text.indexOf('**The budget**'), text.indexOf('**Who runs each phase.**'))
+    for (const [preset, level] of [
+      ['standard', 'mid'],
+      ['standard', 'high'],
+      ['thorough', 'mid'],
+    ] as const) {
+      const text = await workflowText(preset, level)
+      const at = `${preset} ${level}`
+      // The skip rule still orders a review for a head with no surviving one...
+      expect(text, at).toContain('Skip the review, on a `RETRY` or re-queued run too, only when')
+      expect(text, at).toContain('Otherwise run `/feature-review`')
+      // ...and the budget names the post-budget fix head as the case it does not cover.
+      expect(budgetOf(text), at).toContain(
+        'That holds on a `RETRY` or re-queued run too: on that fix\'s head, or a later commit of the same hand-off (a CI fix), the skip rule\'s "Otherwise run `/feature-review`" does not apply and no review runs, unless the human asked for one more round or `RETRY` names a review.',
+      )
+    }
+    const rules = flat(between(ticketAgent, '### Two rules the workflow', '## '))
+    expect(rules).toContain(
+      "No review runs on that head, on a `RETRY` or re-queued run too (the review step's skip rule does not send it to `/feature-review`), unless the human asked for one more round or `RETRY` names a review.",
+    )
+    expect(await workflowText('standard', 'low')).not.toContain('a later commit of the same hand-off')
+  })
+
+  it("a criterion the last round failed is handed off after the post-budget fix only on the builder's execution evidence, checked at the gate, and named in the Unreviewed fix line", async () => {
+    const budgetOf = (text: string) =>
+      text.slice(text.indexOf('**The budget**'), text.indexOf('**Who runs each phase.**'))
+    for (const [preset, level] of [
+      ['standard', 'mid'],
+      ['standard', 'high'],
+      ['standard', 'max'],
+      ['thorough', 'mid'],
+      ['maximum', 'high'],
+    ] as const) {
+      const text = await workflowText(preset, level)
+      const at = `${preset} ${level}`
+      expect(budgetOf(text), at).toContain(
+        "That fix pass is not a review round. Each criterion that round failed needs the builder's execution evidence (a test that runs the real code, an HTTP call, a browser action), checked at your gate as the gate checks a ticket with no review: a criterion without it is a gate return.",
+      )
+      // The gate's own check of a no-review ticket's evidence, which the budget points at, is still there.
+      expect(text, at).toContain(
+        "the change survives when the gate passed and the builder's evidence covers every criterion",
+      )
+      expect(text, at).toContain(
+        "`<what>` names the findings that fix addressed and the criteria it fixed (each one that round failed, with the builder's evidence checked at the gate), in a few words",
+      )
+      expect(text, at).toContain(
+        "Each criterion that round failed stands only on the builder's execution evidence, checked at the gate as for a ticket with no review: without it there is no hand-off.",
+      )
+    }
+    // A low ticket has no review and no post-budget fix: none of this is served to it.
+    const low = await workflowText('standard', 'low')
+    expect(low).not.toContain('Each criterion that round failed')
+    expect(low).not.toContain('the criteria it fixed')
+    // The ticket agent's contract lets the builder's evidence stand in for the verify phase there.
+    const contract = flat(between(ticketAgent, '## The contract', '## '))
+    expect(contract).toContain(
+      'So it does, checked at your gate, for a criterion that failed in the last review round and was fixed in the fix pass after it (the unreviewed fix below).',
+    )
+    const rules = flat(between(ticketAgent, '### Two rules the workflow', '## '))
+    expect(rules).toContain(
+      "Each criterion that round failed needs the builder's execution evidence, checked at the gate as for a ticket with no review (a criterion without it is a gate return), and `<what>` names those criteria with the findings fixed.",
+    )
+    const { DEFAULT_AGENTS } = await import('./defaultAgents')
+    const builder = flat(DEFAULT_AGENTS.find((a) => a.name === 'builder')!.delegation)
+    expect(builder).toContain(
+      'That fix pass returns execution evidence for each criterion the round failed, as for a low ticket, and the gate checks it.',
+    )
+  })
+
   it('the summary opens with the unreviewed-fix line and its one-line offer only for a ticket with a review', async () => {
     const mid = await workflowText('standard', 'mid')
     expect(mid).toContain(
@@ -1147,7 +1218,7 @@ describe('the review texts the board ships', () => {
       'AGENTS.md': agentsDoc,
     })) {
       expect(flat(text), name).toContain(
-        "a review that does not survive after the workflow's last round goes to one fix pass by the builder and the gate, with no review after it, then to the hand-off, the summary's first line naming the unreviewed fix (a fix that still fails goes to a human decision)",
+        "a review that does not survive after the workflow's last round goes to one fix pass by the builder and the gate, with no review after it, then to the hand-off, the summary's first line naming the unreviewed fix (the gate checks the builder's evidence for each criterion it fixed; a fix that still fails goes to a human decision)",
       )
       expect(flat(text), name).not.toContain(
         "a review that does not survive after the workflow's last round goes to a human decision;",

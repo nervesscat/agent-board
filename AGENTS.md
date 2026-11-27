@@ -599,7 +599,7 @@ step's role, never by the Team agent's name. The review step names none: you run
 hold in every workflow: a fix pass by the **builder** takes the review's confirmed findings, each with
 the project's checks and a new review; a review that does not survive after the workflow's last round
 goes to one fix pass by the builder and the gate, with no review after it, then to the hand-off,
-the summary's first line naming the unreviewed fix (a fix that still fails goes to a human decision); the checks return the build at most twice, and after the second return,
+the summary's first line naming the unreviewed fix (the gate checks the builder's evidence for each criterion it fixed; a fix that still fails goes to a human decision); the checks return the build at most twice, and after the second return,
 when the checks still fail or a criterion still has no evidence, the human decides (keep going or
 drop); the build goes to hand-off only with evidence for every criterion; the **intent** agent runs at its workflow step's effort (`low` by default in every preset) before the hand-off. Max is for work built from scratch (a whole site or app, a new product or standalone service); a feature in an existing codebase is at most high, however difficult. The agents' thinking effort is each workflow
 step's effort, `auto` unless the human set one: `low` for a low ticket, `medium` for mid and high,

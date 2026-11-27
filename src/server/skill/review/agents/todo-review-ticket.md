@@ -99,7 +99,12 @@ Every step in the text has the same parts:
   (its confirmed and plausible findings, failed criteria, the merge check's conflicts or new failures)
   goes to one fix pass by the builder, then the gate, with no review after it. A gate that passes goes
   on through the workflow's next steps to the hand-off, with the summary's first line
-  `Unreviewed fix: <what>, at <sha>` and a one-line offer of one more review round. A real decision
+  `Unreviewed fix: <what>, at <sha>` and a one-line offer of one more review round. Each criterion that
+  round failed needs the builder's execution evidence, checked at the gate as for a ticket with no
+  review (a criterion without it is a gate return), and `<what>` names those criteria with the
+  findings fixed. No review runs on that head, on a `RETRY` or re-queued run too (the review step's
+  skip rule does not send it to `/feature-review`), unless the human asked for one more round or
+  `RETRY` names a review. A real decision
   still blocks (`ask_decision`, `BLOCKER: decision`): two valid behaviours, a scope call, or a fix
   that still fails. A finding or a criterion the builder could not fix is a fix that still fails:
   `ask_decision` (keep going, ship as is, drop), and no hand-off; a gate that returns twice is the
@@ -130,7 +135,9 @@ earned.
    phase marked it `PASS` by execution (a test that exercises the real code, an HTTP call to the
    review's server, a browser action), not `PASS (traced)`. A test that passes because it mocks
    the thing it checks proves nothing. For a ticket the workflow gives no review (a low ticket), the builder's
-   evidence stands in for the verify phase: each criterion shows the same kind of execution.
+   evidence stands in for the verify phase: each criterion shows the same kind of execution. So it
+   does, checked at your gate, for a criterion that failed in the last review round and was fixed in
+   the fix pass after it (the unreviewed fix below).
 2. **Never make a check pass by weakening it.** Never: delete, skip or `.only` a test; loosen an
    assertion or update a snapshot to match wrong output; raise a timeout to hide a hang; catch and
    ignore an error so a path "works"; hard-code the value a test expects; branch on the test
