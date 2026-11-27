@@ -4,7 +4,7 @@ import path from 'node:path'
 
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 
-import { db, schema } from '#/db'
+import { appliedAtBoot, db, schema } from '#/db'
 import { lastHuman } from '../actors'
 import { config, servedEntrance, type PublicEntrance } from '../config'
 import { LOCAL_RP_ID } from '../entrance'
@@ -105,6 +105,8 @@ export interface MachineEdges {
   store: () => FileStore
   /** The migrations the database applied, oldest first: when each was made and its name. */
   migrations: () => { at: number; name: string }[]
+  /** The `when` of each migration this process's boot applied. */
+  migrationsAtBoot: () => number[]
 }
 
 export const edges: MachineEdges = {
@@ -124,6 +126,7 @@ export const edges: MachineEdges = {
   memory: () => ({ free: os.freemem(), total: os.totalmem() }),
   store: () => fileStore,
   migrations: appliedMigrations,
+  migrationsAtBoot: () => appliedAtBoot.map((m) => m.when),
 }
 
 // --- helpers ---
@@ -634,8 +637,12 @@ const markMigrationsSeen = (applied: { at: number }[]) => {
     .run()
 }
 
-const wasAnnounced = (at: number, seen: MigrationsSeen) =>
-  seen.announced ? seen.announced.has(at) : at <= seen.at
+/**
+ * A migration is announced when the marker names it. An old marker only has the newest one, so an older
+ * `when` counts as announced, unless this boot applied it: then it was applied late and is new to the human.
+ */
+const wasAnnounced = (at: number, seen: MigrationsSeen, bootApplied: ReadonlySet<number>) =>
+  seen.announced ? seen.announced.has(at) : at <= seen.at && !bootApplied.has(at)
 
 function migrationAlerts(): AlertCandidate[] {
   const applied = edges.migrations()
@@ -649,7 +656,8 @@ function migrationAlerts(): AlertCandidate[] {
   }
   // A migration can be applied late, from a merged branch, with an older `when` than the newest: it
   // is fresh too, so the set of announced ones is checked, not only the watermark.
-  const fresh = applied.filter((m) => !wasAnnounced(m.at, seen))
+  const bootApplied = new Set(edges.migrationsAtBoot())
+  const fresh = applied.filter((m) => !wasAnnounced(m.at, seen, bootApplied))
   if (!fresh.length) return []
   return [
     {

@@ -740,6 +740,11 @@ describe('12 preview stopped by a restart', () => {
 })
 
 describe('13 a migration applied', () => {
+  // The test process's own boot applied every migration; each test says which ones this boot applied.
+  beforeEach(() => {
+    machine.edges.migrationsAtBoot = () => []
+  })
+
   it('is raised for the migrations applied since the marker, named by the journal', async () => {
     const applied = machine.edges.migrations()
     expect(applied.length).toBeGreaterThan(2)
@@ -816,6 +821,51 @@ describe('13 a migration applied', () => {
     machine.edges.migrations = () => [late, ...applied]
     const [row] = await raise('migration-applied')
     expect(await press(row!.id, 'seen')).toMatchObject({ resolved: true })
+    expect(await check('migration-applied')).toEqual([])
+  })
+
+  it('a legacy marker still announces a migration this boot applied late', async () => {
+    const applied = machine.edges.migrations()
+    await check('migration-applied')
+    db.update(schema.settings)
+      .set({ value: { at: applied.at(-1)!.at } })
+      .where(eq(schema.settings.key, 'alertMigrationsSeen'))
+      .run()
+    // The oldest one was applied by this boot, with a `when` older than the marker.
+    machine.edges.migrationsAtBoot = () => [applied[0]!.at]
+    expect(await check('migration-applied')).toMatchObject([{ details: [applied[0]!.name] }])
+  })
+
+  it('a legacy marker does not announce an older migration this boot did not apply', async () => {
+    const applied = machine.edges.migrations()
+    await check('migration-applied')
+    db.update(schema.settings)
+      .set({ value: { at: applied.at(-1)!.at } })
+      .where(eq(schema.settings.key, 'alertMigrationsSeen'))
+      .run()
+    const late = { at: applied[0]!.at - 1000, name: '0000_late_merge' }
+    machine.edges.migrations = () => [late, ...applied]
+    expect(await check('migration-applied')).toEqual([])
+  })
+
+  it('Got it on a migration this boot applied late, under a legacy marker, is not raised again', async () => {
+    const applied = machine.edges.migrations()
+    await check('migration-applied')
+    db.update(schema.settings)
+      .set({ value: { at: applied.at(-1)!.at } })
+      .where(eq(schema.settings.key, 'alertMigrationsSeen'))
+      .run()
+    machine.edges.migrationsAtBoot = () => [applied[0]!.at]
+    const [row] = await raise('migration-applied')
+    expect(row).toMatchObject({ subject: `migrated:${applied.at(-1)!.at}` })
+    expect(await press(row!.id, 'seen')).toMatchObject({ resolved: true })
+    // The marker is in the new format now: the boot's list no longer raises what it marked seen.
+    const marker = db
+      .select()
+      .from(schema.settings)
+      .where(eq(schema.settings.key, 'alertMigrationsSeen'))
+      .get()
+    expect(marker?.value).toEqual({ at: applied.at(-1)!.at, announced: applied.map((m) => m.at) })
     expect(await check('migration-applied')).toEqual([])
   })
 

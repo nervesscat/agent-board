@@ -20,6 +20,7 @@ sqlite.pragma('busy_timeout = 5000')
 export const db = drizzle(sqlite, { schema })
 
 // Migrations are committed in ./drizzle (drizzle-kit generate); applying them at boot keeps `pnpm dev` zero-setup.
-applyMigrations(sqlite, path.resolve(process.cwd(), 'drizzle'))
+// What this process's boot applied: the alerts announce those even when the marker is an old one.
+export const appliedAtBoot = applyMigrations(sqlite, path.resolve(process.cwd(), 'drizzle'))
 
 export { schema }

@@ -7,9 +7,15 @@ interface Journal {
   entries: { tag: string; when: number }[]
 }
 
+/** A migration applied by applyMigrations: its journal tag and its `when`. */
+export interface AppliedMigration {
+  tag: string
+  when: number
+}
+
 /**
  * Applies the migrations in `migrationsFolder` (drizzle's layout: meta/_journal.json and one .sql file per
- * entry) that `sqlite` does not have yet, and returns their tags in the order they were applied.
+ * entry) that `sqlite` does not have yet, and returns them in the order they were applied.
  *
  * Drizzle's own migrate() applies only the entries whose `when` is newer than the newest one recorded, so an
  * entry merged with an older `when` is skipped without a sign. This applies every journal entry whose `when`
@@ -17,7 +23,7 @@ interface Journal {
  * same table and columns drizzle does (`created_at` is the entry's `when`), so a database drizzle migrated
  * is read as it is.
  */
-export function applyMigrations(sqlite: Database.Database, migrationsFolder: string): string[] {
+export function applyMigrations(sqlite: Database.Database, migrationsFolder: string): AppliedMigration[] {
   sqlite.exec(
     'CREATE TABLE IF NOT EXISTS "__drizzle_migrations" (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric)',
   )
@@ -31,7 +37,7 @@ export function applyMigrations(sqlite: Database.Database, migrationsFolder: str
     fs.readFileSync(path.join(migrationsFolder, 'meta', '_journal.json'), 'utf8'),
   ) as Journal
 
-  const tags: string[] = []
+  const applying: AppliedMigration[] = []
   for (const { tag, when } of journal.entries) {
     if (applied.has(when)) continue
     const file = fs.readFileSync(path.join(migrationsFolder, `${tag}.sql`))
@@ -43,7 +49,7 @@ export function applyMigrations(sqlite: Database.Database, migrationsFolder: str
       record.run(hash, when)
     })()
     applied.add(when)
-    tags.push(tag)
+    applying.push({ tag, when })
   }
-  return tags
+  return applying
 }

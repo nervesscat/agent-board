@@ -2474,10 +2474,15 @@ describe('applyMigrations on a database at 0056', () => {
 
     const applied = applyMigrations(sqlite, dir)
 
-    expect(applied).toEqual(
+    expect(applied.map((m) => m.tag)).toEqual(
       journalOf(dir)
         .slice(57)
         .map((e) => e.tag),
+    )
+    expect(applied.map((m) => m.when)).toEqual(
+      journalOf(dir)
+        .slice(57)
+        .map((e) => e.when),
     )
     expect(applied).toHaveLength(10)
     expect(recorded(sqlite)).toEqual(journalOf(dir).map((e) => e.when))
@@ -2511,7 +2516,7 @@ describe('applyMigrations order', () => {
     ]
     const dir = folderWith(LAST, extra)
     const sqlite = databaseAt(LAST)
-    expect(applyMigrations(sqlite, dir)).toEqual(extra.map((e) => e.tag))
+    expect(applyMigrations(sqlite, dir).map((m) => m.tag)).toEqual(extra.map((e) => e.tag))
     expect(recorded(sqlite).slice(-3)).toEqual(extra.map((e) => e.when))
     expect(userTables(sqlite)).toEqual(expect.arrayContaining(['step_one', 'step_two', 'step_three']))
   })
@@ -2549,7 +2554,7 @@ describe('applyMigrations with a `when` older than the newest applied', () => {
     expect(userTables(drizzleDb)).not.toContain('late_a')
 
     const sqlite = databaseAt(LAST)
-    expect(applyMigrations(sqlite, dir)).toEqual(['20261127093012_a', '20261127093100_b'])
+    expect(applyMigrations(sqlite, dir).map((m) => m.tag)).toEqual(['20261127093012_a', '20261127093100_b'])
     expect(recorded(sqlite)).toContain(older)
     expect(userTables(sqlite)).toEqual(expect.arrayContaining(['late_a', 'late_b']))
   })
@@ -2564,14 +2569,17 @@ describe('applyMigrations with timestamp and numbered names together', () => {
   it('applies every entry in journal order on a fresh database', () => {
     const dir = folderWith(LAST, extra(Number(lastWhen())))
     const sqlite = new Database(':memory:')
-    expect(applyMigrations(sqlite, dir)).toEqual(journalOf(dir).map((e) => e.tag))
+    expect(applyMigrations(sqlite, dir).map((m) => m.tag)).toEqual(journalOf(dir).map((e) => e.tag))
     expect(recorded(sqlite)).toEqual(journalOf(dir).map((e) => e.when))
   })
 
   it('applies only the two timestamp entries on a database at 0066', () => {
     const dir = folderWith(LAST, extra(Number(lastWhen())))
     const sqlite = databaseAt(LAST)
-    expect(applyMigrations(sqlite, dir)).toEqual(['20261127093012_add_x', '20261127093100_add_y'])
+    expect(applyMigrations(sqlite, dir).map((m) => m.tag)).toEqual([
+      '20261127093012_add_x',
+      '20261127093100_add_y',
+    ])
     expect(recorded(sqlite)).toEqual(journalOf(dir).map((e) => e.when))
   })
 })
@@ -2595,7 +2603,7 @@ describe('two branches each adding one migration', () => {
   ])('applies both on a database at 0066, merged %s', (_order, merged) => {
     const dir = folderWith(LAST, merged)
     const sqlite = databaseAt(LAST)
-    expect(applyMigrations(sqlite, dir)).toEqual(merged.map((e) => e.tag))
+    expect(applyMigrations(sqlite, dir).map((m) => m.tag)).toEqual(merged.map((e) => e.tag))
     expect(userTables(sqlite)).toEqual(expect.arrayContaining(['from_a', 'from_b']))
     const whens = journalOf(dir).map((e) => e.when)
     expect(new Set(whens).size).toBe(whens.length)

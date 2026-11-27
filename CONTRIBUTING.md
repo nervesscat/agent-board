@@ -100,6 +100,11 @@ collision. To repair it, delete the later branch's migration file, its journal e
 one whose journal entry comes last), keep its `schema.ts` change, run `pnpm db:generate` again (it writes the
 migration on top of the merged chain under a new name), check, and commit.
 
+The repair is only safe before that migration has run on any database. If a dev or preview data folder
+(`data/dev`, `data/preview`) ran it, reset that folder first: `pnpm dev --fresh` copies the board's data
+again, without the branch's migration, and `pnpm dev` applies the new one. If the live board has run it, do
+not delete it: stop and ask the person who runs the board.
+
 ## Pull requests
 
 - Target **`dev`**.
