@@ -1199,9 +1199,13 @@ describe('the review texts the board ships', () => {
     expect(text).toContain(
       'node ~/.claude/board-slot.mjs run --locks SLOTS --repo REPO_ID --project PROJECT --ticket TICKET --step <name> -- <command>',
     )
-    expect(text).toContain('It takes the first free slot of `SLOTS` for this repo, waits in a queue while none is free')
+    expect(text).toContain(
+      'It takes the first free slot of `SLOTS` for this repo, waits in a queue while none is free',
+    )
     expect(text).toContain('and frees the slot when the command ends, however it ends.')
-    expect(text).toContain('no `mkdir` of a slot folder, no holder file written by hand, no `rm -r` of a slot')
+    expect(text).toContain(
+      'no `mkdir` of a slot folder, no holder file written by hand, no `rm -r` of a slot',
+    )
     expect(text).toContain('**Never remove a slot another ticket holds**, however old it looks.')
     expect(text).toContain('The script reclaims a slot only when its holder')
     expect(flat(todoReview)).toContain(
@@ -1213,7 +1217,9 @@ describe('the review texts the board ships', () => {
     const text = flat(ticketAgent)
     expect(text).toContain('Pass `--full` to `run` for the full unit suite or the full')
     expect(text).toContain('It waits until every numbered slot is free, and new numbered claims wait while')
-    expect(text).toContain("A scoped run's claim backs off by itself when a full run starts, so the two never overlap.")
+    expect(text).toContain(
+      "A scoped run's claim backs off by itself when a full run starts, so the two never overlap.",
+    )
     expect(flat(todoReview)).toContain('`QUEUE/locks/tests-<repo id>-full` for a full suite')
   })
 
