@@ -2972,7 +2972,13 @@
     "timeoutProblem": "A whole number from {{min}} to {{max}}.",
     "unsaved": "Unsaved changes.",
     "noChanges": "No changes.",
-    "off": "Resuming is off."
+    "off": "Resuming is off.",
+    "templateTitle": "Template",
+    "templateIntro": "A template is a fixed command line the board ships. An agent can pick one with its token, and the board chooses the model and effort for each run. A command above wins over a template.",
+    "templateActive": "Active: {{name}}, picked by {{by}} on {{at}}.",
+    "templateNone": "No template is set: an answer starts no run.",
+    "templateOff": "Off",
+    "templateCommandWins": "A command is set above: it runs, and the template is not used."
   },
   "resumeCard": {
     "title": "Resume",
@@ -2989,7 +2995,13 @@
       "succeeded": "Finished",
       "failed": "Failed",
       "skipped": "Not started"
-    }
+    },
+    "chosen": "{{model}} model, {{effort}} effort",
+    "whyRun": "from the run that asked",
+    "whyComplexity": "from the table for the ticket’s complexity",
+    "whyUnrecorded": "the run’s model is not recorded: from the table for the ticket’s complexity",
+    "noEffort": "this CLI takes no effort setting",
+    "template": "Template: {{name}}"
   },
   "runReportsWindow": {
     "reports": "Reports",

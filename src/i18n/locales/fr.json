@@ -2974,7 +2974,13 @@
     "timeoutProblem": "Un nombre entier de {{min}} à {{max}}.",
     "unsaved": "Modifications non enregistrées.",
     "noChanges": "Aucune modification.",
-    "off": "La reprise est désactivée."
+    "off": "La reprise est désactivée.",
+    "templateTitle": "Gabarit",
+    "templateIntro": "Un gabarit est une ligne de commande fixe fournie par le tableau. Un agent peut en choisir un avec son jeton, et le tableau choisit le modèle et l’effort de chaque exécution. Une commande ci-dessus l’emporte sur le gabarit.",
+    "templateActive": "Actif : {{name}}, choisi par {{by}} le {{at}}.",
+    "templateNone": "Aucun gabarit défini : une réponse ne lance aucune exécution.",
+    "templateOff": "Désactiver",
+    "templateCommandWins": "Une commande est définie ci-dessus : elle s’exécute, le gabarit n’est pas utilisé."
   },
   "resumeCard": {
     "title": "Reprise",
@@ -2991,7 +2997,13 @@
       "succeeded": "Terminée",
       "failed": "Échec",
       "skipped": "Non démarrée"
-    }
+    },
+    "chosen": "modèle {{model}}, effort {{effort}}",
+    "whyRun": "depuis l’exécution qui a posé la question",
+    "whyComplexity": "depuis le tableau de complexité du ticket",
+    "whyUnrecorded": "le modèle de l’exécution n’est pas enregistré : depuis le tableau de complexité du ticket",
+    "noEffort": "cette CLI n’a pas de réglage d’effort",
+    "template": "Gabarit : {{name}}"
   },
   "runReportsWindow": {
     "reports": "Rapports",

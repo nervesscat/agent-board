@@ -19,6 +19,7 @@ import { AGENT_TOKEN_NAME } from '#/lib/agents'
 import { KINDS } from '#/lib/kinds'
 import { WORKFLOW_PRESETS } from '#/lib/workflow'
 import { RESUME_COMMAND_MAX, RESUME_TIMEOUT, resumeCommandProblem } from '#/lib/resume'
+import { ResumeTemplateBody } from '#/lib/resumeTemplates'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import * as agentCards from './agentCards'
 import * as alertActions from './alerts/actions'
@@ -53,7 +54,7 @@ import { GalleryQuery, listGallery } from './gallery'
 import { listDirs } from './fs'
 import { assertRepo, listBranches } from './git'
 import { checkHostTools, readyHostTools } from './hostTools'
-import { presetTools, retryResume, ticketResume } from './resume'
+import { presetTools, retryResume, templateTools, ticketResume } from './resume'
 import { HttpError, intParam, notFound, readJson } from './http'
 import * as jobs from './jobs'
 import * as instructions from './instructionsHistory'
@@ -1293,6 +1294,15 @@ api.post('/api/tickets/:id/resume', ({ request, params }) => {
 })
 // Which agent CLIs the resume presets name are on this machine's PATH.
 api.get('/api/resume/tools', () => json(presetTools()))
+// The resume templates an agent or the human may pick (PUT /api/projects/:id/resume-template), and whether each
+// one's program is on this machine's PATH.
+api.get('/api/resume/templates', () => json(templateTools()))
+// Picks the project's resume template, or turns it off (`template: null`). Agents may do it with their token:
+// a template is fixed code, and only free text stays the human's (PATCH /api/projects/:id refuses it to them).
+api.put('/api/projects/:id/resume-template', async ({ request, params, actor }) => {
+  const body = await readJson(request, ResumeTemplateBody)
+  return json(projects.setResumeTemplate(id(params), body.template, actor))
+})
 // Every run of every repo of the ticket, each with the workspace it runs from, its state and why it
 // would not start; Start all and Stop all (repoId: one repo's only) answer each run's outcome.
 api.get('/api/tickets/:id/runs', ({ params }) => json(ticketRuns.ticketRuns(id(params))))

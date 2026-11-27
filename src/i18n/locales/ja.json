@@ -2889,7 +2889,13 @@
     "timeoutProblem": "{{min}}から{{max}}までの整数。",
     "unsaved": "未保存の変更があります。",
     "noChanges": "変更はありません。",
-    "off": "再開はオフです。"
+    "off": "再開はオフです。",
+    "templateTitle": "テンプレート",
+    "templateIntro": "テンプレートは、ボードが提供する固定のコマンドラインです。エージェントはトークンで一つ選べ、ボードが実行ごとにモデルと努力レベルを決めます。上のコマンドがテンプレートより優先されます。",
+    "templateActive": "有効: {{name}}、{{by}} が {{at}} に選択。",
+    "templateNone": "テンプレートは未設定です: 回答しても実行は始まりません。",
+    "templateOff": "オフ",
+    "templateCommandWins": "上にコマンドが設定されているため、それが実行され、テンプレートは使われません。"
   },
   "resumeCard": {
     "title": "再開",
@@ -2906,7 +2912,13 @@
       "succeeded": "完了",
       "failed": "失敗",
       "skipped": "未開始"
-    }
+    },
+    "chosen": "モデル {{model}}、努力 {{effort}}",
+    "whyRun": "質問したエージェントの実行から",
+    "whyComplexity": "チケットの複雑度の表から",
+    "whyUnrecorded": "実行のモデルが記録されていないため、チケットの複雑度の表から",
+    "noEffort": "この CLI には努力の設定がありません",
+    "template": "テンプレート: {{name}}"
   },
   "runReportsWindow": {
     "reports": "レポート",

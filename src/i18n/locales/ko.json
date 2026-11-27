@@ -2889,7 +2889,13 @@
     "timeoutProblem": "{{min}}부터 {{max}}까지의 정수예요.",
     "unsaved": "저장하지 않은 변경 사항이 있어요.",
     "noChanges": "변경 사항이 없어요.",
-    "off": "재개가 꺼져 있어요."
+    "off": "재개가 꺼져 있어요.",
+    "templateTitle": "템플릿",
+    "templateIntro": "템플릿은 보드가 제공하는 고정된 명령줄입니다. 에이전트는 자신의 토큰으로 하나를 고를 수 있고, 보드가 실행마다 모델과 노력 수준을 정합니다. 위의 명령이 템플릿보다 우선합니다.",
+    "templateActive": "사용 중: {{name}}, {{by}} 선택, {{at}}.",
+    "templateNone": "설정된 템플릿이 없습니다: 응답해도 실행이 시작되지 않습니다.",
+    "templateOff": "끄기",
+    "templateCommandWins": "위에 명령이 설정되어 있어 그 명령이 실행되고 템플릿은 쓰이지 않습니다."
   },
   "resumeCard": {
     "title": "재개",
@@ -2906,7 +2912,13 @@
       "succeeded": "종료됨",
       "failed": "실패",
       "skipped": "시작 안 됨"
-    }
+    },
+    "chosen": "모델 {{model}}, 노력 {{effort}}",
+    "whyRun": "질문한 실행에서 정함",
+    "whyComplexity": "티켓 복잡도 표에서 정함",
+    "whyUnrecorded": "실행의 모델이 기록되지 않아 티켓 복잡도 표에서 정함",
+    "noEffort": "이 CLI에는 노력 설정이 없습니다",
+    "template": "템플릿: {{name}}"
   },
   "runReportsWindow": {
     "reports": "보고서",

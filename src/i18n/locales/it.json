@@ -2972,7 +2972,13 @@
     "timeoutProblem": "Un numero intero da {{min}} a {{max}}.",
     "unsaved": "Modifiche non salvate.",
     "noChanges": "Nessuna modifica.",
-    "off": "La ripresa è disattivata."
+    "off": "La ripresa è disattivata.",
+    "templateTitle": "Modello",
+    "templateIntro": "Un modello è una riga di comando fissa fornita dalla bacheca. Un agente può sceglierne uno con il suo token, e la bacheca sceglie modello e impegno per ogni esecuzione. Un comando sopra ha la precedenza sul modello.",
+    "templateActive": "Attivo: {{name}}, scelto da {{by}} il {{at}}.",
+    "templateNone": "Nessun modello impostato: una risposta non avvia nessuna esecuzione.",
+    "templateOff": "Spento",
+    "templateCommandWins": "Un comando è impostato sopra: viene eseguito e il modello non è usato."
   },
   "resumeCard": {
     "title": "Ripresa",
@@ -2989,7 +2995,13 @@
       "succeeded": "Terminata",
       "failed": "Non riuscita",
       "skipped": "Non avviata"
-    }
+    },
+    "chosen": "modello {{model}}, impegno {{effort}}",
+    "whyRun": "dall’esecuzione che ha chiesto",
+    "whyComplexity": "dalla tabella per la complessità del ticket",
+    "whyUnrecorded": "il modello dell’esecuzione non è registrato: dalla tabella per la complessità del ticket",
+    "noEffort": "questa CLI non ha un’impostazione di impegno",
+    "template": "Modello: {{name}}"
   },
   "runReportsWindow": {
     "reports": "Report",

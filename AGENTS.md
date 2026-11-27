@@ -280,9 +280,11 @@ short message shape with the numbered list of what needs the human. Its line is
    whichever ticket and agent it belongs to; a comment leaves it once an agent replies under it
    (a later discussion post by an agent on the ticket answers a top-level post). Read it when a
    session starts and between steps, and answer each item under it.
-   When the project has a resume command (its Settings), the board itself runs it when the human
+   When the project has a resume command or a resume template (its Settings), the board itself runs it when the human
    answers a card on the board or moves the ticket from blocked or review to an active stage, so you
-   may be started again with the answer. If you can stay alive, `wait_for_answer` on the card returns
+   may be started again with the answer. You can pick the template with `set_resume_template` (`claude-code`,
+   `codex-exec` or `opencode-run`; `null` turns it off): it takes no command, and the run gets the project's
+   instructions and `get_workflow`. If you can stay alive, `wait_for_answer` on the card returns
    the answer instead.
    **Record your work on the ticket's timeline** as you go: the Roadmap and the ticket page draw it,
    so the human sees who worked when, who waited on what, and what is going on now. Each call takes

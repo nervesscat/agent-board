@@ -3141,7 +3141,13 @@
     "timeoutProblem": "Liczba całkowita od {{min}} do {{max}}.",
     "unsaved": "Niezapisane zmiany.",
     "noChanges": "Brak zmian.",
-    "off": "Wznawianie jest wyłączone."
+    "off": "Wznawianie jest wyłączone.",
+    "templateTitle": "Szablon",
+    "templateIntro": "Szablon to stała linia poleceń dostarczana przez tablicę. Agent może wybrać jeden swoim tokenem, a tablica dobiera model i wysiłek dla każdego uruchomienia. Polecenie powyżej ma pierwszeństwo przed szablonem.",
+    "templateActive": "Aktywny: {{name}}, wybrany przez {{by}} o {{at}}.",
+    "templateNone": "Nie ustawiono szablonu: odpowiedź nie uruchamia żadnego przebiegu.",
+    "templateOff": "Wyłącz",
+    "templateCommandWins": "Polecenie jest ustawione powyżej: ono działa, szablon nie jest używany."
   },
   "resumeCard": {
     "title": "Wznawianie",
@@ -3158,7 +3164,13 @@
       "succeeded": "Zakończone",
       "failed": "Nieudane",
       "skipped": "Nie uruchomiono"
-    }
+    },
+    "chosen": "model {{model}}, wysiłek {{effort}}",
+    "whyRun": "z przebiegu, który zapytał",
+    "whyComplexity": "z tabeli dla złożoności zadania",
+    "whyUnrecorded": "model przebiegu nie jest zapisany: z tabeli dla złożoności zadania",
+    "noEffort": "ta CLI nie ma ustawienia wysiłku",
+    "template": "Szablon: {{name}}"
   },
   "runReportsWindow": {
     "reports": "Raporty",

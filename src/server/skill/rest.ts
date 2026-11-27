@@ -12,6 +12,7 @@ export const TOOL_ROUTES: Record<string, string> = {
   get_workflow: 'GET /api/projects/:id/workflow/effective?ticketId=',
   set_project_instructions: 'PUT /api/projects/:id/instructions `{instructions}`',
   set_tag_suggestions: 'PATCH /api/projects/:id `{tagSuggestions}`',
+  set_resume_template: 'PUT /api/projects/:id/resume-template `{template}`',
   list_notes: 'GET /api/projects/:id/notes',
   add_note: 'POST /api/projects/:id/notes `{label, body}`',
   update_note: 'PATCH /api/projects/:id/notes/:noteId `{label?, body?, pinned?}`',

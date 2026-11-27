@@ -2972,7 +2972,13 @@
     "timeoutProblem": "{{min}} ile {{max}} arasında bir tam sayı.",
     "unsaved": "Kaydedilmemiş değişiklikler var.",
     "noChanges": "Değişiklik yok.",
-    "off": "Devam ettirme kapalı."
+    "off": "Devam ettirme kapalı.",
+    "templateTitle": "Şablon",
+    "templateIntro": "Şablon, panonun sunduğu sabit bir komut satırıdır. Bir ajan kendi belirteciyle bir şablon seçebilir; pano her çalıştırma için modeli ve çabayı seçer. Yukarıdaki bir komut şablondan önce gelir.",
+    "templateActive": "Etkin: {{name}}, {{by}} tarafından {{at}} tarihinde seçildi.",
+    "templateNone": "Şablon ayarlı değil: bir yanıt hiçbir çalıştırmayı başlatmaz.",
+    "templateOff": "Kapalı",
+    "templateCommandWins": "Yukarıda bir komut ayarlı: o çalışır, şablon kullanılmaz."
   },
   "resumeCard": {
     "title": "Devam ettir",
@@ -2989,7 +2995,13 @@
       "succeeded": "Bitti",
       "failed": "Başarısız",
       "skipped": "Başlamadı"
-    }
+    },
+    "chosen": "model {{model}}, çaba {{effort}}",
+    "whyRun": "soruyu soran çalıştırmadan",
+    "whyComplexity": "görevin karmaşıklığı tablosundan",
+    "whyUnrecorded": "çalıştırmanın modeli kaydedilmedi: görevin karmaşıklığı tablosundan",
+    "noEffort": "bu CLI bir çaba ayarı almıyor",
+    "template": "Şablon: {{name}}"
   },
   "runReportsWindow": {
     "reports": "Raporlar",

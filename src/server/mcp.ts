@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { COMMENT_PARENTS, COMPLEXITIES, FEED_TABS, STALL_MINUTES } from '#/lib/constants'
 import { hasGitSide } from '#/lib/kinds'
 import { WORKFLOW_PRESETS } from '#/lib/workflow'
+import { TemplateChoice } from '#/lib/resumeTemplates'
 import type { RunConfigInput } from '#/lib/runs'
 import { listActors, noteActor } from './actors'
 import * as agentCards from './agentCards'
@@ -286,6 +287,26 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
       projects.updateProject(projectId, { tagSuggestions: tags }, actor)
       const { tagSuggestions, usedTags } = projects.getProjectFull(projectId)
       return { tagSuggestions, usedTags }
+    },
+  )
+
+  tool(
+    'set_resume_template',
+    "Turn on, change or turn off the resume template the board runs to continue a ticket's work: when the human answers a decision card on the board or moves a ticket from blocked or review back to an active stage, the board starts one of its own templates with this project's instructions and the ticket's workflow (get_workflow). template: claude-code (Claude Code), codex-exec (Codex) or opencode-run (OpenCode); null turns it off. The board fixes the command line: there is no command to send, and the model and effort are chosen for each run (the asking run's, else the ticket's complexity). A free-text command the human set in Settings wins over the template. Returns the project's resumeTemplate, resumeTemplateBy (your name) and resumeTemplateAt.",
+    {
+      projectId: z.number().int(),
+      template: TemplateChoice,
+      // Refused, not stripped: a command sent here is an error, and only the human writes a command.
+      command: z.never().optional(),
+      args: z.never().optional(),
+    },
+    ({ projectId, template }) => {
+      const p = projects.setResumeTemplate(projectId, template, actor)
+      return {
+        resumeTemplate: p.resumeTemplate,
+        resumeTemplateBy: p.resumeTemplateBy,
+        resumeTemplateAt: p.resumeTemplateAt,
+      }
     },
   )
 

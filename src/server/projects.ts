@@ -296,6 +296,9 @@ export function updateProject(
       | 'kinds'
       | 'resumeCommand'
       | 'resumeTimeoutMinutes'
+      | 'resumeTemplate'
+      | 'resumeTemplateBy'
+      | 'resumeTemplateAt'
     >
   >,
   actor: string,
@@ -333,6 +336,18 @@ export function updateProject(
     })
     return withPhases(row)
   })
+}
+
+/**
+ * Picks the resume template the board runs for the project (`null` or '' is off), and records who picked it
+ * and when. Free text (resumeCommand) is not touched: a command set by the human wins over the template.
+ */
+export function setResumeTemplate(id: number, template: string | null, actor: string) {
+  return updateProject(
+    id,
+    { resumeTemplate: template ?? '', resumeTemplateBy: actor, resumeTemplateAt: new Date().toISOString() },
+    actor,
+  )
 }
 
 export function deleteProject(id: number, actor: string) {

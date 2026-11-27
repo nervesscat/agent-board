@@ -2,11 +2,19 @@ import { execFile, execFileSync, spawn as nodeSpawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { and, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { LEASE_TTL_MINUTES } from '#/lib/constants'
 import { RESUME_PRESETS, resumeCommandName } from '#/lib/resume'
+import {
+  assemble,
+  chooseModelEffort,
+  commandLine,
+  isTemplateId,
+  templateList,
+  type TemplateId,
+} from '#/lib/resumeTemplates'
 import { isBoardRecord } from '#/lib/roles'
 import { listActors } from './actors'
 import { postNotice } from './agentCards'
@@ -27,9 +35,10 @@ import { noteStageMove } from './workTimeline'
  * own machine, in the ticket's worktree, with a prompt it builds itself.
  *
  * The prompt reaches the command on its standard input and in a file (`BOARD_RESUME_PROMPT_FILE`), and the
- * command's environment carries the ids; neither is ever put into the command line. The command is what
- * the human wrote, run through the machine's shell; nothing else (not an agent, not a card's text) writes
- * any part of it.
+ * command's environment carries the ids; neither is ever put into the command line. The free-text command is
+ * what the human wrote, run through the machine's shell. A template is the board's own program and arguments
+ * (src/lib/resumeTemplates.ts), where only the model and the effort vary per run, from enums. Nothing else
+ * (not an agent, not a card's text) writes any part of either.
  *
  * One row per attempt (`ticket_resumes`), so the ticket page and a restarted board know what happened:
  * a ticket has at most one running resume; a trigger that starts nothing leaves a skipped row saying why
@@ -65,7 +74,10 @@ export interface ResumeProc {
 export interface ResumeRunner {
   /** Starts `command` through the shell, its output appended to `log` and `stdin` written to it. */
   spawn(opts: {
+    /** The command line: run through the shell (a free-text command, or a template's line on Windows). */
     command: string
+    /** A template's program and arguments, run without a shell where the OS allows (POSIX). */
+    argv?: { binary: string; args: string[] }
     cwd: string
     env: NodeJS.ProcessEnv
     log: string
@@ -103,17 +115,20 @@ export function processIdentity(pid: number): string | null {
 }
 
 const realRunner: ResumeRunner = {
-  spawn({ command, cwd, env, log, stdin }) {
+  spawn({ command, argv, cwd, env, log, stdin }) {
     const fd = fs.openSync(log, 'a')
     // Its own process group off Windows, so the whole tree can be killed; the board stopping leaves it be.
-    const child = nodeSpawn(command, {
+    const options = {
       cwd,
       env,
-      shell: true,
-      stdio: ['pipe', fd, fd],
+      stdio: ['pipe', fd, fd] as ['pipe', number, number],
       windowsHide: true,
       detached: !WIN,
-    })
+    }
+    const child =
+      argv && !WIN
+        ? nodeSpawn(argv.binary, argv.args, { ...options, shell: false })
+        : nodeSpawn(command, { ...options, shell: true })
     fs.closeSync(fd)
     child.stdin?.on('error', () => {})
     child.stdin?.end(stdin)
@@ -216,6 +231,7 @@ export interface ResumeView extends schema.TicketResume {
  */
 export function ticketResume(ticketId: number) {
   const t = ticketOf(ticketId)
+  const project = projectOf(t.projectId)
   const rows = db
     .select()
     .from(schema.ticketResumes)
@@ -225,7 +241,7 @@ export function ticketResume(ticketId: number) {
     .all()
   const current = rows.find((r) => r.state === 'running' || r.state === 'queued') ?? rows[0] ?? null
   return {
-    enabled: !!projectOf(t.projectId).resumeCommand.trim(),
+    enabled: !!project.resumeCommand.trim() || templateOf(project) !== null,
     current: current ? ({ ...current, tail: resumeLogTail(current) } satisfies ResumeView) : null,
     recent: rows.filter((r) => r.id !== current?.id),
   }
@@ -234,6 +250,16 @@ export function ticketResume(ticketId: number) {
 /** The CLIs the presets name, and whether each is on this machine's PATH (the board's, as it started). */
 export function presetTools(): { id: string; binary: string; found: boolean }[] {
   return RESUME_PRESETS.map((p) => ({ id: p.id, binary: p.binary, found: !!resolveTool(p.binary) }))
+}
+
+/** The resume templates the board ships, and whether each one's program is on this machine's PATH. */
+export function templateTools() {
+  return templateList().map((t) => ({ ...t, found: !!resolveTool(t.binary) }))
+}
+
+/** The project's template when it names one the board ships; anything else reads as off (fail closed). */
+function templateOf(project: schema.Project): TemplateId | null {
+  return isTemplateId(project.resumeTemplate) ? project.resumeTemplate : null
 }
 
 // --- what a trigger needs ---
@@ -337,6 +363,23 @@ function folderOf(ticket: schema.Ticket): string | null {
   return repo && path.isAbsolute(repo.repoPath) && exists(repo.repoPath) ? repo.repoPath : null
 }
 
+/**
+ * The model and effort the asking run recorded, for a template to use: the newest span start or hand-off of
+ * the ticket's agent. Null when there is no such run. While the run-report fields are not on the events
+ * table, the run is there but records nothing: `unrecorded`, so the table decides and the row says so.
+ */
+function askingRunOf(ticket: schema.Ticket): { model: unknown; effort: unknown } | null {
+  if (!ticket.assignee) return null
+  const columns = (db.all(sql`PRAGMA table_info(ticket_events)`) as { name: string }[]).map((c) => c.name)
+  if (!columns.includes('model') || !columns.includes('effort')) return { model: null, effort: null }
+  const run = db.all(
+    sql`SELECT model, effort FROM ticket_events
+        WHERE ticket_id = ${ticket.id} AND agent = ${ticket.assignee} AND kind IN ('span_start', 'handoff')
+        ORDER BY id DESC LIMIT 1`,
+  )[0] as { model: unknown; effort: unknown } | undefined
+  return run ?? null
+}
+
 // --- the prompt ---
 
 interface Cause {
@@ -345,7 +388,7 @@ interface Cause {
   answer?: string
 }
 
-function promptOf(ticket: schema.Ticket, project: schema.Project, cause: Cause): string {
+function promptOf(ticket: schema.Ticket, project: schema.Project, cause: Cause, template = false): string {
   const stages = listStages(ticket.projectId)
   const lines = [
     `You are continuing work on ticket #${ticket.id} "${ticket.title}" of the project "${project.name}" (project id ${project.id}) on the board at ${config.boardUrl}.`,
@@ -375,6 +418,15 @@ function promptOf(ticket: schema.Ticket, project: schema.Project, cause: Cause):
       humanWords(ticket.id) || '(none)',
     )
   }
+  // A template run follows the project's own rules and workflow, the same steps the ticket's agent was given.
+  if (template)
+    lines.push(
+      '',
+      'The project’s instructions (its rules: how to run its repos, conventions, what never to do; they win over your habits):',
+      project.instructions.trim() || '(none)',
+      '',
+      `Get your workflow with get_workflow (ticketId ${ticket.id}) and run exactly the steps it lists, in that order.`,
+    )
   lines.push(
     '',
     'Read the ticket’s summary and threads with the board’s tools, reply under the card that you are continuing, and work as the board skill says.',
@@ -460,8 +512,10 @@ function skipped(s: Start, reason: string, quiet = false) {
 export function startResume(s: Start): schema.TicketResume {
   const ticket = ticketOf(s.ticketId)
   const project = projectOf(ticket.projectId)
+  // The human's free-text command wins over a template; a template runs only when there is no command.
   const command = project.resumeCommand.trim()
-  if (!command) return skipped(s, SKIP_OFF, true)
+  const template = command ? null : templateOf(project)
+  if (!command && !template) return skipped(s, SKIP_OFF, true)
   if (s.trigger === 'answer') {
     // Only a question an agent waits on is continued: a request to the board (archive, a repo) is answered
     // for the board, and a finished ticket has nothing to continue (Resume on it stays the human's choice).
@@ -510,6 +564,9 @@ export function startResume(s: Start): schema.TicketResume {
   const cwd = folderOf(ticket)
   if (!cwd) return skipped(s, 'the ticket has no folder on this machine to run the command in')
 
+  // A template: its model and effort are the asking run's, else the complexity's (src/lib/resumeTemplates.ts).
+  const picked = template ? chooseModelEffort(ticket.complexity, askingRunOf(ticket)) : null
+  const launch = template && picked ? assemble(template, picked.model, picked.effort) : null
   const row = db
     .insert(schema.ticketResumes)
     .values({
@@ -517,23 +574,36 @@ export function startResume(s: Start): schema.TicketResume {
       postId: s.postId ?? null,
       trigger: s.trigger,
       state: 'queued',
-      command: resumeCommandName(command),
+      command: launch ? launch.binary : resumeCommandName(command),
+      template: template ?? '',
+      model: picked?.model ?? '',
+      effort: picked?.effort ?? '',
+      choice: picked?.choice ?? '',
     })
     .returning()
     .get()
   try {
     fs.mkdirSync(path.dirname(logPathOf(row.id)), { recursive: true })
-    const prompt = promptOf(ticket, project, { postId: s.postId ?? null, answer: s.answer })
+    const prompt = promptOf(ticket, project, { postId: s.postId ?? null, answer: s.answer }, launch !== null)
     fs.writeFileSync(promptPathOf(row.id), prompt)
     const env = {
       ...worktreeEnv(),
+      // A template's constants (its sandbox flag, the subagent model); the board's own values come last.
+      ...launch?.env,
       BOARD_URL: config.boardUrl,
       BOARD_PROJECT_ID: String(project.id),
       BOARD_TICKET_ID: String(ticket.id),
       BOARD_AGENT_NAME: ticket.assignee,
       BOARD_RESUME_PROMPT_FILE: promptPathOf(row.id),
     }
-    const proc = runner.spawn({ command, cwd, env, log: logPathOf(row.id), stdin: prompt })
+    const proc = runner.spawn({
+      command: launch ? commandLine(launch) : command,
+      argv: launch ? { binary: launch.binary, args: launch.args } : undefined,
+      cwd,
+      env,
+      log: logPathOf(row.id),
+      stdin: prompt,
+    })
     if (proc.pid === undefined) {
       void proc.exited.catch(() => {})
       return fail(row.id, 'the command could not be started', null)
@@ -558,7 +628,7 @@ export function startResume(s: Start): schema.TicketResume {
         .run()
     reply(
       s.postId ?? null,
-      `Continuing: the board started ${row.command}${path.basename(cwd) ? ` in ${path.basename(cwd)}` : ''}.`,
+      `Continuing: the board started ${row.command}${picked ? ` (${picked.model}, ${picked.effort} effort)` : ''}${path.basename(cwd) ? ` in ${path.basename(cwd)}` : ''}.`,
     )
     logActivity({
       projectId: ticket.projectId,

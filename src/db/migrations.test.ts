@@ -75,7 +75,17 @@ function projectsAsTheyWere(rows: Record<string, unknown>[]) {
     if ('workflow_preset' in row) expect(row.workflow_preset).toBe('standard')
     if ('workflow_tweaks' in row) expect(row.workflow_tweaks).toBeNull()
   }
-  return rows.map(({ kinds: _k, workflow_preset: _p, workflow_tweaks: _t, ...rest }) => rest)
+  return rows.map(
+    ({
+      kinds: _k,
+      workflow_preset: _p,
+      workflow_tweaks: _t,
+      resume_template: _rt,
+      resume_template_by: _rb,
+      resume_template_at: _ra,
+      ...rest
+    }) => rest,
+  )
 }
 
 /**
@@ -1674,6 +1684,9 @@ describe('0051_agent_cards', () => {
           resume_timeout_minutes: _timeout,
           workflow_preset: _preset,
           workflow_tweaks: _tweaks,
+          resume_template: _rt,
+          resume_template_by: _rb,
+          resume_template_at: _ra,
           ...kept
         } = row
         return kept
@@ -2125,7 +2138,13 @@ describe('0066_drop_workflow_instruction_edits', () => {
     })
     // Nothing else of any project changed: not its name, its id, its preset.
     const after = sqlite.prepare('SELECT * FROM projects ORDER BY id').all() as Record<string, unknown>[]
-    const withoutTweaks = ({ workflow_tweaks: _t, ...rest }: Record<string, unknown>) => rest
+    const withoutTweaks = ({
+      workflow_tweaks: _t,
+      resume_template: _rt,
+      resume_template_by: _rb,
+      resume_template_at: _ra,
+      ...rest
+    }: Record<string, unknown>) => rest
     expect(after.map(withoutTweaks)).toEqual(before.map(withoutTweaks))
     expect(after.map((r) => [r.id, r.workflow_preset])).toEqual(before.map((r) => [r.id, r.workflow_preset]))
     sqlite.close()
@@ -2395,5 +2414,52 @@ describe('0064_approved_kind', () => {
     expect(changed(3)).toEqual([])
     // A ticket keeps its stage.
     expect(sqlite.prepare('SELECT status FROM tickets').all()).toEqual([{ status: 'release' }])
+  })
+})
+
+describe('0067_resume_templates', () => {
+  it('adds the template columns with defaults, keeps a free-text command as it was, and checks the template ids', () => {
+    const sqlite = databaseAt('0066_drop_workflow_instruction_edits')
+    sqlite
+      .prepare(
+        "INSERT INTO projects (name, resume_command, resume_timeout_minutes) VALUES ('shop', 'claude -p', 90)",
+      )
+      .run()
+    const ticket = Number(
+      sqlite
+        .prepare("INSERT INTO tickets (project_id, title, created_by) VALUES (1, 'Kept', 'enrique')")
+        .run().lastInsertRowid,
+    )
+    sqlite
+      .prepare(
+        "INSERT INTO ticket_resumes (ticket_id, trigger, state, command) VALUES (?, 'answer', 'succeeded', 'claude')",
+      )
+      .run(ticket)
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+    // A command the human wrote is read back unchanged, and no template is on.
+    expect(
+      sqlite
+        .prepare(
+          'SELECT resume_command, resume_timeout_minutes, resume_template, resume_template_by, resume_template_at FROM projects',
+        )
+        .all(),
+    ).toEqual([
+      {
+        resume_command: 'claude -p',
+        resume_timeout_minutes: 90,
+        resume_template: '',
+        resume_template_by: '',
+        resume_template_at: '',
+      },
+    ])
+    expect(
+      sqlite.prepare('SELECT template, model, effort, choice, command FROM ticket_resumes').all(),
+    ).toEqual([{ template: '', model: '', effort: '', choice: '', command: 'claude' }])
+    expect(() => sqlite.prepare("UPDATE projects SET resume_template = 'rm -rf /'").run()).toThrow(/CHECK/)
+    sqlite.prepare("UPDATE projects SET resume_template = 'codex-exec'").run()
+    expect(sqlite.prepare('SELECT resume_template FROM projects').get()).toEqual({
+      resume_template: 'codex-exec',
+    })
+    sqlite.close()
   })
 })

@@ -2972,7 +2972,13 @@
     "timeoutProblem": "Eine ganze Zahl von {{min}} bis {{max}}.",
     "unsaved": "Ungespeicherte Änderungen.",
     "noChanges": "Keine Änderungen.",
-    "off": "Fortsetzen ist aus."
+    "off": "Fortsetzen ist aus.",
+    "templateTitle": "Vorlage",
+    "templateIntro": "Eine Vorlage ist eine feste Befehlszeile, die das Board mitliefert. Ein Agent kann mit seinem Token eine wählen; das Board bestimmt Modell und Aufwand jedes Laufs. Ein Befehl oben hat Vorrang vor der Vorlage.",
+    "templateActive": "Aktiv: {{name}}, gewählt von {{by}} am {{at}}.",
+    "templateNone": "Keine Vorlage gesetzt: eine Antwort startet keinen Lauf.",
+    "templateOff": "Aus",
+    "templateCommandWins": "Oben ist ein Befehl gesetzt: er läuft, die Vorlage wird nicht benutzt."
   },
   "resumeCard": {
     "title": "Fortsetzen",
@@ -2989,7 +2995,13 @@
       "succeeded": "Beendet",
       "failed": "Fehlgeschlagen",
       "skipped": "Nicht gestartet"
-    }
+    },
+    "chosen": "Modell {{model}}, Aufwand {{effort}}",
+    "whyRun": "aus dem Lauf, der gefragt hat",
+    "whyComplexity": "aus der Tabelle für die Komplexität des Tickets",
+    "whyUnrecorded": "das Modell des Laufs ist nicht erfasst: aus der Tabelle für die Komplexität des Tickets",
+    "noEffort": "diese CLI hat keine Aufwandseinstellung",
+    "template": "Vorlage: {{name}}"
   },
   "runReportsWindow": {
     "reports": "Berichte",

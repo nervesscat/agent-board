@@ -41,6 +41,10 @@ export function useTicketResume(t: TicketFull | undefined) {
 export function ResumeCard({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   const { t: tr } = useTranslation()
   const { data, refetch } = useTicketResume(t)
+  const { data: templates } = useQuery({
+    queryKey: ['resume-templates'],
+    queryFn: () => get<{ id: string; name: string; effortPassed: boolean }[]>('/api/resume/templates'),
+  })
   const retry = useMutation({
     mutationFn: () => post<TicketResumeRow>(`/api/tickets/${t.id}/resume`),
     onSuccess: () => {
@@ -54,6 +58,7 @@ export function ResumeCard({ t, onChange }: { t: TicketFull; onChange: () => voi
   const row = data.current
   const running = row?.state === 'running' || row?.state === 'queued'
   const state = row ? STATE[row.state] : null
+  const template = row?.template ? templates?.find((x) => x.id === row.template) : undefined
   return (
     <section className="rounded-lg border p-3" aria-label={tr('resumeCard.title')}>
       <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -83,6 +88,16 @@ export function ResumeCard({ t, onChange }: { t: TicketFull; onChange: () => voi
               <span className="text-muted-foreground">{ago(row.startedAt ?? row.createdAt)}</span>
             </Tip>
           </div>
+          {row.template && (
+            <p className="text-muted-foreground [overflow-wrap:anywhere]">
+              {tr('resumeCard.template', { name: template?.name ?? row.template })}
+              {row.model && ` · ${tr('resumeCard.chosen', { model: row.model, effort: row.effort })}`}
+              {row.choice === 'run' && ` · ${tr('resumeCard.whyRun')}`}
+              {row.choice === 'complexity' && ` · ${tr('resumeCard.whyComplexity')}`}
+              {row.choice === 'unrecorded' && ` · ${tr('resumeCard.whyUnrecorded')}`}
+              {template && !template.effortPassed && ` · ${tr('resumeCard.noEffort')}`}
+            </p>
+          )}
           {row.state === 'skipped' && (
             <p className="text-muted-foreground [overflow-wrap:anywhere]">
               {row.reason}
