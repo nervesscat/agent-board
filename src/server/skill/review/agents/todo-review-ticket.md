@@ -103,8 +103,8 @@ Every step in the text has the same parts:
   round failed needs the builder's execution evidence, checked at the gate as for a ticket with no
   review (a criterion without it is a gate return), and `<what>` names those criteria with the
   findings fixed. No review runs on that head, on a `RETRY` or re-queued run too (the review step's
-  skip rule does not send it to `/feature-review`), unless the human asked for one more round or
-  `RETRY` names a review. A real decision
+  skip rule does not send it to `/feature-review`), unless the human asked for one more round,
+  `RETRY` names a review, or an intent check's `does not match` on that head owes its review. A real decision
   still blocks (`ask_decision`, `BLOCKER: decision`): two valid behaviours, a scope call, or a fix
   that still fails. A finding or a criterion the builder could not fix is a fix that still fails:
   `ask_decision` (keep going, ship as is, drop), and no hand-off; a gate that returns twice is the

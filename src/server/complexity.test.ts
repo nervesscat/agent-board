@@ -880,12 +880,12 @@ describe('the review texts the board ships', () => {
       expect(text, at).toContain('Otherwise run `/feature-review`')
       // ...and the budget names the post-budget fix head as the case it does not cover.
       expect(budgetOf(text), at).toContain(
-        'That holds on a `RETRY` or re-queued run too: on that fix\'s head, or a later commit of the same hand-off (a CI fix), the skip rule\'s "Otherwise run `/feature-review`" does not apply and no review runs, unless the human asked for one more round or `RETRY` names a review.',
+        "That holds on a `RETRY` or re-queued run too: on that fix's head, or a later commit of the same hand-off (a CI fix), the skip rule's \"Otherwise run `/feature-review`\" does not apply and no review runs, unless the human asked for one more round, `RETRY` names a review, or an intent check's `does not match` on that head owes its review.",
       )
     }
     const rules = flat(between(ticketAgent, '### Two rules the workflow', '## '))
     expect(rules).toContain(
-      "No review runs on that head, on a `RETRY` or re-queued run too (the review step's skip rule does not send it to `/feature-review`), unless the human asked for one more round or `RETRY` names a review.",
+      "No review runs on that head, on a `RETRY` or re-queued run too (the review step's skip rule does not send it to `/feature-review`), unless the human asked for one more round, `RETRY` names a review, or an intent check's `does not match` on that head owes its review.",
     )
     expect(await workflowText('standard', 'low')).not.toContain('a later commit of the same hand-off')
   })
@@ -955,7 +955,7 @@ describe('the review texts the board ships', () => {
   it('the hand-off after an unreviewed fix stands on the gate, the intent check and the summary line, with no card for the budget', async () => {
     const mid = await workflowText('standard', 'mid')
     expect(mid).toContain(
-      "the hand-off stands only when the gate passed on that fix's head and the intent check returned `matches` on that same head, as for any hand-off, and the summary's first line is the `Unreviewed fix: <what>, at <sha>` line naming that head",
+      "the hand-off stands only when the gate passed on that fix's head and the intent check returned `matches` on that same head, as for any hand-off, and the summary's first line is the `Unreviewed fix: <what>, at <sha>` line naming the head handed off",
     )
     expect(mid).toContain(
       "The ticket goes to `review` with no decision card open for the budget: the summary's offer of one more review round is the human's override, never a card.",

@@ -51,7 +51,7 @@ stop: `BLOCKER: decision`; a gate that returns twice is the gate step's decision
 round on your own. No review follows that fix pass unless the human asks for one more round.
 That holds on a `RETRY` or re-queued run too: on that fix's head, or a later commit of the same
 hand-off (a CI fix), the skip rule's "Otherwise run `/feature-review`" does not apply and no review
-runs, unless the human asked for one more round or `RETRY` names a review. The complexity sets the budget at every review depth: a `deep` review
+runs, unless the human asked for one more round, `RETRY` names a review, or an intent check's `does not match` on that head owes its review. The complexity sets the budget at every review depth: a `deep` review
 earns no extra round, a `light` one loses none. {{if intent}}An intent return (`does not match`, see the intent step)
 is not a gate return and is outside this budget: it gets its own fix pass and one more review, so "never
 start one more round on your own" does not apply to it. Where this workflow's review text below says its
