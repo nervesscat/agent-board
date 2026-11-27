@@ -110,16 +110,16 @@ test('Workflow is a menu page like the others: hideable in the layout, not locke
   await open(page, project.id)
 })
 
-test('the page offers the four presets with their descriptions, and picking one shows its graph without making it active (F2)', async ({
+test('the page offers the five presets with their descriptions, and picking one shows its graph without making it active (F2)', async ({
   page,
   project,
   human,
 }) => {
   await open(page, project.id)
   const presets = page.getByRole('group', { name: 'Workflow presets' })
-  await expect(presets.getByRole('button')).toHaveCount(4)
+  await expect(presets.getByRole('button')).toHaveCount(6)
   const buttons = presets.getByRole('button')
-  for (const [i, name] of ['Light', 'Standard', 'Thorough', 'Maximum'].entries())
+  for (const [i, name] of ['Light', 'Standard', 'Thorough', 'Maximum', 'Content'].entries())
     await expect(buttons.nth(i)).toContainText(name)
   await expect(buttons.nth(0)).toContainText('no spec agent, no environment, no separate hunts')
   await expect(buttons.nth(1)).toContainText('The full cycle')
@@ -1745,10 +1745,10 @@ test('the ticket page sets its own workflow, which the project can change under 
 
   // G3: the ticket's workflow is its own; the project's can change without moving it.
   let w = await effective(t.id)
-  expect([w.preset, w.source, w.projectPreset]).toEqual(['thorough', 'ticket', 'standard'])
+  expect([w.preset, w.source, w.projectPreset]).toEqual(['thorough', 'own', 'standard'])
   await ok(human.put(`/api/projects/${project.id}/workflow`, { data: { preset: 'maximum' } }))
   w = await effective(t.id)
-  expect([w.preset, w.source, w.projectPreset]).toEqual(['thorough', 'ticket', 'maximum'])
+  expect([w.preset, w.source, w.projectPreset]).toEqual(['thorough', 'own', 'maximum'])
   await page.reload()
   await expect(page.getByRole('combobox', { name: 'Workflow' })).toContainText('Thorough')
   await page.getByRole('combobox', { name: 'Workflow' }).click()

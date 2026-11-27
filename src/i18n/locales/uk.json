@@ -1,7 +1,9 @@
 {
   "common": {
     "saved": "Збережено",
-    "close": "Закрити"
+    "close": "Закрити",
+    "cancel": "Скасувати",
+    "delete": "Видалити"
   },
   "loading": {
     "ticket": "Завантаження: тікет…",
@@ -55,22 +57,22 @@
     "hoursAgo": "{{count}} год тому",
     "daysAgo": "{{count}} дн тому",
     "minutesAgoLong_one": "{{count}} хвилину тому",
-    "minutesAgoLong_few": "{{count}} хвилини тому",
-    "minutesAgoLong_many": "{{count}} хвилин тому",
     "minutesAgoLong_other": "{{count}} хвилини тому",
     "hoursAgoLong_one": "{{count}} годину тому",
-    "hoursAgoLong_few": "{{count}} години тому",
-    "hoursAgoLong_many": "{{count}} годин тому",
     "hoursAgoLong_other": "{{count}} години тому",
     "yesterday": "вчора",
     "daysAgoLong_one": "{{count}} день тому",
-    "daysAgoLong_few": "{{count}} дні тому",
-    "daysAgoLong_many": "{{count}} днів тому",
     "daysAgoLong_other": "{{count}} дня тому",
     "weeksAgoLong_one": "{{count}} тиждень тому",
+    "weeksAgoLong_other": "{{count}} тижня тому",
+    "minutesAgoLong_few": "{{count}} хвилини тому",
+    "minutesAgoLong_many": "{{count}} хвилин тому",
+    "hoursAgoLong_few": "{{count}} години тому",
+    "hoursAgoLong_many": "{{count}} годин тому",
+    "daysAgoLong_few": "{{count}} дні тому",
+    "daysAgoLong_many": "{{count}} днів тому",
     "weeksAgoLong_few": "{{count}} тижні тому",
-    "weeksAgoLong_many": "{{count}} тижнів тому",
-    "weeksAgoLong_other": "{{count}} тижня тому"
+    "weeksAgoLong_many": "{{count}} тижнів тому"
   },
   "settings": {
     "title": "Налаштування",
@@ -181,11 +183,11 @@
       "revokeText": "Агента, що його використовує, і кожного субагента під ним буде відхилено, починаючи з наступного запиту. Згенеруйте команди знову в «Підключенні агента», щоб підключити його з новим токеном.",
       "hide": "Сховати агентів",
       "show_one": "Показати {{count}} агента",
-      "show_few": "Показати {{count}} агентів",
-      "show_many": "Показати {{count}} агентів",
       "show_other": "Показати {{count}} агента",
       "workingUnder": "Працює під {{token}}",
-      "seen": "бачили {{when}}"
+      "seen": "бачили {{when}}",
+      "show_few": "Показати {{count}} агентів",
+      "show_many": "Показати {{count}} агентів"
     }
   },
   "devices": {
@@ -199,8 +201,6 @@
     "passkeys": "Ключі доступу",
     "passkeyMeta": "{{where}} · додано {{added}} · востаннє використано {{used}}",
     "passkeyMetaSessions_one": "{{where}} · додано {{added}} · востаннє використано {{used}} · {{count}} сеанс",
-    "passkeyMetaSessions_few": "{{where}} · додано {{added}} · востаннє використано {{used}} · {{count}} сеанси",
-    "passkeyMetaSessions_many": "{{where}} · додано {{added}} · востаннє використано {{used}} · {{count}} сеансів",
     "passkeyMetaSessions_other": "{{where}} · додано {{added}} · востаннє використано {{used}} · {{count}} сеансу",
     "lastLocal": "останній на цьому комп’ютері",
     "revokeAria": "Відкликати {{name}}",
@@ -210,7 +210,9 @@
     "sessions": "Сеанси",
     "thisBrowser": "цей браузер",
     "sessionMeta": "{{where}} · вхід {{signedIn}} · бачили {{seen}} · до {{until}}",
-    "signOutAria": "Вийти з {{name}}, вхід {{when}}"
+    "signOutAria": "Вийти з {{name}}, вхід {{when}}",
+    "passkeyMetaSessions_few": "{{where}} · додано {{added}} · востаннє використано {{used}} · {{count}} сеанси",
+    "passkeyMetaSessions_many": "{{where}} · додано {{added}} · востаннє використано {{used}} · {{count}} сеансів"
   },
   "tailnet": {
     "title": "Інші пристрої (tailnet)",
@@ -325,8 +327,6 @@
     "intro": "<code>/todo-review</code> доводить тікети зі стовпця To do до передання, а <code>/review-queue</code> перевіряє чергу PR; обидві делегують цим агентам. <code>/feature-review</code> — рев’ю, яке вони запускають для кожної зміни. Один рядок встановлює всі три разом з їхніми агентами в <code>~/.claude</code> (Claude Code; OpenCode теж читає його навички), замінюючи файли з тими самими іменами.",
     "placeholderNote": "Він містить <code>{{placeholder}}</code>, доки рядок не скопійовано: тоді дошка видає токен завантаження, чинний близько десяти хвилин, для кожного рядка встановлення на цій сторінці.",
     "filesInstalled_one": "{{count}} файл, який він встановлює",
-    "filesInstalled_few": "{{count}} файли, які він встановлює",
-    "filesInstalled_many": "{{count}} файлів, які він встановлює",
     "filesInstalled_other": "{{count}} файлу, який він встановлює",
     "track": "Відстежувати",
     "global": "Глобально",
@@ -356,10 +356,12 @@
     "repoLabel": "{{repo}} у {{project}}",
     "usesGlobal": "Використовує встановлення з <code>~/.claude</code>.",
     "differ_one": "{{count}} із {{total}} файлів відрізняється або відсутній",
-    "differ_few": "{{count}} із {{total}} файлів відрізняються або відсутні",
-    "differ_many": "{{count}} із {{total}} файлів відрізняються або відсутні",
     "differ_other": "{{count}} із {{total}} файлів відрізняються або відсутні",
-    "notUpToDate": "Застарілі файли"
+    "notUpToDate": "Застарілі файли",
+    "filesInstalled_few": "{{count}} файли, які він встановлює",
+    "filesInstalled_many": "{{count}} файлів, які він встановлює",
+    "differ_few": "{{count}} із {{total}} файлів відрізняються або відсутні",
+    "differ_many": "{{count}} із {{total}} файлів відрізняються або відсутні"
   },
   "skillDiff": {
     "description": "Що змінив би рядок встановлення: рядки з - є в установленій копії й зникнуть, рядки з + походять із копії, яку віддає дошка. Закінчення рядків не враховано.",
@@ -486,8 +488,6 @@
     "moveEarlier": "Перемістити {{name}} раніше",
     "moveLater": "Перемістити {{name}} пізніше",
     "tickets_one": "{{count}} тікет",
-    "tickets_few": "{{count}} тікети",
-    "tickets_many": "{{count}} тікетів",
     "tickets_other": "{{count}} тікета",
     "newPlaceholder": "Новий етап, напр. QA",
     "add": "Додати етап",
@@ -533,13 +533,15 @@
     "delete": "Видалити {{name}}",
     "deleteTitle": "Видалити етап {{name}}?",
     "holds_one": "У ньому {{count}} тікет (разом із доріжками). Виберіть етап, куди їх перенести.",
-    "holds_few": "У ньому {{count}} тікети (разом із доріжками). Виберіть етап, куди їх перенести.",
-    "holds_many": "У ньому {{count}} тікетів (разом із доріжками). Виберіть етап, куди їх перенести.",
     "holds_other": "У ньому {{count}} тікета (разом із доріжками). Виберіть етап, куди їх перенести.",
     "holdsNone": "У ньому немає тікетів.",
     "moveTo": "Перемістити їх до…",
     "cancel": "Скасувати",
-    "deleteConfirm": "Видалити"
+    "deleteConfirm": "Видалити",
+    "tickets_few": "{{count}} тікети",
+    "tickets_many": "{{count}} тікетів",
+    "holds_few": "У ньому {{count}} тікети (разом із доріжками). Виберіть етап, куди їх перенести.",
+    "holds_many": "У ньому {{count}} тікетів (разом із доріжками). Виберіть етап, куди їх перенести."
   },
   "runsSettings": {
     "title": "Запуски",
@@ -607,8 +609,6 @@
     "mainColumn": "Головна колонка",
     "sideColumn": "Бічна колонка",
     "hiddenCount_one": "Приховано: {{count}}.",
-    "hiddenCount_few": "Приховано: {{count}}.",
-    "hiddenCount_many": "Приховано: {{count}}.",
     "hiddenCount_other": "Приховано: {{count}}.",
     "reset": "Скинути до типового",
     "shown": "Показано {{shown}} із {{total}}",
@@ -673,7 +673,9 @@
         "tasks": "Сюди ведуть посилання із заблокованих завдань",
         "activity": "Тут рішення й обговорення, що чекають на вас"
       }
-    }
+    },
+    "hiddenCount_few": "Приховано: {{count}}.",
+    "hiddenCount_many": "Приховано: {{count}}."
   },
   "repoDialog": {
     "newProject": "Новий проєкт…",
@@ -817,12 +819,8 @@
     "region": "Активність",
     "empty": "{{date}} нічого не відбувалося.",
     "actions_one": "{{count}} дія",
-    "actions_few": "{{count}} дії",
-    "actions_many": "{{count}} дій",
     "actions_other": "{{count}} дії",
     "contributors_one": "від {{count}} учасника",
-    "contributors_few": "від {{count}} учасників",
-    "contributors_many": "від {{count}} учасників",
     "contributors_other": "від {{count}} учасника",
     "contributorsTitle": "Учасники",
     "by": "від {{names}}",
@@ -831,54 +829,58 @@
     "openReview": "Відкрити результат рев’ю",
     "kind": {
       "ticket_one": "{{count}} тікет",
-      "ticket_few": "{{count}} тікети",
-      "ticket_many": "{{count}} тікетів",
       "ticket_other": "{{count}} тікета",
       "task_one": "{{count}} завдання",
-      "task_few": "{{count}} завдання",
-      "task_many": "{{count}} завдань",
       "task_other": "{{count}} завдання",
       "update_one": "{{count}} оновлення",
-      "update_few": "{{count}} оновлення",
-      "update_many": "{{count}} оновлень",
       "update_other": "{{count}} оновлення",
       "comment_one": "{{count}} коментар",
-      "comment_few": "{{count}} коментарі",
-      "comment_many": "{{count}} коментарів",
       "comment_other": "{{count}} коментаря",
       "pr_one": "{{count}} PR",
-      "pr_few": "{{count}} PR",
-      "pr_many": "{{count}} PR",
       "pr_other": "{{count}} PR",
       "review_one": "{{count}} рев’ю",
-      "review_few": "{{count}} рев’ю",
-      "review_many": "{{count}} рев’ю",
       "review_other": "{{count}} рев’ю",
       "workspace_one": "{{count}} робоча область",
-      "workspace_few": "{{count}} робочі області",
-      "workspace_many": "{{count}} робочих областей",
       "workspace_other": "{{count}} робочої області",
       "agent_one": "{{count}} агент",
-      "agent_few": "{{count}} агенти",
-      "agent_many": "{{count}} агентів",
       "agent_other": "{{count}} агента",
       "project_one": "{{count}} проєкт",
-      "project_few": "{{count}} проєкти",
-      "project_many": "{{count}} проєктів",
       "project_other": "{{count}} проєкту",
       "summary_one": "{{count}} підсумок",
-      "summary_few": "{{count}} підсумки",
-      "summary_many": "{{count}} підсумків",
       "summary_other": "{{count}} підсумку",
       "report_one": "{{count}} звіт",
-      "report_few": "{{count}} звіти",
-      "report_many": "{{count}} звітів",
       "report_other": "{{count}} звіту",
       "handoff_one": "{{count}} передача",
+      "handoff_other": "{{count}} передачі",
+      "ticket_few": "{{count}} тікети",
+      "ticket_many": "{{count}} тікетів",
+      "task_few": "{{count}} завдання",
+      "task_many": "{{count}} завдань",
+      "update_few": "{{count}} оновлення",
+      "update_many": "{{count}} оновлень",
+      "comment_few": "{{count}} коментарі",
+      "comment_many": "{{count}} коментарів",
+      "pr_few": "{{count}} PR",
+      "pr_many": "{{count}} PR",
+      "review_few": "{{count}} рев’ю",
+      "review_many": "{{count}} рев’ю",
+      "workspace_few": "{{count}} робочі області",
+      "workspace_many": "{{count}} робочих областей",
+      "agent_few": "{{count}} агенти",
+      "agent_many": "{{count}} агентів",
+      "project_few": "{{count}} проєкти",
+      "project_many": "{{count}} проєктів",
+      "summary_few": "{{count}} підсумки",
+      "summary_many": "{{count}} підсумків",
+      "report_few": "{{count}} звіти",
+      "report_many": "{{count}} звітів",
       "handoff_few": "{{count}} передачі",
-      "handoff_many": "{{count}} передач",
-      "handoff_other": "{{count}} передачі"
-    }
+      "handoff_many": "{{count}} передач"
+    },
+    "actions_few": "{{count}} дії",
+    "actions_many": "{{count}} дій",
+    "contributors_few": "від {{count}} учасників",
+    "contributors_many": "від {{count}} учасників"
   },
   "generateReport": {
     "wrote": "claude написав звіт",
@@ -894,8 +896,6 @@
   },
   "pushedToday": {
     "commits_one": "{{count}} коміт",
-    "commits_few": "{{count}} коміти",
-    "commits_many": "{{count}} комітів",
     "commits_other": "{{count}} коміта",
     "label": "Надіслано сьогодні: {{commits}}, додано рядків {{added}}, видалено {{removed}}",
     "labelNone": "Надіслано сьогодні: нічого",
@@ -905,7 +905,9 @@
     "notFetched": "origin ще не отримано",
     "byRepo": "Надіслано сьогодні за репозиторіями",
     "emptyRepos": "Сьогодні до origin у репозиторіях цього проєкту нічого не дійшло.",
-    "hint": "Коміти, що сьогодні потрапили в гілку origin, кожен один раз, без злиттів."
+    "hint": "Коміти, що сьогодні потрапили в гілку origin, кожен один раз, без злиттів.",
+    "commits_few": "{{count}} коміти",
+    "commits_many": "{{count}} комітів"
   },
   "reportCalendar": {
     "region": "Календар звітів",
@@ -924,8 +926,6 @@
     "replace": "замінити",
     "post": "опублікувати звіт",
     "versions_one": "{{count}} версія",
-    "versions_few": "{{count}} версії",
-    "versions_many": "{{count}} версій",
     "versions_other": "{{count}} версії",
     "version": "версія {{n}}",
     "none": "Звіту за {{label}} ще немає.",
@@ -939,7 +939,9 @@
     "attachFirst": "Спершу прикріпіть файл звіту",
     "posting": "Публікація…",
     "replaceButton": "Замінити",
-    "postButton": "Опублікувати"
+    "postButton": "Опублікувати",
+    "versions_few": "{{count}} версії",
+    "versions_many": "{{count}} версій"
   },
   "reportSettings": {
     "region": "Налаштування звіту",
@@ -1025,57 +1027,57 @@
   "cleanup": {
     "counts": {
       "deleted_one": "видалено: {{count}}",
-      "deleted_few": "видалено: {{count}}",
-      "deleted_many": "видалено: {{count}}",
       "deleted_other": "видалено: {{count}}",
       "kept_one": "залишено: {{count}}",
-      "kept_few": "залишено: {{count}}",
-      "kept_many": "залишено: {{count}}",
       "kept_other": "залишено: {{count}}",
       "gone_one": "вже немає: {{count}}",
+      "gone_other": "вже немає: {{count}}",
+      "deleted_few": "видалено: {{count}}",
+      "deleted_many": "видалено: {{count}}",
+      "kept_few": "залишено: {{count}}",
+      "kept_many": "залишено: {{count}}",
       "gone_few": "вже немає: {{count}}",
-      "gone_many": "вже немає: {{count}}",
-      "gone_other": "вже немає: {{count}}"
+      "gone_many": "вже немає: {{count}}"
     },
     "actions": {
       "local": {
         "row": "Видалити гілку",
         "all": "Видалити всі придатні локальні гілки",
         "title_one": "Видалити {{count}} локальну гілку?",
-        "title_few": "Видалити {{count}} локальні гілки?",
-        "title_many": "Видалити {{count}} локальних гілок?",
         "title_other": "Видалити {{count}} локальної гілки?",
         "confirm_one": "Видалити {{count}} локальну гілку",
-        "confirm_few": "Видалити {{count}} локальні гілки",
-        "confirm_many": "Видалити {{count}} локальних гілок",
         "confirm_other": "Видалити {{count}} локальної гілки",
-        "what": "Кожна гілка зникне з checkout. Origin залишить свою копію."
+        "what": "Кожна гілка зникне з checkout. Origin залишить свою копію.",
+        "title_few": "Видалити {{count}} локальні гілки?",
+        "title_many": "Видалити {{count}} локальних гілок?",
+        "confirm_few": "Видалити {{count}} локальні гілки",
+        "confirm_many": "Видалити {{count}} локальних гілок"
       },
       "remote": {
         "row": "Видалити на origin",
         "all": "Видалити всі придатні гілки на origin",
         "title_one": "Видалити {{count}} гілку на origin?",
-        "title_few": "Видалити {{count}} гілки на origin?",
-        "title_many": "Видалити {{count}} гілок на origin?",
         "title_other": "Видалити {{count}} гілки на origin?",
         "confirm_one": "Видалити {{count}} гілку на origin",
-        "confirm_few": "Видалити {{count}} гілки на origin",
-        "confirm_many": "Видалити {{count}} гілок на origin",
         "confirm_other": "Видалити {{count}} гілки на origin",
-        "what": "Кожна гілка зникне з origin для всіх, хто з нею працює. Локальні гілки залишаться."
+        "what": "Кожна гілка зникне з origin для всіх, хто з нею працює. Локальні гілки залишаться.",
+        "title_few": "Видалити {{count}} гілки на origin?",
+        "title_many": "Видалити {{count}} гілок на origin?",
+        "confirm_few": "Видалити {{count}} гілки на origin",
+        "confirm_many": "Видалити {{count}} гілок на origin"
       },
       "worktrees": {
         "row": "Прибрати worktree і гілку",
         "all": "Прибрати всі придатні worktree разом із гілками",
         "title_one": "Прибрати worktree {{count}} гілки й саму гілку?",
-        "title_few": "Прибрати worktree {{count}} гілок і самі гілки?",
-        "title_many": "Прибрати worktree {{count}} гілок і самі гілки?",
         "title_other": "Прибрати worktree {{count}} гілки й саму гілку?",
         "confirm_one": "Прибрати worktree і видалити {{count}} гілку",
-        "confirm_few": "Прибрати worktree і видалити {{count}} гілки",
-        "confirm_many": "Прибрати worktree і видалити {{count}} гілок",
         "confirm_other": "Прибрати worktree і видалити {{count}} гілки",
-        "what": "Кожна тека worktree зникне (разом з ігнорованими файлами, як-от node_modules), потім локальна гілка. Посилання всередині зникає як посилання: тека, на яку воно веде поза worktree, лишається. Origin залишить свою копію."
+        "what": "Кожна тека worktree зникне (разом з ігнорованими файлами, як-от node_modules), потім локальна гілка. Посилання всередині зникає як посилання: тека, на яку воно веде поза worktree, лишається. Origin залишить свою копію.",
+        "title_few": "Прибрати worktree {{count}} гілок і самі гілки?",
+        "title_many": "Прибрати worktree {{count}} гілок і самі гілки?",
+        "confirm_few": "Прибрати worktree і видалити {{count}} гілки",
+        "confirm_many": "Прибрати worktree і видалити {{count}} гілок"
       }
     },
     "previewState": {
@@ -1086,13 +1088,13 @@
     "copied": "Скопійовано",
     "sweep": {
       "partial_one": "Видалено {{count}} файл; {{failed}} не вдалося видалити, вони лишаться до наступного запуску",
-      "partial_few": "Видалено {{count}} файли; {{failed}} не вдалося видалити, вони лишаться до наступного запуску",
-      "partial_many": "Видалено {{count}} файлів; {{failed}} не вдалося видалити, вони лишаться до наступного запуску",
       "partial_other": "Видалено {{count}} файлу; {{failed}} не вдалося видалити, вони лишаться до наступного запуску",
       "done_one": "Видалено {{count}} файл ({{size}})",
+      "done_other": "Видалено {{count}} файлу ({{size}})",
+      "partial_few": "Видалено {{count}} файли; {{failed}} не вдалося видалити, вони лишаться до наступного запуску",
+      "partial_many": "Видалено {{count}} файлів; {{failed}} не вдалося видалити, вони лишаться до наступного запуску",
       "done_few": "Видалено {{count}} файли ({{size}})",
-      "done_many": "Видалено {{count}} файлів ({{size}})",
-      "done_other": "Видалено {{count}} файлу ({{size}})"
+      "done_many": "Видалено {{count}} файлів ({{size}})"
     },
     "toast": {
       "keptSee": "{{counts}}: причини нижче",
@@ -1136,8 +1138,6 @@
       }
     },
     "workspacesRegistered_one": "Зареєстровано {{count}} робочу область",
-    "workspacesRegistered_few": "Зареєстровано {{count}} робочі області",
-    "workspacesRegistered_many": "Зареєстровано {{count}} робочих областей",
     "workspacesRegistered_other": "Зареєстровано {{count}} робочої області",
     "previewStop": "прев’ю: {{state}}; зупиніть його на тікеті",
     "notLocal": "не локальна",
@@ -1169,15 +1169,15 @@
       "intro": "Файли, завантажені понад добу тому, які ніщо на дошці не використовує: вікно нового тікета закрили без створення, файл прибрали з допису перед надсиланням. Дошка видаляє їх щогодини; файли молодші за добу не чіпає.",
       "introRecent": "Файли, завантажені понад добу тому, які ніщо на дошці не використовує: вікно нового тікета закрили без створення, файл прибрали з допису перед надсиланням. Дошка видаляє їх щогодини; файли молодші за добу не чіпає (зараз їх {{recent}}).",
       "summary_one": "{{count}} файл, {{size}}",
-      "summary_few": "{{count}} файли, {{size}}",
-      "summary_many": "{{count}} файлів, {{size}}",
       "summary_other": "{{count}} файлу, {{size}}",
       "deleteNow": "Видалити зараз",
       "confirmTitle": "Видалити неприв’язані завантаження?",
       "confirmText_one": "{{count}} файл ({{size}}), який не використовує жоден допис, відповідь, тікет чи зображення агента, завантажений понад добу тому. Скасувати це не можна.",
+      "confirmText_other": "{{count}} файлу ({{size}}), який не використовує жоден допис, відповідь, тікет чи зображення агента, завантажений понад добу тому. Скасувати це не можна.",
+      "summary_few": "{{count}} файли, {{size}}",
+      "summary_many": "{{count}} файлів, {{size}}",
       "confirmText_few": "{{count}} файли ({{size}}), які не використовує жоден допис, відповідь, тікет чи зображення агента, завантажені понад добу тому. Скасувати це не можна.",
-      "confirmText_many": "{{count}} файлів ({{size}}), які не використовує жоден допис, відповідь, тікет чи зображення агента, завантажені понад добу тому. Скасувати це не можна.",
-      "confirmText_other": "{{count}} файлу ({{size}}), який не використовує жоден допис, відповідь, тікет чи зображення агента, завантажений понад добу тому. Скасувати це не можна."
+      "confirmText_many": "{{count}} файлів ({{size}}), які не використовує жоден допис, відповідь, тікет чи зображення агента, завантажені понад добу тому. Скасувати це не можна."
     },
     "keep": "Залишити",
     "delete": "Видалити",
@@ -1215,7 +1215,9 @@
       "title": "Останнє видалення",
       "retry": "Повторити для залишених",
       "dismiss": "Закрити"
-    }
+    },
+    "workspacesRegistered_few": "Зареєстровано {{count}} робочі області",
+    "workspacesRegistered_many": "Зареєстровано {{count}} робочих областей"
   },
   "gallery": {
     "kind": {
@@ -1386,8 +1388,6 @@
       "failed": "Помилка"
     },
     "notStarted_one": "{{count}} не запущено: {{list}}",
-    "notStarted_few": "{{count}} не запущено: {{list}}",
-    "notStarted_many": "{{count}} не запущено: {{list}}",
     "notStarted_other": "{{count}} не запущено: {{list}}",
     "nothingRunning": "Нічого не працювало",
     "startAllTip": "Запустити кожен запуск репозиторіїв тікета, що ще не працює",
@@ -1420,7 +1420,9 @@
     "since": ", з {{time}}",
     "buildLog": "журнал збірки",
     "runLog": "журнал запуску",
-    "logAria": "Журнал {{name}}"
+    "logAria": "Журнал {{name}}",
+    "notStarted_few": "{{count}} не запущено: {{list}}",
+    "notStarted_many": "{{count}} не запущено: {{list}}"
   },
   "previews": {
     "step": {
@@ -1444,12 +1446,8 @@
     "stageTip": "Показує прев’ю тікетів цього етапу",
     "nothingToStop": "Нічого зупиняти",
     "couldNotStop_one": "не вдалося зупинити {{count}}: {{list}}",
-    "couldNotStop_few": "не вдалося зупинити {{count}}: {{list}}",
-    "couldNotStop_many": "не вдалося зупинити {{count}}: {{list}}",
     "couldNotStop_other": "не вдалося зупинити {{count}}: {{list}}",
     "stoppedCount_one": "Зупинено {{count}}",
-    "stoppedCount_few": "Зупинено {{count}}",
-    "stoppedCount_many": "Зупинено {{count}}",
     "stoppedCount_other": "Зупинено {{count}}",
     "barTip": "Прев’ю, які дошка збирає або запускає, в усіх проєктах, і скільки найбільше вона запускає одночасно",
     "bar": "Прев’ю дошки: <strong>використано {{inUse}} із {{limit}}</strong> <muted>(на всю дошку)</muted>",
@@ -1482,7 +1480,11 @@
     "runBySince": "Запущено дошкою на :{{port}}, з {{time}}",
     "failed": "Помилка: {{reason}}",
     "stoppedReason": "Зупинено: {{reason}}",
-    "stopAllRuns": "Зупинити все"
+    "stopAllRuns": "Зупинити все",
+    "couldNotStop_few": "не вдалося зупинити {{count}}: {{list}}",
+    "couldNotStop_many": "не вдалося зупинити {{count}}: {{list}}",
+    "stoppedCount_few": "Зупинено {{count}}",
+    "stoppedCount_many": "Зупинено {{count}}"
   },
   "previewWindow": {
     "building": "Збірка… воно з’явиться тут, коли запуститься.",
@@ -1590,8 +1592,6 @@
     "remove": "Прибрати {{name}}",
     "removeTitle": "Прибрати {{name}}?",
     "removeReserved_one": "Його {{count}} зарезервований тікет стане спільним і непризначеним.",
-    "removeReserved_few": "Його {{count}} зарезервовані тікети стануть спільними й непризначеними.",
-    "removeReserved_many": "Його {{count}} зарезервованих тікетів стануть спільними й непризначеними.",
     "removeReserved_other": "Його {{count}} зарезервованого тікета стануть спільними й непризначеними.",
     "removeKept": "Те, що він уже опублікував, зберігає його ім’я.",
     "keep": "Залишити",
@@ -1605,8 +1605,6 @@
     "reportHint": "шаблон, який кожен запуск заповнює перед поверненням",
     "nothingYet": "Поки нічого.",
     "lines_one": "{{count}} рядок",
-    "lines_few": "{{count}} рядки",
-    "lines_many": "{{count}} рядків",
     "lines_other": "{{count}} рядка",
     "picture": "Зображення",
     "choosePicture": "Вибрати зображення",
@@ -1620,7 +1618,11 @@
     "templateLabel": "Шаблон звіту запуску",
     "templateText": "Те, що запуск цього агента заповнює перед поверненням, один звіт на запуск. Він починається зі спільної частини кожного звіту (особа, час, завдання, кроки, оцінки, проблеми, прогалини); додайте те, що робить цей агент. Дошка зберігає його разом з агентом.",
     "templatePlaceholder": "## Правило …",
-    "add": "Додати агента"
+    "add": "Додати агента",
+    "removeReserved_few": "Його {{count}} зарезервовані тікети стануть спільними й непризначеними.",
+    "removeReserved_many": "Його {{count}} зарезервованих тікетів стануть спільними й непризначеними.",
+    "lines_few": "{{count}} рядки",
+    "lines_many": "{{count}} рядків"
   },
   "gettingStarted": {
     "agentEmpty": "Проєктів ще немає. Людина створює перший із «Початку роботи» на головній.",
@@ -1671,16 +1673,10 @@
     "select": "Виберіть проєкт",
     "projects": "Проєкти",
     "repos_one": "{{count}} репозиторій",
-    "repos_few": "{{count}} репозиторії",
-    "repos_many": "{{count}} репозиторіїв",
     "repos_other": "{{count}} репозиторію",
     "tickets_one": "{{count}} тікет",
-    "tickets_few": "{{count}} тікети",
-    "tickets_many": "{{count}} тікетів",
     "tickets_other": "{{count}} тікета",
     "openPrs_one": "{{count}} відкритий PR",
-    "openPrs_few": "{{count}} відкриті PR",
-    "openPrs_many": "{{count}} відкритих PR",
     "openPrs_other": "{{count}} відкритого PR",
     "newProject": "Новий проєкт…",
     "manage": "Керування проєктами…",
@@ -1698,7 +1694,13 @@
     "keep": "Залишити",
     "delete": "Видалити",
     "noRepos": "немає репозиторіїв",
-    "counts": "{{tickets}} · {{openPrs}}"
+    "counts": "{{tickets}} · {{openPrs}}",
+    "repos_few": "{{count}} репозиторії",
+    "repos_many": "{{count}} репозиторіїв",
+    "tickets_few": "{{count}} тікети",
+    "tickets_many": "{{count}} тікетів",
+    "openPrs_few": "{{count}} відкриті PR",
+    "openPrs_many": "{{count}} відкритих PR"
   },
   "newTicket": {
     "newTicket": "Новий тікет",
@@ -1831,23 +1833,15 @@
     "pushed": "надіслано",
     "pushedBehind": "надіслано, відстає на {{count}}",
     "pushedBehindTitle_one": "надіслано; на origin ще {{count}} коміт",
-    "pushedBehindTitle_few": "надіслано; на origin ще {{count}} коміти",
-    "pushedBehindTitle_many": "надіслано; на origin ще {{count}} комітів",
     "pushedBehindTitle_other": "надіслано; на origin ще {{count}} коміта",
     "ahead": "{{count}} не надіслано",
     "aheadTitle_one": "не надіслано: {{count}} коміт лише тут",
-    "aheadTitle_few": "не надіслано: {{count}} коміти лише тут",
-    "aheadTitle_many": "не надіслано: {{count}} комітів лише тут",
     "aheadTitle_other": "не надіслано: {{count}} коміта лише тут",
     "aheadBehindTitle_one": "не надіслано: {{count}} коміт лише тут; на origin є ще {{behind}}, яких у цій гілці немає",
-    "aheadBehindTitle_few": "не надіслано: {{count}} коміти лише тут; на origin є ще {{behind}}, яких у цій гілці немає",
-    "aheadBehindTitle_many": "не надіслано: {{count}} комітів лише тут; на origin є ще {{behind}}, яких у цій гілці немає",
     "aheadBehindTitle_other": "не надіслано: {{count}} коміта лише тут; на origin є ще {{behind}}, яких у цій гілці немає",
     "localOnly": "немає на origin",
     "localOnlyTitle": "не надіслано: такої гілки на origin немає",
     "localOnlyAheadTitle_one": "не надіслано: такої гілки на origin немає, {{count}} коміт лише тут",
-    "localOnlyAheadTitle_few": "не надіслано: такої гілки на origin немає, {{count}} коміти лише тут",
-    "localOnlyAheadTitle_many": "не надіслано: такої гілки на origin немає, {{count}} комітів лише тут",
     "localOnlyAheadTitle_other": "не надіслано: такої гілки на origin немає, {{count}} коміта лише тут",
     "itsBase": "її база",
     "merged": "злито в {{into}}",
@@ -1858,7 +1852,15 @@
     "noneTitle": "такої гілки немає ні тут, ні на origin",
     "checked": "перевірено {{ago}}",
     "notFetched": "origin ще не отримано",
-    "fetchNow": "Отримати origin зараз"
+    "fetchNow": "Отримати origin зараз",
+    "pushedBehindTitle_few": "надіслано; на origin ще {{count}} коміти",
+    "pushedBehindTitle_many": "надіслано; на origin ще {{count}} комітів",
+    "aheadTitle_few": "не надіслано: {{count}} коміти лише тут",
+    "aheadTitle_many": "не надіслано: {{count}} комітів лише тут",
+    "aheadBehindTitle_few": "не надіслано: {{count}} коміти лише тут; на origin є ще {{behind}}, яких у цій гілці немає",
+    "aheadBehindTitle_many": "не надіслано: {{count}} комітів лише тут; на origin є ще {{behind}}, яких у цій гілці немає",
+    "localOnlyAheadTitle_few": "не надіслано: такої гілки на origin немає, {{count}} коміти лише тут",
+    "localOnlyAheadTitle_many": "не надіслано: такої гілки на origin немає, {{count}} комітів лише тут"
   },
   "clock": {
     "typeTime": "{{label}} (введіть час)",
@@ -1870,9 +1872,9 @@
   "markdown": {
     "agentChip": "{{name}}, один з агентів проєкту",
     "pages_one": "{{count}} сторінка",
+    "pages_other": "{{count}} сторінки",
     "pages_few": "{{count}} сторінки",
-    "pages_many": "{{count}} сторінок",
-    "pages_other": "{{count}} сторінки"
+    "pages_many": "{{count}} сторінок"
   },
   "editor": {
     "text": "Текст",
@@ -2097,12 +2099,8 @@
     },
     "recent": "Нещодавні",
     "notStarted_one": "не запущено {{count}}: {{details}}",
-    "notStarted_few": "не запущено {{count}}: {{details}}",
-    "notStarted_many": "не запущено {{count}}: {{details}}",
     "notStarted_other": "не запущено {{count}}: {{details}}",
     "notStopped_one": "не зупинено {{count}}: {{details}}",
-    "notStopped_few": "не зупинено {{count}}: {{details}}",
-    "notStopped_many": "не зупинено {{count}}: {{details}}",
     "notStopped_other": "не зупинено {{count}}: {{details}}",
     "nothingRunning": "Нічого не працювало",
     "createIn": "Створити тікет у {{name}}",
@@ -2129,7 +2127,11 @@
     "toMove": "переміщення",
     "toOpen": "відкрити",
     "toClose": "закрити",
-    "anywhere": "будь-де"
+    "anywhere": "будь-де",
+    "notStarted_few": "не запущено {{count}}: {{details}}",
+    "notStarted_many": "не запущено {{count}}: {{details}}",
+    "notStopped_few": "не зупинено {{count}}: {{details}}",
+    "notStopped_many": "не зупинено {{count}}: {{details}}"
   },
   "signIn": {
     "finishTitle": "Завершіть налаштування на хості",
@@ -2158,30 +2160,20 @@
   "ticketBoard": {
     "stage": "Етап",
     "archiveTip_one": "Архівувати {{count}} тікет у {{stage}}",
-    "archiveTip_few": "Архівувати {{count}} тікети в {{stage}}",
-    "archiveTip_many": "Архівувати {{count}} тікетів у {{stage}}",
     "archiveTip_other": "Архівувати {{count}} тікета в {{stage}}",
     "archiveAll": "Архівувати все",
     "archiveTitle_one": "Архівувати {{count}} тікет?",
-    "archiveTitle_few": "Архівувати {{count}} тікети?",
-    "archiveTitle_many": "Архівувати {{count}} тікетів?",
     "archiveTitle_other": "Архівувати {{count}} тікета?",
     "archiveDescription": "Кожен тікет у {{stage}} зникне з дошки разом зі своїми доріжками. Вони лишаться в розділі «Архів», де кожен можна відновити, а їхні сторінки й далі відкриваються.",
     "cancel": "Скасувати",
     "archive": "Архівувати",
     "decisions_one": "потрібне {{count}} рішення",
-    "decisions_few": "потрібні рішення: {{count}}",
-    "decisions_many": "потрібні рішення: {{count}}",
     "decisions_other": "потрібні рішення: {{count}}",
     "tasksBlocked_one": "{{count}} завдання заблоковано",
-    "tasksBlocked_few": "{{count}} завдання заблоковано",
-    "tasksBlocked_many": "{{count}} завдань заблоковано",
     "tasksBlocked_other": "{{count}} завдання заблоковано",
     "previousStage": "Попередній етап",
     "nextStage": "Наступний етап",
     "lanes_one": "{{count}} доріжка",
-    "lanes_few": "{{count}} доріжки",
-    "lanes_many": "{{count}} доріжок",
     "lanes_other": "{{count}} доріжки",
     "laneStage": "{{count}} {{stage}}",
     "hitInstructions": "Інструкції",
@@ -2191,12 +2183,20 @@
     "nothingArchived": "В архіві порожньо.",
     "archived": "архівовано {{when}}",
     "archivedBy": "архівовано {{when}}, виконав <actor/>",
-    "restore": "Відновити"
+    "restore": "Відновити",
+    "archiveTip_few": "Архівувати {{count}} тікети в {{stage}}",
+    "archiveTip_many": "Архівувати {{count}} тікетів у {{stage}}",
+    "archiveTitle_few": "Архівувати {{count}} тікети?",
+    "archiveTitle_many": "Архівувати {{count}} тікетів?",
+    "decisions_few": "потрібні рішення: {{count}}",
+    "decisions_many": "потрібні рішення: {{count}}",
+    "tasksBlocked_few": "{{count}} завдання заблоковано",
+    "tasksBlocked_many": "{{count}} завдань заблоковано",
+    "lanes_few": "{{count}} доріжки",
+    "lanes_many": "{{count}} доріжок"
   },
   "ticketList": {
     "archivedToast_one": "Архівовано {{count}} тікет",
-    "archivedToast_few": "Архівовано {{count}} тікети",
-    "archivedToast_many": "Архівовано {{count}} тікетів",
     "archivedToast_other": "Архівовано {{count}} тікета",
     "restoredToast": "#{{id}} повернуто на дошку",
     "title": "Поточні функції",
@@ -2213,8 +2213,6 @@
     "searchTags": "Шукати теги",
     "noTagsMatch": "Жоден тег не підходить",
     "tickets_one": "{{count}} тікет",
-    "tickets_few": "{{count}} тікети",
-    "tickets_many": "{{count}} тікетів",
     "tickets_other": "{{count}} тікета",
     "showEveryTag": "Показати всі теги",
     "clearTag": "Скинути фільтр за тегом",
@@ -2223,7 +2221,11 @@
     "retry": "Повторити",
     "searchTickets": "Шукати тікети",
     "searchPlaceholder": "Пошук за назвою чи обговоренням",
-    "clearSearchAria": "Скинути пошук"
+    "clearSearchAria": "Скинути пошук",
+    "archivedToast_few": "Архівовано {{count}} тікети",
+    "archivedToast_many": "Архівовано {{count}} тікетів",
+    "tickets_few": "{{count}} тікети",
+    "tickets_many": "{{count}} тікетів"
   },
   "needs": {
     "titleIn": "#{{id}} {{title}}: {{branch}} уже в {{into}}",
@@ -2458,15 +2460,15 @@
       "delegated": "{{on}}, делеговано",
       "clause": "{{agent}} {{parts}}",
       "workBy_one": "Робота {{count}} агента за {{over}}: {{clauses}}.{{live}}{{scale}}",
-      "workBy_few": "Робота {{count}} агентів за {{over}}: {{clauses}}.{{live}}{{scale}}",
-      "workBy_many": "Робота {{count}} агентів за {{over}}: {{clauses}}.{{live}}{{scale}}",
       "workBy_other": "Робота {{count}} агента за {{over}}: {{clauses}}.{{live}}{{scale}}",
       "activityBy_one": "Активність {{count}} агента за {{over}}: {{clauses}}.{{live}}{{scale}}",
-      "activityBy_few": "Активність {{count}} агентів за {{over}}: {{clauses}}.{{live}}{{scale}}",
-      "activityBy_many": "Активність {{count}} агентів за {{over}}: {{clauses}}.{{live}}{{scale}}",
       "activityBy_other": "Активність {{count}} агента за {{over}}: {{clauses}}.{{live}}{{scale}}",
       "stillGoing": " Ще триває.",
-      "notToScale": " Не в масштабі: {{skipped}}."
+      "notToScale": " Не в масштабі: {{skipped}}.",
+      "workBy_few": "Робота {{count}} агентів за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "workBy_many": "Робота {{count}} агентів за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_few": "Активність {{count}} агентів за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_many": "Активність {{count}} агентів за {{over}}: {{clauses}}.{{live}}{{scale}}"
     },
     "card": {
       "title": "Хронологія",
@@ -2543,17 +2545,17 @@
     "range": "від {{start}} до зараз",
     "stat": {
       "tickets_one": "тікет",
-      "tickets_few": "тікети",
-      "tickets_many": "тікетів",
       "tickets_other": "тікета",
       "lanes_one": "доріжка",
-      "lanes_few": "доріжки",
-      "lanes_many": "доріжок",
       "lanes_other": "доріжки",
       "workingNow": "працює зараз",
       "blocked": "заблоковано",
       "inReview": "на рев’ю",
-      "noWord": "без вістей"
+      "noWord": "без вістей",
+      "tickets_few": "тікети",
+      "tickets_many": "тікетів",
+      "lanes_few": "доріжки",
+      "lanes_many": "доріжок"
     },
     "projectWork": "Робота проєкту, кожен тікет і доріжка:",
     "empty": {
@@ -2562,8 +2564,6 @@
       "review": "Жоден тікет не чекає на рев’ю."
     },
     "lanes_one": "{{count}} доріжка",
-    "lanes_few": "{{count}} доріжки",
-    "lanes_many": "{{count}} доріжок",
     "lanes_other": "{{count}} доріжки",
     "unassigned": "Не призначено",
     "progress": "Готово {{done}} із {{total}}",
@@ -2576,18 +2576,20 @@
       "next": "далі",
       "later": "пізніше",
       "blocked": "заблоковано"
-    }
+    },
+    "lanes_few": "{{count}} доріжки",
+    "lanes_many": "{{count}} доріжок"
   },
   "overview": {
     "loadError": "Не вдалося завантажити підсумок: {{error}}",
     "projectOverview": "{{name}}: огляд",
     "headline": {
+      "inProgress": "{{count}} у роботі",
+      "doneToday": "{{count}} зроблено сьогодні",
       "waiting_one": "{{count}} чекає на вас",
       "waiting_few": "{{count}} чекають на вас",
       "waiting_many": "{{count}} чекають на вас",
-      "waiting_other": "{{count}} чекають на вас",
-      "inProgress": "{{count}} у роботі",
-      "doneToday": "{{count}} зроблено сьогодні"
+      "waiting_other": "{{count}} чекають на вас"
     },
     "allHidden": "Усі картки цього огляду приховано. <goto>Покажіть їх знову в налаштуваннях макета</goto>.",
     "showFewer": "Показати менше",
@@ -2601,12 +2603,8 @@
     "prTitle": "PR #{{number}} {{title}}",
     "openOnGithub": "Відкрити на GitHub",
     "option_one": "{{count}} варіант",
-    "option_few": "{{count}} варіанти",
-    "option_many": "{{count}} варіантів",
     "option_other": "{{count}} варіанта",
     "lane_one": "{{count}} доріжка",
-    "lane_few": "{{count}} доріжки",
-    "lane_many": "{{count}} доріжок",
     "lane_other": "{{count}} доріжки",
     "previewOf": "Прев’ю {{workspace}}",
     "preview": "Прев’ю",
@@ -2644,19 +2642,23 @@
       "closedTip": "Злито або закрито: вийшло з черги рев’ю",
       "closed": "закрито {{time}}",
       "activity_one": "Сьогодні {{count}} подія: Щодня",
+      "activity_other": "Сьогодні {{count}} події: Щодня",
       "activity_few": "Сьогодні {{count}} події: Щодня",
-      "activity_many": "Сьогодні {{count}} подій: Щодня",
-      "activity_other": "Сьогодні {{count}} події: Щодня"
+      "activity_many": "Сьогодні {{count}} подій: Щодня"
     },
     "carryingOver": {
       "title": "Переходить далі",
       "startedTip": "Роботу над ним розпочато {{when}}",
       "days_one": "{{count}} день у роботі",
-      "days_few": "{{count}} дні в роботі",
-      "days_many": "{{count}} днів у роботі",
       "days_other": "{{count}} дня в роботі",
-      "emptyShown": "Нічого заблокованого чи на рев’ю з попередніх днів."
-    }
+      "emptyShown": "Нічого заблокованого чи на рев’ю з попередніх днів.",
+      "days_few": "{{count}} дні в роботі",
+      "days_many": "{{count}} днів у роботі"
+    },
+    "option_few": "{{count}} варіанти",
+    "option_many": "{{count}} варіантів",
+    "lane_few": "{{count}} доріжки",
+    "lane_many": "{{count}} доріжок"
   },
   "notifications": {
     "title": "Сповіщення",
@@ -2714,8 +2716,6 @@
     "deleteTitle": "Видалити цей тікет?",
     "deleteBody": "Завдання, оновлення, вкладення й обговорення зникнуть разом із ним.",
     "deleteLanes_one": "Має {{count}} доріжку: видаліть її теж або залиште й підніміть на рівень вище.",
-    "deleteLanes_few": "Має {{count}} доріжки: видаліть їх теж або залиште й підніміть на рівень вище.",
-    "deleteLanes_many": "Має {{count}} доріжок: видаліть їх теж або залиште й підніміть на рівень вище.",
     "deleteLanes_other": "Має {{count}} доріжки: видаліть їх теж або залиште й підніміть на рівень вище.",
     "deleteKeepLanes": "Видалити, залишити доріжки",
     "deleteWithLanes": "Видалити з доріжками",
@@ -2760,8 +2760,6 @@
     "tickedAuto": "Позначено автоматично",
     "blocked": "заблоковано",
     "subtasksBlocked_one": "{{count}} підзавдання заблоковано",
-    "subtasksBlocked_few": "{{count}} підзавдання заблоковано",
-    "subtasksBlocked_many": "{{count}} підзавдань заблоковано",
     "subtasksBlocked_other": "{{count}} підзавдання заблоковано",
     "unblock": "Розблокувати {{name}}",
     "markBlockedNamed": "Позначити {{name}} заблокованим",
@@ -2802,8 +2800,6 @@
     "agents": "Агенти",
     "includeLanePosts": "з дописами доріжок",
     "newCount_one": "нових: {{count}}",
-    "newCount_few": "нових: {{count}}",
-    "newCount_many": "нових: {{count}}",
     "newCount_other": "нових: {{count}}",
     "newPost": "Новий допис",
     "postPlaceholder": "Напишіть допис: питання, відповідь, прогрес. Вставте або перетягніть знімки екрана й записи.",
@@ -2823,8 +2819,6 @@
     "earlierVersions": "Попередні версії",
     "firstVersion": "перша версія",
     "replies_one": "{{count}} відповідь",
-    "replies_few": "{{count}} відповіді",
-    "replies_many": "{{count}} відповідей",
     "replies_other": "{{count}} відповіді",
     "summaryActions": "Дії з підсумком",
     "hideRepliesLabel": "сховати відповіді",
@@ -2873,7 +2867,16 @@
     "workflowOwn": "Дотримується воркфлоу «{{workflow}}», заданого для цього тікета.",
     "workflowProject": "Дотримується воркфлоу проєкту ({{workflow}}).",
     "workflowSteps": "Переглянути кроки",
-    "lanesProgress": "{{done}}/{{total}} готово"
+    "lanesProgress": "{{done}}/{{total}} готово",
+    "workflowDeleted": "Воркфлоу, заданий для цього тікета, видалено, тож тікет іде за воркфлоу проєкту ({{workflow}}).",
+    "deleteLanes_few": "Має {{count}} доріжки: видаліть їх теж або залиште й підніміть на рівень вище.",
+    "deleteLanes_many": "Має {{count}} доріжок: видаліть їх теж або залиште й підніміть на рівень вище.",
+    "subtasksBlocked_few": "{{count}} підзавдання заблоковано",
+    "subtasksBlocked_many": "{{count}} підзавдань заблоковано",
+    "newCount_few": "нових: {{count}}",
+    "newCount_many": "нових: {{count}}",
+    "replies_few": "{{count}} відповіді",
+    "replies_many": "{{count}} відповідей"
   },
   "complexity": {
     "label": {
@@ -2895,8 +2898,6 @@
     "error": "Не вдалося дізнатися, хто працює.",
     "empty": "Ніхто з агентів не працює",
     "more_one": "ще {{count}}",
-    "more_few": "ще {{count}}",
-    "more_many": "ще {{count}}",
     "more_other": "ще {{count}}",
     "round": "{{phase}}, раунд {{round}}",
     "waiting": "Чекає: {{what}}",
@@ -2909,7 +2910,9 @@
       "working": "працює",
       "waiting": "чекає",
       "asleep": "спить"
-    }
+    },
+    "more_few": "ще {{count}}",
+    "more_many": "ще {{count}}"
   },
   "notificationSettings": {
     "title": "Сповіщення",
@@ -2926,17 +2929,17 @@
     },
     "snooze": {
       "minutes_one": "{{count}} хвилина",
-      "minutes_few": "{{count}} хвилини",
-      "minutes_many": "{{count}} хвилин",
       "minutes_other": "{{count}} хвилини",
       "hours_one": "{{count}} година",
-      "hours_few": "{{count}} години",
-      "hours_many": "{{count}} годин",
       "hours_other": "{{count}} години",
       "days_one": "{{count}} день",
+      "days_other": "{{count}} дня",
+      "minutes_few": "{{count}} хвилини",
+      "minutes_many": "{{count}} хвилин",
+      "hours_few": "{{count}} години",
+      "hours_many": "{{count}} годин",
       "days_few": "{{count}} дні",
-      "days_many": "{{count}} днів",
-      "days_other": "{{count}} дня"
+      "days_many": "{{count}} днів"
     }
   },
   "workflowChips": {
@@ -2953,6 +2956,21 @@
     "skippedOnLow": "Пропускається на низькій",
     "changed": "змінено",
     "changedTip": "Змінено відносно пресета: {{what}}"
+  },
+  "workflowCustom": {
+    "name": "Назва",
+    "new": "Новий воркфлоу",
+    "newDescription": "Копія воркфлоу цього проєкту, яку ви змінюєте окремо: додавайте й прибирайте кроки, переставляйте їх, обирайте, хто виконує кожен. Рев’ю всередині йде з пресетом, з якого скопійовано.",
+    "startFrom": "Почати з",
+    "create": "Створити воркфлоу",
+    "rename": "Перейменувати",
+    "renameTitle": "Перейменувати воркфлоу",
+    "renameDescription": "Тікети й проєкт і далі йдуть за ним під новою назвою.",
+    "deleteTitle": "Видалити воркфлоу {{name}}?",
+    "deleteDescription": "Якщо проєкт іде за ним, він повернеться до {{standard}}, а тікет, що його називає, натомість іде за воркфлоу проєкту. Пресети не чіпаються. Це не можна скасувати.",
+    "deleteWorkflow": "Видалити воркфлоу",
+    "addStep": "Додати крок",
+    "allIn": "Усі типи вже є"
   },
   "workflowGraph": {
     "label": "{{label}} воркфлоу, складність тікета: {{complexity}}",
@@ -2995,7 +3013,13 @@
     "effort": "Зусилля",
     "effortHint": "Передається як рівень зусиль інструмента Agent. {{hint}}.",
     "reviewRuns": "За раунд запускається окремих /feature-review: {{total}} ({{runs}}), кожен під власним іменем агента, і жоден не бачить знахідок іншого.",
-    "survival": "<strong>Раунд пройдено, коли</strong> {{survival}}."
+    "survival": "<strong>Раунд пройдено, коли</strong> {{survival}}.",
+    "inThisWorkflow": "У цьому воркфлоу",
+    "removeStep": "Прибрати крок",
+    "takesOut": "Приберіть {{step}} з цього воркфлоу. Додати його знову можна через «Додати крок» над графіком.",
+    "alwaysFirst": "Крок {{step}} завжди перший, тож його не можна прибрати.",
+    "alwaysLast": "Крок {{step}} завжди останній, тож його не можна прибрати.",
+    "lockedStep": "Крок {{step}} заблоковано, тож його не можна прибрати."
   },
   "workflowPage": {
     "title": "Воркфлоу",
@@ -3011,9 +3035,21 @@
     "sectionLabel": "{{label}} воркфлоу",
     "projects": "проєктний",
     "summary_one": "{{count}} крок · складність: {{complexity}} · рев’ю: {{rounds}}",
+    "summary_other": "{{count}} кроку · складність: {{complexity}} · рев’ю: {{rounds}}",
+    "summaryNoReview_one": "{{count}} крок для завдання ({{complexity}}) · без перевірки",
+    "summaryNoReview_few": "{{count}} кроки для завдання ({{complexity}}) · без перевірки",
+    "summaryNoReview_many": "{{count}} кроків для завдання ({{complexity}}) · без перевірки",
+    "summaryNoReview_other": "{{count}} кроку для завдання ({{complexity}}) · без перевірки",
+    "created": "Воркфлоу створено",
+    "renamed": "Перейменовано",
+    "deleted": "Воркфлоу видалено",
+    "resetBodyCustom": "Його кроки, порядок, перемикачі, зусилля, агенти команди та раунди рев’ю повернуться до того стану, яким був воркфлоу {{label}}. Назва лишиться, а інші воркфлоу зберігатимуть свої зміни.",
+    "fellBack": "Воркфлоу, за яким ішов проєкт, видалено, тож тепер проєкт іде за {{standard}}. Тікети, що його називали, йдуть за воркфлоу проєкту. Залиште {{standard}}, щоб закрити це повідомлення, або оберіть нижче інший воркфлоу й натисніть «Використовувати цей воркфлоу».",
+    "notOwn": "Цей воркфлоу не належить проєкту (можливо, його видалено), тому показано власний воркфлоу проєкту.",
+    "keepStandard": "Залишити {{label}}",
+    "customNote": "Ваш власний воркфлоу, скопійовано з {{base}}. Додавайте кроки перелічених типів, прибирайте ті, що не заблоковані, і пересувайте їх у межах того, що дозволяє кожен крок. Рев’ю всередині (його фази й те, що вони виконують) іде з {{base}}.",
     "summary_few": "{{count}} кроки · складність: {{complexity}} · рев’ю: {{rounds}}",
-    "summary_many": "{{count}} кроків · складність: {{complexity}} · рев’ю: {{rounds}}",
-    "summary_other": "{{count}} кроку · складність: {{complexity}} · рев’ю: {{rounds}}"
+    "summary_many": "{{count}} кроків · складність: {{complexity}} · рев’ю: {{rounds}}"
   },
   "workflowPresets": {
     "group": "Пресети воркфлоу",
@@ -3021,8 +3057,6 @@
     "tweaked": "Змінений",
     "complexity": "Складність",
     "stats_one": "{{count}} крок · раунди рев’ю: {{rounds}}",
-    "stats_few": "{{count}} кроки · раунди рев’ю: {{rounds}}",
-    "stats_many": "{{count}} кроків · раунди рев’ю: {{rounds}}",
     "stats_other": "{{count}} кроку · раунди рев’ю: {{rounds}}",
     "light": {
       "label": "Легкий",
@@ -3039,7 +3073,16 @@
     "maximum": {
       "label": "Максимальний",
       "description": "Ретельний плюс друга незалежна специфікація, друге повне рев’ю кожного раунду іншим агентом, який не бачить першого, і високі зусилля в кожного агента."
-    }
+    },
+    "content": {
+      "label": "Контент",
+      "description": "Захоплення завдання, чернетка, створена й перевірена самостійно, раунди перевірки людиною, підсумок і передача: без spec, PR, CI, прев’ю чи фаз рев’ю."
+    },
+    "custom": "Власний",
+    "copiedFrom": "Власний, скопійовано з {{base}}.",
+    "stats_few": "{{count}} кроки · раунди рев’ю: {{rounds}}",
+    "stats_many": "{{count}} кроків · раунди рев’ю: {{rounds}}",
+    "noReview": "без перевірки"
   },
   "workflowReview": {
     "legend": "Раунди рев’ю за складністю",
@@ -3054,13 +3097,19 @@
   },
   "workflowSelect": {
     "project": "Воркфлоу проєкту ({{label}})",
-    "hint": "Воркфлоу, якого дотримується його агент: власний воркфлоу проєкту або один із чотирьох пресетів лише для цього тікета. Зміна воркфлоу проєкту не чіпає тікет, який задає власний."
+    "hint": "Воркфлоу, за яким іде його агент: власний воркфлоу проєкту або інший воркфлоу проєкту лише для цього тікета. Зміна воркфлоу проєкту не переміщує тікет, що називає свій.",
+    "deleted": "Видалений воркфлоу (іде за воркфлоу проєкту)"
+  },
+  "workflowTags": {
+    "title": "Теги, що вибирають воркфлоу",
+    "empty": "Жоден тег поки що не вибирає воркфлоу. Агенти задають цю мапу через set_workflow_tags: тікет з одним із тегів і без власного воркфлоу йде за воркфлоу, на який вказує тег, інакше — за воркфлоу проєкту.",
+    "tag": "Тег",
+    "workflow": "Воркфлоу",
+    "notOne": "Не належить до воркфлоу проєкту"
   },
   "workflowView": {
     "noRounds": "без раундів рев’ю",
     "rounds_one": "{{count}} раунд",
-    "rounds_few": "{{count}} раунди",
-    "rounds_many": "{{count}} раундів",
     "rounds_other": "{{count}} раунду",
     "complexity": {
       "low": "Низька",
@@ -3101,6 +3150,7 @@
       "build": "Зафіксовано: без збірки зміни нічого не передається.",
       "gate": "Зафіксовано: жодна зміна не йде далі без перевірки.",
       "intent": "Зафіксовано вище за низьку: кожен тікет вище за низьку складність звіряють зі словами самої людини, перш ніж його передати.",
+      "rounds": "Заблоковано: людина переглядає чернетку перед передачею.",
       "always": "Зафіксовано: без цього тікет не можна передати."
     },
     "survival": {
@@ -3116,7 +3166,9 @@
       "stayLast": "Крок {{step}} має лишатися останнім",
       "alreadyFirst": "Крок {{step}} уже перший",
       "alreadyLast": "Крок {{step}} уже останній"
-    }
+    },
+    "rounds_few": "{{count}} раунди",
+    "rounds_many": "{{count}} раундів"
   },
   "backToModule": {
     "back": "Назад: {{label}}",
@@ -3169,8 +3221,6 @@
     "none": "Звітів запусків ще немає.",
     "noMatch": "Жоден звіт не відповідає цим фільтрам.",
     "count_one": "{{shown}} із {{count}} звіту",
-    "count_few": "{{shown}} із {{count}} звітів",
-    "count_many": "{{shown}} із {{count}} звітів",
     "count_other": "{{shown}} із {{count}} звіту",
     "clearFilters": "Скинути фільтри",
     "filter": {
@@ -3209,6 +3259,8 @@
       "longest": "Найдовші",
       "difficulty": "Найвища складність",
       "confidence": "Найвища впевненість"
-    }
+    },
+    "count_few": "{{shown}} із {{count}} звітів",
+    "count_many": "{{shown}} із {{count}} звітів"
   }
 }

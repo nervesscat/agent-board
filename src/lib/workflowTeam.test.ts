@@ -4,7 +4,10 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { COMPLEXITIES } from './constants'
+/** The presets with a review step: Content has none, so the review's own checks read only these. */
+const REVIEWED = WORKFLOW_PRESETS.filter((p) => WORKFLOW_PRESET_DEFS[p].steps.includes('review'))
 import {
+  WORKFLOW_PRESET_DEFS,
   WORKFLOW_PRESETS,
   bindableNodes,
   defaultTeamAgent,
@@ -71,7 +74,7 @@ describe('the nodes that can name a Team agent (B10)', () => {
   })
 
   it('are exactly the resolved nodes that carry a Team agent', () => {
-    for (const preset of WORKFLOW_PRESETS) {
+    for (const preset of REVIEWED) {
       const w = resolveWorkflow(preset, undefined, 'max')
       const review = w.steps.find((s) => s.id === 'review')!.review!
       const withAgent = [
@@ -312,7 +315,7 @@ describe('which Team agent runs a node (B4)', () => {
   })
 
   it('names the agents of each run, one per phases= token', () => {
-    for (const preset of WORKFLOW_PRESETS)
+    for (const preset of REVIEWED)
       for (const level of COMPLEXITIES) {
         const review = resolveWorkflow(preset, undefined, level).steps.find((s) => s.id === 'review')!.review!
         for (const run of review.runs)
@@ -377,6 +380,7 @@ describe('the pure module (B5)', () => {
   it('imports nothing from the server or the database', () => {
     const source = fs.readFileSync(path.resolve('src/lib/workflow.ts'), 'utf8')
     const imports = [...source.matchAll(/from '([^']+)'/g)].map((m) => m[1])
-    expect(imports).toEqual(['./constants'])
+    // The tag rules (`./tags`) are pure too: no server, database or node module.
+    expect(imports).toEqual(['./constants', './tags'])
   })
 })

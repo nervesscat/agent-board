@@ -1,7 +1,9 @@
 {
   "common": {
     "saved": "सहेजा गया",
-    "close": "बंद करें"
+    "close": "बंद करें",
+    "cancel": "रद्द करें",
+    "delete": "मिटाएँ"
   },
   "loading": {
     "ticket": "ticket लोड हो रहा है…",
@@ -2718,7 +2720,8 @@
     "workflowOwn": "इस ticket पर चुने {{workflow}} workflow का पालन करता है।",
     "workflowProject": "प्रोजेक्ट के workflow ({{workflow}}) का पालन करता है।",
     "workflowSteps": "स्टेप देखें",
-    "lanesProgress": "{{done}}/{{total}} पूर्ण"
+    "lanesProgress": "{{done}}/{{total}} पूर्ण",
+    "workflowDeleted": "इस ticket पर सेट किया गया workflow हटा दिया गया, इसलिए यह प्रोजेक्ट के workflow ({{workflow}}) को फ़ॉलो करता है।"
   },
   "complexity": {
     "label": {
@@ -2791,6 +2794,21 @@
     "changed": "बदला",
     "changedTip": "प्रीसेट से बदला गया: {{what}}"
   },
+  "workflowCustom": {
+    "name": "नाम",
+    "new": "नया workflow",
+    "newDescription": "इस प्रोजेक्ट के workflow की एक प्रति, जिसे आप अपने तौर पर बदलते हैं: चरण जोड़ें और हटाएँ, उनका क्रम बदलें, तय करें कि हर चरण कौन चलाएगा। इसके अंदर की रिव्यू उसी प्रीसेट के साथ आती है जिससे इसे कॉपी किया गया था।",
+    "startFrom": "यहाँ से शुरू करें",
+    "create": "workflow बनाएँ",
+    "rename": "नाम बदलें",
+    "renameTitle": "workflow का नाम बदलें",
+    "renameDescription": "ticket और प्रोजेक्ट नए नाम से इसे फ़ॉलो करते रहते हैं।",
+    "deleteTitle": "{{name}} workflow हटाएँ?",
+    "deleteDescription": "अगर प्रोजेक्ट इसे फ़ॉलो करता है, तो प्रोजेक्ट {{standard}} पर वापस चला जाता है, और जो ticket इसका नाम लेता है वह इसके बजाय प्रोजेक्ट के workflow को फ़ॉलो करता है। प्रीसेट नहीं बदले जाते। यह वापस नहीं हो सकता।",
+    "deleteWorkflow": "workflow हटाएँ",
+    "addStep": "चरण जोड़ें",
+    "allIn": "सभी प्रकार पहले से हैं"
+  },
   "workflowGraph": {
     "label": "{{complexity}} ticket के लिए {{label}} workflow",
     "complexity": {
@@ -2832,7 +2850,13 @@
     "effort": "Effort",
     "effortHint": "Agent tool के effort के रूप में आगे भेजा जाता है। {{hint}}।",
     "reviewRuns": "हर राउंड में {{total}} अलग /feature-review रन चलते हैं: {{runs}}, हर एक अपने एजेंट नाम से और दूसरे के निष्कर्ष कभी देखे बिना।",
-    "survival": "<strong>राउंड तब टिकता है जब</strong> {{survival}}।"
+    "survival": "<strong>राउंड तब टिकता है जब</strong> {{survival}}।",
+    "inThisWorkflow": "इस workflow में",
+    "removeStep": "चरण हटाएँ",
+    "takesOut": "{{step}} को इस workflow से हटाएँ। ग्राफ़ के ऊपर \"चरण जोड़ें\" से इसे फिर जोड़ सकते हैं।",
+    "alwaysFirst": "{{step}} हमेशा पहला चरण होता है, इसलिए इसे हटाया नहीं जा सकता।",
+    "alwaysLast": "{{step}} हमेशा आखिरी चरण होता है, इसलिए इसे हटाया नहीं जा सकता।",
+    "lockedStep": "{{step}} लॉक है, इसलिए इसे हटाया नहीं जा सकता।"
   },
   "workflowPage": {
     "title": "Workflow",
@@ -2848,7 +2872,17 @@
     "sectionLabel": "{{label}} workflow",
     "projects": "प्रोजेक्ट का",
     "summary_one": "{{complexity}} ticket के लिए {{count}} स्टेप · रिव्यू: {{rounds}}",
-    "summary_other": "{{complexity}} ticket के लिए {{count}} स्टेप · रिव्यू: {{rounds}}"
+    "summary_other": "{{complexity}} ticket के लिए {{count}} स्टेप · रिव्यू: {{rounds}}",
+    "summaryNoReview_one": "{{complexity}} टिकट के लिए {{count}} चरण · कोई समीक्षा नहीं",
+    "summaryNoReview_other": "{{complexity}} टिकट के लिए {{count}} चरण · कोई समीक्षा नहीं",
+    "created": "workflow बनाया गया",
+    "renamed": "नाम बदला गया",
+    "deleted": "workflow हटाया गया",
+    "resetBodyCustom": "इसके चरण, क्रम, स्विच, प्रयास, टीम एजेंट और रिव्यू राउंड वापस उसी हालत में आ जाएँगे जैसे {{label}} workflow बना था। नाम वैसा ही रहेगा और दूसरे workflows में जो बदला गया है वह रहेगा।",
+    "fellBack": "जिस workflow को यह प्रोजेक्ट फ़ॉलो करता था वह हटा दिया गया, इसलिए अब यह {{standard}} को फ़ॉलो करता है। जो ticket उसका नाम लेते थे, वे प्रोजेक्ट के workflow को फ़ॉलो करते हैं। यह सूचना बंद करने के लिए {{standard}} रहने दें, या नीचे कोई और workflow चुनकर \"यह workflow इस्तेमाल करें\" दबाएँ।",
+    "notOwn": "यह workflow इस प्रोजेक्ट का नहीं है (शायद हटाया गया हो), इसलिए प्रोजेक्ट का अपना workflow दिखाया जा रहा है।",
+    "keepStandard": "{{label}} रखें",
+    "customNote": "आपका अपना workflow, {{base}} से कॉपी किया गया। सूची में दिए प्रकार के चरण जोड़ें, जो लॉक नहीं हैं उन्हें हटाएँ, और हर चरण जितनी इजाज़त दे उतने दायरे में उन्हें आगे-पीछे करें। इसके अंदर की रिव्यू (इसके फ़ेज़ और वे क्या चलाते हैं) {{base}} के साथ आती है।"
   },
   "workflowPresets": {
     "group": "Workflow प्रीसेट",
@@ -2872,7 +2906,14 @@
     "maximum": {
       "label": "Maximum",
       "description": "Thorough के साथ दूसरा स्वतंत्र spec, हर राउंड की दूसरी पूरी रिव्यू एक अलग एजेंट से जो पहली कभी नहीं देखता, और हर एजेंट पर उच्च effort।"
-    }
+    },
+    "content": {
+      "label": "कंटेंट",
+      "description": "क्लेम, एक ड्राफ़्ट बनाया और खुद जाँचा गया, ड्राफ़्ट पर इंसानी राउंड, सारांश और हैंड-ऑफ़: कोई spec नहीं, कोई PR नहीं, CI, preview या रिव्यू फ़ेज़ नहीं।"
+    },
+    "custom": "कस्टम",
+    "copiedFrom": "आपका अपना, {{base}} से कॉपी किया गया।",
+    "noReview": "कोई समीक्षा नहीं"
   },
   "workflowReview": {
     "legend": "जटिलता के अनुसार रिव्यू राउंड",
@@ -2887,7 +2928,15 @@
   },
   "workflowSelect": {
     "project": "प्रोजेक्ट का workflow ({{label}})",
-    "hint": "वह workflow जिसका पालन उसका एजेंट करता है: प्रोजेक्ट का अपना, या सिर्फ़ इस ticket के लिए चार प्रीसेट में से एक। प्रोजेक्ट का workflow बदलने से वह ticket नहीं बदलता जिसने कोई चुना है।"
+    "hint": "वह workflow जिसे इसका एजेंट फ़ॉलो करता है: प्रोजेक्ट का अपना, या सिर्फ़ इस ticket के लिए प्रोजेक्ट का कोई और workflow। प्रोजेक्ट का workflow बदलने से वह ticket नहीं हिलता जो कोई और नाम देता है।",
+    "deleted": "हटाया गया workflow (प्रोजेक्ट का फ़ॉलो करता है)"
+  },
+  "workflowTags": {
+    "title": "वे टैग जो workflow चुनते हैं",
+    "empty": "अभी तक कोई टैग workflow नहीं चुनता। एजेंट set_workflow_tags से यह मैप सेट करते हैं: जिस ticket पर इनमें से कोई टैग हो और उसका अपना workflow न हो, वह टैग से जुड़े workflow को फ़ॉलो करता है, नहीं तो प्रोजेक्ट के workflow को।",
+    "tag": "टैग",
+    "workflow": "workflow",
+    "notOne": "प्रोजेक्ट के workflows में से नहीं है"
   },
   "workflowView": {
     "noRounds": "कोई रिव्यू राउंड नहीं",
@@ -2932,6 +2981,7 @@
       "build": "लॉक: बदलाव बने बिना कुछ नहीं सौंपा जाता।",
       "gate": "लॉक: कोई बदलाव बिना जाँचे आगे नहीं जाता।",
       "intent": "कम से ऊपर लॉक: कम से ऊपर हर ticket को सौंपने से पहले इंसान के अपने शब्दों से मिलाकर जाँचा जाता है।",
+      "rounds": "लॉक: हैंड-ऑफ़ से पहले इंसान ड्राफ़्ट की समीक्षा करता है।",
       "always": "लॉक: इसके बिना ticket सौंपा नहीं जा सकता।"
     },
     "survival": {

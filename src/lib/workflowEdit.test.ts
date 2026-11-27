@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { ROUNDS_MAX, normalizeTweaks, resolveWorkflow, validateTweaks, type PresetTweak } from './workflow'
+import {
+  ROUNDS_MAX,
+  customSource,
+  normalizeTweaks,
+  resolveWorkflow,
+  validateTweaks,
+  type PresetTweak,
+} from './workflow'
 import {
   parseRounds,
   tweakBody,
@@ -9,6 +16,7 @@ import {
   withEnabled,
   withOrder,
   withRounds,
+  withoutStep,
 } from './workflowEdit'
 
 describe('the changes the Workflow page makes to a preset tweak', () => {
@@ -96,4 +104,59 @@ describe('parseRounds', () => {
       expect(r.ok ? '' : r.error).toBe(`Rounds are a whole number from 0 to ${ROUNDS_MAX}`)
     },
   )
+})
+
+describe('taking a step out of a custom workflow', () => {
+  const order = resolveWorkflow('thorough').defaultOrder
+  const without = (id: string) => order.filter((x) => x !== id)
+  const saved: PresetTweak = {
+    order,
+    steps: { preview: { enabled: false }, tests: { effort: 'high' }, spec: { effort: 'low' } },
+    agents: { spec: 'Quick', 'review.hunt-a': 'Sharp', 'review.refute': 'Sharp' },
+    rounds: { mid: 3 },
+  }
+
+  it('leaves nothing of the step behind: its switch, its effort and its Team agent', () => {
+    const next = withoutStep(saved, 'preview', without('preview'))
+    expect(next.order).toEqual(without('preview'))
+    expect(next.steps).toEqual({ tests: { effort: 'high' }, spec: { effort: 'low' } })
+    expect(next.agents).toEqual(saved.agents)
+    const spec = withoutStep(saved, 'spec', without('spec'))
+    expect(spec.steps).toEqual({ preview: { enabled: false }, tests: { effort: 'high' } })
+    expect(spec.agents).toEqual({ 'review.hunt-a': 'Sharp', 'review.refute': 'Sharp' })
+  })
+
+  it('takes the Team agent of every phase of the review with the review', () => {
+    const next = withoutStep(saved, 'review', without('review'))
+    expect(next.agents).toEqual({ spec: 'Quick' })
+    expect(withoutStep({ order, agents: { 'review.hunt-a': 'Sharp' } }, 'review', without('review'))).toEqual(
+      {
+        order: without('review'),
+      },
+    )
+  })
+
+  it('takes the review rounds with the review, and only with it', () => {
+    expect(withoutStep(saved, 'review', without('review')).rounds).toBeUndefined()
+    expect(withoutStep(saved, 'preview', without('preview')).rounds).toEqual({ mid: 3 })
+    expect(withoutStep({ order, rounds: { mid: 3 } }, 'review', without('review'))).toEqual({
+      order: without('review'),
+    })
+  })
+
+  it('is a body the board accepts, and never changes the tweak it is given', () => {
+    const copy = structuredClone(saved)
+    for (const id of ['preview', 'tests', 'spec', 'review'] as const) {
+      const body = tweakBody(withoutStep(saved, id, without(id)))
+      const source = customSource({
+        id: 'custom-abcdef0123',
+        name: 'Mine',
+        base: 'thorough',
+        seed: { order },
+      })
+      const checked = validateTweaks(source, body, { team: ['Quick', 'Sharp'], order })
+      expect(checked.ok, id).toBe(true)
+    }
+    expect(saved).toEqual(copy)
+  })
 })

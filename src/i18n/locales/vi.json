@@ -1,7 +1,9 @@
 {
   "common": {
     "saved": "Đã lưu",
-    "close": "Đóng"
+    "close": "Đóng",
+    "cancel": "Hủy",
+    "delete": "Xóa"
   },
   "loading": {
     "ticket": "Đang tải ticket…",
@@ -2642,7 +2644,8 @@
     "workflowOwn": "Theo quy trình {{workflow}}, đặt riêng cho ticket này.",
     "workflowProject": "Theo quy trình của dự án ({{workflow}}).",
     "workflowSteps": "Xem các bước",
-    "lanesProgress": "{{done}}/{{total}} xong"
+    "lanesProgress": "{{done}}/{{total}} xong",
+    "workflowDeleted": "Quy trình đặt cho ticket này đã bị xóa nên ticket theo quy trình của dự án ({{workflow}})."
   },
   "complexity": {
     "label": {
@@ -2711,6 +2714,21 @@
     "changed": "đã đổi",
     "changedTip": "Khác với preset: {{what}}"
   },
+  "workflowCustom": {
+    "name": "Tên",
+    "new": "Quy trình mới",
+    "newDescription": "Một bản sao của quy trình trong dự án này, do bạn tự thay đổi: thêm và bỏ bước, sắp xếp lại, chọn ai chạy từng bước. Phần đánh giá bên trong đi kèm với preset đã được sao chép.",
+    "startFrom": "Bắt đầu từ",
+    "create": "Tạo quy trình",
+    "rename": "Đổi tên",
+    "renameTitle": "Đổi tên quy trình",
+    "renameDescription": "Ticket và dự án vẫn theo dõi quy trình dưới tên mới.",
+    "deleteTitle": "Xóa quy trình {{name}}?",
+    "deleteDescription": "Nếu dự án đang theo quy trình này, dự án sẽ quay về {{standard}}; ticket nào nêu tên nó sẽ theo quy trình của dự án. Các preset không bị ảnh hưởng. Không thể hoàn tác.",
+    "deleteWorkflow": "Xóa quy trình",
+    "addStep": "Thêm bước",
+    "allIn": "Đã có đủ mọi loại"
+  },
   "workflowGraph": {
     "label": "Quy trình {{label}} cho ticket mức {{complexity}}",
     "complexity": {
@@ -2752,7 +2770,13 @@
     "effort": "Effort",
     "effortHint": "Được truyền đi làm effort của công cụ Agent. {{hint}}.",
     "reviewRuns": "Chạy {{total}} lượt /feature-review riêng biệt mỗi vòng: {{runs}}, mỗi lượt dưới tên agent riêng và không bao giờ thấy phát hiện của lượt kia.",
-    "survival": "<strong>Một vòng đạt khi</strong> {{survival}}."
+    "survival": "<strong>Một vòng đạt khi</strong> {{survival}}.",
+    "inThisWorkflow": "Trong quy trình này",
+    "removeStep": "Bỏ bước",
+    "takesOut": "Bỏ {{step}} khỏi quy trình này. Thêm lại từ \"Thêm bước\" phía trên biểu đồ.",
+    "alwaysFirst": "Bước {{step}} luôn là bước đầu tiên nên không thể bỏ.",
+    "alwaysLast": "Bước {{step}} luôn là bước cuối cùng nên không thể bỏ.",
+    "lockedStep": "Bước {{step}} đã bị khóa nên không thể bỏ."
   },
   "workflowPage": {
     "title": "Quy trình",
@@ -2767,7 +2791,16 @@
     "reset": "Đặt lại",
     "sectionLabel": "Quy trình {{label}}",
     "projects": "của dự án",
-    "summary_other": "{{count}} bước cho ticket mức {{complexity}} · review: {{rounds}}"
+    "summary_other": "{{count}} bước cho ticket mức {{complexity}} · review: {{rounds}}",
+    "summaryNoReview_other": "{{count}} bước cho ticket {{complexity}} · không có rà soát",
+    "created": "Đã tạo quy trình",
+    "renamed": "Đã đổi tên",
+    "deleted": "Đã xóa quy trình",
+    "resetBodyCustom": "Các bước, thứ tự, công tắc, mức nỗ lực, agent của Team và vòng đánh giá sẽ trở về như khi quy trình {{label}} được tạo. Tên giữ nguyên, các quy trình khác vẫn giữ những thay đổi của chúng.",
+    "fellBack": "Quy trình mà dự án theo dõi đã bị xóa nên giờ dự án theo {{standard}}. Các ticket từng nêu tên nó theo quy trình của dự án. Giữ {{standard}} để đóng thông báo này, hoặc chọn quy trình khác bên dưới rồi bấm Dùng quy trình này.",
+    "notOwn": "Quy trình này không thuộc dự án (có thể đã bị xóa) nên hiển thị quy trình của chính dự án.",
+    "keepStandard": "Giữ {{label}}",
+    "customNote": "Quy trình riêng của bạn, sao chép từ {{base}}. Thêm bước thuộc các loại đã liệt kê, bỏ những bước không bị khóa, và di chuyển chúng trong giới hạn mỗi bước cho phép. Phần đánh giá bên trong (các giai đoạn và việc chúng chạy) đi kèm với {{base}}."
   },
   "workflowPresets": {
     "group": "Preset quy trình",
@@ -2790,7 +2823,14 @@
     "maximum": {
       "label": "Tối đa",
       "description": "Kỹ lưỡng cộng thêm một spec thứ hai độc lập, một lượt review đầy đủ thứ hai của mỗi vòng bởi một agent khác không bao giờ thấy lượt đầu, và effort cao cho mọi agent."
-    }
+    },
+    "content": {
+      "label": "Nội dung",
+      "description": "Nhận việc, một bản nháp được soạn và tự kiểm tra, các vòng người duyệt bản nháp, tóm tắt và bàn giao: không có spec, PR, CI, preview hay giai đoạn đánh giá."
+    },
+    "custom": "Tùy chỉnh",
+    "copiedFrom": "Của riêng, sao chép từ {{base}}.",
+    "noReview": "không có rà soát"
   },
   "workflowReview": {
     "legend": "Vòng review theo độ phức tạp",
@@ -2805,7 +2845,15 @@
   },
   "workflowSelect": {
     "project": "Quy trình của dự án ({{label}})",
-    "hint": "Quy trình mà agent của nó theo: của riêng dự án, hoặc một trong bốn preset chỉ cho ticket này. Đổi quy trình của dự án không làm đổi ticket đã chọn một quy trình."
+    "hint": "Quy trình mà agent của ticket theo: quy trình riêng của dự án, hoặc một quy trình khác của dự án chỉ dành cho ticket này. Đổi quy trình của dự án không làm thay đổi ticket đã nêu tên một quy trình.",
+    "deleted": "Quy trình đã xóa (theo quy trình của dự án)"
+  },
+  "workflowTags": {
+    "title": "Thẻ chọn quy trình",
+    "empty": "Chưa có thẻ nào chọn quy trình. Agent đặt bảng này qua set_workflow_tags: ticket có một trong các thẻ và không có quy trình riêng sẽ theo quy trình mà thẻ trỏ tới, nếu không thì theo quy trình của dự án.",
+    "tag": "Thẻ",
+    "workflow": "Quy trình",
+    "notOne": "Không thuộc quy trình của dự án"
   },
   "workflowView": {
     "noRounds": "không có vòng review",
@@ -2849,6 +2897,7 @@
       "build": "Cố định: không có gì được giao nếu thay đổi chưa được build.",
       "gate": "Cố định: không thay đổi nào đi tiếp mà chưa được kiểm tra.",
       "intent": "Cố định từ mức vừa: mọi ticket trên mức thấp đều được đối chiếu với lời của chính con người trước khi bàn giao.",
+      "rounds": "Đã khóa: người duyệt xem bản nháp trước khi bàn giao.",
       "always": "Cố định: không có nó thì ticket không thể bàn giao."
     },
     "survival": {

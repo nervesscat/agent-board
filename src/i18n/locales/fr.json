@@ -1,7 +1,9 @@
 {
   "common": {
     "saved": "Enregistré",
-    "close": "Fermer"
+    "close": "Fermer",
+    "cancel": "Annuler",
+    "delete": "Supprimer"
   },
   "loading": {
     "ticket": "Chargement du ticket…",
@@ -2476,8 +2478,6 @@
       "waitingOnYou": "Vous attend {{since}} · {{agent}}",
       "reviewPr": "Revoir la PR #{{number}} {{title}}",
       "prBy": "par {{author}} · mise à jour {{ago}}",
-      "newReplies_one": "{{count}} nouvelle · ",
-      "newReplies_other": "{{count}} nouvelles · ",
       "blocked": "bloqué",
       "instructionsChanged": "Instructions du projet modifiées",
       "changedBy": "par <actor/>",
@@ -2485,7 +2485,9 @@
       "revertTip": "Remettre les instructions comme elles étaient avant cette modification",
       "revertBlockedTip": "Les instructions ont changé depuis : annulez d’abord la modification suivante",
       "revert": "Annuler",
-      "last": "dernière"
+      "last": "dernière",
+      "newReplies_one": "{{count}} nouvelle · ",
+      "newReplies_other": "{{count}} nouvelles · "
     },
     "lost": {
       "title": "Contact perdu",
@@ -2720,7 +2722,8 @@
     "workflowOwn": "Suit le workflow {{workflow}}, défini sur ce ticket.",
     "workflowProject": "Suit le workflow du projet ({{workflow}}).",
     "workflowSteps": "Voir les étapes",
-    "lanesProgress": "{{done}}/{{total}} terminées"
+    "lanesProgress": "{{done}}/{{total}} terminées",
+    "workflowDeleted": "Le workflow défini sur ce ticket a été supprimé, il suit donc celui du projet ({{workflow}})."
   },
   "complexity": {
     "label": {
@@ -2793,6 +2796,21 @@
     "changed": "modifiée",
     "changedTip": "Modifiée par rapport au préréglage : {{what}}"
   },
+  "workflowCustom": {
+    "name": "Nom",
+    "new": "Nouveau workflow",
+    "newDescription": "Une copie d’un workflow de ce projet que vous modifiez à part : ajoutez et retirez des étapes, réordonnez-les, choisissez qui exécute chacune. La revue qu’il contient vient du préréglage dont il a été copié.",
+    "startFrom": "Partir de",
+    "create": "Créer le workflow",
+    "rename": "Renommer",
+    "renameTitle": "Renommer le workflow",
+    "renameDescription": "Les tickets et le projet continuent de le suivre sous son nouveau nom.",
+    "deleteTitle": "Supprimer le workflow {{name}} ?",
+    "deleteDescription": "Si le projet le suit, il revient à {{standard}}, et un ticket qui le nomme suit à la place le workflow du projet. Les préréglages ne sont pas touchés. Cette action est irréversible.",
+    "deleteWorkflow": "Supprimer le workflow",
+    "addStep": "Ajouter une étape",
+    "allIn": "Toutes les étapes sont déjà là"
+  },
   "workflowGraph": {
     "label": "Workflow {{label}} pour un ticket de complexité {{complexity}}",
     "complexity": {
@@ -2834,7 +2852,13 @@
     "effort": "Effort",
     "effortHint": "Transmis comme effort de l’outil Agent. {{hint}}.",
     "reviewRuns": "Lance {{total}} exécutions /feature-review distinctes à chaque tour : {{runs}}, chacune sous son propre nom d’agent, sans jamais voir les constats de l’autre.",
-    "survival": "<strong>Un tour est validé quand</strong> {{survival}}."
+    "survival": "<strong>Un tour est validé quand</strong> {{survival}}.",
+    "inThisWorkflow": "Dans ce workflow",
+    "removeStep": "Retirer l’étape",
+    "takesOut": "Retirez {{step}} de ce workflow. Ajoutez-la de nouveau depuis Ajouter une étape au-dessus du graphe.",
+    "alwaysFirst": "L’étape {{step}} est toujours la première, elle ne peut donc pas être retirée.",
+    "alwaysLast": "L’étape {{step}} est toujours la dernière, elle ne peut donc pas être retirée.",
+    "lockedStep": "L’étape {{step}} est verrouillée, elle ne peut donc pas être retirée."
   },
   "workflowPage": {
     "title": "Workflow",
@@ -2850,7 +2874,17 @@
     "sectionLabel": "Workflow {{label}}",
     "projects": "du projet",
     "summary_one": "{{count}} étape pour un ticket de complexité {{complexity}} · revue : {{rounds}}",
-    "summary_other": "{{count}} étapes pour un ticket de complexité {{complexity}} · revue : {{rounds}}"
+    "summary_other": "{{count}} étapes pour un ticket de complexité {{complexity}} · revue : {{rounds}}",
+    "summaryNoReview_one": "{{count}} étape pour un ticket {{complexity}} · sans revue",
+    "summaryNoReview_other": "{{count}} étapes pour un ticket {{complexity}} · sans revue",
+    "created": "Workflow créé",
+    "renamed": "Renommé",
+    "deleted": "Workflow supprimé",
+    "resetBodyCustom": "Ses étapes, son ordre, ses interrupteurs, ses efforts, ses agents d’équipe et ses tours de revue reviennent à ceux du workflow {{label}} d’origine. Son nom reste, et les autres workflows gardent ce qui y a été modifié.",
+    "fellBack": "Le workflow suivi par ce projet a été supprimé : il suit maintenant {{standard}}. Les tickets qui le nommaient suivent le workflow du projet. Gardez {{standard}} pour fermer ce message, ou choisissez un autre workflow ci-dessous et cliquez sur Utiliser ce workflow.",
+    "notOwn": "Ce workflow n’appartient pas à ce projet (il a peut-être été supprimé), on affiche donc celui du projet.",
+    "keepStandard": "Garder {{label}}",
+    "customNote": "Votre propre workflow, copié de {{base}}. Ajoutez des étapes des types listés, retirez celles qui ne sont pas verrouillées et déplacez-les dans les limites de chaque étape. La revue qu’il contient (ses phases et ce qu’elles exécutent) vient de {{base}}."
   },
   "workflowPresets": {
     "group": "Préréglages de workflow",
@@ -2874,7 +2908,14 @@
     "maximum": {
       "label": "Maximum",
       "description": "Approfondi plus une seconde spec indépendante, une seconde revue complète de chaque tour par un autre agent qui ne voit jamais la première, et un effort élevé sur chaque agent."
-    }
+    },
+    "content": {
+      "label": "Contenu",
+      "description": "Prise en charge, un brouillon construit et vérifié par lui-même, des tours humains sur le brouillon, le résumé et la remise : pas de spec, pas de PR, CI, preview ni phase de revue."
+    },
+    "custom": "Personnalisé",
+    "copiedFrom": "Le vôtre, copié de {{base}}.",
+    "noReview": "sans revue"
   },
   "workflowReview": {
     "legend": "Tours de revue par complexité",
@@ -2889,7 +2930,15 @@
   },
   "workflowSelect": {
     "project": "Workflow du projet ({{label}})",
-    "hint": "Le workflow que suit son agent : celui du projet, ou l’un des quatre préréglages pour ce seul ticket. Changer le workflow du projet ne déplace pas un ticket qui en nomme un."
+    "hint": "Le workflow que suit son agent : celui du projet, ou un autre workflow du projet pour ce seul ticket. Changer le workflow du projet ne déplace pas un ticket qui en nomme un.",
+    "deleted": "Workflow supprimé (suit celui du projet)"
+  },
+  "workflowTags": {
+    "title": "Étiquettes qui choisissent un workflow",
+    "empty": "Aucune étiquette ne choisit encore de workflow. Les agents définissent cette correspondance avec set_workflow_tags : un ticket avec l’une des étiquettes et sans workflow propre suit le workflow auquel l’étiquette correspond, sinon celui du projet.",
+    "tag": "Étiquette",
+    "workflow": "Workflow",
+    "notOne": "Ne fait pas partie des workflows du projet"
   },
   "workflowView": {
     "noRounds": "aucun tour de revue",
@@ -2934,6 +2983,7 @@
       "build": "Verrouillée : rien n’est livré sans que le changement soit construit.",
       "gate": "Verrouillée : aucun changement ne passe sans contrôle.",
       "intent": "Verrouillée au-dessus de faible : tout ticket au-dessus de faible est comparé aux propres mots de l’humain avant sa remise.",
+      "rounds": "Verrouillé : vous relisez le brouillon avant la remise.",
       "always": "Verrouillée : le ticket ne peut pas être remis sans elle."
     },
     "survival": {

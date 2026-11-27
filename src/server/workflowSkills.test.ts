@@ -5,7 +5,7 @@ import path from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import { COMPLEXITIES } from '#/lib/constants'
-import { WORKFLOW_PRESETS, resolveWorkflow } from '#/lib/workflow'
+import { WORKFLOW_PRESET_DEFS, WORKFLOW_PRESETS, resolveWorkflow } from '#/lib/workflow'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-workflow-skills-'))
@@ -469,6 +469,7 @@ describe('the README documents the workflow (I1)', () => {
       '**Tweakable, per preset.**',
       'the review rounds per complexity (0 to 12)',
       '**Locked steps** cannot be turned off',
+      '**Your own workflows, per project.**',
       "**A ticket's own workflow.**",
       '`workflowPreset`',
       '`get_workflow`',
@@ -496,11 +497,13 @@ describe('the README documents the workflow (I1)', () => {
       .split('\n')
       .filter((l) => l.startsWith('|'))
     const row = (needle: string) => rows.find((l) => l.includes(needle))
-    expect(row('`/api/projects/:id/workflow`')).toContain('{active, team, presets[]}')
+    expect(row('`/api/projects/:id/workflow`')).toContain('{active, fellBack, team, presets[]}')
     expect(row('`/api/projects/:id/workflow/:preset`')).toContain('{order?, steps?, agents?, rounds?}')
     expect(row('`/api/projects/:id/workflow/:preset`')).toContain('`steps`: `{enabled?, effort?}`')
     expect(row('`/api/projects/:id/workflow/:preset`')).not.toContain('instructions?')
     expect(row('`/api/projects/:id/workflow/effective?ticketId=`')).toContain('get_workflow')
+    expect(row('`/api/projects/:id/workflow/custom`')).toContain('`{name, from}`')
+    expect(row('`/api/projects/:id/workflow/custom/:workflowId`')).toContain('renames')
     expect(row('`workflowPreset` on GET `/api/projects/:id`')).toBeDefined()
     expect(
       rows.find((l) => l.includes('`/api/projects/:id/tickets`') && l.includes('`/api/tickets/:id`')),
@@ -793,8 +796,7 @@ describe('a step runs the Team agent the workflow names (B9, B11, B14)', () => {
       "brief its subagent with the instructions of `acme-dev` (`get_project` -> `agents`) and, besides them, only what the intent step lists: the human's own words and the result",
     )
     expect(text).toContain('Brief it with only two things besides them')
-    const intent = flat(read(skillDir, 'workflow', 'intent.md'))
-    expect(intent).toContain("Never give it the builder's plan, the spec, the review's findings")
+    expect(text).toContain("Never give it the builder's plan, the spec, the review's findings")
   })
 
   it('has spans, run reports and agentName named by the role, never by the picked agent (B11)', async () => {
@@ -1040,7 +1042,7 @@ describe('a step runs the Team agent the workflow names (B9, B11, B14)', () => {
   })
 
   it('serves the review step as the skill the ticket agent runs itself, with no Team agent of its own (C2)', async () => {
-    for (const preset of WORKFLOW_PRESETS)
+    for (const preset of WORKFLOW_PRESETS.filter((p) => WORKFLOW_PRESET_DEFS[p].steps.includes('review')))
       for (const complexity of ['mid', 'high', 'max']) {
         const text = await workflowText(preset, complexity)
         const at = `${preset}/${complexity}`

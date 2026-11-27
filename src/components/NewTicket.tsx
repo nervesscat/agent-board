@@ -32,7 +32,6 @@ import { errorMessage, post, type Ticket, type TicketFull } from '#/lib/api'
 import { DEFAULT_COMPLEXITY, type Complexity } from '#/lib/constants'
 import { hasGitSide } from '#/lib/kinds'
 import { useProject } from '#/lib/project'
-import { DEFAULT_WORKFLOW_PRESET, type WorkflowPresetId } from '#/lib/workflow'
 import { newTicketStage } from '#/lib/stages'
 import { addTags, overTagLimits } from '#/lib/tags'
 import { addTasks } from '#/lib/tasks'
@@ -86,7 +85,7 @@ export function NewTicket({
   const [stage, setStage] = useState('')
   const [complexity, setComplexity] = useState<Complexity>(DEFAULT_COMPLEXITY)
   // The ticket's own workflow; none follows the project's.
-  const [workflow, setWorkflow] = useState<WorkflowPresetId | null>(null)
+  const [workflow, setWorkflow] = useState<string | null>(null)
   // Sent as the stage's key: the kind `open` would resolve to To do. None until the stages have loaded.
   const status = parent ? undefined : stage || newTicketStage(project?.stages ?? [])?.key
   // A ticket waits for its stage, so that leaving it alone always means Backlog.
@@ -348,15 +347,15 @@ export function NewTicket({
             {/* A lane follows its parent's workflow; the workflow module is for projects with a git side. It goes under
                 Stage and Complexity, in the room Tags' suggestions leave beside them, so it adds no row. */}
             {hasWorkflow && (
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <Label htmlFor="workflow">{t('newTicket.workflow')}</Label>
                 <WorkflowSelect
                   id="workflow"
+                  projectId={projectId}
                   value={workflow}
-                  projectPreset={project?.workflowPreset ?? DEFAULT_WORKFLOW_PRESET}
                   onChange={setWorkflow}
                   size="default"
-                  className="w-full"
+                  className="w-full min-w-0"
                 />
               </div>
             )}

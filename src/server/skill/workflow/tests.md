@@ -3,7 +3,7 @@ author of the code alone.
 
 Start the agent this step names, briefed as for the build step (its Agent line's Team agent and that
 agent's `instructions`, the project's `instructions`, the ticket's context, {{if spec}}`WORKDIR/01-spec.md`, {{end}}the worktree and branch, the scoped
-check commands, the **Local test flags** and the test slots' rule). {{if !spec}}When the workflow lists the spec step as skipped for the ticket there is no `WORKDIR/01-spec.md`: the
+check commands, the **Local test flags** and the test slots' rule). {{if !spec}}When the workflow runs no spec step for the ticket (it is skipped, turned off or not part of it) there is no `WORKDIR/01-spec.md`: the
 ticket's instructions and the acceptance criteria you wrote from them are the spec, as in the build step.{{end}}
 The change to the brief:
 

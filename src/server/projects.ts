@@ -4,6 +4,12 @@ import { and, asc, count, eq, isNull, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db, schema } from '#/db'
+import {
+  DEFAULT_WORKFLOW_PRESET,
+  isWorkflowPreset,
+  readCustomWorkflows,
+  readWorkflowTags,
+} from '#/lib/workflow'
 import { cleanKinds, DEFAULT_KINDS, hasGitSide, KINDS, type Kind, presetPhases } from '#/lib/kinds'
 import { LAYOUT_AREAS, LAYOUT_ELEMENTS, mergeLayout } from '#/lib/layout'
 import {
@@ -44,10 +50,19 @@ export const BUILT_IN_PHASES: readonly string[] = [
  * A project as it is handed out: `defaultPhases` is the list in effect and `layout` the layout in
  * effect (what was saved merged with the elements there are now), never null. A project it saved
  * no list for gets its kinds' preset (`#/lib/kinds`): the built-in list when it has software.
+ * `workflowPreset` is the workflow in effect: a stored id whose custom workflow was deleted reads as Standard
+ * (the stored id stays in the row), and `workflowFellBack` names that id, null while the stored one stands.
  */
-function withPhases<T extends Pick<schema.Project, 'defaultPhases' | 'layout' | 'kinds'>>(p: T) {
+function withPhases<
+  T extends Pick<schema.Project, 'defaultPhases' | 'layout' | 'kinds' | 'workflowPreset' | 'workflowCustom'>,
+>(p: T) {
+  const stored = p.workflowPreset
+  const stands =
+    isWorkflowPreset(stored) || readCustomWorkflows(p.workflowCustom).some((c) => c.id === stored)
   return {
     ...p,
+    workflowPreset: stands ? stored : DEFAULT_WORKFLOW_PRESET,
+    workflowFellBack: stands ? null : { id: stored },
     defaultPhases: p.defaultPhases ?? presetPhases(p.kinds) ?? [...BUILT_IN_PHASES],
     layout: mergeLayout(p.layout),
   }
@@ -107,6 +122,8 @@ export function getProjectFull(id: number) {
     // Where the work of a project with no git side is kept: a plain folder, no repo.
     workFolder: hasGitSide(project.kinds) ? null : ensureProjectWorkFolder(id),
     usedTags: usedTags(tickets.map((t) => t.tags)),
+    // The tag map that picks a ticket's workflow by its tags (set by agents: set_workflow_tags).
+    workflowTags: readWorkflowTags(project.workflowTags),
     tagWeek: recentTagCounts(tickets, new Date()),
     repos: listRepos(id),
     stages: listStages(id),

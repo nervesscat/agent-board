@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next'
 import { Skeleton } from '#/components/ui/skeleton'
 import { errorMessage, get, type WorkflowEffective } from '#/lib/api'
 import type { Complexity } from '#/lib/constants'
-import type { WorkflowPresetId } from '#/lib/workflow'
 
 /** The query key of the text for a preset and complexity: a save drops all of them. */
 export const readsKey = (projectId: string) => ['workflow-text', projectId] as const
@@ -22,7 +21,7 @@ export function WhatAgentsRead({
   complexity,
 }: {
   projectId: string
-  preset: WorkflowPresetId
+  preset: string
   complexity: Complexity
 }) {
   const { t } = useTranslation()

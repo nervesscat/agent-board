@@ -7,6 +7,8 @@ import {
   groupSubSteps,
   lockReasonText,
   moveReason,
+  reviewHeaderText,
+  reviewRoundsLine,
   roundsText,
   skipText,
   survivalText,
@@ -20,6 +22,14 @@ describe('how the graph words things', () => {
     expect(roundsText(0)).toBe('no review rounds')
     expect(roundsText(1)).toBe('1 round')
     expect(roundsText(10)).toBe('10 rounds')
+  })
+
+  it('says no review, not round counts, for a workflow with no review step', () => {
+    const rounds = [0, 1, 3, 10]
+    expect(reviewRoundsLine(['claim', 'review', 'handoff'], rounds)).toBe('review rounds 0 / 1 / 3 / 10')
+    expect(reviewRoundsLine(['claim', 'handoff'], rounds)).toBe('no review')
+    expect(reviewHeaderText(['claim', 'review', 'handoff'], 3)).toBe('review: 3 rounds')
+    expect(reviewHeaderText(['claim', 'handoff'], 3)).toBe('no review')
   })
 
   it('writes an effort chip: an explicit effort as it is, auto with the level it comes to', () => {
@@ -67,7 +77,10 @@ describe('the sentences the page shows of the resolved workflow', () => {
     for (const preset of WORKFLOW_PRESETS)
       for (const complexity of COMPLEXITIES)
         for (const tweak of [null, { steps: { intent: { enabled: false } } }]) {
-          const review = step(resolveWorkflow(preset, tweak, complexity), 'review').review!
+          // Content has no review round (its rounds are the human's): there is no review to say.
+          const found = step(resolveWorkflow(preset, tweak, complexity), 'review')
+          if (!found) continue
+          const review = found.review!
           expect(survivalText(preset, review)).toBe(review.survival)
         }
   })

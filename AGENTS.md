@@ -414,7 +414,7 @@ short message shape with the numbered list of what needs the human. Its line is
    rounds and their phases, the intent check, the push, the PR, the hand-off), the review rounds a ticket
    gets for its complexity and each step's effort are the project's workflow, which the board serves:
    `get_workflow` with the ticket's id. The human sets it on the project's Workflow page; a ticket may
-   name its own preset (`workflowPreset`); an agent changes neither. Run exactly the steps it lists, in
+   name its own workflow (`workflowPreset`: a preset or one of the project's own custom workflows, which `get_workflow` serves like a preset; one the human deleted falls back to the project's); an agent changes neither. Run exactly the steps it lists, in
    its order, each as its text says; a workflow change made while you work is read at your next
    relaunch. Each step that runs an agent names the Team agent that runs it: brief it with that agent's
    instructions from `get_project` (written on the Team page, never in the workflow). None is skipped because findings look obvious, the change looks small or a finding was

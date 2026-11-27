@@ -470,6 +470,20 @@
       "when": 1795474710106,
       "tag": "0066_drop_workflow_instruction_edits",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "6",
+      "when": 1795474720000,
+      "tag": "0067_project_custom_workflows",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "6",
+      "when": 1795474730000,
+      "tag": "0068_project_workflow_tags",
+      "breakpoints": true
     }
   ]
 }

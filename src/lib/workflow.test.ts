@@ -9,6 +9,13 @@ import {
   WORKFLOW_PRESET_DEFS,
   WORKFLOW_STEPS,
   WORKFLOW_STEP_IDS,
+  WORKFLOW_TAGS_MAX,
+  addStep,
+  addableSteps,
+  applyTagPatch,
+  customOrderProblem,
+  pickWorkflow,
+  readWorkflowTags,
   type PresetTweak,
   type WorkflowPresetId,
   type WorkflowStepId,
@@ -47,8 +54,8 @@ const STANDARD = [
 ]
 
 describe('the catalogue and the presets (A1)', () => {
-  it('has the four presets with a label and a one-line description', () => {
-    expect([...WORKFLOW_PRESETS]).toEqual(['light', 'standard', 'thorough', 'maximum'])
+  it('has the five presets with a label and a one-line description', () => {
+    expect([...WORKFLOW_PRESETS]).toEqual(['light', 'standard', 'thorough', 'maximum', 'content'])
     for (const id of WORKFLOW_PRESETS) {
       const p = WORKFLOW_PRESET_DEFS[id]
       expect(p.label).toBe(id[0]!.toUpperCase() + id.slice(1))
@@ -74,6 +81,7 @@ describe('the catalogue and the presets (A1)', () => {
       'claim',
       'build',
       'gate',
+      'rounds',
       'push',
       'pr',
       'summary',
@@ -608,7 +616,8 @@ describe('the effort (A11)', () => {
     const w = resolveWorkflow('standard', tweak, 'low')
     expect(w.steps.find((s) => s.id === 'build')!.effortLevel).toBe('high')
     expect(w.steps.find((s) => s.id === 'build')!.edited.effort).toBe(true)
-    for (const preset of WORKFLOW_PRESETS)
+    // Content has no intent check: every other preset keeps it at low.
+    for (const preset of WORKFLOW_PRESETS.filter((p) => WORKFLOW_PRESET_DEFS[p].steps.includes('intent')))
       for (const level of COMPLEXITIES)
         expect(
           resolveWorkflow(preset, undefined, level).steps.find((s) => s.id === 'intent')!.effortLevel,
@@ -715,5 +724,160 @@ describe('what the human edited', () => {
     const tweak: PresetTweak = { rounds: { mid: 5 } }
     expect(resolveWorkflow('thorough', tweak).rounds.mid).toBe(5)
     expect(resolveWorkflow('thorough').rounds.mid).toBe(2)
+  })
+})
+
+describe('the Content preset (A6, A10, A11, A14)', () => {
+  const CONTENT = ['claim', 'build', 'gate', 'rounds', 'summary', 'handoff']
+
+  it('has the steps claim, build, gate, human rounds, summary and hand-off, and no review, preview, CI or code delivery', () => {
+    expect(ids('content')).toEqual(CONTENT)
+    expect(WORKFLOW_PRESET_DEFS.content.pickable).toBe(false)
+    for (const complexity of COMPLEXITIES) {
+      expect(resolveWorkflow('content', undefined, complexity).steps.some((s) => s.id === 'review')).toBe(
+        false,
+      )
+      expect(runs('content', complexity)).toEqual({})
+    }
+  })
+
+  it('locks the human rounds on and gives them no effort, no span and no review budget', () => {
+    const rounds = WORKFLOW_STEPS.rounds
+    expect([rounds.agent, rounds.lock, rounds.span, rounds.handoff.length > 20]).toEqual([
+      'you',
+      'always',
+      null,
+      true,
+    ])
+    const step = resolveWorkflow('content', undefined, 'high').steps.find((s) => s.id === 'rounds')!
+    expect([step.effort, step.skipped, step.enabled]).toEqual([null, null, true])
+  })
+
+  it('is not offered as an addable step to any workflow, Content included', () => {
+    expect(addableSteps(WORKFLOW_PRESET_DEFS.standard.steps)).not.toContain('rounds')
+    expect(addableSteps([...WORKFLOW_PRESET_DEFS.content.steps])).not.toContain('rounds')
+    expect(addStep(WORKFLOW_PRESET_DEFS.standard.steps, 'rounds')).toEqual({
+      ok: false,
+      reason: 'rounds is part of its preset and cannot be added',
+    })
+  })
+
+  it('keeps the locked steps of a copy of Standard without asking for the human rounds it does not have', () => {
+    expect(customOrderProblem([...WORKFLOW_PRESET_DEFS.standard.steps])).toBe(null)
+    expect(customOrderProblem([...CONTENT], WORKFLOW_PRESET_DEFS.content.steps)).toBe(null)
+    expect(
+      customOrderProblem(
+        CONTENT.filter((id) => id !== 'rounds'),
+        WORKFLOW_PRESET_DEFS.content.steps,
+      ),
+    ).toBe('rounds is locked: it cannot be removed')
+  })
+})
+
+describe('the tag map (A3, A6)', () => {
+  const VALID = ['light', 'standard', 'thorough', 'maximum', 'content', 'custom-abcdef12']
+
+  it('refuses a patch longer than the map holds before reading it, so its cost stays linear', () => {
+    const big: Record<string, string> = {}
+    for (let i = 0; i < WORKFLOW_TAGS_MAX + 1; i++) big[`tag${i}`] = 'light'
+    const r = applyTagPatch({}, big, VALID)
+    expect(r).toEqual({ ok: false, errors: [`tags: a patch names at most ${WORKFLOW_TAGS_MAX} tags`] })
+  })
+
+  it('refuses a tag named __proto__ instead of reporting it saved', () => {
+    const r = applyTagPatch({}, JSON.parse('{"__proto__":"light","Brand":"content"}'), VALID)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.errors.join('; ')).toContain('"__proto__" is not a tag name')
+  })
+
+  it('stores a patch: a key sets its tag, null removes it, the tags it does not name stay', () => {
+    const first = applyTagPatch({}, { Brand: 'light', UI: 'content' }, VALID)
+    expect(first).toEqual({ ok: true, tags: { Brand: 'light', UI: 'content' } })
+    const next = applyTagPatch(first.ok ? first.tags : {}, { LinkedIn: 'light', UI: null }, VALID)
+    expect(next).toEqual({ ok: true, tags: { Brand: 'light', LinkedIn: 'light' } })
+  })
+
+  it('trims a tag, and keeps the stored spelling of a tag the map already has in any casing', () => {
+    const r = applyTagPatch({ Brand: 'light' }, { '  brand ': 'content', ' Security ': 'standard' }, VALID)
+    expect(r).toEqual({ ok: true, tags: { Brand: 'content', Security: 'standard' } })
+    const cased = applyTagPatch({}, { '  Design  ': 'light' }, VALID)
+    expect(cased).toEqual({ ok: true, tags: { Design: 'light' } })
+  })
+
+  it('refuses each bad case, naming it, and applies none of the patch', () => {
+    const stored = { Brand: 'light' }
+    const long = 'x'.repeat(41)
+    const many = Object.fromEntries(Array.from({ length: WORKFLOW_TAGS_MAX }, (_, i) => [`t${i}`, 'light']))
+    const cases: [unknown, RegExp][] = [
+      [{ '   ': 'light' }, /must be 1 to 40 characters/],
+      [{ [long]: 'light' }, /must be 1 to 40 characters/],
+      [{ UI: 'nope' }, /give null or one of light, standard/],
+      [{ UI: 5 }, /give null or one of/],
+      [{ UI: 'light', ui: 'content' }, /"ui" is given twice/],
+      [{ UI: 'light', Brand: 'nope' }, /"Brand" maps to "nope"/],
+      ['not a map', /an object of tag -> workflow id/],
+    ]
+    for (const [patch, error] of cases) {
+      const r = applyTagPatch(stored, patch, VALID)
+      expect(r.ok, JSON.stringify(patch)).toBe(false)
+      if (!r.ok) expect(r.errors.join(' '), JSON.stringify(patch)).toMatch(error)
+    }
+    const full = applyTagPatch(many, { extra: 'light' }, VALID)
+    expect(full.ok).toBe(false)
+    expect(!full.ok && full.errors.join(' ')).toContain(`at most ${WORKFLOW_TAGS_MAX} tags`)
+    expect(applyTagPatch(stored, { UI: 'custom-abcdef12' }, VALID)).toEqual({
+      ok: true,
+      tags: { Brand: 'light', UI: 'custom-abcdef12' },
+    })
+  })
+
+  it('reads a stored map leniently: a tag with no string value is dropped, a dead value stays', () => {
+    expect(readWorkflowTags(null)).toEqual({})
+    expect(readWorkflowTags({ Brand: 'light', '': 'light', Bad: 3, Gone: 'custom-deadbeef00' })).toEqual({
+      Brand: 'light',
+      Gone: 'custom-deadbeef00',
+    })
+  })
+})
+
+describe('which workflow a ticket follows (A6)', () => {
+  const map = { Brand: 'light', UI: 'maximum', Dead: 'custom-deadbeef00' }
+  const live = (id: string) =>
+    id !== 'custom-deadbeef00' && (WORKFLOW_PRESETS as readonly string[]).includes(id)
+  const pick = (own: string | null, tags: string[], tagMap: Record<string, string> | null = map) =>
+    pickWorkflow({ own, tags, tagMap, live, project: 'standard' })
+
+  it('takes the own workflow first, then the first matching tag in the ticket order, then the project', () => {
+    expect(pick('thorough', ['Brand'])).toEqual({ id: 'thorough', source: 'own', tag: null, fellBack: null })
+    expect(pick(null, ['Implementation', 'brand', 'UI'])).toEqual({
+      id: 'light',
+      source: 'tag',
+      tag: 'brand',
+      fellBack: null,
+    })
+    expect(pick(null, ['UI', 'Brand']).id).toBe('maximum')
+    expect(pick(null, ['Implementation'])).toEqual({
+      id: 'standard',
+      source: 'project',
+      tag: null,
+      fellBack: null,
+    })
+    expect(pick(null, [], null)).toEqual({ id: 'standard', source: 'project', tag: null, fellBack: null })
+  })
+
+  it('skips a stale own id and a tag whose workflow is gone, and says which own id it skipped', () => {
+    expect(pick('custom-gone000000', ['UI'])).toEqual({
+      id: 'maximum',
+      source: 'tag',
+      tag: 'UI',
+      fellBack: 'custom-gone000000',
+    })
+    expect(pick('custom-gone000000', ['Dead'])).toEqual({
+      id: 'standard',
+      source: 'project',
+      tag: null,
+      fellBack: 'custom-gone000000',
+    })
+    expect(pick(null, ['Dead', 'UI']).id).toBe('maximum')
   })
 })

@@ -55,6 +55,14 @@ export const autoEffortHint = (): string => shared.t('workflowView.autoEffortHin
 export const roundsText = (rounds: number): string =>
   rounds === 0 ? shared.t('workflowView.noRounds') : shared.t('workflowView.rounds', { count: rounds })
 
+/** The card line's review part: the rounds per level, or that the workflow has no review step at all. */
+export const reviewRoundsLine = (order: readonly string[], rounds: readonly number[]): string =>
+  order.includes('review') ? `review rounds ${rounds.join(' / ')}` : 'no review'
+
+/** The page header's review part: the rounds for the level shown, or that the workflow has no review step. */
+export const reviewHeaderText = (order: readonly string[], rounds: number): string =>
+  order.includes('review') ? `review: ${roundsText(rounds)}` : 'no review'
+
 /** The effort chip of a step: what is set, and with `auto` the level it comes to for the complexity shown. */
 export function effortText(step: Pick<ResolvedStep, 'effort' | 'effortLevel'>): string | null {
   if (step.effort === null) return null
@@ -91,6 +99,8 @@ export function lockReasonText(step: Pick<ResolvedStep, 'id' | 'lock' | 'lockRea
       return shared.t('workflowView.lockReason.gate')
     case 'intent':
       return shared.t('workflowView.lockReason.intent')
+    case 'rounds':
+      return shared.t('workflowView.lockReason.rounds')
     default:
       return step.lock === 'always' ? shared.t('workflowView.lockReason.always') : step.lockReason
   }

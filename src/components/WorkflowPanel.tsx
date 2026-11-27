@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, MousePointerClick, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, MinusCircle, MousePointerClick, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 
@@ -16,7 +16,6 @@ import {
   type ResolvedStep,
   type ResolvedWorkflow,
   type WorkflowEffort,
-  type WorkflowPresetId,
   type WorkflowStepId,
 } from '#/lib/workflow'
 import { defaultAgentName, nodeView, type GraphNode, type NodeView } from '#/lib/workflowGraph'
@@ -40,6 +39,8 @@ export interface WorkflowEdits {
   setRounds: (level: Complexity, rounds: number) => Promise<string | null>
   /** Answers with the reason the move was not saved, or null once it was. */
   move: (id: WorkflowStepId, direction: 'up' | 'down') => Promise<string | null>
+  /** Takes the step out of the workflow; only a custom workflow has steps to remove. */
+  remove?: (id: WorkflowStepId) => void
 }
 
 /** The picker's entry for "no pick": it stands for the default. A name no Team agent can have. */
@@ -304,7 +305,7 @@ function StepSettings({
   const { t } = useTranslation()
   const body = useRef<HTMLDivElement>(null)
   // After a move the step is somewhere else in the list: the keyboard stays on the button that moved it.
-  const moved = useRef<{ id: string; direction: 'up' | 'down'; preset: WorkflowPresetId } | null>(null)
+  const moved = useRef<{ id: string; direction: 'up' | 'down'; preset: string } | null>(null)
   const order = workflow.order.join()
   useLayoutEffect(() => {
     const target = moved.current
@@ -357,7 +358,38 @@ function StepSettings({
           </p>
         )}
       </section>
+      {edits.remove && <RemoveStep step={step} onRemove={() => edits.remove?.(step.id)} />}
     </div>
+  )
+}
+
+/**
+ * Takes a step out of a custom workflow. A step with a lock cannot go, and says so: the lock's own reason is
+ * already shown under its switch. The kind can be added again from the page's Add a step list.
+ */
+function RemoveStep({ step, onRemove }: { step: ResolvedStep; onRemove: () => void }) {
+  const { t } = useTranslation()
+  const removable = step.lock === null && step.id !== 'claim' && step.id !== 'handoff'
+  return (
+    <section className="space-y-1.5">
+      <h3 className="text-xs font-medium text-muted-foreground">{t('workflowPanel.inThisWorkflow')}</h3>
+      {removable ? (
+        <>
+          <button type="button" data-remove-step={step.id} className={MOVE_BUTTON} onClick={onRemove}>
+            <MinusCircle className="size-3.5" aria-hidden /> {t('workflowPanel.removeStep')}
+          </button>
+          <p className="text-xs text-muted-foreground">{t('workflowPanel.takesOut', { step: step.label })}</p>
+        </>
+      ) : (
+        <p data-remove-reason className="text-xs text-muted-foreground">
+          {step.id === 'claim'
+            ? t('workflowPanel.alwaysFirst', { step: step.label })
+            : step.id === 'handoff'
+              ? t('workflowPanel.alwaysLast', { step: step.label })
+              : t('workflowPanel.lockedStep', { step: step.label })}
+        </p>
+      )}
+    </section>
   )
 }
 
@@ -514,7 +546,7 @@ function ReviewSettings({
       <p className="text-xs text-muted-foreground">
         <Trans
           i18nKey="workflowPanel.survival"
-          values={{ survival: survivalText(workflow.preset, review) }}
+          values={{ survival: survivalText(workflow.base, review) }}
           components={{ strong: <span className="font-medium" /> }}
         />
       </p>

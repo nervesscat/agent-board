@@ -1,7 +1,9 @@
 {
   "common": {
     "saved": "Zapisano",
-    "close": "Zamknij"
+    "close": "Zamknij",
+    "cancel": "Anuluj",
+    "delete": "Usuń"
   },
   "loading": {
     "ticket": "Wczytywanie: zgłoszenie…",
@@ -55,22 +57,22 @@
     "hoursAgo": "{{count}} godz. temu",
     "daysAgo": "{{count}} d. temu",
     "minutesAgoLong_one": "{{count}} minutę temu",
-    "minutesAgoLong_few": "{{count}} minuty temu",
-    "minutesAgoLong_many": "{{count}} minut temu",
     "minutesAgoLong_other": "{{count}} minuty temu",
     "hoursAgoLong_one": "{{count}} godzinę temu",
-    "hoursAgoLong_few": "{{count}} godziny temu",
-    "hoursAgoLong_many": "{{count}} godzin temu",
     "hoursAgoLong_other": "{{count}} godziny temu",
     "yesterday": "wczoraj",
     "daysAgoLong_one": "{{count}} dzień temu",
-    "daysAgoLong_few": "{{count}} dni temu",
-    "daysAgoLong_many": "{{count}} dni temu",
     "daysAgoLong_other": "{{count}} dnia temu",
     "weeksAgoLong_one": "{{count}} tydzień temu",
+    "weeksAgoLong_other": "{{count}} tygodnia temu",
+    "minutesAgoLong_few": "{{count}} minuty temu",
+    "minutesAgoLong_many": "{{count}} minut temu",
+    "hoursAgoLong_few": "{{count}} godziny temu",
+    "hoursAgoLong_many": "{{count}} godzin temu",
+    "daysAgoLong_few": "{{count}} dni temu",
+    "daysAgoLong_many": "{{count}} dni temu",
     "weeksAgoLong_few": "{{count}} tygodnie temu",
-    "weeksAgoLong_many": "{{count}} tygodni temu",
-    "weeksAgoLong_other": "{{count}} tygodnia temu"
+    "weeksAgoLong_many": "{{count}} tygodni temu"
   },
   "settings": {
     "title": "Ustawienia",
@@ -181,11 +183,11 @@
       "revokeText": "Agent, który go używa, i każdy subagent pracujący pod nim, będą odrzucani od następnego żądania. Wygeneruj polecenia ponownie w Połącz agenta, aby połączyć go z nowym tokenem.",
       "hide": "Ukryj agentów",
       "show_one": "Pokaż {{count}} agenta",
-      "show_few": "Pokaż {{count}} agentów",
-      "show_many": "Pokaż {{count}} agentów",
       "show_other": "Pokaż {{count}} agentów",
       "workingUnder": "Pracuje pod {{token}}",
-      "seen": "widziany {{when}}"
+      "seen": "widziany {{when}}",
+      "show_few": "Pokaż {{count}} agentów",
+      "show_many": "Pokaż {{count}} agentów"
     }
   },
   "devices": {
@@ -199,8 +201,6 @@
     "passkeys": "Klucze dostępu",
     "passkeyMeta": "{{where}} · dodano {{added}} · ostatnio użyty {{used}}",
     "passkeyMetaSessions_one": "{{where}} · dodano {{added}} · ostatnio użyty {{used}} · {{count}} sesja",
-    "passkeyMetaSessions_few": "{{where}} · dodano {{added}} · ostatnio użyty {{used}} · {{count}} sesje",
-    "passkeyMetaSessions_many": "{{where}} · dodano {{added}} · ostatnio użyty {{used}} · {{count}} sesji",
     "passkeyMetaSessions_other": "{{where}} · dodano {{added}} · ostatnio użyty {{used}} · {{count}} sesji",
     "lastLocal": "ostatnio na tym komputerze",
     "revokeAria": "Unieważnij {{name}}",
@@ -210,7 +210,9 @@
     "sessions": "Sesje",
     "thisBrowser": "ta przeglądarka",
     "sessionMeta": "{{where}} · zalogowano {{signedIn}} · widziana {{seen}} · do {{until}}",
-    "signOutAria": "Wyloguj {{name}}, zalogowano {{when}}"
+    "signOutAria": "Wyloguj {{name}}, zalogowano {{when}}",
+    "passkeyMetaSessions_few": "{{where}} · dodano {{added}} · ostatnio użyty {{used}} · {{count}} sesje",
+    "passkeyMetaSessions_many": "{{where}} · dodano {{added}} · ostatnio użyty {{used}} · {{count}} sesji"
   },
   "tailnet": {
     "title": "Inne urządzenia (tailnet)",
@@ -325,8 +327,6 @@
     "intro": "<code>/todo-review</code> prowadzi zgłoszenia z To do aż do przekazania, a <code>/review-queue</code> recenzuje kolejkę PR; oba delegują pracę do tych agentów. <code>/feature-review</code> to recenzja, którą uruchamiają dla każdej zmiany. Jedno polecenie instaluje wszystkie trzy, razem z agentami, w <code>~/.claude</code> (Claude Code; OpenCode też czyta jego skille), zastępując pliki o tej samej nazwie.",
     "placeholderNote": "Zawiera <code>{{placeholder}}</code>, dopóki nie skopiujesz polecenia: wtedy tablica tworzy token pobierania, ważny przez około dziesięć minut, dla każdego polecenia instalacji na tej stronie.",
     "filesInstalled_one": "{{count}} instalowany plik",
-    "filesInstalled_few": "{{count}} instalowane pliki",
-    "filesInstalled_many": "{{count}} instalowanych plików",
     "filesInstalled_other": "{{count}} instalowanego pliku",
     "track": "Śledź",
     "global": "Globalnie",
@@ -356,10 +356,12 @@
     "repoLabel": "{{repo}} w {{project}}",
     "usesGlobal": "Używa instalacji z <code>~/.claude</code>.",
     "differ_one": "Różni się lub brakuje: {{count}} z {{total}} plików",
-    "differ_few": "Różni się lub brakuje: {{count}} z {{total}} plików",
-    "differ_many": "Różni się lub brakuje: {{count}} z {{total}} plików",
     "differ_other": "Różni się lub brakuje: {{count}} z {{total}} plików",
-    "notUpToDate": "Nieaktualne pliki"
+    "notUpToDate": "Nieaktualne pliki",
+    "filesInstalled_few": "{{count}} instalowane pliki",
+    "filesInstalled_many": "{{count}} instalowanych plików",
+    "differ_few": "Różni się lub brakuje: {{count}} z {{total}} plików",
+    "differ_many": "Różni się lub brakuje: {{count}} z {{total}} plików"
   },
   "skillDiff": {
     "description": "Co zmieniłoby polecenie instalacji: linie z - są w zainstalowanej kopii i znikną, linie z + pochodzą z kopii serwowanej przez tablicę. Z pominięciem zakończeń linii.",
@@ -486,8 +488,6 @@
     "moveEarlier": "Przesuń {{name}} wcześniej",
     "moveLater": "Przesuń {{name}} później",
     "tickets_one": "{{count}} zgłoszenie",
-    "tickets_few": "{{count}} zgłoszenia",
-    "tickets_many": "{{count}} zgłoszeń",
     "tickets_other": "{{count}} zgłoszenia",
     "newPlaceholder": "Nowy etap, np. QA",
     "add": "Dodaj etap",
@@ -533,13 +533,15 @@
     "delete": "Usuń {{name}}",
     "deleteTitle": "Usunąć etap {{name}}?",
     "holds_one": "Zawiera {{count}} zgłoszenie (razem ze ścieżkami). Wybierz etap, do którego przejdzie.",
-    "holds_few": "Zawiera {{count}} zgłoszenia (razem ze ścieżkami). Wybierz etap, do którego przejdą.",
-    "holds_many": "Zawiera {{count}} zgłoszeń (razem ze ścieżkami). Wybierz etap, do którego przejdą.",
     "holds_other": "Zawiera {{count}} zgłoszenia (razem ze ścieżkami). Wybierz etap, do którego przejdą.",
     "holdsNone": "Nie ma w nim żadnego zgłoszenia.",
     "moveTo": "Przenieś je do…",
     "cancel": "Anuluj",
-    "deleteConfirm": "Usuń"
+    "deleteConfirm": "Usuń",
+    "tickets_few": "{{count}} zgłoszenia",
+    "tickets_many": "{{count}} zgłoszeń",
+    "holds_few": "Zawiera {{count}} zgłoszenia (razem ze ścieżkami). Wybierz etap, do którego przejdą.",
+    "holds_many": "Zawiera {{count}} zgłoszeń (razem ze ścieżkami). Wybierz etap, do którego przejdą."
   },
   "runsSettings": {
     "title": "Uruchomienia",
@@ -607,8 +609,6 @@
     "mainColumn": "Kolumna główna",
     "sideColumn": "Kolumna boczna",
     "hiddenCount_one": "Ukrytych: {{count}}.",
-    "hiddenCount_few": "Ukrytych: {{count}}.",
-    "hiddenCount_many": "Ukrytych: {{count}}.",
     "hiddenCount_other": "Ukrytych: {{count}}.",
     "reset": "Przywróć domyślne",
     "shown": "Widocznych: {{shown}} z {{total}}",
@@ -673,7 +673,9 @@
         "tasks": "Tu trafiają linki zablokowanych zadań",
         "activity": "Są tu decyzje i wątki, które czekają na ciebie"
       }
-    }
+    },
+    "hiddenCount_few": "Ukrytych: {{count}}.",
+    "hiddenCount_many": "Ukrytych: {{count}}."
   },
   "repoDialog": {
     "newProject": "Nowy projekt…",
@@ -817,12 +819,8 @@
     "region": "Aktywność",
     "empty": "Nic się nie wydarzyło: {{date}}.",
     "actions_one": "{{count}} akcja",
-    "actions_few": "{{count}} akcje",
-    "actions_many": "{{count}} akcji",
     "actions_other": "{{count}} akcji",
     "contributors_one": "od {{count}} współtwórcy",
-    "contributors_few": "od {{count}} współtwórców",
-    "contributors_many": "od {{count}} współtwórców",
     "contributors_other": "od {{count}} współtwórców",
     "contributorsTitle": "Współtwórcy",
     "by": "przez {{names}}",
@@ -831,54 +829,58 @@
     "openReview": "Otwórz wynik recenzji",
     "kind": {
       "ticket_one": "{{count}} zgłoszenie",
-      "ticket_few": "{{count}} zgłoszenia",
-      "ticket_many": "{{count}} zgłoszeń",
       "ticket_other": "{{count}} zgłoszenia",
       "task_one": "{{count}} zadanie",
-      "task_few": "{{count}} zadania",
-      "task_many": "{{count}} zadań",
       "task_other": "{{count}} zadania",
       "update_one": "{{count}} aktualizacja",
-      "update_few": "{{count}} aktualizacje",
-      "update_many": "{{count}} aktualizacji",
       "update_other": "{{count}} aktualizacji",
       "comment_one": "{{count}} komentarz",
-      "comment_few": "{{count}} komentarze",
-      "comment_many": "{{count}} komentarzy",
       "comment_other": "{{count}} komentarza",
       "pr_one": "{{count}} PR",
-      "pr_few": "{{count}} PR-y",
-      "pr_many": "{{count}} PR-ów",
       "pr_other": "{{count}} PR-a",
       "review_one": "{{count}} recenzja",
-      "review_few": "{{count}} recenzje",
-      "review_many": "{{count}} recenzji",
       "review_other": "{{count}} recenzji",
       "workspace_one": "{{count}} obszar roboczy",
-      "workspace_few": "{{count}} obszary robocze",
-      "workspace_many": "{{count}} obszarów roboczych",
       "workspace_other": "{{count}} obszaru roboczego",
       "agent_one": "{{count}} agent",
-      "agent_few": "{{count}} agenci",
-      "agent_many": "{{count}} agentów",
       "agent_other": "{{count}} agenta",
       "project_one": "{{count}} projekt",
-      "project_few": "{{count}} projekty",
-      "project_many": "{{count}} projektów",
       "project_other": "{{count}} projektu",
       "summary_one": "{{count}} podsumowanie",
-      "summary_few": "{{count}} podsumowania",
-      "summary_many": "{{count}} podsumowań",
       "summary_other": "{{count}} podsumowania",
       "report_one": "{{count}} raport",
-      "report_few": "{{count}} raporty",
-      "report_many": "{{count}} raportów",
       "report_other": "{{count}} raportu",
       "handoff_one": "{{count}} przekazanie",
+      "handoff_other": "{{count}} przekazania",
+      "ticket_few": "{{count}} zgłoszenia",
+      "ticket_many": "{{count}} zgłoszeń",
+      "task_few": "{{count}} zadania",
+      "task_many": "{{count}} zadań",
+      "update_few": "{{count}} aktualizacje",
+      "update_many": "{{count}} aktualizacji",
+      "comment_few": "{{count}} komentarze",
+      "comment_many": "{{count}} komentarzy",
+      "pr_few": "{{count}} PR-y",
+      "pr_many": "{{count}} PR-ów",
+      "review_few": "{{count}} recenzje",
+      "review_many": "{{count}} recenzji",
+      "workspace_few": "{{count}} obszary robocze",
+      "workspace_many": "{{count}} obszarów roboczych",
+      "agent_few": "{{count}} agenci",
+      "agent_many": "{{count}} agentów",
+      "project_few": "{{count}} projekty",
+      "project_many": "{{count}} projektów",
+      "summary_few": "{{count}} podsumowania",
+      "summary_many": "{{count}} podsumowań",
+      "report_few": "{{count}} raporty",
+      "report_many": "{{count}} raportów",
       "handoff_few": "{{count}} przekazania",
-      "handoff_many": "{{count}} przekazań",
-      "handoff_other": "{{count}} przekazania"
-    }
+      "handoff_many": "{{count}} przekazań"
+    },
+    "actions_few": "{{count}} akcje",
+    "actions_many": "{{count}} akcji",
+    "contributors_few": "od {{count}} współtwórców",
+    "contributors_many": "od {{count}} współtwórców"
   },
   "generateReport": {
     "wrote": "claude napisał raport",
@@ -894,8 +896,6 @@
   },
   "pushedToday": {
     "commits_one": "{{count}} commit",
-    "commits_few": "{{count}} commity",
-    "commits_many": "{{count}} commitów",
     "commits_other": "{{count}} commitu",
     "label": "Wypchnięte dziś: {{commits}}, dodanych linii: {{added}}, usuniętych: {{removed}}",
     "labelNone": "Wypchnięte dziś: nic",
@@ -905,7 +905,9 @@
     "notFetched": "origin jeszcze nie pobrany",
     "byRepo": "Wypchnięte dziś wg repozytorium",
     "emptyRepos": "Dziś nic nie trafiło do origin w repozytoriach tego projektu.",
-    "hint": "Commity, które dziś trafiły do gałęzi origin, każdy raz, bez merge'y."
+    "hint": "Commity, które dziś trafiły do gałęzi origin, każdy raz, bez merge'y.",
+    "commits_few": "{{count}} commity",
+    "commits_many": "{{count}} commitów"
   },
   "reportCalendar": {
     "region": "Kalendarz raportów",
@@ -924,8 +926,6 @@
     "replace": "zastąp",
     "post": "opublikuj raport",
     "versions_one": "{{count}} wersja",
-    "versions_few": "{{count}} wersje",
-    "versions_many": "{{count}} wersji",
     "versions_other": "{{count}} wersji",
     "version": "wersja {{n}}",
     "none": "Brak jeszcze raportu za {{label}}.",
@@ -939,7 +939,9 @@
     "attachFirst": "Najpierw dołącz plik raportu",
     "posting": "Publikowanie…",
     "replaceButton": "Zastąp",
-    "postButton": "Opublikuj"
+    "postButton": "Opublikuj",
+    "versions_few": "{{count}} wersje",
+    "versions_many": "{{count}} wersji"
   },
   "reportSettings": {
     "region": "Ustawienia raportów",
@@ -1025,57 +1027,57 @@
   "cleanup": {
     "counts": {
       "deleted_one": "usunięto: {{count}}",
-      "deleted_few": "usunięto: {{count}}",
-      "deleted_many": "usunięto: {{count}}",
       "deleted_other": "usunięto: {{count}}",
       "kept_one": "zachowano: {{count}}",
-      "kept_few": "zachowano: {{count}}",
-      "kept_many": "zachowano: {{count}}",
       "kept_other": "zachowano: {{count}}",
       "gone_one": "już nie istnieje: {{count}}",
+      "gone_other": "już nie istnieje: {{count}}",
+      "deleted_few": "usunięto: {{count}}",
+      "deleted_many": "usunięto: {{count}}",
+      "kept_few": "zachowano: {{count}}",
+      "kept_many": "zachowano: {{count}}",
       "gone_few": "już nie istnieje: {{count}}",
-      "gone_many": "już nie istnieje: {{count}}",
-      "gone_other": "już nie istnieje: {{count}}"
+      "gone_many": "już nie istnieje: {{count}}"
     },
     "actions": {
       "local": {
         "row": "Usuń gałąź",
         "all": "Usuń każdą kwalifikującą się gałąź lokalną",
         "title_one": "Usunąć {{count}} gałąź lokalną?",
-        "title_few": "Usunąć {{count}} gałęzie lokalne?",
-        "title_many": "Usunąć {{count}} gałęzi lokalnych?",
         "title_other": "Usunąć {{count}} gałęzi lokalnej?",
         "confirm_one": "Usuń {{count}} gałąź lokalną",
-        "confirm_few": "Usuń {{count}} gałęzie lokalne",
-        "confirm_many": "Usuń {{count}} gałęzi lokalnych",
         "confirm_other": "Usuń {{count}} gałęzi lokalnej",
-        "what": "Każda gałąź znika z checkoutu. Origin zachowuje swoją kopię."
+        "what": "Każda gałąź znika z checkoutu. Origin zachowuje swoją kopię.",
+        "title_few": "Usunąć {{count}} gałęzie lokalne?",
+        "title_many": "Usunąć {{count}} gałęzi lokalnych?",
+        "confirm_few": "Usuń {{count}} gałęzie lokalne",
+        "confirm_many": "Usuń {{count}} gałęzi lokalnych"
       },
       "remote": {
         "row": "Usuń na origin",
         "all": "Usuń każdą kwalifikującą się gałąź na origin",
         "title_one": "Usunąć {{count}} gałąź na origin?",
-        "title_few": "Usunąć {{count}} gałęzie na origin?",
-        "title_many": "Usunąć {{count}} gałęzi na origin?",
         "title_other": "Usunąć {{count}} gałęzi na origin?",
         "confirm_one": "Usuń {{count}} gałąź na origin",
-        "confirm_few": "Usuń {{count}} gałęzie na origin",
-        "confirm_many": "Usuń {{count}} gałęzi na origin",
         "confirm_other": "Usuń {{count}} gałęzi na origin",
-        "what": "Każda gałąź znika z origin, dla wszystkich, którzy z nią pracują. Gałęzie lokalne zostają."
+        "what": "Każda gałąź znika z origin, dla wszystkich, którzy z nią pracują. Gałęzie lokalne zostają.",
+        "title_few": "Usunąć {{count}} gałęzie na origin?",
+        "title_many": "Usunąć {{count}} gałęzi na origin?",
+        "confirm_few": "Usuń {{count}} gałęzie na origin",
+        "confirm_many": "Usuń {{count}} gałęzi na origin"
       },
       "worktrees": {
         "row": "Usuń worktree i gałąź",
         "all": "Usuń każdy kwalifikujący się worktree razem z gałęzią",
         "title_one": "Usunąć worktree {{count}} gałęzi i samą gałąź?",
-        "title_few": "Usunąć worktree dla gałęzi ({{count}}) i same gałęzie?",
-        "title_many": "Usunąć worktree dla gałęzi ({{count}}) i same gałęzie?",
         "title_other": "Usunąć worktree dla gałęzi ({{count}}) i same gałęzie?",
         "confirm_one": "Usuń worktree i {{count}} gałąź",
-        "confirm_few": "Usuń worktree i {{count}} gałęzie",
-        "confirm_many": "Usuń worktree i {{count}} gałęzi",
         "confirm_other": "Usuń worktree i {{count}} gałęzi",
-        "what": "Każdy folder worktree znika (razem z ignorowanymi plikami, takimi jak node_modules), potem gałąź lokalna. Link w nim znika jako link: folder, do którego prowadzi poza worktree, zostaje. Origin zachowuje swoją kopię."
+        "what": "Każdy folder worktree znika (razem z ignorowanymi plikami, takimi jak node_modules), potem gałąź lokalna. Link w nim znika jako link: folder, do którego prowadzi poza worktree, zostaje. Origin zachowuje swoją kopię.",
+        "title_few": "Usunąć worktree dla gałęzi ({{count}}) i same gałęzie?",
+        "title_many": "Usunąć worktree dla gałęzi ({{count}}) i same gałęzie?",
+        "confirm_few": "Usuń worktree i {{count}} gałęzie",
+        "confirm_many": "Usuń worktree i {{count}} gałęzi"
       }
     },
     "previewState": {
@@ -1086,13 +1088,13 @@
     "copied": "Skopiowano",
     "sweep": {
       "partial_one": "Usunięto {{count}} plik; {{failed}} nie udało się usunąć i zostaje do następnego przebiegu",
-      "partial_few": "Usunięto {{count}} pliki; {{failed}} nie udało się usunąć i zostaje do następnego przebiegu",
-      "partial_many": "Usunięto {{count}} plików; {{failed}} nie udało się usunąć i zostaje do następnego przebiegu",
       "partial_other": "Usunięto {{count}} pliku; {{failed}} nie udało się usunąć i zostaje do następnego przebiegu",
       "done_one": "Usunięto {{count}} plik ({{size}})",
+      "done_other": "Usunięto {{count}} pliku ({{size}})",
+      "partial_few": "Usunięto {{count}} pliki; {{failed}} nie udało się usunąć i zostaje do następnego przebiegu",
+      "partial_many": "Usunięto {{count}} plików; {{failed}} nie udało się usunąć i zostaje do następnego przebiegu",
       "done_few": "Usunięto {{count}} pliki ({{size}})",
-      "done_many": "Usunięto {{count}} plików ({{size}})",
-      "done_other": "Usunięto {{count}} pliku ({{size}})"
+      "done_many": "Usunięto {{count}} plików ({{size}})"
     },
     "toast": {
       "keptSee": "{{counts}}: powody poniżej",
@@ -1136,8 +1138,6 @@
       }
     },
     "workspacesRegistered_one": "{{count}} zarejestrowany obszar roboczy",
-    "workspacesRegistered_few": "{{count}} zarejestrowane obszary robocze",
-    "workspacesRegistered_many": "{{count}} zarejestrowanych obszarów roboczych",
     "workspacesRegistered_other": "{{count}} zarejestrowanego obszaru roboczego",
     "previewStop": "podgląd: {{state}}; zatrzymaj go w zgłoszeniu",
     "notLocal": "nie lokalna",
@@ -1169,15 +1169,15 @@
       "intro": "Pliki przesłane ponad dobę temu, których nic na tablicy nie używa: okno Nowe zgłoszenie zamknięte bez utworzenia, plik usunięty z wpisu przed wysłaniem. Tablica usuwa je co godzinę; pliki młodsze niż doba są nietykane.",
       "introRecent": "Pliki przesłane ponad dobę temu, których nic na tablicy nie używa: okno Nowe zgłoszenie zamknięte bez utworzenia, plik usunięty z wpisu przed wysłaniem. Tablica usuwa je co godzinę; pliki młodsze niż doba są nietykane (teraz: {{recent}}).",
       "summary_one": "{{count}} plik, {{size}}",
-      "summary_few": "{{count}} pliki, {{size}}",
-      "summary_many": "{{count}} plików, {{size}}",
       "summary_other": "{{count}} pliku, {{size}}",
       "deleteNow": "Usuń teraz",
       "confirmTitle": "Usunąć niepodpięte pliki?",
       "confirmText_one": "{{count}} plik ({{size}}), którego nie używa żaden wpis, odpowiedź, zgłoszenie ani obrazek agenta, przesłany ponad dobę temu. Tego nie można cofnąć.",
+      "confirmText_other": "{{count}} pliku ({{size}}), których nie używa żaden wpis, odpowiedź, zgłoszenie ani obrazek agenta, przesłanych ponad dobę temu. Tego nie można cofnąć.",
+      "summary_few": "{{count}} pliki, {{size}}",
+      "summary_many": "{{count}} plików, {{size}}",
       "confirmText_few": "{{count}} pliki ({{size}}), których nie używa żaden wpis, odpowiedź, zgłoszenie ani obrazek agenta, przesłane ponad dobę temu. Tego nie można cofnąć.",
-      "confirmText_many": "{{count}} plików ({{size}}), których nie używa żaden wpis, odpowiedź, zgłoszenie ani obrazek agenta, przesłanych ponad dobę temu. Tego nie można cofnąć.",
-      "confirmText_other": "{{count}} pliku ({{size}}), których nie używa żaden wpis, odpowiedź, zgłoszenie ani obrazek agenta, przesłanych ponad dobę temu. Tego nie można cofnąć."
+      "confirmText_many": "{{count}} plików ({{size}}), których nie używa żaden wpis, odpowiedź, zgłoszenie ani obrazek agenta, przesłanych ponad dobę temu. Tego nie można cofnąć."
     },
     "keep": "Zachowaj",
     "delete": "Usuń",
@@ -1215,7 +1215,9 @@
       "title": "Ostatnie usuwanie",
       "retry": "Ponów dla zachowanych",
       "dismiss": "Zamknij"
-    }
+    },
+    "workspacesRegistered_few": "{{count}} zarejestrowane obszary robocze",
+    "workspacesRegistered_many": "{{count}} zarejestrowanych obszarów roboczych"
   },
   "gallery": {
     "kind": {
@@ -1386,8 +1388,6 @@
       "failed": "Niepowodzenie"
     },
     "notStarted_one": "Nieuruchomione ({{count}}): {{list}}",
-    "notStarted_few": "Nieuruchomione ({{count}}): {{list}}",
-    "notStarted_many": "Nieuruchomione ({{count}}): {{list}}",
     "notStarted_other": "Nieuruchomione ({{count}}): {{list}}",
     "nothingRunning": "Nic nie działało",
     "startAllTip": "Uruchom każde uruchomienie repozytoriów zgłoszenia, które jeszcze nie działa",
@@ -1420,7 +1420,9 @@
     "since": ", od {{time}}",
     "buildLog": "log budowania",
     "runLog": "log działania",
-    "logAria": "Log: {{name}}"
+    "logAria": "Log: {{name}}",
+    "notStarted_few": "Nieuruchomione ({{count}}): {{list}}",
+    "notStarted_many": "Nieuruchomione ({{count}}): {{list}}"
   },
   "previews": {
     "step": {
@@ -1444,12 +1446,8 @@
     "stageTip": "Pokazuje podglądy zgłoszeń w tym etapie",
     "nothingToStop": "Nie ma czego zatrzymać",
     "couldNotStop_one": "nie udało się zatrzymać ({{count}}): {{list}}",
-    "couldNotStop_few": "nie udało się zatrzymać ({{count}}): {{list}}",
-    "couldNotStop_many": "nie udało się zatrzymać ({{count}}): {{list}}",
     "couldNotStop_other": "nie udało się zatrzymać ({{count}}): {{list}}",
     "stoppedCount_one": "Zatrzymano: {{count}}",
-    "stoppedCount_few": "Zatrzymano: {{count}}",
-    "stoppedCount_many": "Zatrzymano: {{count}}",
     "stoppedCount_other": "Zatrzymano: {{count}}",
     "barTip": "Podglądy, które tablica buduje lub uruchamia, we wszystkich projektach, i ile najwyżej uruchamia naraz",
     "bar": "Podglądy tablicy: <strong>w użyciu {{inUse}} z {{limit}}</strong> <muted>(na całej tablicy)</muted>",
@@ -1482,7 +1480,11 @@
     "runBySince": "Uruchomione przez tablicę na :{{port}}, od {{time}}",
     "failed": "Niepowodzenie: {{reason}}",
     "stoppedReason": "Zatrzymano: {{reason}}",
-    "stopAllRuns": "Zatrzymaj wszystkie"
+    "stopAllRuns": "Zatrzymaj wszystkie",
+    "couldNotStop_few": "nie udało się zatrzymać ({{count}}): {{list}}",
+    "couldNotStop_many": "nie udało się zatrzymać ({{count}}): {{list}}",
+    "stoppedCount_few": "Zatrzymano: {{count}}",
+    "stoppedCount_many": "Zatrzymano: {{count}}"
   },
   "previewWindow": {
     "building": "Budowanie… pokaże się tu, gdy ruszy.",
@@ -1590,8 +1592,6 @@
     "remove": "Usuń {{name}}",
     "removeTitle": "Usunąć {{name}}?",
     "removeReserved_one": "Jego {{count}} zarezerwowane zgłoszenie staje się wspólne i nieprzypisane.",
-    "removeReserved_few": "Jego {{count}} zarezerwowane zgłoszenia stają się wspólne i nieprzypisane.",
-    "removeReserved_many": "Jego {{count}} zarezerwowanych zgłoszeń staje się wspólnych i nieprzypisanych.",
     "removeReserved_other": "Jego {{count}} zarezerwowanego zgłoszenia staje się wspólnych i nieprzypisanych.",
     "removeKept": "To, co już opublikował, zachowuje jego nazwę.",
     "keep": "Zachowaj",
@@ -1605,8 +1605,6 @@
     "reportHint": "szablon, który każde uruchomienie wypełnia przed zwróceniem wyniku",
     "nothingYet": "Na razie nic.",
     "lines_one": "{{count}} linia",
-    "lines_few": "{{count}} linie",
-    "lines_many": "{{count}} linii",
     "lines_other": "{{count}} linii",
     "picture": "Obraz",
     "choosePicture": "Wybierz obraz",
@@ -1620,7 +1618,11 @@
     "templateLabel": "Szablon raportu uruchomienia",
     "templateText": "Co uruchomienie tego agenta wypełnia przed zwróceniem wyniku, jeden raport na uruchomienie. Zaczyna się od części wspólnej, którą ma każdy raport (tożsamość, czas, zlecenie, kroki, oceny, problemy, luki); dodaj to, co robi ten agent. Tablica trzyma go razem z agentem.",
     "templatePlaceholder": "## Reguła …",
-    "add": "Dodaj agenta"
+    "add": "Dodaj agenta",
+    "removeReserved_few": "Jego {{count}} zarezerwowane zgłoszenia stają się wspólne i nieprzypisane.",
+    "removeReserved_many": "Jego {{count}} zarezerwowanych zgłoszeń staje się wspólnych i nieprzypisanych.",
+    "lines_few": "{{count}} linie",
+    "lines_many": "{{count}} linii"
   },
   "gettingStarted": {
     "agentEmpty": "Brak projektów. Pierwszy tworzy człowiek w Pierwszych krokach na Starcie.",
@@ -1671,16 +1673,10 @@
     "select": "Wybierz projekt",
     "projects": "Projekty",
     "repos_one": "{{count}} repozytorium",
-    "repos_few": "{{count}} repozytoria",
-    "repos_many": "{{count}} repozytoriów",
     "repos_other": "{{count}} repozytorium",
     "tickets_one": "{{count}} zgłoszenie",
-    "tickets_few": "{{count}} zgłoszenia",
-    "tickets_many": "{{count}} zgłoszeń",
     "tickets_other": "{{count}} zgłoszenia",
     "openPrs_one": "{{count}} otwarty PR",
-    "openPrs_few": "{{count}} otwarte PR-y",
-    "openPrs_many": "{{count}} otwartych PR-ów",
     "openPrs_other": "{{count}} otwartego PR-a",
     "newProject": "Nowy projekt…",
     "manage": "Zarządzaj projektami…",
@@ -1698,7 +1694,13 @@
     "keep": "Zachowaj",
     "delete": "Usuń",
     "noRepos": "brak repozytoriów",
-    "counts": "{{tickets}} · {{openPrs}}"
+    "counts": "{{tickets}} · {{openPrs}}",
+    "repos_few": "{{count}} repozytoria",
+    "repos_many": "{{count}} repozytoriów",
+    "tickets_few": "{{count}} zgłoszenia",
+    "tickets_many": "{{count}} zgłoszeń",
+    "openPrs_few": "{{count}} otwarte PR-y",
+    "openPrs_many": "{{count}} otwartych PR-ów"
   },
   "newTicket": {
     "newTicket": "Nowe zgłoszenie",
@@ -1831,23 +1833,15 @@
     "pushed": "wypchnięte",
     "pushedBehind": "wypchnięte, w tyle o {{count}}",
     "pushedBehindTitle_one": "wypchnięte; origin ma o {{count}} commit więcej",
-    "pushedBehindTitle_few": "wypchnięte; origin ma o {{count}} commity więcej",
-    "pushedBehindTitle_many": "wypchnięte; origin ma o {{count}} commitów więcej",
     "pushedBehindTitle_other": "wypchnięte; origin ma o {{count}} commitu więcej",
     "ahead": "niewypchnięte: {{count}}",
     "aheadTitle_one": "niewypchnięte: {{count}} commit tylko tutaj",
-    "aheadTitle_few": "niewypchnięte: {{count}} commity tylko tutaj",
-    "aheadTitle_many": "niewypchnięte: {{count}} commitów tylko tutaj",
     "aheadTitle_other": "niewypchnięte: {{count}} commitu tylko tutaj",
     "aheadBehindTitle_one": "niewypchnięte: {{count}} commit tylko tutaj; origin ma ponadto commity, których brakuje tej gałęzi: {{behind}}",
-    "aheadBehindTitle_few": "niewypchnięte: {{count}} commity tylko tutaj; origin ma ponadto commity, których brakuje tej gałęzi: {{behind}}",
-    "aheadBehindTitle_many": "niewypchnięte: {{count}} commitów tylko tutaj; origin ma ponadto commity, których brakuje tej gałęzi: {{behind}}",
     "aheadBehindTitle_other": "niewypchnięte: {{count}} commitu tylko tutaj; origin ma ponadto commity, których brakuje tej gałęzi: {{behind}}",
     "localOnly": "nie ma na origin",
     "localOnlyTitle": "niewypchnięte: na origin nie ma takiej gałęzi",
     "localOnlyAheadTitle_one": "niewypchnięte: na origin nie ma takiej gałęzi, {{count}} commit tylko tutaj",
-    "localOnlyAheadTitle_few": "niewypchnięte: na origin nie ma takiej gałęzi, {{count}} commity tylko tutaj",
-    "localOnlyAheadTitle_many": "niewypchnięte: na origin nie ma takiej gałęzi, {{count}} commitów tylko tutaj",
     "localOnlyAheadTitle_other": "niewypchnięte: na origin nie ma takiej gałęzi, {{count}} commitu tylko tutaj",
     "itsBase": "jej baza",
     "merged": "scalone do {{into}}",
@@ -1858,7 +1852,15 @@
     "noneTitle": "nie ma takiej gałęzi tutaj ani na origin",
     "checked": "sprawdzono {{ago}}",
     "notFetched": "origin jeszcze nie pobrany",
-    "fetchNow": "Pobierz origin teraz"
+    "fetchNow": "Pobierz origin teraz",
+    "pushedBehindTitle_few": "wypchnięte; origin ma o {{count}} commity więcej",
+    "pushedBehindTitle_many": "wypchnięte; origin ma o {{count}} commitów więcej",
+    "aheadTitle_few": "niewypchnięte: {{count}} commity tylko tutaj",
+    "aheadTitle_many": "niewypchnięte: {{count}} commitów tylko tutaj",
+    "aheadBehindTitle_few": "niewypchnięte: {{count}} commity tylko tutaj; origin ma ponadto commity, których brakuje tej gałęzi: {{behind}}",
+    "aheadBehindTitle_many": "niewypchnięte: {{count}} commitów tylko tutaj; origin ma ponadto commity, których brakuje tej gałęzi: {{behind}}",
+    "localOnlyAheadTitle_few": "niewypchnięte: na origin nie ma takiej gałęzi, {{count}} commity tylko tutaj",
+    "localOnlyAheadTitle_many": "niewypchnięte: na origin nie ma takiej gałęzi, {{count}} commitów tylko tutaj"
   },
   "clock": {
     "typeTime": "{{label}} (wpisz godzinę)",
@@ -1870,9 +1872,9 @@
   "markdown": {
     "agentChip": "{{name}}, jeden z agentów projektu",
     "pages_one": "{{count}} strona",
+    "pages_other": "{{count}} strony",
     "pages_few": "{{count}} strony",
-    "pages_many": "{{count}} stron",
-    "pages_other": "{{count}} strony"
+    "pages_many": "{{count}} stron"
   },
   "editor": {
     "text": "Tekst",
@@ -2097,12 +2099,8 @@
     },
     "recent": "Ostatnie",
     "notStarted_one": "Nieuruchomione ({{count}}): {{details}}",
-    "notStarted_few": "Nieuruchomione ({{count}}): {{details}}",
-    "notStarted_many": "Nieuruchomione ({{count}}): {{details}}",
     "notStarted_other": "Nieuruchomione ({{count}}): {{details}}",
     "notStopped_one": "Niezatrzymane ({{count}}): {{details}}",
-    "notStopped_few": "Niezatrzymane ({{count}}): {{details}}",
-    "notStopped_many": "Niezatrzymane ({{count}}): {{details}}",
     "notStopped_other": "Niezatrzymane ({{count}}): {{details}}",
     "nothingRunning": "Nic nie działało",
     "createIn": "Utwórz zgłoszenie w {{name}}",
@@ -2129,7 +2127,11 @@
     "toMove": "przesuwa",
     "toOpen": "otwiera",
     "toClose": "zamyka",
-    "anywhere": "wszędzie"
+    "anywhere": "wszędzie",
+    "notStarted_few": "Nieuruchomione ({{count}}): {{details}}",
+    "notStarted_many": "Nieuruchomione ({{count}}): {{details}}",
+    "notStopped_few": "Niezatrzymane ({{count}}): {{details}}",
+    "notStopped_many": "Niezatrzymane ({{count}}): {{details}}"
   },
   "signIn": {
     "finishTitle": "Dokończ konfigurację na hoście",
@@ -2158,30 +2160,20 @@
   "ticketBoard": {
     "stage": "Etap",
     "archiveTip_one": "Zarchiwizuj {{count}} zgłoszenie w {{stage}}",
-    "archiveTip_few": "Zarchiwizuj {{count}} zgłoszenia w {{stage}}",
-    "archiveTip_many": "Zarchiwizuj {{count}} zgłoszeń w {{stage}}",
     "archiveTip_other": "Zarchiwizuj {{count}} zgłoszenia w {{stage}}",
     "archiveAll": "Zarchiwizuj wszystkie",
     "archiveTitle_one": "Zarchiwizować {{count}} zgłoszenie?",
-    "archiveTitle_few": "Zarchiwizować {{count}} zgłoszenia?",
-    "archiveTitle_many": "Zarchiwizować {{count}} zgłoszeń?",
     "archiveTitle_other": "Zarchiwizować {{count}} zgłoszenia?",
     "archiveDescription": "Każde zgłoszenie w {{stage}} znika z tablicy, razem ze swoimi ścieżkami. Zostają w Zarchiwizowanych, gdzie można każde przywrócić, a ich strony nadal się otwierają.",
     "cancel": "Anuluj",
     "archive": "Zarchiwizuj",
     "decisions_one": "wymagana decyzja",
-    "decisions_few": "{{count}} decyzje do podjęcia",
-    "decisions_many": "{{count}} decyzji do podjęcia",
     "decisions_other": "{{count}} decyzji do podjęcia",
     "tasksBlocked_one": "{{count}} zadanie zablokowane",
-    "tasksBlocked_few": "{{count}} zadania zablokowane",
-    "tasksBlocked_many": "{{count}} zadań zablokowanych",
     "tasksBlocked_other": "{{count}} zadania zablokowanego",
     "previousStage": "Poprzedni etap",
     "nextStage": "Następny etap",
     "lanes_one": "{{count}} ścieżka",
-    "lanes_few": "{{count}} ścieżki",
-    "lanes_many": "{{count}} ścieżek",
     "lanes_other": "{{count}} ścieżki",
     "laneStage": "{{count}} {{stage}}",
     "hitInstructions": "Instrukcje",
@@ -2191,12 +2183,20 @@
     "nothingArchived": "Nic nie zarchiwizowano.",
     "archived": "zarchiwizowano {{when}}",
     "archivedBy": "zarchiwizowano {{when}} przez <actor/>",
-    "restore": "Przywróć"
+    "restore": "Przywróć",
+    "archiveTip_few": "Zarchiwizuj {{count}} zgłoszenia w {{stage}}",
+    "archiveTip_many": "Zarchiwizuj {{count}} zgłoszeń w {{stage}}",
+    "archiveTitle_few": "Zarchiwizować {{count}} zgłoszenia?",
+    "archiveTitle_many": "Zarchiwizować {{count}} zgłoszeń?",
+    "decisions_few": "{{count}} decyzje do podjęcia",
+    "decisions_many": "{{count}} decyzji do podjęcia",
+    "tasksBlocked_few": "{{count}} zadania zablokowane",
+    "tasksBlocked_many": "{{count}} zadań zablokowanych",
+    "lanes_few": "{{count}} ścieżki",
+    "lanes_many": "{{count}} ścieżek"
   },
   "ticketList": {
     "archivedToast_one": "Zarchiwizowano {{count}} zgłoszenie",
-    "archivedToast_few": "Zarchiwizowano {{count}} zgłoszenia",
-    "archivedToast_many": "Zarchiwizowano {{count}} zgłoszeń",
     "archivedToast_other": "Zarchiwizowano {{count}} zgłoszenia",
     "restoredToast": "Przywrócono #{{id}} na tablicę",
     "title": "Bieżące funkcje",
@@ -2213,8 +2213,6 @@
     "searchTags": "Szukaj tagów",
     "noTagsMatch": "Żaden tag nie pasuje",
     "tickets_one": "{{count}} zgłoszenie",
-    "tickets_few": "{{count}} zgłoszenia",
-    "tickets_many": "{{count}} zgłoszeń",
     "tickets_other": "{{count}} zgłoszenia",
     "showEveryTag": "Pokaż każdy tag",
     "clearTag": "Wyczyść filtr tagu",
@@ -2223,7 +2221,11 @@
     "retry": "Ponów",
     "searchTickets": "Szukaj zgłoszeń",
     "searchPlaceholder": "Szukaj po nazwie lub wątku",
-    "clearSearchAria": "Wyczyść wyszukiwanie"
+    "clearSearchAria": "Wyczyść wyszukiwanie",
+    "archivedToast_few": "Zarchiwizowano {{count}} zgłoszenia",
+    "archivedToast_many": "Zarchiwizowano {{count}} zgłoszeń",
+    "tickets_few": "{{count}} zgłoszenia",
+    "tickets_many": "{{count}} zgłoszeń"
   },
   "needs": {
     "titleIn": "#{{id}} {{title}}: {{branch}} jest w {{into}}",
@@ -2458,15 +2460,15 @@
       "delegated": "{{on}}, delegowano",
       "clause": "{{agent}} {{parts}}",
       "workBy_one": "Praca {{count}} agenta w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
-      "workBy_few": "Praca {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
-      "workBy_many": "Praca {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
       "workBy_other": "Praca {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
       "activityBy_one": "Aktywność {{count}} agenta w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
-      "activityBy_few": "Aktywność {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
-      "activityBy_many": "Aktywność {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
       "activityBy_other": "Aktywność {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
       "stillGoing": " Wciąż trwa.",
-      "notToScale": " Poza skalą: {{skipped}}."
+      "notToScale": " Poza skalą: {{skipped}}.",
+      "workBy_few": "Praca {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "workBy_many": "Praca {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_few": "Aktywność {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_many": "Aktywność {{count}} agentów w ciągu {{over}}: {{clauses}}.{{live}}{{scale}}"
     },
     "card": {
       "title": "Oś czasu",
@@ -2543,17 +2545,17 @@
     "range": "od {{start}} do teraz",
     "stat": {
       "tickets_one": "zgłoszenie",
-      "tickets_few": "zgłoszenia",
-      "tickets_many": "zgłoszeń",
       "tickets_other": "zgłoszenia",
       "lanes_one": "ścieżka",
-      "lanes_few": "ścieżki",
-      "lanes_many": "ścieżek",
       "lanes_other": "ścieżki",
       "workingNow": "pracuje teraz",
       "blocked": "zablokowane",
       "inReview": "w recenzji",
-      "noWord": "brak wieści"
+      "noWord": "brak wieści",
+      "tickets_few": "zgłoszenia",
+      "tickets_many": "zgłoszeń",
+      "lanes_few": "ścieżki",
+      "lanes_many": "ścieżek"
     },
     "projectWork": "Praca projektu, każde zgłoszenie i ścieżka:",
     "empty": {
@@ -2562,8 +2564,6 @@
       "review": "Żadne zgłoszenie nie czeka na recenzję."
     },
     "lanes_one": "{{count}} ścieżka",
-    "lanes_few": "{{count}} ścieżki",
-    "lanes_many": "{{count}} ścieżek",
     "lanes_other": "{{count}} ścieżki",
     "unassigned": "Nieprzypisane",
     "progress": "gotowe: {{done}} z {{total}}",
@@ -2576,18 +2576,20 @@
       "next": "następne",
       "later": "później",
       "blocked": "zablokowane"
-    }
+    },
+    "lanes_few": "{{count}} ścieżki",
+    "lanes_many": "{{count}} ścieżek"
   },
   "overview": {
     "loadError": "Nie udało się wczytać podsumowania: {{error}}",
     "projectOverview": "{{name}}: przegląd",
     "headline": {
+      "inProgress": "{{count}} w toku",
+      "doneToday": "{{count}} gotowe dziś",
       "waiting_one": "{{count}} czeka na ciebie",
       "waiting_few": "{{count}} czekają na ciebie",
       "waiting_many": "{{count}} czeka na ciebie",
-      "waiting_other": "{{count}} czeka na ciebie",
-      "inProgress": "{{count}} w toku",
-      "doneToday": "{{count}} gotowe dziś"
+      "waiting_other": "{{count}} czeka na ciebie"
     },
     "allHidden": "Każda karta tego przeglądu jest ukryta. <goto>Pokaż je ponownie w ustawieniach układu</goto>.",
     "showFewer": "Pokaż mniej",
@@ -2601,12 +2603,8 @@
     "prTitle": "PR #{{number}} {{title}}",
     "openOnGithub": "Otwórz na GitHubie",
     "option_one": "{{count}} opcja",
-    "option_few": "{{count}} opcje",
-    "option_many": "{{count}} opcji",
     "option_other": "{{count}} opcji",
     "lane_one": "{{count}} ścieżka",
-    "lane_few": "{{count}} ścieżki",
-    "lane_many": "{{count}} ścieżek",
     "lane_other": "{{count}} ścieżki",
     "previewOf": "Podgląd: {{workspace}}",
     "preview": "Podgląd",
@@ -2644,19 +2642,23 @@
       "closedTip": "Scalone lub zamknięte: opuściło kolejkę recenzji",
       "closed": "zamknięto {{time}}",
       "activity_one": "{{count}} zdarzenie dziś: Dzienny",
+      "activity_other": "{{count}} zdarzenia dziś: Dzienny",
       "activity_few": "{{count}} zdarzenia dziś: Dzienny",
-      "activity_many": "{{count}} zdarzeń dziś: Dzienny",
-      "activity_other": "{{count}} zdarzenia dziś: Dzienny"
+      "activity_many": "{{count}} zdarzeń dziś: Dzienny"
     },
     "carryingOver": {
       "title": "Przechodzące",
       "startedTip": "Praca nad tym zaczęła się {{when}}",
       "days_one": "{{count}} dzień w toku",
-      "days_few": "{{count}} dni w toku",
-      "days_many": "{{count}} dni w toku",
       "days_other": "{{count}} dnia w toku",
-      "emptyShown": "Nic zablokowanego ani w recenzji sprzed dzisiaj."
-    }
+      "emptyShown": "Nic zablokowanego ani w recenzji sprzed dzisiaj.",
+      "days_few": "{{count}} dni w toku",
+      "days_many": "{{count}} dni w toku"
+    },
+    "option_few": "{{count}} opcje",
+    "option_many": "{{count}} opcji",
+    "lane_few": "{{count}} ścieżki",
+    "lane_many": "{{count}} ścieżek"
   },
   "notifications": {
     "title": "Powiadomienia",
@@ -2714,8 +2716,6 @@
     "deleteTitle": "Usunąć to zgłoszenie?",
     "deleteBody": "Zadania, aktualizacje, załączniki i wątek znikną razem z nim.",
     "deleteLanes_one": "Ma {{count}} ścieżkę: usuń ją też albo zachowaj i przenieś o poziom wyżej.",
-    "deleteLanes_few": "Ma {{count}} ścieżki: usuń je też albo zachowaj i przenieś o poziom wyżej.",
-    "deleteLanes_many": "Ma {{count}} ścieżek: usuń je też albo zachowaj i przenieś o poziom wyżej.",
     "deleteLanes_other": "Ma {{count}} ścieżki: usuń je też albo zachowaj i przenieś o poziom wyżej.",
     "deleteKeepLanes": "Usuń, zachowaj ścieżki",
     "deleteWithLanes": "Usuń ze ścieżkami",
@@ -2760,8 +2760,6 @@
     "tickedAuto": "Odhaczone automatycznie",
     "blocked": "zablokowane",
     "subtasksBlocked_one": "{{count}} podzadanie zablokowane",
-    "subtasksBlocked_few": "{{count}} podzadania zablokowane",
-    "subtasksBlocked_many": "{{count}} podzadań zablokowanych",
     "subtasksBlocked_other": "{{count}} podzadania zablokowanego",
     "unblock": "Odblokuj {{name}}",
     "markBlockedNamed": "Oznacz {{name}} jako zablokowane",
@@ -2802,8 +2800,6 @@
     "agents": "Agenci",
     "includeLanePosts": "uwzględnij wpisy ścieżek",
     "newCount_one": "nowe: {{count}}",
-    "newCount_few": "nowe: {{count}}",
-    "newCount_many": "nowe: {{count}}",
     "newCount_other": "nowe: {{count}}",
     "newPost": "Nowy wpis",
     "postPlaceholder": "Napisz wpis: pytanie, odpowiedź, postęp. Wklej lub upuść zrzuty ekranu i nagrania.",
@@ -2823,8 +2819,6 @@
     "earlierVersions": "Wcześniejsze wersje",
     "firstVersion": "pierwsza wersja",
     "replies_one": "{{count}} odpowiedź",
-    "replies_few": "{{count}} odpowiedzi",
-    "replies_many": "{{count}} odpowiedzi",
     "replies_other": "{{count}} odpowiedzi",
     "summaryActions": "Akcje podsumowania",
     "hideRepliesLabel": "ukryj odpowiedzi",
@@ -2873,7 +2867,16 @@
     "workflowOwn": "Działa według przepływu pracy {{workflow}}, ustawionego dla tego zgłoszenia.",
     "workflowProject": "Działa według przepływu pracy projektu ({{workflow}}).",
     "workflowSteps": "Zobacz kroki",
-    "lanesProgress": "{{done}}/{{total}} gotowe"
+    "lanesProgress": "{{done}}/{{total}} gotowe",
+    "workflowDeleted": "Przepływ pracy ustawiony dla tego zgłoszenia został usunięty, więc zgłoszenie podąża za przepływem projektu ({{workflow}}).",
+    "deleteLanes_few": "Ma {{count}} ścieżki: usuń je też albo zachowaj i przenieś o poziom wyżej.",
+    "deleteLanes_many": "Ma {{count}} ścieżek: usuń je też albo zachowaj i przenieś o poziom wyżej.",
+    "subtasksBlocked_few": "{{count}} podzadania zablokowane",
+    "subtasksBlocked_many": "{{count}} podzadań zablokowanych",
+    "newCount_few": "nowe: {{count}}",
+    "newCount_many": "nowe: {{count}}",
+    "replies_few": "{{count}} odpowiedzi",
+    "replies_many": "{{count}} odpowiedzi"
   },
   "complexity": {
     "label": {
@@ -2895,8 +2898,6 @@
     "error": "Nie udało się odczytać, kto pracuje.",
     "empty": "Nikt nie pracuje",
     "more_one": "+{{count}} więcej",
-    "more_few": "+{{count}} więcej",
-    "more_many": "+{{count}} więcej",
     "more_other": "+{{count}} więcej",
     "round": "{{phase}}, runda {{round}}",
     "waiting": "Czeka: {{what}}",
@@ -2909,7 +2910,9 @@
       "working": "pracuje",
       "waiting": "czeka",
       "asleep": "śpi"
-    }
+    },
+    "more_few": "+{{count}} więcej",
+    "more_many": "+{{count}} więcej"
   },
   "notificationSettings": {
     "title": "Powiadomienia",
@@ -2926,17 +2929,17 @@
     },
     "snooze": {
       "minutes_one": "{{count}} minuta",
-      "minutes_few": "{{count}} minuty",
-      "minutes_many": "{{count}} minut",
       "minutes_other": "{{count}} minuty",
       "hours_one": "{{count}} godzina",
-      "hours_few": "{{count}} godziny",
-      "hours_many": "{{count}} godzin",
       "hours_other": "{{count}} godziny",
       "days_one": "{{count}} dzień",
+      "days_other": "{{count}} dnia",
+      "minutes_few": "{{count}} minuty",
+      "minutes_many": "{{count}} minut",
+      "hours_few": "{{count}} godziny",
+      "hours_many": "{{count}} godzin",
       "days_few": "{{count}} dni",
-      "days_many": "{{count}} dni",
-      "days_other": "{{count}} dnia"
+      "days_many": "{{count}} dni"
     }
   },
   "workflowChips": {
@@ -2953,6 +2956,21 @@
     "skippedOnLow": "Pomijane przy niskiej",
     "changed": "zmienione",
     "changedTip": "Zmienione względem presetu: {{what}}"
+  },
+  "workflowCustom": {
+    "name": "Nazwa",
+    "new": "Nowy przepływ pracy",
+    "newDescription": "Kopia przepływu pracy tego projektu, którą zmieniasz osobno: dodawaj i usuwaj kroki, zmieniaj ich kolejność, wybieraj, kto wykonuje każdy. Przegląd w środku idzie razem z presetem, z którego został skopiowany.",
+    "startFrom": "Zacznij od",
+    "create": "Utwórz przepływ pracy",
+    "rename": "Zmień nazwę",
+    "renameTitle": "Zmień nazwę przepływu pracy",
+    "renameDescription": "Zgłoszenia i projekt nadal będą go śledzić pod nową nazwą.",
+    "deleteTitle": "Usunąć przepływ pracy {{name}}?",
+    "deleteDescription": "Jeśli projekt go używa, przełączy się na: {{standard}}, a zgłoszenie, które go wskazuje, będzie używać przepływu pracy projektu. Presety pozostają nietknięte. Tej operacji nie można cofnąć.",
+    "deleteWorkflow": "Usuń przepływ pracy",
+    "addStep": "Dodaj krok",
+    "allIn": "Wszystkie rodzaje są już dodane"
   },
   "workflowGraph": {
     "label": "Przepływ pracy {{label}} dla zgłoszenia, złożoność: {{complexity}}",
@@ -2995,7 +3013,13 @@
     "effort": "Nakład",
     "effortHint": "Przekazywany jako nakład narzędzia Agent. {{hint}}.",
     "reviewRuns": "Osobne uruchomienia /feature-review w każdej rundzie ({{total}}): {{runs}}, każde pod własną nazwą agenta i bez wglądu w znaleziska pozostałych.",
-    "survival": "<strong>Runda przechodzi, gdy</strong> {{survival}}."
+    "survival": "<strong>Runda przechodzi, gdy</strong> {{survival}}.",
+    "inThisWorkflow": "W tym przepływie pracy",
+    "removeStep": "Usuń krok",
+    "takesOut": "Usuń {{step}} z tego przepływu pracy. Dodasz go ponownie w „Dodaj krok” nad diagramem.",
+    "alwaysFirst": "Krok {{step}} jest zawsze pierwszy, więc nie można go usunąć.",
+    "alwaysLast": "Krok {{step}} jest zawsze ostatni, więc nie można go usunąć.",
+    "lockedStep": "Krok {{step}} jest zablokowany, więc nie można go usunąć."
   },
   "workflowPage": {
     "title": "Przepływ pracy",
@@ -3011,9 +3035,21 @@
     "sectionLabel": "Przepływ pracy {{label}}",
     "projects": "projektu",
     "summary_one": "{{count}} krok · złożoność: {{complexity}} · recenzja: {{rounds}}",
+    "summary_other": "{{count}} kroku · złożoność: {{complexity}} · recenzja: {{rounds}}",
+    "summaryNoReview_one": "{{count}} krok dla zgłoszenia {{complexity}} · bez przeglądu",
+    "summaryNoReview_few": "{{count}} kroki dla zgłoszenia {{complexity}} · bez przeglądu",
+    "summaryNoReview_many": "{{count}} kroków dla zgłoszenia {{complexity}} · bez przeglądu",
+    "summaryNoReview_other": "{{count}} kroku dla zgłoszenia {{complexity}} · bez przeglądu",
+    "created": "Przepływ pracy utworzony",
+    "renamed": "Zmieniono nazwę",
+    "deleted": "Przepływ pracy usunięty",
+    "resetBodyCustom": "Jego kroki, kolejność, przełączniki, nakłady pracy, agenci zespołu i rundy przeglądu wrócą do stanu, w jakim był przepływ {{label}}. Nazwa zostaje, a inne przepływy zachowają zmiany, które w nich wprowadzono.",
+    "fellBack": "Przepływ pracy, którego używał projekt, został usunięty, więc teraz projekt używa: {{standard}}. Zgłoszenia, które go wskazywały, używają przepływu projektu. Zostaw {{standard}}, aby zamknąć ten komunikat, albo wybierz poniżej inny przepływ i kliknij „Użyj tego przepływu pracy”.",
+    "notOwn": "Ten przepływ pracy nie należy do tego projektu (mógł zostać usunięty), więc pokazano przepływ własny projektu.",
+    "keepStandard": "Zostaw: {{label}}",
+    "customNote": "Twój własny przepływ pracy, skopiowany z: {{base}}. Dodawaj kroki wymienionych rodzajów, usuwaj te, które nie są zablokowane, i przesuwaj je w granicach, na jakie pozwala każdy krok. Przegląd w środku (jego fazy i to, co uruchamiają) pochodzi z: {{base}}.",
     "summary_few": "{{count}} kroki · złożoność: {{complexity}} · recenzja: {{rounds}}",
-    "summary_many": "{{count}} kroków · złożoność: {{complexity}} · recenzja: {{rounds}}",
-    "summary_other": "{{count}} kroku · złożoność: {{complexity}} · recenzja: {{rounds}}"
+    "summary_many": "{{count}} kroków · złożoność: {{complexity}} · recenzja: {{rounds}}"
   },
   "workflowPresets": {
     "group": "Presety przepływu pracy",
@@ -3021,8 +3057,6 @@
     "tweaked": "Zmieniony",
     "complexity": "Złożoność",
     "stats_one": "{{count}} krok · rundy recenzji {{rounds}}",
-    "stats_few": "{{count}} kroki · rundy recenzji {{rounds}}",
-    "stats_many": "{{count}} kroków · rundy recenzji {{rounds}}",
     "stats_other": "{{count}} kroku · rundy recenzji {{rounds}}",
     "light": {
       "label": "Lekki",
@@ -3039,7 +3073,16 @@
     "maximum": {
       "label": "Maksymalny",
       "description": "Dokładny plus drugi, niezależny spec, druga pełna recenzja każdej rundy przez innego agenta, który nigdy nie widzi pierwszej, i wysoki nakład każdego agenta."
-    }
+    },
+    "content": {
+      "label": "Treść",
+      "description": "Przejęcie, szkic zbudowany i sprawdzony przez agenta, rundy ludzkie nad szkicem, podsumowanie i przekazanie: bez spec, PR, CI, podglądu i faz przeglądu."
+    },
+    "custom": "Własny",
+    "copiedFrom": "Własny, skopiowany z: {{base}}.",
+    "stats_few": "{{count}} kroki · rundy recenzji {{rounds}}",
+    "stats_many": "{{count}} kroków · rundy recenzji {{rounds}}",
+    "noReview": "bez przeglądu"
   },
   "workflowReview": {
     "legend": "Rundy recenzji według złożoności",
@@ -3054,13 +3097,19 @@
   },
   "workflowSelect": {
     "project": "Przepływ pracy projektu ({{label}})",
-    "hint": "Przepływ pracy, według którego działa agent zgłoszenia: własny projektu albo jeden z czterech presetów tylko dla tego zgłoszenia. Zmiana przepływu pracy projektu nie zmienia zgłoszenia, które wskazuje własny."
+    "hint": "Przepływ pracy, za którym podąża agent: własny przepływ projektu albo inny przepływ projektu, tylko dla tego zgłoszenia. Zmiana przepływu projektu nie przenosi zgłoszenia, które wskazuje własny.",
+    "deleted": "Usunięty przepływ pracy (podąża za przepływem projektu)"
+  },
+  "workflowTags": {
+    "title": "Tagi wybierające przepływ pracy",
+    "empty": "Żaden tag jeszcze nie wybiera przepływu pracy. Agenci ustawiają tę mapę przez set_workflow_tags: zgłoszenie z jednym z tagów i bez własnego przepływu pracy używa przepływu, na który wskazuje tag, a jeśli nie ma takiego, przepływu projektu.",
+    "tag": "Tag",
+    "workflow": "Przepływ pracy",
+    "notOne": "Nie jest jednym z przepływów pracy projektu"
   },
   "workflowView": {
     "noRounds": "bez rund recenzji",
     "rounds_one": "{{count}} runda",
-    "rounds_few": "{{count}} rundy",
-    "rounds_many": "{{count}} rund",
     "rounds_other": "{{count}} rundy",
     "complexity": {
       "low": "Niska",
@@ -3101,6 +3150,7 @@
       "build": "Zablokowane: nic nie jest dostarczane bez zbudowania zmiany.",
       "gate": "Zablokowane: żadna zmiana nie idzie dalej bez sprawdzenia.",
       "intent": "Zablokowane powyżej niskiej: każde zgłoszenie powyżej niskiej złożoności jest sprawdzane z własnymi słowami człowieka, zanim zostanie przekazane.",
+      "rounds": "Zablokowane: człowiek sprawdza szkic przed przekazaniem.",
       "always": "Zablokowane: zgłoszenia nie można przekazać bez tego."
     },
     "survival": {
@@ -3116,7 +3166,9 @@
       "stayLast": "{{step}}: musi pozostać ostatnim krokiem",
       "alreadyFirst": "{{step}}: jest już pierwszym krokiem",
       "alreadyLast": "{{step}}: jest już ostatnim krokiem"
-    }
+    },
+    "rounds_few": "{{count}} rundy",
+    "rounds_many": "{{count}} rund"
   },
   "backToModule": {
     "back": "Wróć do: {{label}}",
@@ -3169,8 +3221,6 @@
     "none": "Brak raportów uruchomień.",
     "noMatch": "Żaden raport nie pasuje do tych filtrów.",
     "count_one": "{{shown}} z {{count}} raportu",
-    "count_few": "{{shown}} z {{count}} raportów",
-    "count_many": "{{shown}} z {{count}} raportów",
     "count_other": "{{shown}} z {{count}} raportu",
     "clearFilters": "Wyczyść filtry",
     "filter": {
@@ -3209,6 +3259,8 @@
       "longest": "Najdłuższe",
       "difficulty": "Najwyższa trudność",
       "confidence": "Najwyższa pewność"
-    }
+    },
+    "count_few": "{{shown}} z {{count}} raportów",
+    "count_many": "{{shown}} z {{count}} raportów"
   }
 }

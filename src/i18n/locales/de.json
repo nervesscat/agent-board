@@ -1,7 +1,9 @@
 {
   "common": {
     "saved": "Gespeichert",
-    "close": "Schließen"
+    "close": "Schließen",
+    "cancel": "Abbrechen",
+    "delete": "Löschen"
   },
   "loading": {
     "ticket": "Lade Ticket…",
@@ -2718,7 +2720,8 @@
     "workflowOwn": "Folgt dem Workflow {{workflow}}, festgelegt an diesem Ticket.",
     "workflowProject": "Folgt dem Workflow des Projekts ({{workflow}}).",
     "workflowSteps": "Schritte ansehen",
-    "lanesProgress": "{{done}}/{{total}} erledigt"
+    "lanesProgress": "{{done}}/{{total}} erledigt",
+    "workflowDeleted": "Der an diesem Ticket eingestellte Workflow wurde gelöscht, daher folgt es dem Workflow des Projekts ({{workflow}})."
   },
   "complexity": {
     "label": {
@@ -2791,6 +2794,21 @@
     "changed": "geändert",
     "changedTip": "Gegenüber dem Preset geändert: {{what}}"
   },
+  "workflowCustom": {
+    "name": "Name",
+    "new": "Neuer Workflow",
+    "newDescription": "Eine Kopie eines Workflows dieses Projekts, die du eigenständig änderst: Schritte hinzufügen und entfernen, sie umordnen, festlegen, wer jeden ausführt. Die Review darin kommt mit dem Preset, von dem sie kopiert wurde.",
+    "startFrom": "Ausgehen von",
+    "create": "Workflow erstellen",
+    "rename": "Umbenennen",
+    "renameTitle": "Workflow umbenennen",
+    "renameDescription": "Tickets und das Projekt folgen ihm weiterhin unter dem neuen Namen.",
+    "deleteTitle": "Den Workflow {{name}} löschen?",
+    "deleteDescription": "Wenn das Projekt ihm folgt, wechselt es zum Workflow {{standard}}, und ein Ticket, das ihn nennt, folgt stattdessen dem Workflow des Projekts. Die Presets bleiben unberührt. Das kann nicht rückgängig gemacht werden.",
+    "deleteWorkflow": "Workflow löschen",
+    "addStep": "Schritt hinzufügen",
+    "allIn": "Alle Arten sind schon drin"
+  },
   "workflowGraph": {
     "label": "Workflow {{label}} für ein Ticket mit Komplexität {{complexity}}",
     "complexity": {
@@ -2832,7 +2850,13 @@
     "effort": "Aufwand",
     "effortHint": "Wird als Aufwand des Agent-Tools weitergegeben. {{hint}}.",
     "reviewRuns": "Führt je Runde {{total}} getrennte /feature-review-Runs aus: {{runs}}, jeden unter eigenem Agent-Namen und ohne die Befunde des anderen zu sehen.",
-    "survival": "<strong>Eine Runde besteht, wenn</strong> {{survival}}."
+    "survival": "<strong>Eine Runde besteht, wenn</strong> {{survival}}.",
+    "inThisWorkflow": "In diesem Workflow",
+    "removeStep": "Schritt entfernen",
+    "takesOut": "Nimm {{step}} aus diesem Workflow heraus. Füge ihn über „Schritt hinzufügen“ über dem Graphen wieder hinzu.",
+    "alwaysFirst": "Der Schritt {{step}} ist immer der erste und kann daher nicht entfernt werden.",
+    "alwaysLast": "Der Schritt {{step}} ist immer der letzte und kann daher nicht entfernt werden.",
+    "lockedStep": "Der Schritt {{step}} ist gesperrt und kann daher nicht entfernt werden."
   },
   "workflowPage": {
     "title": "Workflow",
@@ -2848,7 +2872,17 @@
     "sectionLabel": "Workflow {{label}}",
     "projects": "der des Projekts",
     "summary_one": "{{count}} Schritt für Komplexität {{complexity}} · Review: {{rounds}}",
-    "summary_other": "{{count}} Schritte für Komplexität {{complexity}} · Review: {{rounds}}"
+    "summary_other": "{{count}} Schritte für Komplexität {{complexity}} · Review: {{rounds}}",
+    "summaryNoReview_one": "{{count}} Schritt für ein Ticket ({{complexity}}) · keine Prüfung",
+    "summaryNoReview_other": "{{count}} Schritte für ein Ticket ({{complexity}}) · keine Prüfung",
+    "created": "Workflow erstellt",
+    "renamed": "Umbenannt",
+    "deleted": "Workflow gelöscht",
+    "resetBodyCustom": "Seine Schritte, Reihenfolge, Schalter, Aufwände, Team-Agenten und Review-Runden werden auf den Stand zurückgesetzt, mit dem der Workflow {{label}} erstellt wurde. Sein Name bleibt, und die anderen Workflows behalten, was in ihnen geändert wurde.",
+    "fellBack": "Der Workflow, dem dieses Projekt folgte, wurde gelöscht, daher folgt es jetzt dem Workflow {{standard}}. Tickets, die ihn nannten, folgen dem Workflow des Projekts. Behalte {{standard}}, um diesen Hinweis zu schließen, oder wähle unten einen anderen Workflow und drücke Diesen Workflow verwenden.",
+    "notOwn": "Dieser Workflow gehört nicht zu diesem Projekt (er wurde vielleicht gelöscht), daher wird der des Projekts angezeigt.",
+    "keepStandard": "{{label}} behalten",
+    "customNote": "Dein eigener Workflow, kopiert von {{base}}. Füge Schritte der aufgeführten Arten hinzu, entferne die nicht gesperrten und verschiebe sie innerhalb dessen, was jeder Schritt erlaubt. Die Review darin (ihre Phasen und was sie ausführen) stammt von {{base}}."
   },
   "workflowPresets": {
     "group": "Workflow-Presets",
@@ -2872,7 +2906,14 @@
     "maximum": {
       "label": "Maximal",
       "description": "Gründlich plus eine zweite, unabhängige Spec, ein zweites volles Review jeder Runde durch einen anderen Agent, der das erste nie sieht, und hoher Aufwand bei jedem Agent."
-    }
+    },
+    "content": {
+      "label": "Inhalt",
+      "description": "Übernehmen, ein Entwurf, gebaut und selbst geprüft, menschliche Runden über den Entwurf, die Zusammenfassung und die Übergabe: keine Spec, kein PR, keine CI, kein Preview und keine Review-Phasen."
+    },
+    "custom": "Eigener",
+    "copiedFrom": "Eigener, kopiert von {{base}}.",
+    "noReview": "keine Prüfung"
   },
   "workflowReview": {
     "legend": "Review-Runden je Komplexität",
@@ -2887,7 +2928,15 @@
   },
   "workflowSelect": {
     "project": "Workflow des Projekts ({{label}})",
-    "hint": "Der Workflow, dem sein Agent folgt: der des Projekts oder eines der vier Presets nur für dieses Ticket. Eine Änderung am Workflow des Projekts betrifft kein Ticket, das einen eigenen nennt."
+    "hint": "Der Workflow, dem sein Agent folgt: der eigene des Projekts oder ein anderer Workflow des Projekts, nur für dieses Ticket. Den Workflow des Projekts zu ändern, verschiebt kein Ticket, das einen eigenen nennt.",
+    "deleted": "Gelöschter Workflow (folgt dem des Projekts)"
+  },
+  "workflowTags": {
+    "title": "Tags, die einen Workflow wählen",
+    "empty": "Noch kein Tag wählt einen Workflow. Agenten setzen diese Zuordnung über set_workflow_tags: Ein Ticket mit einem der Tags und ohne eigenen Workflow folgt dem Workflow, dem das Tag zugeordnet ist, sonst dem des Projekts.",
+    "tag": "Tag",
+    "workflow": "Workflow",
+    "notOne": "Keiner der Workflows des Projekts"
   },
   "workflowView": {
     "noRounds": "keine Review-Runden",
@@ -2932,6 +2981,7 @@
       "build": "Fest: Nichts wird geliefert, ohne dass die Änderung gebaut wurde.",
       "gate": "Fest: Keine Änderung geht ungeprüft weiter.",
       "intent": "Fest über Niedrig: Jedes Ticket über Niedrig wird vor der Übergabe an den eigenen Worten des Menschen geprüft.",
+      "rounds": "Gesperrt: Du prüfst den Entwurf vor der Übergabe.",
       "always": "Fest: Ohne diesen Schritt kann das Ticket nicht übergeben werden."
     },
     "survival": {

@@ -1,7 +1,9 @@
 {
   "common": {
     "saved": "Salvato",
-    "close": "Chiudi"
+    "close": "Chiudi",
+    "cancel": "Annulla",
+    "delete": "Elimina"
   },
   "loading": {
     "ticket": "Caricamento di ticket…",
@@ -2718,7 +2720,8 @@
     "workflowOwn": "Segue il workflow {{workflow}}, impostato su questo ticket.",
     "workflowProject": "Segue il workflow del progetto ({{workflow}}).",
     "workflowSteps": "Vedi i passaggi",
-    "lanesProgress": "{{done}}/{{total}} fatte"
+    "lanesProgress": "{{done}}/{{total}} fatte",
+    "workflowDeleted": "Il workflow impostato su questo ticket è stato eliminato, quindi segue il workflow del progetto ({{workflow}})."
   },
   "complexity": {
     "label": {
@@ -2791,6 +2794,21 @@
     "changed": "modificato",
     "changedTip": "Modificato rispetto al preset: {{what}}"
   },
+  "workflowCustom": {
+    "name": "Nome",
+    "new": "Nuovo workflow",
+    "newDescription": "Una copia di un workflow di questo progetto che modifichi da solo: aggiungi e rimuovi passi, riordinali, scegli chi esegue ciascuno. La revisione al suo interno arriva dal preset da cui è stato copiato.",
+    "startFrom": "Parti da",
+    "create": "Crea workflow",
+    "rename": "Rinomina",
+    "renameTitle": "Rinomina workflow",
+    "renameDescription": "Ticket e progetto continuano a seguirlo con il nuovo nome.",
+    "deleteTitle": "Eliminare il workflow {{name}}?",
+    "deleteDescription": "Se il progetto lo segue, torna a {{standard}}, e un ticket che lo indica segue invece il workflow del progetto. I preset non vengono toccati. Non si può annullare.",
+    "deleteWorkflow": "Elimina workflow",
+    "addStep": "Aggiungi un passo",
+    "allIn": "Ci sono già tutti"
+  },
   "workflowGraph": {
     "label": "Workflow {{label}} per un ticket di complessità {{complexity}}",
     "complexity": {
@@ -2832,7 +2850,13 @@
     "effort": "Impegno",
     "effortHint": "Passato come impegno dello strumento Agent. {{hint}}.",
     "reviewRuns": "Esegue {{total}} esecuzioni separate di /feature-review a ogni round: {{runs}}, ciascuna con un proprio nome di agente e senza mai vedere i problemi trovati dall'altra.",
-    "survival": "<strong>Un round è superato quando</strong> {{survival}}."
+    "survival": "<strong>Un round è superato quando</strong> {{survival}}.",
+    "inThisWorkflow": "In questo workflow",
+    "removeStep": "Rimuovi passo",
+    "takesOut": "Togli {{step}} da questo workflow. Riaggiungilo da Aggiungi un passo sopra il grafico.",
+    "alwaysFirst": "Il passo {{step}} è sempre il primo, quindi non si può rimuovere.",
+    "alwaysLast": "Il passo {{step}} è sempre l’ultimo, quindi non si può rimuovere.",
+    "lockedStep": "Il passo {{step}} è bloccato, quindi non si può rimuovere."
   },
   "workflowPage": {
     "title": "Workflow",
@@ -2848,7 +2872,17 @@
     "sectionLabel": "Workflow {{label}}",
     "projects": "del progetto",
     "summary_one": "{{count}} passaggio per un ticket di complessità {{complexity}} · revisione: {{rounds}}",
-    "summary_other": "{{count}} passaggi per un ticket di complessità {{complexity}} · revisione: {{rounds}}"
+    "summary_other": "{{count}} passaggi per un ticket di complessità {{complexity}} · revisione: {{rounds}}",
+    "summaryNoReview_one": "{{count}} passaggio per un ticket {{complexity}} · nessuna revisione",
+    "summaryNoReview_other": "{{count}} passaggi per un ticket {{complexity}} · nessuna revisione",
+    "created": "Workflow creato",
+    "renamed": "Rinominato",
+    "deleted": "Workflow eliminato",
+    "resetBodyCustom": "I suoi passi, l’ordine, gli interruttori, gli sforzi, gli agenti del Team e i giri di revisione tornano come erano quando è stato creato il workflow {{label}}. Il nome resta e gli altri workflow mantengono ciò che vi è stato modificato.",
+    "fellBack": "Il workflow che seguiva questo progetto è stato eliminato, quindi ora segue {{standard}}. I ticket che lo indicavano seguono il workflow del progetto. Tieni {{standard}} per chiudere questo avviso, oppure scegli un altro workflow qui sotto e premi Usa questo workflow.",
+    "notOwn": "Quel workflow non è di questo progetto (potrebbe essere stato eliminato), quindi viene mostrato quello del progetto.",
+    "keepStandard": "Mantieni {{label}}",
+    "customNote": "Il tuo workflow, copiato da {{base}}. Aggiungi passi dei tipi elencati, rimuovi quelli non bloccati e spostali entro quanto consente ogni passo. La revisione al suo interno (le sue fasi e cosa eseguono) arriva da {{base}}."
   },
   "workflowPresets": {
     "group": "Preset di workflow",
@@ -2872,7 +2906,14 @@
     "maximum": {
       "label": "Massimo",
       "description": "Accurato più una seconda specifica indipendente, una seconda revisione completa di ogni round da parte di un agente diverso che non vede mai la prima, e impegno alto su ogni agente."
-    }
+    },
+    "content": {
+      "label": "Contenuto",
+      "description": "Presa in carico, una bozza creata e autoverificata, giri umani sulla bozza, il riepilogo e la consegna: niente spec, niente PR, CI, preview né fasi di revisione."
+    },
+    "custom": "Personalizzato",
+    "copiedFrom": "Personalizzato, copiato da {{base}}.",
+    "noReview": "nessuna revisione"
   },
   "workflowReview": {
     "legend": "Round di revisione per complessità",
@@ -2887,7 +2928,15 @@
   },
   "workflowSelect": {
     "project": "Workflow del progetto ({{label}})",
-    "hint": "Il workflow che il suo agente segue: quello del progetto, o uno dei quattro preset solo per questo ticket. Cambiare il workflow del progetto non sposta un ticket che ne indica uno."
+    "hint": "Il workflow che segue il suo agente: quello proprio del progetto, oppure un altro workflow del progetto solo per questo ticket. Cambiare il workflow del progetto non sposta un ticket che ne indica uno.",
+    "deleted": "Workflow eliminato (segue quello del progetto)"
+  },
+  "workflowTags": {
+    "title": "Tag che scelgono un workflow",
+    "empty": "Nessun tag sceglie ancora un workflow. Gli agenti impostano questa mappa con set_workflow_tags: un ticket con uno dei tag e senza un workflow proprio segue il workflow a cui il tag è collegato, altrimenti quello del progetto.",
+    "tag": "Tag",
+    "workflow": "Workflow",
+    "notOne": "Non è uno dei workflow del progetto"
   },
   "workflowView": {
     "noRounds": "nessun round di revisione",
@@ -2932,6 +2981,7 @@
       "build": "Bloccato: niente viene consegnato senza che la modifica sia implementata.",
       "gate": "Bloccato: nessuna modifica va avanti senza controlli.",
       "intent": "Bloccato sopra bassa: ogni ticket sopra bassa viene confrontato con le parole dell'utente prima della consegna.",
+      "rounds": "Bloccato: l’utente rivede la bozza prima della consegna.",
       "always": "Bloccato: il ticket non può essere consegnato senza."
     },
     "survival": {

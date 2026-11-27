@@ -1,7 +1,9 @@
 {
   "common": {
     "saved": "已保存",
-    "close": "关闭"
+    "close": "关闭",
+    "cancel": "取消",
+    "delete": "删除"
   },
   "loading": {
     "ticket": "正在加载ticket…",
@@ -2642,7 +2644,8 @@
     "workflowOwn": "遵循{{workflow}}工作流，已在此 ticket 上设定。",
     "workflowProject": "遵循项目的工作流（{{workflow}}）。",
     "workflowSteps": "查看步骤",
-    "lanesProgress": "已完成 {{done}}/{{total}}"
+    "lanesProgress": "已完成 {{done}}/{{total}}",
+    "workflowDeleted": "此 ticket 上设置的工作流已被删除，因此跟随项目的工作流（{{workflow}}）。"
   },
   "complexity": {
     "label": {
@@ -2711,6 +2714,21 @@
     "changed": "已更改",
     "changedTip": "与预设不同：{{what}}"
   },
+  "workflowCustom": {
+    "name": "名称",
+    "new": "新建工作流",
+    "newDescription": "本项目某个工作流的副本，由你单独修改：增加和删除步骤、调整顺序、指定每一步由谁执行。其中的评审随它所复制的预设一起带来。",
+    "startFrom": "基于",
+    "create": "创建工作流",
+    "rename": "重命名",
+    "renameTitle": "重命名工作流",
+    "renameDescription": "ticket 和项目会以新名称继续跟随它。",
+    "deleteTitle": "删除工作流 {{name}}？",
+    "deleteDescription": "如果项目正跟随它，项目将回到{{standard}}，指定了它的 ticket 则改为跟随项目的工作流。预设不受影响。此操作无法撤销。",
+    "deleteWorkflow": "删除工作流",
+    "addStep": "添加步骤",
+    "allIn": "所有类型都已添加"
+  },
   "workflowGraph": {
     "label": "复杂度为{{complexity}}的 ticket 的{{label}}工作流",
     "complexity": {
@@ -2752,7 +2770,13 @@
     "effort": "强度",
     "effortHint": "作为 Agent 工具的 effort 传递。{{hint}}。",
     "reviewRuns": "每轮运行 {{total}} 次独立的 /feature-review：{{runs}}，各用自己的智能体名称，互相看不到对方的发现。",
-    "survival": "<strong>该轮通过的条件：</strong>{{survival}}。"
+    "survival": "<strong>该轮通过的条件：</strong>{{survival}}。",
+    "inThisWorkflow": "在此工作流中",
+    "removeStep": "移除步骤",
+    "takesOut": "将 {{step}} 移出此工作流。可在图表上方的“添加步骤”中重新添加。",
+    "alwaysFirst": "步骤 {{step}} 始终是第一步，因此无法移除。",
+    "alwaysLast": "步骤 {{step}} 始终是最后一步，因此无法移除。",
+    "lockedStep": "步骤 {{step}} 已锁定，因此无法移除。"
   },
   "workflowPage": {
     "title": "工作流",
@@ -2767,7 +2791,16 @@
     "reset": "重置",
     "sectionLabel": "{{label}}工作流",
     "projects": "项目的",
-    "summary_other": "复杂度为{{complexity}}的 ticket 共{{count}}步 · 评审：{{rounds}}"
+    "summary_other": "复杂度为{{complexity}}的 ticket 共{{count}}步 · 评审：{{rounds}}",
+    "summaryNoReview_other": "{{complexity}}工单 {{count}} 个步骤 · 无评审",
+    "created": "工作流已创建",
+    "renamed": "已重命名",
+    "deleted": "工作流已删除",
+    "resetBodyCustom": "其步骤、顺序、开关、投入程度、团队智能体和评审轮次将恢复为 {{label}} 工作流的初始设置。名称保留，其他工作流中的更改也保持不变。",
+    "fellBack": "本项目所跟随的工作流已被删除，现在改为跟随{{standard}}。指定了它的 ticket 跟随项目的工作流。保留{{standard}}即可关闭此提示，或在下方选择其他工作流并点击“使用此工作流”。",
+    "notOwn": "该工作流不属于本项目（可能已被删除），因此显示的是项目自己的工作流。",
+    "keepStandard": "保留{{label}}",
+    "customNote": "你自己的工作流，复制自 {{base}}。添加所列类型的步骤，移除未锁定的步骤，并在每个步骤允许的范围内移动它们。其中的评审（其阶段及其执行内容）随 {{base}} 一起带来。"
   },
   "workflowPresets": {
     "group": "工作流预设",
@@ -2790,7 +2823,14 @@
     "maximum": {
       "label": "最高",
       "description": "严格流程，外加第二份独立的 spec、由另一个看不到第一份的智能体对每一轮做第二次完整评审，以及每个智能体都使用高强度。"
-    }
+    },
+    "content": {
+      "label": "内容",
+      "description": "认领、起草并自检，对草稿进行人工评审轮次，然后是摘要和交付：没有 spec，没有 PR、CI、预览或评审阶段。"
+    },
+    "custom": "自定义",
+    "copiedFrom": "自定义，复制自 {{base}}。",
+    "noReview": "无评审"
   },
   "workflowReview": {
     "legend": "各复杂度的评审轮数",
@@ -2805,7 +2845,15 @@
   },
   "workflowSelect": {
     "project": "项目的工作流（{{label}}）",
-    "hint": "其智能体遵循的工作流：项目自己的，或仅用于此 ticket 的四个预设之一。更改项目的工作流不会影响已指定工作流的 ticket。"
+    "hint": "其智能体所遵循的工作流：项目自己的，或项目的另一个工作流（仅用于此 ticket）。更改项目的工作流不会改变已指定工作流的 ticket。",
+    "deleted": "已删除的工作流（跟随项目的）"
+  },
+  "workflowTags": {
+    "title": "用于选择工作流的标签",
+    "empty": "目前还没有标签选择工作流。智能体通过 set_workflow_tags 设置此映射：带有其中某个标签且没有自己工作流的 ticket，会跟随该标签对应的工作流，否则跟随项目的工作流。",
+    "tag": "标签",
+    "workflow": "工作流",
+    "notOne": "不是本项目的工作流"
   },
   "workflowView": {
     "noRounds": "没有评审轮",
@@ -2849,6 +2897,7 @@
       "build": "已锁定：没有构建出更改，就不会交付任何东西。",
       "gate": "已锁定：任何更改都不会未经检查就继续。",
       "intent": "低以上已锁定：低以上的每个 ticket 在交接前，都会对照人自己的原话进行检查。",
+      "rounds": "已锁定：交付前由人工评审草稿。",
       "always": "已锁定：没有它，ticket 无法交接。"
     },
     "survival": {

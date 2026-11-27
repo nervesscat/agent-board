@@ -17,7 +17,6 @@ import {
 import { LANGUAGES } from '#/i18n/languages'
 import { AGENT_TOKEN_NAME } from '#/lib/agents'
 import { KINDS } from '#/lib/kinds'
-import { WORKFLOW_PRESETS } from '#/lib/workflow'
 import { RESUME_COMMAND_MAX, RESUME_TIMEOUT, resumeCommandProblem } from '#/lib/resume'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import * as agentCards from './agentCards'
@@ -135,8 +134,9 @@ const TicketPatch = z.object({
   status: Status.optional(),
   // Exactly low, mid, high or max; a lane created without one copies its parent's (features.ts createTicket).
   complexity: z.enum(COMPLEXITIES).optional(),
-  // The preset of the workflow this ticket follows instead of its project's; null follows the project's again.
-  workflowPreset: z.enum(WORKFLOW_PRESETS).nullable().optional(),
+  // The workflow this ticket follows instead of its project's (a preset's id or one of the project's own
+  // workflows, checked against the project when saved); null follows the project's again.
+  workflowPreset: z.string().max(60).nullable().optional(),
   assignee: z.string().max(80).optional(),
   branch: z.string().max(200).optional(),
   baseBranch: z.string().max(200).optional(),
@@ -477,13 +477,36 @@ api.put('/api/projects/:id/workflow', async ({ request, params, actor }) => {
   const body = await readJson(request, z.object({ preset: z.string().max(40) }))
   return json(workflow.setActivePreset(id(params), body.preset, actor))
 })
-// Replaces that preset's saved tweaks ({order?, steps?, rounds?}); the other presets keep theirs.
+// The tag map: which workflow a ticket follows by its tags when it names none of its own. Agents set it (the
+// set_workflow_tags tool); the body is a patch ({tags: {tag: workflow id | null}}) and nothing else is accepted.
+api.put('/api/projects/:id/workflow-tags', async ({ request, params, actor }) => {
+  // The tags are checked whole by the workflow module (a record schema would drop a key such as __proto__ before the check).
+  const body = await readJson(request, z.object({ tags: z.unknown() }).strict())
+  return json(workflow.setWorkflowTags(id(params), body, actor))
+})
+// The project's own workflows: duplicate a workflow ({name, from}), rename one ({name}) or delete one.
+api.post('/api/projects/:id/workflow/custom', async ({ request, params, actor }) => {
+  humanWorkflow(request)
+  const body = await readJson(request, z.unknown())
+  return json(workflow.createCustom(id(params), body, actor), 201)
+})
+api.patch('/api/projects/:id/workflow/custom/:workflowId', async ({ request, params, actor }) => {
+  humanWorkflow(request)
+  const body = await readJson(request, z.unknown())
+  return json(workflow.renameCustom(id(params), params.workflowId!, body, actor))
+})
+api.delete('/api/projects/:id/workflow/custom/:workflowId', ({ request, params, actor }) => {
+  humanWorkflow(request)
+  return json(workflow.deleteCustom(id(params), params.workflowId!, actor))
+})
+// Replaces that workflow's saved tweaks ({order?, steps?, agents?, rounds?}); the others keep theirs. A custom
+// workflow's `order` is its list of steps: leave a step out to remove it, name a new kind to add it.
 api.put('/api/projects/:id/workflow/:preset', async ({ request, params, actor }) => {
   humanWorkflow(request)
   const body = await readJson(request, z.unknown())
   return json(workflow.saveTweaks(id(params), params.preset!, body, actor))
 })
-// Back to the preset as shipped; nothing to reset is not an error.
+// A preset back to as shipped (nothing to reset is not an error), a custom workflow back to how it was made.
 api.delete('/api/projects/:id/workflow/:preset', ({ request, params, actor }) => {
   humanWorkflow(request)
   return json(workflow.resetTweaks(id(params), params.preset!, actor))

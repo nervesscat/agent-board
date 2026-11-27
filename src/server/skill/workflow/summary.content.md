@@ -1,0 +1,3 @@
+The ticket's summary (`set_ticket_summary`, not a new post), the one post the human reads on top of Main, short and to the point: what the draft says and its current state, what the human changed in the rounds (each round's words in one line), how it was checked (the criteria the self-check met, and anything it left as a question), and any fact the draft relies on that the human must confirm.
+
+When a summary is already there (an earlier round), rewrite it to the state now, with `change` saying in one line what changed; the board keeps the earlier versions. Then answer each of the human's posts you answered with a plan, as a reply under that post.

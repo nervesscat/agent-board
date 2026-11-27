@@ -1,4 +1,4 @@
-After the last review round passes (a ticket with no review: after its gate and evidence) and before
+{{if review}}After the last review round passes{{else}}After the gate and the evidence{{end}} and before
 every hand-off. It runs again after any human comment that sent the ticket back (a `RETRY` or a re-run
 that finds one among the ticket's posts, newest last).
 
@@ -16,9 +16,12 @@ besides them:
 {{if preview}}- the result: the preview link (from the preview step), its screenshots or recordings, and the diff at
   the current head.{{if roundIntent}} A workflow that checks intent at the end of each review round starts the head's
   preview before that check, and the preview step then reuses it.{{end}}
-{{else}}- the result: the diff at the current head and the screenshots the review took (its `shots/`, the verify phase), when there are any
-  (the preview step is turned off for this ticket, so there is no preview link and no screenshots from it; the
+{{else}}{{if review}}- the result: the diff at the current head and the screenshots the review took (its `shots/`, the verify phase), when there are any
+  (this workflow runs no preview step for this ticket, so there is no preview link and no screenshots from it; the
   screenshots of a UI change come from the review's own run).
+{{else}}- the result: the diff at the current head and any screenshots the builder took (this workflow runs no preview and no review
+  for this ticket, so there is no preview link and there may be no screenshots).
+{{end}}
 {{end}}
 
 {{if preview}}The intent check always runs against a preview of the head it checks. Before the first intent run and before every
@@ -27,7 +30,7 @@ handed off, whatever the preview step's place in the order: when none does (a co
 was started changed the head), go through the preview step again at that head, so the preview for that
 head runs and fresh screenshots of the changed state are taken; brief the check with those, never an older head's.
 
-{{end}}Never give it the builder's plan, the spec, the review's findings or the options an agent put on a card:
+{{end}}Never give it the builder's plan, the spec{{if review}}, the review's findings{{end}} or the options an agent put on a card:
 it must not inherit their reading. It returns one line per thing the human asked (`done as asked`,
 `done differently (how)` or `not done`, with the evidence) and a verdict, `matches` or `does not match`. It
 never asks the human, builds and edits nothing, and never answers a decision (`answer_decision`); it
@@ -37,13 +40,13 @@ writes its run report like every subagent.
   head, so the intent check runs again on the new head before the hand-off stands.
 - `does not match`: back to the builder with the intent check's lines as the brief{{if review}} (that fix pass is run and
   posted by the agent the review's `Between rounds` line names){{end}}, then your gate, then
-  ONE more full review round (the review's phases all run again; a ticket with no review has only the
+  {{if review}}ONE more full review round (the review's phases all run again; a ticket with no review has only the
   gate), then the intent check again. Which budget rule applies depends on the review step's text of this
   workflow: where it says the round-end intent check counts as a round (Thorough and Maximum say so), a
   `does not match` is an ordinary round of the budget, and the next sentence about the budget does not
   apply to it (the rule about the SECOND `does not match` still does); in every other workflow the next
   sentence applies. A `does not match` is not a gate return and is outside the
-  complexity's round budget. After the SECOND `does not match` on one ticket, stop and ask the human with
+  complexity's round budget.{{else}}the intent check again. A `does not match` is not a gate return.{{end}} After the SECOND `does not match` on one ticket, stop and ask the human with
   `ask_decision` (keep going, ship as is, drop), with the intent check's lines and the human's words on
   the card.
 - Earlier than that the human is asked only when two readings of their words are both plausible and give

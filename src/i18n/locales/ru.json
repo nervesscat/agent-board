@@ -1,7 +1,9 @@
 {
   "common": {
     "saved": "Сохранено",
-    "close": "Закрыть"
+    "close": "Закрыть",
+    "cancel": "Отмена",
+    "delete": "Удалить"
   },
   "loading": {
     "ticket": "Загрузка: тикет…",
@@ -55,22 +57,22 @@
     "hoursAgo": "{{count}} ч назад",
     "daysAgo": "{{count}} д назад",
     "minutesAgoLong_one": "{{count}} минуту назад",
-    "minutesAgoLong_few": "{{count}} минуты назад",
-    "minutesAgoLong_many": "{{count}} минут назад",
     "minutesAgoLong_other": "{{count}} минуты назад",
     "hoursAgoLong_one": "{{count}} час назад",
-    "hoursAgoLong_few": "{{count}} часа назад",
-    "hoursAgoLong_many": "{{count}} часов назад",
     "hoursAgoLong_other": "{{count}} часа назад",
     "yesterday": "вчера",
     "daysAgoLong_one": "{{count}} день назад",
-    "daysAgoLong_few": "{{count}} дня назад",
-    "daysAgoLong_many": "{{count}} дней назад",
     "daysAgoLong_other": "{{count}} дня назад",
     "weeksAgoLong_one": "{{count}} неделю назад",
+    "weeksAgoLong_other": "{{count}} недели назад",
+    "minutesAgoLong_few": "{{count}} минуты назад",
+    "minutesAgoLong_many": "{{count}} минут назад",
+    "hoursAgoLong_few": "{{count}} часа назад",
+    "hoursAgoLong_many": "{{count}} часов назад",
+    "daysAgoLong_few": "{{count}} дня назад",
+    "daysAgoLong_many": "{{count}} дней назад",
     "weeksAgoLong_few": "{{count}} недели назад",
-    "weeksAgoLong_many": "{{count}} недель назад",
-    "weeksAgoLong_other": "{{count}} недели назад"
+    "weeksAgoLong_many": "{{count}} недель назад"
   },
   "settings": {
     "title": "Настройки",
@@ -181,11 +183,11 @@
       "revokeText": "Агенту с этим токеном и всем субагентам, работающим под ним, будет отказано, начиная со следующего запроса. Снова создайте команды на странице «Подключение агента», чтобы подключить его с новым токеном.",
       "hide": "Скрыть агентов",
       "show_one": "Показать {{count}} агента",
-      "show_few": "Показать {{count}} агентов",
-      "show_many": "Показать {{count}} агентов",
       "show_other": "Показать {{count}} агента",
       "workingUnder": "Работает под {{token}}",
-      "seen": "замечен {{when}}"
+      "seen": "замечен {{when}}",
+      "show_few": "Показать {{count}} агентов",
+      "show_many": "Показать {{count}} агентов"
     }
   },
   "devices": {
@@ -199,8 +201,6 @@
     "passkeys": "Ключи доступа",
     "passkeyMeta": "{{where}} · добавлен {{added}} · использован {{used}}",
     "passkeyMetaSessions_one": "{{where}} · добавлен {{added}} · использован {{used}} · {{count}} сеанс",
-    "passkeyMetaSessions_few": "{{where}} · добавлен {{added}} · использован {{used}} · {{count}} сеанса",
-    "passkeyMetaSessions_many": "{{where}} · добавлен {{added}} · использован {{used}} · {{count}} сеансов",
     "passkeyMetaSessions_other": "{{where}} · добавлен {{added}} · использован {{used}} · {{count}} сеанса",
     "lastLocal": "последний вход на этом компьютере",
     "revokeAria": "Отозвать {{name}}",
@@ -210,7 +210,9 @@
     "sessions": "Сеансы",
     "thisBrowser": "этот браузер",
     "sessionMeta": "{{where}} · вход {{signedIn}} · замечен {{seen}} · до {{until}}",
-    "signOutAria": "Выйти: {{name}}, вход {{when}}"
+    "signOutAria": "Выйти: {{name}}, вход {{when}}",
+    "passkeyMetaSessions_few": "{{where}} · добавлен {{added}} · использован {{used}} · {{count}} сеанса",
+    "passkeyMetaSessions_many": "{{where}} · добавлен {{added}} · использован {{used}} · {{count}} сеансов"
   },
   "tailnet": {
     "title": "Другие устройства (tailnet)",
@@ -325,8 +327,6 @@
     "intro": "<code>/todo-review</code> проводит тикеты из «К выполнению» до сдачи, а <code>/review-queue</code> проверяет очередь PR; оба поручают работу этим агентам. <code>/feature-review</code> — ревью, которое они проводят для каждого изменения. Одна строка ставит все три вместе с их агентами в <code>~/.claude</code> (Claude Code; OpenCode тоже читает его скиллы), заменяя файлы с теми же именами.",
     "placeholderNote": "В ней стоит <code>{{placeholder}}</code>, пока строка не скопирована: тогда доска выпускает токен скачивания, действующий около десяти минут, для всех строк установки на этой странице.",
     "filesInstalled_one": "{{count}} устанавливаемый файл",
-    "filesInstalled_few": "{{count}} устанавливаемых файла",
-    "filesInstalled_many": "{{count}} устанавливаемых файлов",
     "filesInstalled_other": "{{count}} устанавливаемого файла",
     "track": "Отслеживать",
     "global": "Глобально",
@@ -356,10 +356,12 @@
     "repoLabel": "{{repo}} в {{project}}",
     "usesGlobal": "Использует установку в <code>~/.claude</code>.",
     "differ_one": "{{count}} из {{total}} файлов отличается или отсутствует",
-    "differ_few": "{{count}} из {{total}} файлов отличаются или отсутствуют",
-    "differ_many": "{{count}} из {{total}} файлов отличаются или отсутствуют",
     "differ_other": "{{count}} из {{total}} файлов отличаются или отсутствуют",
-    "notUpToDate": "Устаревшие файлы"
+    "notUpToDate": "Устаревшие файлы",
+    "filesInstalled_few": "{{count}} устанавливаемых файла",
+    "filesInstalled_many": "{{count}} устанавливаемых файлов",
+    "differ_few": "{{count}} из {{total}} файлов отличаются или отсутствуют",
+    "differ_many": "{{count}} из {{total}} файлов отличаются или отсутствуют"
   },
   "skillDiff": {
     "description": "Что изменила бы строка установки: строки с - есть в установленной копии и исчезнут, строки с + идут из копии, которую отдаёт доска. Без учёта концов строк.",
@@ -486,8 +488,6 @@
     "moveEarlier": "Сдвинуть {{name}} раньше",
     "moveLater": "Сдвинуть {{name}} позже",
     "tickets_one": "{{count}} тикет",
-    "tickets_few": "{{count}} тикета",
-    "tickets_many": "{{count}} тикетов",
     "tickets_other": "{{count}} тикета",
     "newPlaceholder": "Новый этап, напр. QA",
     "add": "Добавить этап",
@@ -533,13 +533,15 @@
     "delete": "Удалить {{name}}",
     "deleteTitle": "Удалить этап {{name}}?",
     "holds_one": "В нём {{count}} тикет (включая лейны). Выберите этап, куда он перейдёт.",
-    "holds_few": "В нём {{count}} тикета (включая лейны). Выберите этап, куда они перейдут.",
-    "holds_many": "В нём {{count}} тикетов (включая лейны). Выберите этап, куда они перейдут.",
     "holds_other": "В нём {{count}} тикета (включая лейны). Выберите этап, куда они перейдут.",
     "holdsNone": "В нём нет тикетов.",
     "moveTo": "Перенести в…",
     "cancel": "Отмена",
-    "deleteConfirm": "Удалить"
+    "deleteConfirm": "Удалить",
+    "tickets_few": "{{count}} тикета",
+    "tickets_many": "{{count}} тикетов",
+    "holds_few": "В нём {{count}} тикета (включая лейны). Выберите этап, куда они перейдут.",
+    "holds_many": "В нём {{count}} тикетов (включая лейны). Выберите этап, куда они перейдут."
   },
   "runsSettings": {
     "title": "Запуски",
@@ -607,8 +609,6 @@
     "mainColumn": "Основная колонка",
     "sideColumn": "Боковая колонка",
     "hiddenCount_one": "Скрыт {{count}}.",
-    "hiddenCount_few": "Скрыто {{count}}.",
-    "hiddenCount_many": "Скрыто {{count}}.",
     "hiddenCount_other": "Скрыто {{count}}.",
     "reset": "По умолчанию",
     "shown": "Показано {{shown}} из {{total}}",
@@ -673,7 +673,9 @@
         "tasks": "Сюда ведут ссылки на заблокированные задачи",
         "activity": "Здесь решения и обсуждения, которые ждут вас"
       }
-    }
+    },
+    "hiddenCount_few": "Скрыто {{count}}.",
+    "hiddenCount_many": "Скрыто {{count}}."
   },
   "repoDialog": {
     "newProject": "Новый проект…",
@@ -817,12 +819,8 @@
     "region": "Активность",
     "empty": "{{date}} ничего не происходило.",
     "actions_one": "{{count}} действие",
-    "actions_few": "{{count}} действия",
-    "actions_many": "{{count}} действий",
     "actions_other": "{{count}} действия",
     "contributors_one": "{{count}} участник",
-    "contributors_few": "{{count}} участника",
-    "contributors_many": "{{count}} участников",
     "contributors_other": "{{count}} участника",
     "contributorsTitle": "Участники",
     "by": "от {{names}}",
@@ -831,54 +829,58 @@
     "openReview": "Открыть результат ревью",
     "kind": {
       "ticket_one": "{{count}} тикет",
-      "ticket_few": "{{count}} тикета",
-      "ticket_many": "{{count}} тикетов",
       "ticket_other": "{{count}} тикета",
       "task_one": "{{count}} задача",
-      "task_few": "{{count}} задачи",
-      "task_many": "{{count}} задач",
       "task_other": "{{count}} задачи",
       "update_one": "{{count}} обновление",
-      "update_few": "{{count}} обновления",
-      "update_many": "{{count}} обновлений",
       "update_other": "{{count}} обновления",
       "comment_one": "{{count}} комментарий",
-      "comment_few": "{{count}} комментария",
-      "comment_many": "{{count}} комментариев",
       "comment_other": "{{count}} комментария",
       "pr_one": "{{count}} PR",
-      "pr_few": "{{count}} PR",
-      "pr_many": "{{count}} PR",
       "pr_other": "{{count}} PR",
       "review_one": "{{count}} ревью",
-      "review_few": "{{count}} ревью",
-      "review_many": "{{count}} ревью",
       "review_other": "{{count}} ревью",
       "workspace_one": "{{count}} workspace",
-      "workspace_few": "{{count}} workspace",
-      "workspace_many": "{{count}} workspace",
       "workspace_other": "{{count}} workspace",
       "agent_one": "{{count}} агент",
-      "agent_few": "{{count}} агента",
-      "agent_many": "{{count}} агентов",
       "agent_other": "{{count}} агента",
       "project_one": "{{count}} проект",
-      "project_few": "{{count}} проекта",
-      "project_many": "{{count}} проектов",
       "project_other": "{{count}} проекта",
       "summary_one": "{{count}} сводка",
-      "summary_few": "{{count}} сводки",
-      "summary_many": "{{count}} сводок",
       "summary_other": "{{count}} сводки",
       "report_one": "{{count}} отчёт",
-      "report_few": "{{count}} отчёта",
-      "report_many": "{{count}} отчётов",
       "report_other": "{{count}} отчёта",
       "handoff_one": "{{count}} передача",
+      "handoff_other": "{{count}} передачи",
+      "ticket_few": "{{count}} тикета",
+      "ticket_many": "{{count}} тикетов",
+      "task_few": "{{count}} задачи",
+      "task_many": "{{count}} задач",
+      "update_few": "{{count}} обновления",
+      "update_many": "{{count}} обновлений",
+      "comment_few": "{{count}} комментария",
+      "comment_many": "{{count}} комментариев",
+      "pr_few": "{{count}} PR",
+      "pr_many": "{{count}} PR",
+      "review_few": "{{count}} ревью",
+      "review_many": "{{count}} ревью",
+      "workspace_few": "{{count}} workspace",
+      "workspace_many": "{{count}} workspace",
+      "agent_few": "{{count}} агента",
+      "agent_many": "{{count}} агентов",
+      "project_few": "{{count}} проекта",
+      "project_many": "{{count}} проектов",
+      "summary_few": "{{count}} сводки",
+      "summary_many": "{{count}} сводок",
+      "report_few": "{{count}} отчёта",
+      "report_many": "{{count}} отчётов",
       "handoff_few": "{{count}} передачи",
-      "handoff_many": "{{count}} передач",
-      "handoff_other": "{{count}} передачи"
-    }
+      "handoff_many": "{{count}} передач"
+    },
+    "actions_few": "{{count}} действия",
+    "actions_many": "{{count}} действий",
+    "contributors_few": "{{count}} участника",
+    "contributors_many": "{{count}} участников"
   },
   "generateReport": {
     "wrote": "claude написал отчёт",
@@ -894,8 +896,6 @@
   },
   "pushedToday": {
     "commits_one": "{{count}} коммит",
-    "commits_few": "{{count}} коммита",
-    "commits_many": "{{count}} коммитов",
     "commits_other": "{{count}} коммита",
     "label": "Отправлено сегодня: {{commits}}, добавлено строк: {{added}}, удалено: {{removed}}",
     "labelNone": "Отправлено сегодня: ничего",
@@ -905,7 +905,9 @@
     "notFetched": "origin ещё не получен",
     "byRepo": "Отправлено сегодня по репозиториям",
     "emptyRepos": "Сегодня в origin репозиториев этого проекта ничего не попало.",
-    "hint": "Коммиты, попавшие сегодня в ветку origin, каждый один раз, без слияний."
+    "hint": "Коммиты, попавшие сегодня в ветку origin, каждый один раз, без слияний.",
+    "commits_few": "{{count}} коммита",
+    "commits_many": "{{count}} коммитов"
   },
   "reportCalendar": {
     "region": "Календарь отчётов",
@@ -924,8 +926,6 @@
     "replace": "заменить",
     "post": "отправить отчёт",
     "versions_one": "{{count}} версия",
-    "versions_few": "{{count}} версии",
-    "versions_many": "{{count}} версий",
     "versions_other": "{{count}} версии",
     "version": "версия {{n}}",
     "none": "Отчёта за {{label}} пока нет.",
@@ -939,7 +939,9 @@
     "attachFirst": "Сначала прикрепите файл отчёта",
     "posting": "Отправка…",
     "replaceButton": "Заменить",
-    "postButton": "Отправить"
+    "postButton": "Отправить",
+    "versions_few": "{{count}} версии",
+    "versions_many": "{{count}} версий"
   },
   "reportSettings": {
     "region": "Настройки отчёта",
@@ -1025,57 +1027,57 @@
   "cleanup": {
     "counts": {
       "deleted_one": "{{count}} удалена",
-      "deleted_few": "{{count}} удалены",
-      "deleted_many": "{{count}} удалено",
       "deleted_other": "{{count}} удалено",
       "kept_one": "{{count}} оставлена",
-      "kept_few": "{{count}} оставлены",
-      "kept_many": "{{count}} оставлено",
       "kept_other": "{{count}} оставлено",
       "gone_one": "{{count}} уже нет",
+      "gone_other": "{{count}} уже нет",
+      "deleted_few": "{{count}} удалены",
+      "deleted_many": "{{count}} удалено",
+      "kept_few": "{{count}} оставлены",
+      "kept_many": "{{count}} оставлено",
       "gone_few": "{{count}} уже нет",
-      "gone_many": "{{count}} уже нет",
-      "gone_other": "{{count}} уже нет"
+      "gone_many": "{{count}} уже нет"
     },
     "actions": {
       "local": {
         "row": "Удалить ветку",
         "all": "Удалить все подходящие локальные ветки",
         "title_one": "Удалить {{count}} локальную ветку?",
-        "title_few": "Удалить {{count}} локальные ветки?",
-        "title_many": "Удалить {{count}} локальных веток?",
         "title_other": "Удалить {{count}} локальной ветки?",
         "confirm_one": "Удалить {{count}} локальную ветку",
-        "confirm_few": "Удалить {{count}} локальные ветки",
-        "confirm_many": "Удалить {{count}} локальных веток",
         "confirm_other": "Удалить {{count}} локальной ветки",
-        "what": "Каждая ветка удаляется из checkout. Копия в origin остаётся."
+        "what": "Каждая ветка удаляется из checkout. Копия в origin остаётся.",
+        "title_few": "Удалить {{count}} локальные ветки?",
+        "title_many": "Удалить {{count}} локальных веток?",
+        "confirm_few": "Удалить {{count}} локальные ветки",
+        "confirm_many": "Удалить {{count}} локальных веток"
       },
       "remote": {
         "row": "Удалить в origin",
         "all": "Удалить все подходящие ветки в origin",
         "title_one": "Удалить {{count}} ветку в origin?",
-        "title_few": "Удалить {{count}} ветки в origin?",
-        "title_many": "Удалить {{count}} веток в origin?",
         "title_other": "Удалить {{count}} ветки в origin?",
         "confirm_one": "Удалить {{count}} ветку в origin",
-        "confirm_few": "Удалить {{count}} ветки в origin",
-        "confirm_many": "Удалить {{count}} веток в origin",
         "confirm_other": "Удалить {{count}} ветки в origin",
-        "what": "Каждая ветка удаляется из origin, у всех, кто с ней работает. Локальные ветки остаются."
+        "what": "Каждая ветка удаляется из origin, у всех, кто с ней работает. Локальные ветки остаются.",
+        "title_few": "Удалить {{count}} ветки в origin?",
+        "title_many": "Удалить {{count}} веток в origin?",
+        "confirm_few": "Удалить {{count}} ветки в origin",
+        "confirm_many": "Удалить {{count}} веток в origin"
       },
       "worktrees": {
         "row": "Убрать worktree и ветку",
         "all": "Убрать все подходящие worktree вместе с ветками",
         "title_one": "Убрать worktree {{count}} ветки и сами ветки?",
-        "title_few": "Убрать worktree {{count}} веток и сами ветки?",
-        "title_many": "Убрать worktree {{count}} веток и сами ветки?",
         "title_other": "Убрать worktree {{count}} ветки и сами ветки?",
         "confirm_one": "Убрать worktree и удалить {{count}} ветку",
-        "confirm_few": "Убрать worktree и удалить {{count}} ветки",
-        "confirm_many": "Убрать worktree и удалить {{count}} веток",
         "confirm_other": "Убрать worktree и удалить {{count}} ветки",
-        "what": "Папка каждого worktree удаляется (вместе с игнорируемыми файлами вроде node_modules), затем локальная ветка. Ссылка внутри удаляется как ссылка: папка, на которую она ведёт вне worktree, остаётся. Копия в origin остаётся."
+        "what": "Папка каждого worktree удаляется (вместе с игнорируемыми файлами вроде node_modules), затем локальная ветка. Ссылка внутри удаляется как ссылка: папка, на которую она ведёт вне worktree, остаётся. Копия в origin остаётся.",
+        "title_few": "Убрать worktree {{count}} веток и сами ветки?",
+        "title_many": "Убрать worktree {{count}} веток и сами ветки?",
+        "confirm_few": "Убрать worktree и удалить {{count}} ветки",
+        "confirm_many": "Убрать worktree и удалить {{count}} веток"
       }
     },
     "previewState": {
@@ -1086,13 +1088,13 @@
     "copied": "Скопировано",
     "sweep": {
       "partial_one": "Удалён {{count}} файл; {{failed}} удалить не удалось, они останутся до следующего запуска",
-      "partial_few": "Удалено {{count}} файла; {{failed}} удалить не удалось, они останутся до следующего запуска",
-      "partial_many": "Удалено {{count}} файлов; {{failed}} удалить не удалось, они останутся до следующего запуска",
       "partial_other": "Удалено {{count}} файла; {{failed}} удалить не удалось, они останутся до следующего запуска",
       "done_one": "Удалён {{count}} файл ({{size}})",
+      "done_other": "Удалено {{count}} файла ({{size}})",
+      "partial_few": "Удалено {{count}} файла; {{failed}} удалить не удалось, они останутся до следующего запуска",
+      "partial_many": "Удалено {{count}} файлов; {{failed}} удалить не удалось, они останутся до следующего запуска",
       "done_few": "Удалено {{count}} файла ({{size}})",
-      "done_many": "Удалено {{count}} файлов ({{size}})",
-      "done_other": "Удалено {{count}} файла ({{size}})"
+      "done_many": "Удалено {{count}} файлов ({{size}})"
     },
     "toast": {
       "keptSee": "{{counts}}: причины ниже",
@@ -1136,8 +1138,6 @@
       }
     },
     "workspacesRegistered_one": "Зарегистрирован {{count}} workspace",
-    "workspacesRegistered_few": "Зарегистрировано {{count}} workspace",
-    "workspacesRegistered_many": "Зарегистрировано {{count}} workspace",
     "workspacesRegistered_other": "Зарегистрировано {{count}} workspace",
     "previewStop": "превью: {{state}}; остановите его в тикете",
     "notLocal": "не локальная",
@@ -1169,15 +1169,15 @@
       "intro": "Файлы, загруженные больше суток назад, которые ничто на доске не использует: окно «Новый тикет», закрытое без создания, файл, убранный из записи до отправки. Доска удаляет их каждый час; файлы младше суток не трогает.",
       "introRecent": "Файлы, загруженные больше суток назад, которые ничто на доске не использует: окно «Новый тикет», закрытое без создания, файл, убранный из записи до отправки. Доска удаляет их каждый час; файлы младше суток не трогает (сейчас таких: {{recent}}).",
       "summary_one": "{{count}} файл, {{size}}",
-      "summary_few": "{{count}} файла, {{size}}",
-      "summary_many": "{{count}} файлов, {{size}}",
       "summary_other": "{{count}} файла, {{size}}",
       "deleteNow": "Удалить сейчас",
       "confirmTitle": "Удалить неприкреплённые загрузки?",
       "confirmText_one": "{{count}} файл ({{size}}), который не используют ни запись, ни ответ, ни тикет, ни картинка агента, загруженный больше суток назад. Это нельзя отменить.",
+      "confirmText_other": "{{count}} файла ({{size}}), которые не используют ни запись, ни ответ, ни тикет, ни картинка агента, загруженные больше суток назад. Это нельзя отменить.",
+      "summary_few": "{{count}} файла, {{size}}",
+      "summary_many": "{{count}} файлов, {{size}}",
       "confirmText_few": "{{count}} файла ({{size}}), которые не используют ни запись, ни ответ, ни тикет, ни картинка агента, загруженные больше суток назад. Это нельзя отменить.",
-      "confirmText_many": "{{count}} файлов ({{size}}), которые не используют ни запись, ни ответ, ни тикет, ни картинка агента, загруженные больше суток назад. Это нельзя отменить.",
-      "confirmText_other": "{{count}} файла ({{size}}), которые не используют ни запись, ни ответ, ни тикет, ни картинка агента, загруженные больше суток назад. Это нельзя отменить."
+      "confirmText_many": "{{count}} файлов ({{size}}), которые не используют ни запись, ни ответ, ни тикет, ни картинка агента, загруженные больше суток назад. Это нельзя отменить."
     },
     "keep": "Оставить",
     "delete": "Удалить",
@@ -1215,7 +1215,9 @@
       "title": "Последнее удаление",
       "retry": "Повторить для оставленных",
       "dismiss": "Закрыть"
-    }
+    },
+    "workspacesRegistered_few": "Зарегистрировано {{count}} workspace",
+    "workspacesRegistered_many": "Зарегистрировано {{count}} workspace"
   },
   "gallery": {
     "kind": {
@@ -1386,8 +1388,6 @@
       "failed": "Ошибка"
     },
     "notStarted_one": "{{count}} не запущен: {{list}}",
-    "notStarted_few": "{{count}} не запущены: {{list}}",
-    "notStarted_many": "{{count}} не запущено: {{list}}",
     "notStarted_other": "{{count}} не запущено: {{list}}",
     "nothingRunning": "Ничего не работало",
     "startAllTip": "Запустить все запуски репозиториев тикета, которые ещё не работают",
@@ -1420,7 +1420,9 @@
     "since": ", с {{time}}",
     "buildLog": "лог сборки",
     "runLog": "лог запуска",
-    "logAria": "Лог: {{name}}"
+    "logAria": "Лог: {{name}}",
+    "notStarted_few": "{{count}} не запущены: {{list}}",
+    "notStarted_many": "{{count}} не запущено: {{list}}"
   },
   "previews": {
     "step": {
@@ -1444,12 +1446,8 @@
     "stageTip": "Показывает превью тикетов этого этапа",
     "nothingToStop": "Останавливать нечего",
     "couldNotStop_one": "не удалось остановить {{count}}: {{list}}",
-    "couldNotStop_few": "не удалось остановить {{count}}: {{list}}",
-    "couldNotStop_many": "не удалось остановить {{count}}: {{list}}",
     "couldNotStop_other": "не удалось остановить {{count}}: {{list}}",
     "stoppedCount_one": "Остановлено: {{count}}",
-    "stoppedCount_few": "Остановлено: {{count}}",
-    "stoppedCount_many": "Остановлено: {{count}}",
     "stoppedCount_other": "Остановлено: {{count}}",
     "barTip": "Превью, которые доска собирает или запускает, во всех проектах, и сколько их максимум одновременно",
     "bar": "Превью от доски: <strong>занято {{inUse}} из {{limit}}</strong> <muted>(на всю доску)</muted>",
@@ -1482,7 +1480,11 @@
     "runBySince": "Запущено доской на :{{port}}, с {{time}}",
     "failed": "Ошибка: {{reason}}",
     "stoppedReason": "Остановлено: {{reason}}",
-    "stopAllRuns": "Остановить все"
+    "stopAllRuns": "Остановить все",
+    "couldNotStop_few": "не удалось остановить {{count}}: {{list}}",
+    "couldNotStop_many": "не удалось остановить {{count}}: {{list}}",
+    "stoppedCount_few": "Остановлено: {{count}}",
+    "stoppedCount_many": "Остановлено: {{count}}"
   },
   "previewWindow": {
     "building": "Сборка… оно появится здесь, когда запустится.",
@@ -1590,8 +1592,6 @@
     "remove": "Убрать {{name}}",
     "removeTitle": "Убрать {{name}}?",
     "removeReserved_one": "Его {{count}} закреплённый тикет станет общим и без исполнителя.",
-    "removeReserved_few": "Его {{count}} закреплённых тикета станут общими и без исполнителя.",
-    "removeReserved_many": "Его {{count}} закреплённых тикетов станут общими и без исполнителя.",
     "removeReserved_other": "Его {{count}} закреплённого тикета станут общими и без исполнителя.",
     "removeKept": "Всё, что он уже опубликовал, сохранит его имя.",
     "keep": "Оставить",
@@ -1605,8 +1605,6 @@
     "reportHint": "шаблон, который каждый запуск заполняет перед передачей результата",
     "nothingYet": "Пока ничего.",
     "lines_one": "{{count}} строка",
-    "lines_few": "{{count}} строки",
-    "lines_many": "{{count}} строк",
     "lines_other": "{{count}} строки",
     "picture": "Картинка",
     "choosePicture": "Выбрать картинку",
@@ -1620,7 +1618,11 @@
     "templateLabel": "Шаблон отчёта о запуске",
     "templateText": "Что запуск этого агента заполняет перед передачей результата, по одному отчёту на запуск. Он начинается с общей части каждого отчёта (личность, время, задание, шаги, оценки, проблемы, пробелы); добавьте то, что делает этот агент. Доска хранит его вместе с агентом.",
     "templatePlaceholder": "## Правило …",
-    "add": "Добавить агента"
+    "add": "Добавить агента",
+    "removeReserved_few": "Его {{count}} закреплённых тикета станут общими и без исполнителя.",
+    "removeReserved_many": "Его {{count}} закреплённых тикетов станут общими и без исполнителя.",
+    "lines_few": "{{count}} строки",
+    "lines_many": "{{count}} строк"
   },
   "gettingStarted": {
     "agentEmpty": "Проектов пока нет. Первый создаёт человек в «Начале работы» на главной.",
@@ -1671,16 +1673,10 @@
     "select": "Выберите проект",
     "projects": "Проекты",
     "repos_one": "{{count}} репозиторий",
-    "repos_few": "{{count}} репозитория",
-    "repos_many": "{{count}} репозиториев",
     "repos_other": "{{count}} репозитория",
     "tickets_one": "{{count}} тикет",
-    "tickets_few": "{{count}} тикета",
-    "tickets_many": "{{count}} тикетов",
     "tickets_other": "{{count}} тикета",
     "openPrs_one": "{{count}} открытый PR",
-    "openPrs_few": "{{count}} открытых PR",
-    "openPrs_many": "{{count}} открытых PR",
     "openPrs_other": "{{count}} открытого PR",
     "newProject": "Новый проект…",
     "manage": "Управление проектами…",
@@ -1698,7 +1694,13 @@
     "keep": "Оставить",
     "delete": "Удалить",
     "noRepos": "нет репозиториев",
-    "counts": "{{tickets}} · {{openPrs}}"
+    "counts": "{{tickets}} · {{openPrs}}",
+    "repos_few": "{{count}} репозитория",
+    "repos_many": "{{count}} репозиториев",
+    "tickets_few": "{{count}} тикета",
+    "tickets_many": "{{count}} тикетов",
+    "openPrs_few": "{{count}} открытых PR",
+    "openPrs_many": "{{count}} открытых PR"
   },
   "newTicket": {
     "newTicket": "Новый тикет",
@@ -1831,23 +1833,15 @@
     "pushed": "отправлено",
     "pushedBehind": "отправлено, отстаёт на {{count}}",
     "pushedBehindTitle_one": "отправлено; в origin на {{count}} коммит больше",
-    "pushedBehindTitle_few": "отправлено; в origin на {{count}} коммита больше",
-    "pushedBehindTitle_many": "отправлено; в origin на {{count}} коммитов больше",
     "pushedBehindTitle_other": "отправлено; в origin на {{count}} коммита больше",
     "ahead": "не отправлено: {{count}}",
     "aheadTitle_one": "не отправлено: {{count}} коммит только здесь",
-    "aheadTitle_few": "не отправлено: {{count}} коммита только здесь",
-    "aheadTitle_many": "не отправлено: {{count}} коммитов только здесь",
     "aheadTitle_other": "не отправлено: {{count}} коммита только здесь",
     "aheadBehindTitle_one": "не отправлено: {{count}} коммит только здесь; в origin есть ещё {{behind}}, которых нет в этой ветке",
-    "aheadBehindTitle_few": "не отправлено: {{count}} коммита только здесь; в origin есть ещё {{behind}}, которых нет в этой ветке",
-    "aheadBehindTitle_many": "не отправлено: {{count}} коммитов только здесь; в origin есть ещё {{behind}}, которых нет в этой ветке",
     "aheadBehindTitle_other": "не отправлено: {{count}} коммита только здесь; в origin есть ещё {{behind}}, которых нет в этой ветке",
     "localOnly": "нет в origin",
     "localOnlyTitle": "не отправлено: такой ветки нет в origin",
     "localOnlyAheadTitle_one": "не отправлено: такой ветки нет в origin, {{count}} коммит только здесь",
-    "localOnlyAheadTitle_few": "не отправлено: такой ветки нет в origin, {{count}} коммита только здесь",
-    "localOnlyAheadTitle_many": "не отправлено: такой ветки нет в origin, {{count}} коммитов только здесь",
     "localOnlyAheadTitle_other": "не отправлено: такой ветки нет в origin, {{count}} коммита только здесь",
     "itsBase": "её база",
     "merged": "влита в {{into}}",
@@ -1858,7 +1852,15 @@
     "noneTitle": "такой ветки нет ни здесь, ни в origin",
     "checked": "проверено {{ago}}",
     "notFetched": "origin ещё не получен",
-    "fetchNow": "Получить origin сейчас"
+    "fetchNow": "Получить origin сейчас",
+    "pushedBehindTitle_few": "отправлено; в origin на {{count}} коммита больше",
+    "pushedBehindTitle_many": "отправлено; в origin на {{count}} коммитов больше",
+    "aheadTitle_few": "не отправлено: {{count}} коммита только здесь",
+    "aheadTitle_many": "не отправлено: {{count}} коммитов только здесь",
+    "aheadBehindTitle_few": "не отправлено: {{count}} коммита только здесь; в origin есть ещё {{behind}}, которых нет в этой ветке",
+    "aheadBehindTitle_many": "не отправлено: {{count}} коммитов только здесь; в origin есть ещё {{behind}}, которых нет в этой ветке",
+    "localOnlyAheadTitle_few": "не отправлено: такой ветки нет в origin, {{count}} коммита только здесь",
+    "localOnlyAheadTitle_many": "не отправлено: такой ветки нет в origin, {{count}} коммитов только здесь"
   },
   "clock": {
     "typeTime": "{{label}} (введите время)",
@@ -1870,9 +1872,9 @@
   "markdown": {
     "agentChip": "{{name}}, агент проекта",
     "pages_one": "{{count}} страница",
+    "pages_other": "{{count}} страницы",
     "pages_few": "{{count}} страницы",
-    "pages_many": "{{count}} страниц",
-    "pages_other": "{{count}} страницы"
+    "pages_many": "{{count}} страниц"
   },
   "editor": {
     "text": "Текст",
@@ -2097,12 +2099,8 @@
     },
     "recent": "Недавние",
     "notStarted_one": "{{count}} не запущен: {{details}}",
-    "notStarted_few": "{{count}} не запущены: {{details}}",
-    "notStarted_many": "{{count}} не запущено: {{details}}",
     "notStarted_other": "{{count}} не запущено: {{details}}",
     "notStopped_one": "{{count}} не остановлен: {{details}}",
-    "notStopped_few": "{{count}} не остановлены: {{details}}",
-    "notStopped_many": "{{count}} не остановлено: {{details}}",
     "notStopped_other": "{{count}} не остановлено: {{details}}",
     "nothingRunning": "Ничего не работало",
     "createIn": "Создать тикет в {{name}}",
@@ -2129,7 +2127,11 @@
     "toMove": "перемещение",
     "toOpen": "открыть",
     "toClose": "закрыть",
-    "anywhere": "везде"
+    "anywhere": "везде",
+    "notStarted_few": "{{count}} не запущены: {{details}}",
+    "notStarted_many": "{{count}} не запущено: {{details}}",
+    "notStopped_few": "{{count}} не остановлены: {{details}}",
+    "notStopped_many": "{{count}} не остановлено: {{details}}"
   },
   "signIn": {
     "finishTitle": "Завершите настройку на хосте",
@@ -2158,30 +2160,20 @@
   "ticketBoard": {
     "stage": "Этап",
     "archiveTip_one": "Архивировать {{count}} тикет в этапе {{stage}}",
-    "archiveTip_few": "Архивировать {{count}} тикета в этапе {{stage}}",
-    "archiveTip_many": "Архивировать {{count}} тикетов в этапе {{stage}}",
     "archiveTip_other": "Архивировать {{count}} тикета в этапе {{stage}}",
     "archiveAll": "Архивировать все",
     "archiveTitle_one": "Архивировать {{count}} тикет?",
-    "archiveTitle_few": "Архивировать {{count}} тикета?",
-    "archiveTitle_many": "Архивировать {{count}} тикетов?",
     "archiveTitle_other": "Архивировать {{count}} тикета?",
     "archiveDescription": "Все тикеты этапа {{stage}} уйдут с доски вместе со своими лейнами. Они останутся в «Архиве», где каждый можно восстановить, и их страницы по-прежнему открываются.",
     "cancel": "Отмена",
     "archive": "Архивировать",
     "decisions_one": "нужно {{count}} решение",
-    "decisions_few": "нужно {{count}} решения",
-    "decisions_many": "нужно {{count}} решений",
     "decisions_other": "нужно {{count}} решения",
     "tasksBlocked_one": "{{count}} задача заблокирована",
-    "tasksBlocked_few": "{{count}} задачи заблокированы",
-    "tasksBlocked_many": "{{count}} задач заблокировано",
     "tasksBlocked_other": "{{count}} задачи заблокированы",
     "previousStage": "Предыдущий этап",
     "nextStage": "Следующий этап",
     "lanes_one": "{{count}} лейн",
-    "lanes_few": "{{count}} лейна",
-    "lanes_many": "{{count}} лейнов",
     "lanes_other": "{{count}} лейна",
     "laneStage": "{{count}} {{stage}}",
     "hitInstructions": "Инструкции",
@@ -2191,12 +2183,20 @@
     "nothingArchived": "В архиве пусто.",
     "archived": "в архиве с {{when}}",
     "archivedBy": "в архиве с {{when}}, <actor/>",
-    "restore": "Восстановить"
+    "restore": "Восстановить",
+    "archiveTip_few": "Архивировать {{count}} тикета в этапе {{stage}}",
+    "archiveTip_many": "Архивировать {{count}} тикетов в этапе {{stage}}",
+    "archiveTitle_few": "Архивировать {{count}} тикета?",
+    "archiveTitle_many": "Архивировать {{count}} тикетов?",
+    "decisions_few": "нужно {{count}} решения",
+    "decisions_many": "нужно {{count}} решений",
+    "tasksBlocked_few": "{{count}} задачи заблокированы",
+    "tasksBlocked_many": "{{count}} задач заблокировано",
+    "lanes_few": "{{count}} лейна",
+    "lanes_many": "{{count}} лейнов"
   },
   "ticketList": {
     "archivedToast_one": "В архив отправлен {{count}} тикет",
-    "archivedToast_few": "В архив отправлено {{count}} тикета",
-    "archivedToast_many": "В архив отправлено {{count}} тикетов",
     "archivedToast_other": "В архив отправлено {{count}} тикета",
     "restoredToast": "Тикет #{{id}} возвращён на доску",
     "title": "Текущие фичи",
@@ -2213,8 +2213,6 @@
     "searchTags": "Поиск тегов",
     "noTagsMatch": "Нет подходящих тегов",
     "tickets_one": "{{count}} тикет",
-    "tickets_few": "{{count}} тикета",
-    "tickets_many": "{{count}} тикетов",
     "tickets_other": "{{count}} тикета",
     "showEveryTag": "Показать все теги",
     "clearTag": "Сбросить фильтр тега",
@@ -2223,7 +2221,11 @@
     "retry": "Повторить",
     "searchTickets": "Поиск тикетов",
     "searchPlaceholder": "Поиск по названию или обсуждению",
-    "clearSearchAria": "Очистить поиск"
+    "clearSearchAria": "Очистить поиск",
+    "archivedToast_few": "В архив отправлено {{count}} тикета",
+    "archivedToast_many": "В архив отправлено {{count}} тикетов",
+    "tickets_few": "{{count}} тикета",
+    "tickets_many": "{{count}} тикетов"
   },
   "needs": {
     "titleIn": "#{{id}} {{title}}: {{branch}} в {{into}}",
@@ -2458,15 +2460,15 @@
       "delegated": "{{on}}, делегировано",
       "clause": "{{agent}} {{parts}}",
       "workBy_one": "Работа {{count}} агента за {{over}}: {{clauses}}.{{live}}{{scale}}",
-      "workBy_few": "Работа {{count}} агентов за {{over}}: {{clauses}}.{{live}}{{scale}}",
-      "workBy_many": "Работа {{count}} агентов за {{over}}: {{clauses}}.{{live}}{{scale}}",
       "workBy_other": "Работа {{count}} агентов за {{over}}: {{clauses}}.{{live}}{{scale}}",
       "activityBy_one": "Активность {{count}} агента за {{over}}: {{clauses}}.{{live}}{{scale}}",
-      "activityBy_few": "Активность {{count}} агентов за {{over}}: {{clauses}}.{{live}}{{scale}}",
-      "activityBy_many": "Активность {{count}} агентов за {{over}}: {{clauses}}.{{live}}{{scale}}",
       "activityBy_other": "Активность {{count}} агентов за {{over}}: {{clauses}}.{{live}}{{scale}}",
       "stillGoing": " Продолжается.",
-      "notToScale": " Не в масштабе: {{skipped}}."
+      "notToScale": " Не в масштабе: {{skipped}}.",
+      "workBy_few": "Работа {{count}} агентов за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "workBy_many": "Работа {{count}} агентов за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_few": "Активность {{count}} агентов за {{over}}: {{clauses}}.{{live}}{{scale}}",
+      "activityBy_many": "Активность {{count}} агентов за {{over}}: {{clauses}}.{{live}}{{scale}}"
     },
     "card": {
       "title": "Хронология",
@@ -2543,17 +2545,17 @@
     "range": "с {{start}} до сейчас",
     "stat": {
       "tickets_one": "тикет",
-      "tickets_few": "тикета",
-      "tickets_many": "тикетов",
       "tickets_other": "тикета",
       "lanes_one": "лейн",
-      "lanes_few": "лейна",
-      "lanes_many": "лейнов",
       "lanes_other": "лейна",
       "workingNow": "работают",
       "blocked": "заблокированы",
       "inReview": "на ревью",
-      "noWord": "без вестей"
+      "noWord": "без вестей",
+      "tickets_few": "тикета",
+      "tickets_many": "тикетов",
+      "lanes_few": "лейна",
+      "lanes_many": "лейнов"
     },
     "projectWork": "Работа проекта, все тикеты и лейны:",
     "empty": {
@@ -2562,8 +2564,6 @@
       "review": "Нет тикетов, ждущих ревью."
     },
     "lanes_one": "{{count}} лейн",
-    "lanes_few": "{{count}} лейна",
-    "lanes_many": "{{count}} лейнов",
     "lanes_other": "{{count}} лейна",
     "unassigned": "Не назначен",
     "progress": "готово {{done}} из {{total}}",
@@ -2576,18 +2576,20 @@
       "next": "дальше",
       "later": "позже",
       "blocked": "заблокировано"
-    }
+    },
+    "lanes_few": "{{count}} лейна",
+    "lanes_many": "{{count}} лейнов"
   },
   "overview": {
     "loadError": "Не удалось загрузить сводку: {{error}}",
     "projectOverview": "{{name}}: обзор",
     "headline": {
+      "inProgress": "{{count}} в работе",
+      "doneToday": "{{count}} готово сегодня",
       "waiting_one": "{{count}} ждёт вас",
       "waiting_few": "{{count}} ждут вас",
       "waiting_many": "{{count}} ждут вас",
-      "waiting_other": "{{count}} ждут вас",
-      "inProgress": "{{count}} в работе",
-      "doneToday": "{{count}} готово сегодня"
+      "waiting_other": "{{count}} ждут вас"
     },
     "allHidden": "Все карточки этого обзора скрыты. <goto>Верните их в настройках раскладки</goto>.",
     "showFewer": "Показать меньше",
@@ -2601,12 +2603,8 @@
     "prTitle": "PR #{{number}} {{title}}",
     "openOnGithub": "Открыть на GitHub",
     "option_one": "{{count}} вариант",
-    "option_few": "{{count}} варианта",
-    "option_many": "{{count}} вариантов",
     "option_other": "{{count}} варианта",
     "lane_one": "{{count}} лейн",
-    "lane_few": "{{count}} лейна",
-    "lane_many": "{{count}} лейнов",
     "lane_other": "{{count}} лейна",
     "previewOf": "Превью {{workspace}}",
     "preview": "Превью",
@@ -2644,19 +2642,23 @@
       "closedTip": "Влит или закрыт: ушёл из очереди ревью",
       "closed": "закрыт {{time}}",
       "activity_one": "Сегодня {{count}} событие: «Отчёт дня»",
+      "activity_other": "Сегодня {{count}} события: «Отчёт дня»",
       "activity_few": "Сегодня {{count}} события: «Отчёт дня»",
-      "activity_many": "Сегодня {{count}} событий: «Отчёт дня»",
-      "activity_other": "Сегодня {{count}} события: «Отчёт дня»"
+      "activity_many": "Сегодня {{count}} событий: «Отчёт дня»"
     },
     "carryingOver": {
       "title": "Переходит",
       "startedTip": "Работа над ним началась {{when}}",
       "days_one": "{{count}} день в работе",
-      "days_few": "{{count}} дня в работе",
-      "days_many": "{{count}} дней в работе",
       "days_other": "{{count}} дня в работе",
-      "emptyShown": "Нет заблокированного и ждущего ревью с прошлых дней."
-    }
+      "emptyShown": "Нет заблокированного и ждущего ревью с прошлых дней.",
+      "days_few": "{{count}} дня в работе",
+      "days_many": "{{count}} дней в работе"
+    },
+    "option_few": "{{count}} варианта",
+    "option_many": "{{count}} вариантов",
+    "lane_few": "{{count}} лейна",
+    "lane_many": "{{count}} лейнов"
   },
   "notifications": {
     "title": "Уведомления",
@@ -2714,8 +2716,6 @@
     "deleteTitle": "Удалить этот тикет?",
     "deleteBody": "Вместе с ним уйдут задачи, обновления, вложения и обсуждение.",
     "deleteLanes_one": "У него {{count}} лейн: удалите и его тоже или оставьте и поднимите на уровень выше.",
-    "deleteLanes_few": "У него {{count}} лейна: удалите и их тоже или оставьте и поднимите на уровень выше.",
-    "deleteLanes_many": "У него {{count}} лейнов: удалите и их тоже или оставьте и поднимите на уровень выше.",
     "deleteLanes_other": "У него {{count}} лейна: удалите и их тоже или оставьте и поднимите на уровень выше.",
     "deleteKeepLanes": "Удалить, оставить лейны",
     "deleteWithLanes": "Удалить с лейнами",
@@ -2760,8 +2760,6 @@
     "tickedAuto": "Отмечено автоматически",
     "blocked": "заблокировано",
     "subtasksBlocked_one": "{{count}} подзадача заблокирована",
-    "subtasksBlocked_few": "{{count}} подзадачи заблокированы",
-    "subtasksBlocked_many": "{{count}} подзадач заблокировано",
     "subtasksBlocked_other": "{{count}} подзадачи заблокированы",
     "unblock": "Разблокировать {{name}}",
     "markBlockedNamed": "Заблокировать {{name}}",
@@ -2802,8 +2800,6 @@
     "agents": "Агенты",
     "includeLanePosts": "с записями лейнов",
     "newCount_one": "Новых: {{count}}",
-    "newCount_few": "Новых: {{count}}",
-    "newCount_many": "Новых: {{count}}",
     "newCount_other": "Новых: {{count}}",
     "newPost": "Новая запись",
     "postPlaceholder": "Напишите запись: вопрос, ответ, ход работы. Вставьте или перетащите скриншоты и записи экрана.",
@@ -2823,8 +2819,6 @@
     "earlierVersions": "Прежние версии",
     "firstVersion": "первая версия",
     "replies_one": "{{count}} ответ",
-    "replies_few": "{{count}} ответа",
-    "replies_many": "{{count}} ответов",
     "replies_other": "{{count}} ответа",
     "summaryActions": "Действия со сводкой",
     "hideRepliesLabel": "скрыть ответы",
@@ -2873,7 +2867,16 @@
     "workflowOwn": "Идёт по процессу «{{workflow}}», заданному для этого тикета.",
     "workflowProject": "Идёт по процессу проекта ({{workflow}}).",
     "workflowSteps": "Смотреть шаги",
-    "lanesProgress": "{{done}}/{{total}} готово"
+    "lanesProgress": "{{done}}/{{total}} готово",
+    "workflowDeleted": "Процесс, заданный для этого тикета, удалён, поэтому тикет следует процессу проекта ({{workflow}}).",
+    "deleteLanes_few": "У него {{count}} лейна: удалите и их тоже или оставьте и поднимите на уровень выше.",
+    "deleteLanes_many": "У него {{count}} лейнов: удалите и их тоже или оставьте и поднимите на уровень выше.",
+    "subtasksBlocked_few": "{{count}} подзадачи заблокированы",
+    "subtasksBlocked_many": "{{count}} подзадач заблокировано",
+    "newCount_few": "Новых: {{count}}",
+    "newCount_many": "Новых: {{count}}",
+    "replies_few": "{{count}} ответа",
+    "replies_many": "{{count}} ответов"
   },
   "complexity": {
     "label": {
@@ -2895,8 +2898,6 @@
     "error": "Не удалось узнать, кто работает.",
     "empty": "Никто не работает",
     "more_one": "+ещё {{count}}",
-    "more_few": "+ещё {{count}}",
-    "more_many": "+ещё {{count}}",
     "more_other": "+ещё {{count}}",
     "round": "{{phase}}, раунд {{round}}",
     "waiting": "Ждёт: {{what}}",
@@ -2909,7 +2910,9 @@
       "working": "работает",
       "waiting": "ждёт",
       "asleep": "спит"
-    }
+    },
+    "more_few": "+ещё {{count}}",
+    "more_many": "+ещё {{count}}"
   },
   "notificationSettings": {
     "title": "Уведомления",
@@ -2926,17 +2929,17 @@
     },
     "snooze": {
       "minutes_one": "{{count}} минута",
-      "minutes_few": "{{count}} минуты",
-      "minutes_many": "{{count}} минут",
       "minutes_other": "{{count}} минуты",
       "hours_one": "{{count}} час",
-      "hours_few": "{{count}} часа",
-      "hours_many": "{{count}} часов",
       "hours_other": "{{count}} часа",
       "days_one": "{{count}} день",
+      "days_other": "{{count}} дня",
+      "minutes_few": "{{count}} минуты",
+      "minutes_many": "{{count}} минут",
+      "hours_few": "{{count}} часа",
+      "hours_many": "{{count}} часов",
       "days_few": "{{count}} дня",
-      "days_many": "{{count}} дней",
-      "days_other": "{{count}} дня"
+      "days_many": "{{count}} дней"
     }
   },
   "workflowChips": {
@@ -2953,6 +2956,21 @@
     "skippedOnLow": "Пропускается на низкой",
     "changed": "изменено",
     "changedTip": "Изменено относительно пресета: {{what}}"
+  },
+  "workflowCustom": {
+    "name": "Название",
+    "new": "Новый процесс",
+    "newDescription": "Копия процесса этого проекта, которую вы меняете отдельно: добавляйте и убирайте шаги, меняйте их порядок, выбирайте, кто выполняет каждый. Ревью внутри идёт с пресетом, из которого он скопирован.",
+    "startFrom": "Начать с",
+    "create": "Создать процесс",
+    "rename": "Переименовать",
+    "renameTitle": "Переименовать процесс",
+    "renameDescription": "Тикеты и проект продолжают следовать за ним под новым названием.",
+    "deleteTitle": "Удалить процесс {{name}}?",
+    "deleteDescription": "Если проект следует за ним, он переключится на {{standard}}, а тикет, который его называет, будет следовать процессу проекта. Пресеты не затрагиваются. Это нельзя отменить.",
+    "deleteWorkflow": "Удалить процесс",
+    "addStep": "Добавить шаг",
+    "allIn": "Все виды уже есть"
   },
   "workflowGraph": {
     "label": "Процесс: {{label}}; тикет, сложность: {{complexity}}",
@@ -2995,7 +3013,13 @@
     "effort": "Усилие",
     "effortHint": "Передаётся как усилие инструмента Agent. {{hint}}.",
     "reviewRuns": "В каждом раунде отдельные запуски /feature-review, всего {{total}}: {{runs}}; каждый под своим именем агента, находки другого ему не показывают.",
-    "survival": "<strong>Раунд пройден, когда</strong> {{survival}}."
+    "survival": "<strong>Раунд пройден, когда</strong> {{survival}}.",
+    "inThisWorkflow": "В этом процессе",
+    "removeStep": "Убрать шаг",
+    "takesOut": "Уберите {{step}} из этого процесса. Добавьте его снова через «Добавить шаг» над графом.",
+    "alwaysFirst": "Шаг {{step}} всегда первый, поэтому его нельзя убрать.",
+    "alwaysLast": "Шаг {{step}} всегда последний, поэтому его нельзя убрать.",
+    "lockedStep": "Шаг {{step}} заблокирован, поэтому его нельзя убрать."
   },
   "workflowPage": {
     "title": "Процесс",
@@ -3011,9 +3035,21 @@
     "sectionLabel": "Процесс: {{label}}",
     "projects": "проектный",
     "summary_one": "{{count}} шаг для тикета, сложность: {{complexity}} · ревью: {{rounds}}",
+    "summary_other": "{{count}} шага для тикета, сложность: {{complexity}} · ревью: {{rounds}}",
+    "summaryNoReview_one": "{{count}} шаг для задачи ({{complexity}}) · без проверки",
+    "summaryNoReview_few": "{{count}} шага для задачи ({{complexity}}) · без проверки",
+    "summaryNoReview_many": "{{count}} шагов для задачи ({{complexity}}) · без проверки",
+    "summaryNoReview_other": "{{count}} шага для задачи ({{complexity}}) · без проверки",
+    "created": "Процесс создан",
+    "renamed": "Переименовано",
+    "deleted": "Процесс удалён",
+    "resetBodyCustom": "Его шаги, порядок, переключатели, усилия, агенты команды и раунды ревью вернутся к тем, какими был процесс {{label}}. Название останется, а в других процессах сохранятся изменения, которые в них внесли.",
+    "fellBack": "Процесс, которому следовал проект, удалён, поэтому теперь проект следует {{standard}}. Тикеты, которые его называли, следуют процессу проекта. Оставьте {{standard}}, чтобы закрыть это сообщение, или выберите ниже другой процесс и нажмите «Использовать этот процесс».",
+    "notOwn": "Этот процесс не относится к этому проекту (возможно, он удалён), поэтому показан процесс проекта.",
+    "keepStandard": "Оставить {{label}}",
+    "customNote": "Ваш процесс, скопирован из {{base}}. Добавляйте шаги перечисленных видов, убирайте те, что не заблокированы, и переставляйте их в пределах того, что допускает каждый шаг. Ревью внутри (его фазы и то, что они выполняют) взято из {{base}}.",
     "summary_few": "{{count}} шага для тикета, сложность: {{complexity}} · ревью: {{rounds}}",
-    "summary_many": "{{count}} шагов для тикета, сложность: {{complexity}} · ревью: {{rounds}}",
-    "summary_other": "{{count}} шага для тикета, сложность: {{complexity}} · ревью: {{rounds}}"
+    "summary_many": "{{count}} шагов для тикета, сложность: {{complexity}} · ревью: {{rounds}}"
   },
   "workflowPresets": {
     "group": "Пресеты процесса",
@@ -3021,8 +3057,6 @@
     "tweaked": "Изменён",
     "complexity": "Сложность",
     "stats_one": "{{count}} шаг · раунды ревью {{rounds}}",
-    "stats_few": "{{count}} шага · раунды ревью {{rounds}}",
-    "stats_many": "{{count}} шагов · раунды ревью {{rounds}}",
     "stats_other": "{{count}} шага · раунды ревью {{rounds}}",
     "light": {
       "label": "Лёгкий",
@@ -3039,7 +3073,16 @@
     "maximum": {
       "label": "Максимальный",
       "description": "Тщательный плюс второй независимый spec, второе полное ревью каждого раунда другим агентом, который не видит первое, и высокое усилие у каждого агента."
-    }
+    },
+    "content": {
+      "label": "Контент",
+      "description": "Захват задачи, черновик, созданный и проверенный самим агентом, раунды проверки человеком по черновику, сводка и передача: без spec, без PR, CI, превью и фаз ревью."
+    },
+    "custom": "Свой",
+    "copiedFrom": "Свой, скопирован из {{base}}.",
+    "stats_few": "{{count}} шага · раунды ревью {{rounds}}",
+    "stats_many": "{{count}} шагов · раунды ревью {{rounds}}",
+    "noReview": "без проверки"
   },
   "workflowReview": {
     "legend": "Раундов ревью по сложности",
@@ -3054,13 +3097,19 @@
   },
   "workflowSelect": {
     "project": "Процесс проекта ({{label}})",
-    "hint": "Процесс, по которому идёт его агент: проектный или один из четырёх пресетов только для этого тикета. Смена процесса проекта не затрагивает тикет, у которого указан свой."
+    "hint": "Процесс, которому следует его агент: собственный процесс проекта или другой процесс проекта только для этого тикета. Смена процесса проекта не переносит тикет, который назвал свой.",
+    "deleted": "Удалённый процесс (следует процессу проекта)"
+  },
+  "workflowTags": {
+    "title": "Теги, которые выбирают процесс",
+    "empty": "Ни один тег пока не выбирает процесс. Агенты задают эту карту через set_workflow_tags: тикет с одним из тегов и без собственного процесса следует процессу, на который указывает тег, иначе — процессу проекта.",
+    "tag": "Тег",
+    "workflow": "Процесс",
+    "notOne": "Не один из процессов проекта"
   },
   "workflowView": {
     "noRounds": "без раундов ревью",
     "rounds_one": "{{count}} раунд",
-    "rounds_few": "{{count}} раунда",
-    "rounds_many": "{{count}} раундов",
     "rounds_other": "{{count}} раунда",
     "complexity": {
       "low": "Низкая",
@@ -3101,6 +3150,7 @@
       "build": "Обязателен: без сборки изменения ничего не сдаётся.",
       "gate": "Обязателен: ни одно изменение не идёт дальше непроверенным.",
       "intent": "Обязателен выше низкой: каждый тикет выше низкой сверяется со словами человека перед передачей.",
+      "rounds": "Заблокировано: человек проверяет черновик до передачи.",
       "always": "Обязателен: без него тикет не передать."
     },
     "survival": {
@@ -3116,7 +3166,9 @@
       "stayLast": "{{step}} должен остаться последним",
       "alreadyFirst": "{{step}} уже первый",
       "alreadyLast": "{{step}} уже последний"
-    }
+    },
+    "rounds_few": "{{count}} раунда",
+    "rounds_many": "{{count}} раундов"
   },
   "backToModule": {
     "back": "Назад: {{label}}",
@@ -3169,8 +3221,6 @@
     "none": "Отчётов о запусках пока нет.",
     "noMatch": "Нет отчётов под эти фильтры.",
     "count_one": "{{shown}} из {{count}} отчёта",
-    "count_few": "{{shown}} из {{count}} отчётов",
-    "count_many": "{{shown}} из {{count}} отчётов",
     "count_other": "{{shown}} из {{count}} отчёта",
     "clearFilters": "Сбросить фильтры",
     "filter": {
@@ -3209,6 +3259,8 @@
       "longest": "Сначала длинные",
       "difficulty": "Наибольшая сложность",
       "confidence": "Наибольшая уверенность"
-    }
+    },
+    "count_few": "{{shown}} из {{count}} отчётов",
+    "count_many": "{{shown}} из {{count}} отчётов"
   }
 }

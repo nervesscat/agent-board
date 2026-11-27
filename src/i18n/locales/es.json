@@ -1,7 +1,9 @@
 {
   "common": {
     "saved": "Guardado",
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar"
   },
   "loading": {
     "ticket": "Cargando ticket…",
@@ -2446,9 +2448,9 @@
     "loadError": "No se pudo cargar el resumen: {{error}}",
     "projectOverview": "{{name}}: resumen",
     "headline": {
+      "inProgress": "{{count}} en curso",
       "waiting_one": "{{count}} te espera",
       "waiting_other": "{{count}} te esperan",
-      "inProgress": "{{count}} en curso",
       "doneToday_one": "{{count}} hecho hoy",
       "doneToday_other": "{{count}} hechos hoy"
     },
@@ -2720,7 +2722,8 @@
     "workflowOwn": "Sigue el flujo de trabajo {{workflow}}, definido en este ticket.",
     "workflowProject": "Sigue el flujo de trabajo del proyecto ({{workflow}}).",
     "workflowSteps": "Ver los pasos",
-    "lanesProgress": "{{done}}/{{total}} hechos"
+    "lanesProgress": "{{done}}/{{total}} hechos",
+    "workflowDeleted": "El flujo de trabajo asignado a este ticket se eliminó, así que sigue el flujo de trabajo del proyecto ({{workflow}})."
   },
   "complexity": {
     "label": {
@@ -2793,6 +2796,21 @@
     "changed": "cambiado",
     "changedTip": "Cambiado respecto al preset: {{what}}"
   },
+  "workflowCustom": {
+    "name": "Nombre",
+    "new": "Nuevo flujo de trabajo",
+    "newDescription": "Una copia de un flujo de trabajo de este proyecto que cambias por tu cuenta: añade y quita pasos, reordénalos y elige quién ejecuta cada uno. La revisión que contiene viene con el preset del que se copió.",
+    "startFrom": "Partir de",
+    "create": "Crear flujo de trabajo",
+    "rename": "Renombrar",
+    "renameTitle": "Renombrar flujo de trabajo",
+    "renameDescription": "Los tickets y el proyecto siguen usándolo con su nuevo nombre.",
+    "deleteTitle": "¿Eliminar el flujo de trabajo {{name}}?",
+    "deleteDescription": "Si el proyecto lo usa, vuelve a {{standard}}, y un ticket que lo nombra pasa a seguir el flujo de trabajo del proyecto. Los presets no se tocan. Esto no se puede deshacer.",
+    "deleteWorkflow": "Eliminar flujo de trabajo",
+    "addStep": "Añadir un paso",
+    "allIn": "Ya están todos"
+  },
   "workflowGraph": {
     "label": "Flujo de trabajo {{label}} para un ticket de complejidad {{complexity}}",
     "complexity": {
@@ -2834,7 +2852,13 @@
     "effort": "Esfuerzo",
     "effortHint": "Se pasa como esfuerzo de la herramienta Agent. {{hint}}.",
     "reviewRuns": "Ejecuta {{total}} ejecuciones separadas de /feature-review en cada ronda: {{runs}}, cada una con su propio nombre de agente y sin ver nunca los hallazgos de las demás.",
-    "survival": "<strong>Una ronda se supera cuando</strong> {{survival}}."
+    "survival": "<strong>Una ronda se supera cuando</strong> {{survival}}.",
+    "inThisWorkflow": "En este flujo de trabajo",
+    "removeStep": "Quitar paso",
+    "takesOut": "Saca {{step}} de este flujo de trabajo. Vuelve a añadirlo desde Añadir un paso encima del gráfico.",
+    "alwaysFirst": "El paso {{step}} es siempre el primero, así que no se puede quitar.",
+    "alwaysLast": "El paso {{step}} es siempre el último, así que no se puede quitar.",
+    "lockedStep": "El paso {{step}} está bloqueado, así que no se puede quitar."
   },
   "workflowPage": {
     "title": "Flujo de trabajo",
@@ -2850,7 +2874,17 @@
     "sectionLabel": "Flujo de trabajo {{label}}",
     "projects": "del proyecto",
     "summary_one": "{{count}} paso en un ticket de complejidad {{complexity}} · revisión: {{rounds}}",
-    "summary_other": "{{count}} pasos en un ticket de complejidad {{complexity}} · revisión: {{rounds}}"
+    "summary_other": "{{count}} pasos en un ticket de complejidad {{complexity}} · revisión: {{rounds}}",
+    "summaryNoReview_one": "{{count}} paso para un ticket {{complexity}} · sin revisión",
+    "summaryNoReview_other": "{{count}} pasos para un ticket {{complexity}} · sin revisión",
+    "created": "Flujo de trabajo creado",
+    "renamed": "Renombrado",
+    "deleted": "Flujo de trabajo eliminado",
+    "resetBodyCustom": "Sus pasos, orden, interruptores, esfuerzos, agentes del equipo y rondas de revisión vuelven a como se creó el flujo de trabajo {{label}}. Su nombre se mantiene y los demás flujos de trabajo conservan lo que se cambió en ellos.",
+    "fellBack": "El flujo de trabajo que seguía el proyecto se eliminó, así que ahora sigue {{standard}}. Los tickets que lo nombraban siguen el flujo de trabajo del proyecto. Mantén {{standard}} para cerrar este aviso, o elige otro flujo de trabajo abajo y pulsa Usar este flujo de trabajo.",
+    "notOwn": "Ese flujo de trabajo no es de este proyecto (puede que se haya eliminado), así que se muestra el del proyecto.",
+    "keepStandard": "Mantener {{label}}",
+    "customNote": "Tu propio flujo de trabajo, copiado de {{base}}. Añade pasos de los tipos indicados, quita los que no están bloqueados y muévelos dentro de lo que permite cada paso. La revisión que contiene (sus fases y lo que ejecutan) viene de {{base}}."
   },
   "workflowPresets": {
     "group": "Presets de flujo de trabajo",
@@ -2874,7 +2908,14 @@
     "maximum": {
       "label": "Máximo",
       "description": "Exhaustivo más un segundo spec independiente, una segunda revisión completa de cada ronda a cargo de otro agente que nunca ve la primera, y esfuerzo alto en todos los agentes."
-    }
+    },
+    "content": {
+      "label": "Contenido",
+      "description": "Reservar, un borrador creado y autocomprobado, rondas humanas sobre el borrador, el resumen y la entrega: sin spec, sin PR, CI, preview ni fases de revisión."
+    },
+    "custom": "Personalizado",
+    "copiedFrom": "Propio, copiado de {{base}}.",
+    "noReview": "sin revisión"
   },
   "workflowReview": {
     "legend": "Rondas de revisión por complejidad",
@@ -2889,7 +2930,15 @@
   },
   "workflowSelect": {
     "project": "Flujo de trabajo del proyecto ({{label}})",
-    "hint": "El flujo de trabajo que sigue su agente: el del proyecto, o uno de los cuatro presets solo para este ticket. Cambiar el flujo de trabajo del proyecto no mueve a un ticket que nombra uno."
+    "hint": "El flujo de trabajo que sigue su agente: el propio del proyecto, u otro de los flujos del proyecto solo para este ticket. Cambiar el flujo de trabajo del proyecto no mueve a un ticket que nombra uno.",
+    "deleted": "Flujo de trabajo eliminado (sigue el del proyecto)"
+  },
+  "workflowTags": {
+    "title": "Etiquetas que eligen un flujo de trabajo",
+    "empty": "Ninguna etiqueta elige todavía un flujo de trabajo. Los agentes configuran este mapa con set_workflow_tags: un ticket con una de las etiquetas y sin flujo de trabajo propio sigue el flujo al que apunta la etiqueta; si no, el del proyecto.",
+    "tag": "Etiqueta",
+    "workflow": "Flujo de trabajo",
+    "notOne": "No es uno de los flujos de trabajo del proyecto"
   },
   "workflowView": {
     "noRounds": "sin rondas de revisión",
@@ -2934,6 +2983,7 @@
       "build": "Fijo: nada se entrega sin que se construya el cambio.",
       "gate": "Fijo: ningún cambio avanza sin comprobar.",
       "intent": "Fijo por encima de baja: todo ticket por encima de baja se comprueba con las propias palabras de la persona antes de entregarlo.",
+      "rounds": "Bloqueado: la persona revisa el borrador antes de la entrega.",
       "always": "Fijo: el ticket no puede entregarse sin él."
     },
     "survival": {

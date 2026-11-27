@@ -1,7 +1,9 @@
 {
   "common": {
     "saved": "Saved",
-    "close": "Close"
+    "close": "Close",
+    "cancel": "Cancel",
+    "delete": "Delete"
   },
   "loading": {
     "ticket": "Loading ticket…",
@@ -2718,7 +2720,8 @@
     "workflowOwn": "Follows the {{workflow}} workflow, set on this ticket.",
     "workflowProject": "Follows the project's workflow ({{workflow}}).",
     "workflowSteps": "See the steps",
-    "lanesProgress": "{{done}}/{{total}} done"
+    "lanesProgress": "{{done}}/{{total}} done",
+    "workflowDeleted": "The workflow set on this ticket was deleted, so it follows the project's workflow ({{workflow}})."
   },
   "complexity": {
     "label": {
@@ -2791,6 +2794,21 @@
     "changed": "changed",
     "changedTip": "Changed from the preset: {{what}}"
   },
+  "workflowCustom": {
+    "name": "Name",
+    "new": "New workflow",
+    "newDescription": "A copy of a workflow of this project that you change on its own: add and remove steps, reorder them, pick who runs each. The review inside it comes with the preset it was copied from.",
+    "startFrom": "Start from",
+    "create": "Create workflow",
+    "rename": "Rename",
+    "renameTitle": "Rename workflow",
+    "renameDescription": "Tickets and the project keep following it under its new name.",
+    "deleteTitle": "Delete the {{name}} workflow?",
+    "deleteDescription": "The project, if it follows it, goes back to {{standard}}, and a ticket that names it follows the project's workflow instead. The presets are not touched. This cannot be undone.",
+    "deleteWorkflow": "Delete workflow",
+    "addStep": "Add a step",
+    "allIn": "Every kind is in"
+  },
   "workflowGraph": {
     "label": "{{label}} workflow for a {{complexity}} ticket",
     "complexity": {
@@ -2832,7 +2850,13 @@
     "effort": "Effort",
     "effortHint": "Passed on as the Agent tool's effort. {{hint}}.",
     "reviewRuns": "Runs {{total}} separate /feature-review runs each round: {{runs}}, each under its own agent name and never shown the other's findings.",
-    "survival": "<strong>A round survives when</strong> {{survival}}."
+    "survival": "<strong>A round survives when</strong> {{survival}}.",
+    "inThisWorkflow": "In this workflow",
+    "removeStep": "Remove step",
+    "takesOut": "Takes {{step}} out of this workflow. Add it again from Add a step above the graph.",
+    "alwaysFirst": "{{step}} is always the first step, so it cannot be removed.",
+    "alwaysLast": "{{step}} is always the last step, so it cannot be removed.",
+    "lockedStep": "{{step}} is locked, so it cannot be removed."
   },
   "workflowPage": {
     "title": "Workflow",
@@ -2848,7 +2872,17 @@
     "sectionLabel": "{{label}} workflow",
     "projects": "the project's",
     "summary_one": "{{count}} step for a {{complexity}} ticket · review: {{rounds}}",
-    "summary_other": "{{count}} steps for a {{complexity}} ticket · review: {{rounds}}"
+    "summary_other": "{{count}} steps for a {{complexity}} ticket · review: {{rounds}}",
+    "summaryNoReview_one": "{{count}} step for a {{complexity}} ticket · no review",
+    "summaryNoReview_other": "{{count}} steps for a {{complexity}} ticket · no review",
+    "created": "Workflow created",
+    "renamed": "Renamed",
+    "deleted": "Workflow deleted",
+    "resetBodyCustom": "Its steps, order, switches, efforts, Team agents and review rounds go back to how the {{label}} workflow was made. Its name stays and the other workflows keep what was changed in them.",
+    "fellBack": "The workflow this project followed was deleted, so it follows {{standard}} now. Tickets that named it follow the project's workflow. Keep {{standard}} to dismiss this, or pick another workflow below and press Use this workflow.",
+    "notOwn": "That workflow is not one of this project's (it may have been deleted), so the project's own is shown.",
+    "keepStandard": "Keep {{label}}",
+    "customNote": "Your own workflow, copied from {{base}}. Add steps of the kinds listed, remove the ones that are not locked, and move them within what each step allows. The review inside it (its phases and what they run) comes with {{base}}."
   },
   "workflowPresets": {
     "group": "Workflow presets",
@@ -2872,7 +2906,14 @@
     "maximum": {
       "label": "Maximum",
       "description": "Thorough plus a second, independent spec, a second full review of every round by a different agent that never sees the first, and high effort on every agent."
-    }
+    },
+    "content": {
+      "label": "Content",
+      "description": "Claim, a draft built and self-checked, human rounds on the draft, the summary and the hand-off: no spec, no pull request, CI, preview or review phases."
+    },
+    "custom": "Custom",
+    "copiedFrom": "Your own, copied from {{base}}.",
+    "noReview": "no review"
   },
   "workflowReview": {
     "legend": "Review rounds per complexity",
@@ -2887,7 +2928,15 @@
   },
   "workflowSelect": {
     "project": "Project's workflow ({{label}})",
-    "hint": "The workflow its agent follows: the project's own, or one of the four presets for this ticket alone. Changing the project's workflow does not move a ticket that names one."
+    "hint": "The workflow its agent follows: the project's own, or another of the project's workflows for this ticket alone. Changing the project's workflow does not move a ticket that names one.",
+    "deleted": "Deleted workflow (follows the project's)"
+  },
+  "workflowTags": {
+    "title": "Tags that pick a workflow",
+    "empty": "No tag picks a workflow yet. Agents set this map through set_workflow_tags: a ticket with one of the tags and no workflow of its own follows the workflow the tag maps to, else the project's.",
+    "tag": "Tag",
+    "workflow": "Workflow",
+    "notOne": "Not one of the project's workflows"
   },
   "workflowView": {
     "noRounds": "no review rounds",
@@ -2932,6 +2981,7 @@
       "build": "Locked: nothing is delivered without the change being built.",
       "gate": "Locked: no change moves on unchecked.",
       "intent": "Locked above low: every ticket above low is checked against the human's own words before it is handed off.",
+      "rounds": "Locked: the human reviews the draft before the hand-off.",
       "always": "Locked: the ticket cannot be handed off without it."
     },
     "survival": {

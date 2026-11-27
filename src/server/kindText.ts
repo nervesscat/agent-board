@@ -66,6 +66,7 @@ export const FILES_HIDDEN_TOOLS: ReadonlySet<string> = new Set([
   'get_ticket_git',
   // the workflow orders the build-and-review cycle of code
   'get_workflow',
+  'set_workflow_tags',
   'list_prs',
   'set_pr_hold',
   'post_review_result',

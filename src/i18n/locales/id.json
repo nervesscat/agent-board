@@ -1,7 +1,9 @@
 {
   "common": {
     "saved": "Tersimpan",
-    "close": "Tutup"
+    "close": "Tutup",
+    "cancel": "Batal",
+    "delete": "Hapus"
   },
   "loading": {
     "ticket": "Memuat tiket…",
@@ -2642,7 +2644,8 @@
     "workflowOwn": "Mengikuti alur kerja {{workflow}}, diatur pada tiket ini.",
     "workflowProject": "Mengikuti alur kerja proyek ({{workflow}}).",
     "workflowSteps": "Lihat langkahnya",
-    "lanesProgress": "{{done}}/{{total}} selesai"
+    "lanesProgress": "{{done}}/{{total}} selesai",
+    "workflowDeleted": "Alur kerja yang diatur di tiket ini telah dihapus, jadi tiket mengikuti alur kerja proyek ({{workflow}})."
   },
   "complexity": {
     "label": {
@@ -2711,6 +2714,21 @@
     "changed": "diubah",
     "changedTip": "Diubah dari preset: {{what}}"
   },
+  "workflowCustom": {
+    "name": "Nama",
+    "new": "Alur kerja baru",
+    "newDescription": "Salinan alur kerja proyek ini yang Anda ubah sendiri: tambah dan hapus langkah, atur ulang urutannya, pilih siapa yang menjalankan tiap langkah. Tinjauan di dalamnya ikut dengan preset tempat ia disalin.",
+    "startFrom": "Mulai dari",
+    "create": "Buat alur kerja",
+    "rename": "Ganti nama",
+    "renameTitle": "Ganti nama alur kerja",
+    "renameDescription": "Tiket dan proyek tetap mengikutinya dengan nama barunya.",
+    "deleteTitle": "Hapus alur kerja {{name}}?",
+    "deleteDescription": "Jika proyek mengikutinya, proyek kembali ke {{standard}}, dan tiket yang menyebutnya akan mengikuti alur kerja proyek. Preset tidak diubah. Ini tidak bisa dibatalkan.",
+    "deleteWorkflow": "Hapus alur kerja",
+    "addStep": "Tambah langkah",
+    "allIn": "Semua jenis sudah ada"
+  },
   "workflowGraph": {
     "label": "Alur kerja {{label}} untuk tiket {{complexity}}",
     "complexity": {
@@ -2752,7 +2770,13 @@
     "effort": "Effort",
     "effortHint": "Diteruskan sebagai effort alat Agent. {{hint}}.",
     "reviewRuns": "Menjalankan {{total}} eksekusi /feature-review terpisah setiap putaran: {{runs}}, masing-masing dengan nama agennya sendiri dan tidak pernah melihat temuan yang lain.",
-    "survival": "<strong>Putaran lolos jika</strong> {{survival}}."
+    "survival": "<strong>Putaran lolos jika</strong> {{survival}}.",
+    "inThisWorkflow": "Dalam alur kerja ini",
+    "removeStep": "Hapus langkah",
+    "takesOut": "Keluarkan {{step}} dari alur kerja ini. Tambahkan lagi lewat Tambah langkah di atas grafik.",
+    "alwaysFirst": "{{step}} selalu menjadi langkah pertama, jadi tidak bisa dihapus.",
+    "alwaysLast": "{{step}} selalu menjadi langkah terakhir, jadi tidak bisa dihapus.",
+    "lockedStep": "{{step}} terkunci, jadi tidak bisa dihapus."
   },
   "workflowPage": {
     "title": "Alur kerja",
@@ -2767,7 +2791,16 @@
     "reset": "Setel ulang",
     "sectionLabel": "Alur kerja {{label}}",
     "projects": "milik proyek",
-    "summary_other": "{{count}} langkah untuk tiket {{complexity}} · tinjauan: {{rounds}}"
+    "summary_other": "{{count}} langkah untuk tiket {{complexity}} · tinjauan: {{rounds}}",
+    "summaryNoReview_other": "{{count}} langkah untuk tiket {{complexity}} · tanpa tinjauan",
+    "created": "Alur kerja dibuat",
+    "renamed": "Namanya diganti",
+    "deleted": "Alur kerja dihapus",
+    "resetBodyCustom": "Langkah, urutan, sakelar, usaha, agen Tim, dan putaran tinjauannya kembali seperti saat alur kerja {{label}} dibuat. Namanya tetap, dan alur kerja lain tetap menyimpan perubahannya.",
+    "fellBack": "Alur kerja yang diikuti proyek ini telah dihapus, jadi sekarang proyek mengikuti {{standard}}. Tiket yang menyebutnya mengikuti alur kerja proyek. Biarkan {{standard}} untuk menutup pemberitahuan ini, atau pilih alur kerja lain di bawah lalu tekan Pakai alur kerja ini.",
+    "notOwn": "Alur kerja itu bukan milik proyek ini (mungkin sudah dihapus), jadi yang ditampilkan adalah alur kerja milik proyek.",
+    "keepStandard": "Pertahankan {{label}}",
+    "customNote": "Alur kerja Anda sendiri, disalin dari {{base}}. Tambahkan langkah dari jenis yang tercantum, hapus yang tidak terkunci, dan pindahkan dalam batas yang diizinkan tiap langkah. Tinjauan di dalamnya (fasenya dan apa yang dijalankannya) ikut dari {{base}}."
   },
   "workflowPresets": {
     "group": "Preset alur kerja",
@@ -2790,7 +2823,14 @@
     "maximum": {
       "label": "Maksimum",
       "description": "Teliti ditambah spec kedua yang independen, tinjauan penuh kedua untuk setiap putaran oleh agen lain yang tidak pernah melihat yang pertama, dan effort tinggi pada setiap agen."
-    }
+    },
+    "content": {
+      "label": "Konten",
+      "description": "Klaim, draf yang dibuat dan diperiksa sendiri, putaran manusia atas draf, ringkasan, dan serah terima: tanpa spec, tanpa PR, CI, preview, atau fase tinjauan."
+    },
+    "custom": "Kustom",
+    "copiedFrom": "Milik Anda sendiri, disalin dari {{base}}.",
+    "noReview": "tanpa tinjauan"
   },
   "workflowReview": {
     "legend": "Putaran tinjauan per kompleksitas",
@@ -2805,7 +2845,15 @@
   },
   "workflowSelect": {
     "project": "Alur kerja proyek ({{label}})",
-    "hint": "Alur kerja yang diikuti agennya: milik proyek, atau salah satu dari empat preset untuk tiket ini saja. Mengubah alur kerja proyek tidak memindahkan tiket yang sudah memilih satu."
+    "hint": "Alur kerja yang diikuti agennya: milik proyek sendiri, atau alur kerja lain milik proyek hanya untuk tiket ini. Mengubah alur kerja proyek tidak memindahkan tiket yang menyebut alur kerja sendiri.",
+    "deleted": "Alur kerja yang dihapus (mengikuti milik proyek)"
+  },
+  "workflowTags": {
+    "title": "Tag yang memilih alur kerja",
+    "empty": "Belum ada tag yang memilih alur kerja. Agen mengatur peta ini lewat set_workflow_tags: tiket dengan salah satu tag dan tanpa alur kerja sendiri mengikuti alur kerja yang dipetakan tag itu, jika tidak, alur kerja proyek.",
+    "tag": "Tag",
+    "workflow": "Alur kerja",
+    "notOne": "Bukan salah satu alur kerja proyek"
   },
   "workflowView": {
     "noRounds": "tanpa putaran tinjauan",
@@ -2849,6 +2897,7 @@
       "build": "Terkunci: tidak ada yang diserahkan tanpa perubahannya dibangun.",
       "gate": "Terkunci: tidak ada perubahan yang lanjut tanpa diperiksa.",
       "intent": "Terkunci di atas low: setiap tiket di atas low diperiksa terhadap kata-kata manusia sendiri sebelum diserahkan.",
+      "rounds": "Terkunci: manusia meninjau draf sebelum serah terima.",
       "always": "Terkunci: tiket tidak bisa diserahkan tanpanya."
     },
     "survival": {

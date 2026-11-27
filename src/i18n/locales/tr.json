@@ -1,7 +1,9 @@
 {
   "common": {
     "saved": "Kaydedildi",
-    "close": "Kapat"
+    "close": "Kapat",
+    "cancel": "İptal",
+    "delete": "Sil"
   },
   "loading": {
     "ticket": "ticket yükleniyor…",
@@ -2718,7 +2720,8 @@
     "workflowOwn": "Şu iş akışını izler: {{workflow}}. Bu ticket'ta ayarlandı.",
     "workflowProject": "Projenin iş akışını izler ({{workflow}}).",
     "workflowSteps": "Adımlara bak",
-    "lanesProgress": "{{done}}/{{total}} bitti"
+    "lanesProgress": "{{done}}/{{total}} bitti",
+    "workflowDeleted": "Bu ticket'a atanan iş akışı silindiği için projenin iş akışını ({{workflow}}) takip ediyor."
   },
   "complexity": {
     "label": {
@@ -2791,6 +2794,21 @@
     "changed": "değişti",
     "changedTip": "Hazır ayardan değişti: {{what}}"
   },
+  "workflowCustom": {
+    "name": "Ad",
+    "new": "Yeni iş akışı",
+    "newDescription": "Bu projedeki bir iş akışının, tek başına değiştirdiğin bir kopyası: adım ekle ve çıkar, sırasını değiştir, her birini kimin çalıştıracağını seç. İçindeki inceleme, kopyalandığı ön ayarla birlikte gelir.",
+    "startFrom": "Başlangıç",
+    "create": "İş akışı oluştur",
+    "rename": "Yeniden adlandır",
+    "renameTitle": "İş akışını yeniden adlandır",
+    "renameDescription": "Ticket'lar ve proje, onu yeni adıyla takip etmeye devam eder.",
+    "deleteTitle": "{{name}} iş akışı silinsin mi?",
+    "deleteDescription": "Proje bunu takip ediyorsa {{standard}} iş akışına döner ve bunu adlandıran ticket'lar bunun yerine projenin iş akışını takip eder. Ön ayarlar etkilenmez. Bu geri alınamaz.",
+    "deleteWorkflow": "İş akışını sil",
+    "addStep": "Adım ekle",
+    "allIn": "Tüm türler zaten ekli"
+  },
   "workflowGraph": {
     "label": "{{label}} iş akışı, ticket karmaşıklığı: {{complexity}}",
     "complexity": {
@@ -2832,7 +2850,13 @@
     "effort": "Efor",
     "effortHint": "Agent aracının eforu olarak iletilir. {{hint}}.",
     "reviewRuns": "Her turda {{total}} ayrı /feature-review çalıştırır: {{runs}}; her biri kendi ajan adıyla çalışır ve diğerinin bulgularını hiç görmez.",
-    "survival": "<strong>Bir tur şu durumda geçer:</strong> {{survival}}."
+    "survival": "<strong>Bir tur şu durumda geçer:</strong> {{survival}}.",
+    "inThisWorkflow": "Bu iş akışında",
+    "removeStep": "Adımı kaldır",
+    "takesOut": "{{step}} adımını bu iş akışından çıkar. Grafiğin üstündeki Adım ekle'den tekrar ekleyebilirsin.",
+    "alwaysFirst": "{{step}} adımı her zaman ilk adımdır, bu yüzden kaldırılamaz.",
+    "alwaysLast": "{{step}} adımı her zaman son adımdır, bu yüzden kaldırılamaz.",
+    "lockedStep": "{{step}} adımı kilitli, bu yüzden kaldırılamaz."
   },
   "workflowPage": {
     "title": "İş akışı",
@@ -2848,7 +2872,17 @@
     "sectionLabel": "{{label}} iş akışı",
     "projects": "projenin",
     "summary_one": "{{count}} adım · karmaşıklık {{complexity}} · inceleme: {{rounds}}",
-    "summary_other": "{{count}} adım · karmaşıklık {{complexity}} · inceleme: {{rounds}}"
+    "summary_other": "{{count}} adım · karmaşıklık {{complexity}} · inceleme: {{rounds}}",
+    "summaryNoReview_one": "{{complexity}} iş için {{count}} adım · inceleme yok",
+    "summaryNoReview_other": "{{complexity}} iş için {{count}} adım · inceleme yok",
+    "created": "İş akışı oluşturuldu",
+    "renamed": "Yeniden adlandırıldı",
+    "deleted": "İş akışı silindi",
+    "resetBodyCustom": "Adımları, sırası, anahtarları, çaba düzeyleri, Ekip ajanları ve inceleme turları {{label}} iş akışının ilk hâline döner. Adı kalır, diğer iş akışlarında yapılan değişiklikler de kalır.",
+    "fellBack": "Projenin takip ettiği iş akışı silindiği için proje artık {{standard}} iş akışını takip ediyor. Bunu adlandıran ticket'lar projenin iş akışını takip eder. Bu bildirimi kapatmak için {{standard}} iş akışını koru ya da aşağıdan başka bir iş akışı seçip Bu iş akışını kullan'a bas.",
+    "notOwn": "Bu iş akışı projenin değil (silinmiş olabilir), bu yüzden projenin kendi iş akışı gösteriliyor.",
+    "keepStandard": "{{label}} kalsın",
+    "customNote": "Kendi iş akışın, {{base}} iş akışından kopyalandı. Listelenen türlerde adım ekle, kilitli olmayanları kaldır ve her adımın izin verdiği sınırlar içinde taşı. İçindeki inceleme (aşamaları ve ne çalıştırdıkları) {{base}} ile birlikte gelir."
   },
   "workflowPresets": {
     "group": "Hazır iş akışları",
@@ -2872,7 +2906,14 @@
     "maximum": {
       "label": "Maksimum",
       "description": "Kapsamlı, artı ikinci bir bağımsız spec, her turun ilkini hiç görmeyen farklı bir ajanla ikinci tam incelemesi ve her ajanda yüksek efor."
-    }
+    },
+    "content": {
+      "label": "İçerik",
+      "description": "Üstlenme, bir taslak oluşturup kendi kendine kontrol etme, taslak üzerinde insan turları, özet ve devir: spec, PR, CI, preview veya inceleme aşaması yok."
+    },
+    "custom": "Özel",
+    "copiedFrom": "Kendi iş akışın, {{base}} kopyası.",
+    "noReview": "inceleme yok"
   },
   "workflowReview": {
     "legend": "Karmaşıklığa göre inceleme turları",
@@ -2887,7 +2928,15 @@
   },
   "workflowSelect": {
     "project": "Projenin iş akışı ({{label}})",
-    "hint": "Ajanının izlediği iş akışı: projenin kendisi ya da yalnızca bu ticket için dört hazır ayardan biri. Projenin iş akışını değiştirmek, kendi iş akışını seçmiş bir ticket'ı etkilemez."
+    "hint": "Ajanının takip ettiği iş akışı: projenin kendi iş akışı ya da yalnızca bu ticket için projenin başka bir iş akışı. Projenin iş akışını değiştirmek, birini adlandıran bir ticket'ı taşımaz.",
+    "deleted": "Silinen iş akışı (projenin takip eder)"
+  },
+  "workflowTags": {
+    "title": "İş akışını seçen etiketler",
+    "empty": "Henüz hiçbir etiket bir iş akışı seçmiyor. Ajanlar bu eşleşmeyi set_workflow_tags ile ayarlar: etiketlerden biri olan ve kendi iş akışı olmayan bir ticket, etiketin eşleştiği iş akışını takip eder, yoksa projenin iş akışını.",
+    "tag": "Etiket",
+    "workflow": "İş akışı",
+    "notOne": "Projenin iş akışlarından biri değil"
   },
   "workflowView": {
     "noRounds": "inceleme turu yok",
@@ -2932,6 +2981,7 @@
       "build": "Kilitli: değişiklik yapılmadan hiçbir şey teslim edilmez.",
       "gate": "Kilitli: hiçbir değişiklik denetlenmeden ilerlemez.",
       "intent": "Düşükten yukarıda kilitli: düşükten yukarıdaki her ticket, devredilmeden önce insanın kendi sözleriyle karşılaştırılır.",
+      "rounds": "Kilitli: devirden önce insan taslağı inceler.",
       "always": "Kilitli: ticket onsuz devredilemez."
     },
     "survival": {

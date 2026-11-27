@@ -1,7 +1,9 @@
 {
   "common": {
     "saved": "Salvo",
-    "close": "Fechar"
+    "close": "Fechar",
+    "cancel": "Cancelar",
+    "delete": "Excluir"
   },
   "loading": {
     "ticket": "Carregando ticket…",
@@ -2718,7 +2720,8 @@
     "workflowOwn": "Segue o workflow {{workflow}}, definido neste ticket.",
     "workflowProject": "Segue o workflow do projeto ({{workflow}}).",
     "workflowSteps": "Ver os passos",
-    "lanesProgress": "{{done}}/{{total}} concluídas"
+    "lanesProgress": "{{done}}/{{total}} concluídas",
+    "workflowDeleted": "O workflow definido neste ticket foi excluído, então ele segue o workflow do projeto ({{workflow}})."
   },
   "complexity": {
     "label": {
@@ -2791,6 +2794,21 @@
     "changed": "alterado",
     "changedTip": "Alterado em relação ao preset: {{what}}"
   },
+  "workflowCustom": {
+    "name": "Nome",
+    "new": "Novo workflow",
+    "newDescription": "Uma cópia de um workflow deste projeto que você altera por conta própria: adicione e remova etapas, reordene-as, escolha quem executa cada uma. A revisão dentro dele vem do preset de onde foi copiado.",
+    "startFrom": "Partir de",
+    "create": "Criar workflow",
+    "rename": "Renomear",
+    "renameTitle": "Renomear workflow",
+    "renameDescription": "Os tickets e o projeto continuam seguindo-o com o novo nome.",
+    "deleteTitle": "Excluir o workflow {{name}}?",
+    "deleteDescription": "Se o projeto o segue, ele volta para {{standard}}, e um ticket que o nomeia passa a seguir o workflow do projeto. Os presets não são alterados. Isso não pode ser desfeito.",
+    "deleteWorkflow": "Excluir workflow",
+    "addStep": "Adicionar uma etapa",
+    "allIn": "Todas as etapas já estão"
+  },
   "workflowGraph": {
     "label": "Workflow {{label}} para um ticket de complexidade {{complexity}}",
     "complexity": {
@@ -2832,7 +2850,13 @@
     "effort": "Esforço",
     "effortHint": "Repassado como o esforço da ferramenta Agent. {{hint}}.",
     "reviewRuns": "Executa {{total}} execuções separadas de /feature-review a cada rodada: {{runs}}, cada uma com o próprio nome de agente e sem nunca ver os achados da outra.",
-    "survival": "<strong>Uma rodada sobrevive quando</strong> {{survival}}."
+    "survival": "<strong>Uma rodada sobrevive quando</strong> {{survival}}.",
+    "inThisWorkflow": "Neste workflow",
+    "removeStep": "Remover etapa",
+    "takesOut": "Tire {{step}} deste workflow. Adicione-a de novo em Adicionar uma etapa acima do gráfico.",
+    "alwaysFirst": "A etapa {{step}} é sempre a primeira, por isso não pode ser removida.",
+    "alwaysLast": "A etapa {{step}} é sempre a última, por isso não pode ser removida.",
+    "lockedStep": "A etapa {{step}} está bloqueada, por isso não pode ser removida."
   },
   "workflowPage": {
     "title": "Workflow",
@@ -2848,7 +2872,17 @@
     "sectionLabel": "Workflow {{label}}",
     "projects": "o do projeto",
     "summary_one": "{{count}} passo para um ticket de complexidade {{complexity}} · revisão: {{rounds}}",
-    "summary_other": "{{count}} passos para um ticket de complexidade {{complexity}} · revisão: {{rounds}}"
+    "summary_other": "{{count}} passos para um ticket de complexidade {{complexity}} · revisão: {{rounds}}",
+    "summaryNoReview_one": "{{count}} passo para um ticket {{complexity}} · sem revisão",
+    "summaryNoReview_other": "{{count}} passos para um ticket {{complexity}} · sem revisão",
+    "created": "Workflow criado",
+    "renamed": "Renomeado",
+    "deleted": "Workflow excluído",
+    "resetBodyCustom": "Suas etapas, ordem, chaves, esforços, agentes do Team e rodadas de revisão voltam a como o workflow {{label}} foi feito. O nome continua e os outros workflows mantêm o que foi alterado neles.",
+    "fellBack": "O workflow que este projeto seguia foi excluído, então ele agora segue {{standard}}. Os tickets que o nomeavam seguem o workflow do projeto. Mantenha {{standard}} para fechar este aviso, ou escolha outro workflow abaixo e clique em Usar este workflow.",
+    "notOwn": "Esse workflow não é deste projeto (pode ter sido excluído), então é mostrado o do próprio projeto.",
+    "keepStandard": "Manter {{label}}",
+    "customNote": "Seu próprio workflow, copiado de {{base}}. Adicione etapas dos tipos listados, remova as que não estão bloqueadas e mova-as dentro do que cada etapa permite. A revisão dentro dele (suas fases e o que elas executam) vem de {{base}}."
   },
   "workflowPresets": {
     "group": "Presets de workflow",
@@ -2872,7 +2906,14 @@
     "maximum": {
       "label": "Máximo",
       "description": "Rigoroso mais uma segunda spec independente, uma segunda revisão completa de cada rodada por outro agente que nunca vê a primeira, e esforço alto em todo agente."
-    }
+    },
+    "content": {
+      "label": "Conteúdo",
+      "description": "Reivindicar, um rascunho criado e autoverificado, rodadas humanas sobre o rascunho, o resumo e a entrega: sem spec, sem PR, CI, preview nem fases de revisão."
+    },
+    "custom": "Personalizado",
+    "copiedFrom": "Seu próprio, copiado de {{base}}.",
+    "noReview": "sem revisão"
   },
   "workflowReview": {
     "legend": "Rodadas de revisão por complexidade",
@@ -2887,7 +2928,15 @@
   },
   "workflowSelect": {
     "project": "Workflow do projeto ({{label}})",
-    "hint": "O workflow que seu agente segue: o próprio do projeto ou um dos quatro presets só para este ticket. Mudar o workflow do projeto não altera um ticket que indica um."
+    "hint": "O workflow que o agente dele segue: o próprio do projeto, ou outro workflow do projeto só para este ticket. Mudar o workflow do projeto não move um ticket que nomeia um.",
+    "deleted": "Workflow excluído (segue o do projeto)"
+  },
+  "workflowTags": {
+    "title": "Tags que escolhem um workflow",
+    "empty": "Nenhuma tag escolhe um workflow ainda. Os agentes definem este mapa com set_workflow_tags: um ticket com uma das tags e sem workflow próprio segue o workflow ao qual a tag aponta; senão, o do projeto.",
+    "tag": "Tag",
+    "workflow": "Workflow",
+    "notOne": "Não é um dos workflows do projeto"
   },
   "workflowView": {
     "noRounds": "sem rodadas de revisão",
@@ -2932,6 +2981,7 @@
       "build": "Fixo: nada é entregue sem que a mudança seja construída.",
       "gate": "Fixo: nenhuma mudança segue sem ser verificada.",
       "intent": "Fixo acima de baixa: todo ticket acima de baixa é conferido com as próprias palavras da pessoa antes de ser entregue.",
+      "rounds": "Bloqueado: você revisa o rascunho antes da entrega.",
       "always": "Fixo: o ticket não pode ser entregue sem ele."
     },
     "survival": {
