@@ -195,34 +195,38 @@ has N = 2 of them, and a light run holds none.
   scoped or full, and the full unit suite. **Not heavy**: the typecheck, lint, the formatter
   (`prettier`), the migration check (`check:migrations`), the unit tests scoped to the changed
   files, and a targeted probe test. The light ones take no slot, and nothing waits on one for
-  them. N = 2 came from measuring 1, 2 and 3 concurrent scoped end-to-end runs on a 12-core
-  machine; re-measure and change this one line on another machine.
-- **Take a slot**: the first free one, `mkdir SLOTS/tests-<REPO_ID>-<n>` for n from 1 to N (a
-  plain `mkdir`, never `mkdir -p`: the create must fail when the folder exists), then write
-  `SLOTS/tests-<REPO_ID>-<n>/holder.txt` with `#<TICKET> <step> <ISO time>`. `mkdir` failing
-  means that slot is held: try the next number. All held: read each `holder.txt`, wait about a
-  minute and try again. A holder naming your own ticket is left over from your own earlier step
-  or run: it is yours, rewrite `holder.txt` and go on.
-- **Release it** with `rm -r` on that folder as soon as the heavy command ends, when
-  `holder.txt` names your ticket. Never keep a slot from one check through the next: no hold
-  from the gate through the review, and none across the typecheck, lint or a scoped unit run.
-- **A full suite is exclusive.** The full unit suite and the full end-to-end suite are one heavy
-  run: take `mkdir SLOTS/tests-<REPO_ID>-full` first (a plain `mkdir`; when it fails, a full run
-  is in flight: wait and try again), then wait until every `tests-<REPO_ID>-<n>` slot is free
-  and hold the full-suite folder alone until the suite finishes. A scoped run takes its slot,
-  then checks for `tests-<REPO_ID>-full`: when that folder appeared, release its slot and wait
-  for the full run to end before taking a slot again. Never delete a folder whose `holder.txt`
-  names another ticket.
-- **Never remove a slot another ticket holds**, however old it looks: only its holder removes
-  it, and the orchestrator once that holder's run has returned. Waited more than three hours:
-  return `STATUS: error` with the holder lines in `NOTES` (contention: the orchestrator runs you
+  them. Run them directly, never through the script. N = 2 came from measuring 1, 2 and 3
+  concurrent scoped end-to-end runs on a 12-core machine; re-measure and change this one line on
+  another machine.
+- **The slot script**: fetch it once per run from `$BOARD_URL/api/agent-setup/board-slot` with
+  `Authorization: Bearer $BOARD_TOKEN` into `~/.claude/board-slot.mjs` (overwrite it each time, as
+  the beat script is). Every heavy command then runs through it:
+  `node ~/.claude/board-slot.mjs run --locks SLOTS --repo REPO_ID --project PROJECT --ticket TICKET --step <name> -- <command>`.
+  It takes the first free slot of `SLOTS` for this repo, waits in a queue while none is free and
+  records that wait on the ticket, runs the command with its own output and exit code, and frees
+  the slot when the command ends, however it ends. `--step` names the run (`build`, `e2e`, `unit`,
+  `preview`).
+- **The full suite is exclusive.** Pass `--full` to `run` for the full unit suite or the full
+  end-to-end suite. It waits until every numbered slot is free, and new numbered claims wait while
+  it runs. A scoped run's claim backs off by itself when a full run starts, so the two never overlap.
+- **Never make a slot by hand**: no `mkdir` of a slot folder, no holder file written by hand, no
+  `rm -r` of a slot. The script makes and removes them, and that is what keeps one run from
+  removing another's slot. A folder another agent made by hand keeps its rules: a holder with no
+  `pid` line is never reclaimed.
+- **A slot held across several commands** (a long-lived process you keep up) is the one case for
+  `claim` and `release`: `claim` prints the slot folder and a token, and `release <slot dir> <token>`
+  frees it as soon as that process ends. Use `run` for everything else.
+- **Never remove a slot another ticket holds**, however old it looks. The script reclaims a slot
+  only when its holder's process is dead, or when it has no holder file a minute after it was made.
+  Waited more than three hours (the script gives up then and prints the holder lines on stderr):
+  return `STATUS: error` with those holder lines in `NOTES` (contention: the orchestrator runs you
   again, alone).
 - **Priority.** The next free slot goes to the ticket closest to hand-off — a fix pass after a
   review, a ticket whose PR, CI or preview is pending, one whose `open` tasks are nearly done —
   before a ticket still in its first build. Take a slot only for the run that needs it, and
   never wait on one you do not need.
 - **Who holds one, when**: your builder, for each heavy run it starts (the build step), released
-  right after that run; you, around the gate's end-to-end build and run, the full-suite fallback
+  when that run ends; you, around the gate's end-to-end build and run, the full-suite fallback
   and the preview build you start, released when each ends; `/feature-review`, around its own heavy
   runs (the review step): its verify phase takes one for the end-to-end run and the
   full suite, its merge check for a heavy test run, and its hunt and refute phases only for a

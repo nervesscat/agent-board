@@ -15,6 +15,18 @@ import { seedProject } from './fixtures'
  */
 export default async function globalSetup() {
   const env = e2eEnv()
+  try {
+    await setUp(env)
+  } catch (err) {
+    // A setup that throws leaves no folder behind: the run's root goes with whatever it made.
+    fs.rmSync(env.root, { recursive: true, force: true, maxRetries: 3 })
+    throw err
+  }
+}
+
+async function setUp(env: ReturnType<typeof e2eEnv>) {
+  // The runner's pid: the test-run reaper and the teardown read it to tell a live run from a dead one.
+  fs.writeFileSync(path.join(env.root, 'runner.pid'), `${process.pid}\n`)
   // The Tailscale CLI the boards read: linked in, so a test can take it away (not installed), and its answers
   // start as a board on a running tailnet (tailnet-entrance.spec.ts sets them).
   fs.mkdirSync(path.dirname(env.tailscaleBin), { recursive: true })
