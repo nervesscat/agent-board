@@ -136,7 +136,10 @@ test('a branch that holds another ticket’s unmerged work gets the need by itse
   // A's work lands in B's base: the need is met.
   git('update-ref', `refs/heads/${name('base')}`, a)
   await page.reload()
-  await expect(page.getByRole('link', { name: `Needs #${base.id} · merged` })).toBeVisible()
+  // Met, the need leaves the header: only the warning shows there, and its chip stays in Details.
+  await expect(details.getByRole('listitem').filter({ hasText: `#${base.id} Foundation` })).toBeVisible()
+  await expect(page.getByRole('link', { name: `Needs #${base.id} · merged` })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: `Needs #${base.id} · not merged yet` })).toHaveCount(0)
   await ok(agent.patch(`/api/tickets/${t.id}`, { data: { status: 'done' } }))
 })
 

@@ -2044,7 +2044,6 @@
     "markDoneAnyway": "그래도 완료로 표시",
     "mergeFirst": "먼저 병합:\n{{list}}",
     "badge": "{{list}} 필요",
-    "statusMerged": "#{{id}} 필요 · 병합됨",
     "statusNotMerged": "#{{id}} 필요 · 아직 병합 안 됨",
     "removeNeed": "#{{id}} 선행 요건 제거",
     "addPlaceholder": "먼저 병합해야 하는 티켓 추가…",

@@ -2044,7 +2044,6 @@
     "markDoneAnyway": "Vẫn đánh dấu xong",
     "mergeFirst": "Merge trước:\n{{list}}",
     "badge": "cần {{list}}",
-    "statusMerged": "Cần #{{id}} · đã merge",
     "statusNotMerged": "Cần #{{id}} · chưa merge",
     "removeNeed": "Bỏ yêu cầu #{{id}}",
     "addPlaceholder": "Thêm ticket cần merge trước…",

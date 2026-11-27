@@ -2107,7 +2107,6 @@
     "markDoneAnyway": "তবুও সম্পন্ন করুন",
     "mergeFirst": "আগে merge করুন:\n{{list}}",
     "badge": "{{list}} দরকার",
-    "statusMerged": "#{{id}} দরকার · merge হয়েছে",
     "statusNotMerged": "#{{id}} দরকার · এখনও merge হয়নি",
     "removeNeed": "#{{id}}-এর নির্ভরতা সরান",
     "addPlaceholder": "ticket যোগ করুন…",

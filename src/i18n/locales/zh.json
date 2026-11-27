@@ -2044,7 +2044,6 @@
     "markDoneAnyway": "仍标记为完成",
     "mergeFirst": "请先合并：\n{{list}}",
     "badge": "依赖 {{list}}",
-    "statusMerged": "依赖 #{{id}} · 已合并",
     "statusNotMerged": "依赖 #{{id}} · 尚未合并",
     "removeNeed": "移除对 #{{id}} 的依赖",
     "addPlaceholder": "添加需要先合并的 ticket…",

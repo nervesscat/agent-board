@@ -2044,7 +2044,6 @@
     "markDoneAnyway": "それでも完了にする",
     "mergeFirst": "先にマージしてください:\n{{list}}",
     "badge": "依存 {{list}}",
-    "statusMerged": "依存 #{{id}} · マージ済み",
     "statusNotMerged": "依存 #{{id}} · 未マージ",
     "removeNeed": "#{{id}} への依存を外す",
     "addPlaceholder": "先にマージが必要なチケットを追加…",

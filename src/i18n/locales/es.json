@@ -2107,7 +2107,6 @@
     "markDoneAnyway": "Marcar como hecho igualmente",
     "mergeFirst": "Fusionar antes:\n{{list}}",
     "badge": "necesita {{list}}",
-    "statusMerged": "Necesita #{{id}} · fusionado",
     "statusNotMerged": "Necesita #{{id}} · sin fusionar aún",
     "removeNeed": "Quitar la dependencia de #{{id}}",
     "addPlaceholder": "Añade un ticket previo…",

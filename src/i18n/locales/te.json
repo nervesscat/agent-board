@@ -2107,7 +2107,6 @@
     "markDoneAnyway": "అయినా పూర్తిగా గుర్తించు",
     "mergeFirst": "ముందు merge చేయండి:\n{{list}}",
     "badge": "{{list}} అవసరం",
-    "statusMerged": "#{{id}} అవసరం · merge అయింది",
     "statusNotMerged": "#{{id}} అవసరం · ఇంకా merge కాలేదు",
     "removeNeed": "#{{id}} అవసరాన్ని తీసివేయి",
     "addPlaceholder": "ticket జోడించండి…",
