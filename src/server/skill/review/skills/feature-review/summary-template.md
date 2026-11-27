@@ -12,7 +12,7 @@
 
 ## Findings
 
-- **<claim, one sentence>** (<blocker|bug>, <confirmed|plausible>). <Why it matters, one sentence.> Fix: <a few words>. `<path:line>`
+- **<claim, one sentence>** (<major|medium|minor>, <confirmed|plausible>). <Why it matters, one sentence.> Fix: <a few words>. `<path:line>`
 
 <Each bullet at most 50 words. If there are none, a single line: "No findings. <n> checklist items passed with citations, <m> candidates refuted, <k> of <t> criteria executed.">
 

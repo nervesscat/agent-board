@@ -43,7 +43,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `project=<id>` | the board project | the project of the repo in the current directory (`find_project` with its origin, folder and path) |
 | a number | work only these ticket ids, in this order | every eligible To do ticket |
 | `parallel=N` | maximum tickets in flight, 1 to N+1 (so 1 to 3 with N = 2; the cap is one more than the repo's test slots, since a ticket waiting for one still does its light work), tickets of the same repo included | 2 |
-| `depth=auto\|light\|standard\|deep` | the review depth: `auto` lets each ticket agent pick it from the size of its change (`todo-review-ticket`, "Review depth"); any other value is used for every ticket and every round. The depth never drops a phase: every round runs every phase the ticket's workflow lists, `light` included; the depths differ only in how hard the hunts look and the stability report. The depth is not the workflow's preset | `auto` |
+| `depth=auto\|light\|standard\|deep` | the review depth: `auto` lets each ticket agent pick it from the size of its change (`todo-review-ticket`, "Review depth"); any other value is used for every ticket and every round. The depth never drops a phase: every round runs every phase the ticket's workflow lists for the round's shape, `light` included; the depths differ only in how hard the hunts look and the stability report. The depth is not the workflow's preset | `auto` |
 | `model=<name>` | model for the ticket agents, which their own agents inherit | the session model |
 | `dry` | inventory and schedule only: write the plan, start nothing | off |
 

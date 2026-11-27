@@ -17,6 +17,7 @@ import {
   orderProblem,
   readProjectTweaks,
   resolveWorkflow,
+  REVIEW_ROUND_RECORDS,
   reviewPhaseRuns,
   stepHandoff,
   validateTweaks,
@@ -652,6 +653,57 @@ describe('the phases a round needs (A12)', () => {
       refute: 1,
       merge: 1,
     })
+  })
+})
+
+describe('the phases a round needs by its shape', () => {
+  const shaped = (id: WorkflowPresetId, shape: 'first' | 'later' | 'delta') =>
+    Object.fromEntries(
+      reviewPhaseRuns(resolveWorkflow(id, undefined, 'high'), shape).map((p) => [p.phase, p.expected]),
+    )
+
+  it('drops the spec after round 1, and narrows a delta round to verify and one hunt per review', () => {
+    expect(shaped('standard', 'first')).toEqual({ spec: 1, env: 1, verify: 1, hunt: 2, refute: 1, merge: 1 })
+    expect(shaped('standard', 'later')).toEqual({ env: 1, verify: 1, hunt: 2, refute: 1, merge: 1 })
+    expect(shaped('standard', 'delta')).toEqual({ verify: 1, hunt: 1 })
+    expect(shaped('thorough', 'later')).toEqual({ env: 1, verify: 1, hunt: 3, refute: 1, merge: 1 })
+    expect(shaped('thorough', 'delta')).toEqual({ verify: 1, hunt: 1 })
+    expect(shaped('maximum', 'later')).toEqual({ env: 2, verify: 2, hunt: 6, refute: 2, merge: 2 })
+    expect(shaped('maximum', 'delta')).toEqual({ verify: 2, hunt: 2 })
+  })
+
+  it('keeps Light as it is in every round: it has no delta round', () => {
+    for (const shape of ['first', 'later', 'delta'] as const)
+      expect(shaped('light', shape)).toEqual({ hunt: 1 })
+    expect(reviewOf('light', 'high').review!.perDeltaRound).toBeNull()
+    expect(reviewOf('light', 'high').review!.runs[0]!.delta).toBeNull()
+  })
+
+  it('gives each run the arguments of a later and of a delta round, the Team agent kept at each token', () => {
+    const [run] = reviewOf('standard', 'high').review!.runs
+    expect(run!.later).toEqual({
+      phasesArg: 'env,verify,hunt,hunt,refute,merge',
+      agentsArg: 'env,verify,hunt,hunt,refute,merge',
+    })
+    expect(run!.delta).toEqual({
+      phasesArg: 'verify,hunt,refute,merge',
+      agentsArg: 'verify,hunt,refute,merge',
+    })
+    const thorough = reviewOf('thorough', 'high').review!.runs[0]!
+    expect(thorough.delta!.phasesArg).toBe('verify,hunt,refute,merge')
+    const picked = resolveWorkflow('standard', { agents: { 'review.hunt-a': 'acme' } }, 'high', ['acme'])
+    const pickedRun = picked.steps.find((s) => s.id === 'review')!.review!.runs[0]!
+    expect(pickedRun.delta!.agentsArg).toBe('verify,acme,refute,merge')
+    expect(pickedRun.later.agentsArg).toBe('env,verify,acme,hunt,refute,merge')
+    for (const r of reviewOf('maximum', 'high').review!.runs) {
+      expect(r.later.phasesArg.split(',')).not.toContain('spec')
+      expect(r.delta!.phasesArg).toBe('verify,hunt,refute,merge')
+    }
+  })
+
+  it('names the two records once', () => {
+    expect(REVIEW_ROUND_RECORDS.delta).toEqual({ phase: 'review', note: 'delta round' })
+    expect(REVIEW_ROUND_RECORDS.baseUnchanged).toEqual({ phase: 'merge', note: 'base unchanged' })
   })
 })
 

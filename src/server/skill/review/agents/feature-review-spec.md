@@ -11,8 +11,14 @@ intent**, reconstructed from what they wrote and what they built. It is not your
 of what the feature should do. A wrong spec produces false bugs downstream, so when the
 intent is unclear you record a question instead of guessing.
 
+You run once per review, in round 1: the spec is written once. In a round after the first no spec
+agent is spawned; the orchestrator appends one acceptance criterion per fixed finding to your
+`01-spec.md` and applies the human's recorded decisions to it.
+
 ## Input
 
+0. `projectId`, `ticketId`, the full 40-character head SHA, the round (1), the browser flag and the
+   absolute path of your run-report template (`run-reports/spec.md`).
 1. Repo root.
 2. Working dir containing `00-diff.patch` (the change) and `00-context.md`, the context pack:
    PR title, body and URL, the commits, the project rule files, the ticket's context, the changed
