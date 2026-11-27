@@ -89,9 +89,16 @@ Edit `src/db/schema.ts`, then `pnpm db:generate`. It writes `drizzle/YYYYMMDDHHM
 time, then a slug such as `add_x`), a journal entry with the same tag and a snapshot in `drizzle/meta/`.
 Commit all of them. Do not rename the file or give it a number: the name is what keeps two branches from
 picking the same one. `pnpm check:migrations` runs before the PR. It refuses a name that is not that form
-(a new `NNNN_` file included), a `when` or `idx` used twice in the journal, and a journal entry without its
-file or the reverse. After a merge, keep both entries in journal order; if they share an `idx`, give the
-later one the next free integer. Migrations run when the server starts, each once, in journal order.
+(a new `NNNN_` file included), a `when` or `idx` used twice in the journal, a journal entry without its
+file or the reverse, and two snapshots that follow the same one. After a merge, keep both entries in journal
+order; if they share an `idx`, give the later one the next free integer. Migrations run when the server
+starts, each once, in journal order.
+
+If two branches each generated a migration from the same parent, the merge forks the snapshot chain:
+`pnpm check:migrations` reports two snapshots that follow one, and `pnpm db:generate` reports a snapshot
+collision. To repair it, delete the later branch's migration file, its journal entry and its snapshot (the
+one whose journal entry comes last), keep its `schema.ts` change, run `pnpm db:generate` again (it writes the
+migration on top of the merged chain under a new name), check, and commit.
 
 ## Pull requests
 

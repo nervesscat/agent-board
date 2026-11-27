@@ -10,7 +10,9 @@
 //   place in the journal;
 // - every journal entry has its .sql file, and every .sql file its journal entry;
 // - idx is unique across the journal, and `when` is an integer unique across it: the loader (src/db/migrate.ts)
-//   applies by `when` and records it as the migration's key, so two entries sharing one would be told apart by nothing.
+//   applies by `when` and records it as the migration's key, so two entries sharing one would be told apart by nothing;
+// - no two snapshots in meta/ follow the same snapshot (prevId): a merge of two branches that each generated one from
+//   the same parent forks the chain, and drizzle-kit then refuses to generate the next migration.
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,7 +20,37 @@ import { fileURLToPath } from 'node:url'
 /** The last migration numbered NNNN_name.sql; new ones are named by timestamp. */
 const LAST_NUMBERED = 66
 
-/** The problems in a migrations folder (its .sql files and meta/_journal.json); empty when it is sound. */
+/** The problems with the snapshots in meta/: an unreadable one, or two that follow the same snapshot. */
+function snapshotProblems(metaDir) {
+  const problems = []
+  let names
+  try {
+    names = fs.readdirSync(metaDir)
+  } catch {
+    return problems // no meta folder: the journal check reports it
+  }
+  const files = names.filter((f) => f.endsWith('_snapshot.json')).sort()
+  const followerOf = new Map()
+  for (const file of files) {
+    let snapshot
+    try {
+      snapshot = JSON.parse(fs.readFileSync(path.join(metaDir, file), 'utf8'))
+    } catch (err) {
+      problems.push(`meta/${file}: ${err instanceof Error ? err.message : err}`)
+      continue
+    }
+    const prevId = snapshot?.prevId
+    if (typeof prevId !== 'string') continue
+    if (followerOf.has(prevId)) {
+      problems.push(
+        `meta/${followerOf.get(prevId)} and meta/${file} both follow snapshot ${prevId}: a merge forked the snapshot chain (see CONTRIBUTING.md, Database changes)`,
+      )
+    } else followerOf.set(prevId, file)
+  }
+  return problems
+}
+
+/** The problems in a migrations folder (its .sql files, meta/_journal.json and snapshots); empty when it is sound. */
 export function checkMigrations(dir) {
   const problems = []
   const sql = fs
@@ -43,6 +75,8 @@ export function checkMigrations(dir) {
     if (byNumber.has(number)) problems.push(`${file}: number ${m[1]} is also ${byNumber.get(number)}`)
     else byNumber.set(number, file)
   }
+
+  problems.push(...snapshotProblems(path.join(dir, 'meta')))
 
   const journalPath = path.join(dir, 'meta', '_journal.json')
   let entries

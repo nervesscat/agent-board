@@ -6,11 +6,14 @@ import { afterAll, describe, expect, it } from 'vitest'
 
 import { checkMigrations } from './check-migrations.mjs'
 
-/** A migrations folder: its .sql files, and a journal with these entries (`[tag, idx, when]`). */
+/**
+ * A migrations folder: its .sql files, and a journal with these entries (`[tag, idx, when]`). `snapshots` maps
+ * a file in meta/ to its content: an object is written as JSON, a string as it is.
+ */
 const made = []
 afterAll(() => made.forEach((dir) => fs.rmSync(dir, { recursive: true, force: true })))
 
-function fixture(files, entries) {
+function fixture(files, entries, snapshots = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-migrations-'))
   made.push(dir)
   fs.mkdirSync(path.join(dir, 'meta'))
@@ -21,8 +24,16 @@ function fixture(files, entries) {
     entries: entries.map(([tag, idx, when]) => ({ idx, version: '6', when, tag, breakpoints: true })),
   }
   fs.writeFileSync(path.join(dir, 'meta', '_journal.json'), JSON.stringify(journal))
+  for (const [file, content] of Object.entries(snapshots))
+    fs.writeFileSync(
+      path.join(dir, 'meta', file),
+      typeof content === 'string' ? content : JSON.stringify(content),
+    )
   return dir
 }
+
+/** A snapshot file's content: its id, and the id of the snapshot it follows. */
+const snap = (id, prevId) => ({ version: '6', dialect: 'sqlite', id, prevId })
 
 const sound = () =>
   fixture(
@@ -182,6 +193,52 @@ describe('checkMigrations', () => {
     expect(
       checkMigrations(fixture(files, [...base, ['20261127093100_b', 2, 400], ['20261127093012_a', 3, 300]])),
     ).toEqual([])
+  })
+
+  it('finds two snapshots that follow the same one, a merge that forked the chain', () => {
+    const dir = fixture(
+      ['0000_init.sql', '0001_repos.sql', '0002_tags.sql'],
+      [
+        ['0000_init', 0, 100],
+        ['0001_repos', 1, 200],
+        ['0002_tags', 2, 300],
+      ],
+      {
+        '0000_snapshot.json': snap('id-0', '00000000-root'),
+        '0001_snapshot.json': snap('id-1', 'id-0'),
+        '0002_snapshot.json': snap('id-2', 'id-0'),
+      },
+    )
+    expect(checkMigrations(dir)).toEqual([
+      'meta/0001_snapshot.json and meta/0002_snapshot.json both follow snapshot id-0: a merge forked the snapshot chain (see CONTRIBUTING.md, Database changes)',
+    ])
+  })
+
+  it('passes a linear snapshot chain, with a snapshot file missing from the numbers', () => {
+    // 0001 has no snapshot file (as 0047 has none in the repo): the chain is still linear.
+    const dir = fixture(
+      ['0000_init.sql', '0001_repos.sql', '0002_tags.sql', '0003_more.sql'],
+      [
+        ['0000_init', 0, 100],
+        ['0001_repos', 1, 200],
+        ['0002_tags', 2, 300],
+        ['0003_more', 3, 400],
+      ],
+      {
+        '0000_snapshot.json': snap('id-0', '00000000-root'),
+        '0002_snapshot.json': snap('id-2', 'id-0'),
+        '0003_snapshot.json': snap('id-3', 'id-2'),
+      },
+    )
+    expect(checkMigrations(dir)).toEqual([])
+  })
+
+  it('finds a snapshot that does not parse, and names it', () => {
+    const dir = fixture(['0000_init.sql'], [['0000_init', 0, 100]], {
+      '0000_snapshot.json': snap('id-0', '00000000-root'),
+      '0001_snapshot.json': '{',
+    })
+    expect(checkMigrations(dir)).toEqual([expect.stringMatching(/^meta\/0001_snapshot\.json: /)])
   })
 
   it('finds a file not named NNNN_name.sql, and an unreadable journal', () => {

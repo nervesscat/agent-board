@@ -609,18 +609,33 @@ function appliedMigrations(): { at: number; name: string }[] {
   return rows.map((r) => ({ at: r.at, name: names.get(r.at) ?? `a migration made ${when(r.at)}` }))
 }
 
-const migrationsSeen = () => {
+/** What the human has been told about: the newest applied migration, and the ones announced (null: an old row). */
+type MigrationsSeen = { at: number; announced: Set<number> | null }
+
+const migrationsSeen = (): MigrationsSeen | null => {
   const row = db.select().from(schema.settings).where(eq(schema.settings.key, MIGRATIONS_SEEN)).get()
-  const at = (row?.value as { at?: unknown } | undefined)?.at
-  return typeof at === 'number' ? at : null
+  const value = row?.value as { at?: unknown; announced?: unknown } | undefined
+  if (typeof value?.at !== 'number') return null
+  return {
+    at: value.at,
+    announced: Array.isArray(value.announced)
+      ? new Set(value.announced.filter((n): n is number => typeof n === 'number'))
+      : null,
+  }
 }
 
-const markMigrationsSeen = (at: number) =>
-  db
-    .insert(schema.settings)
-    .values({ key: MIGRATIONS_SEEN, value: { at } })
-    .onConflictDoUpdate({ target: schema.settings.key, set: { value: { at } } })
+const markMigrationsSeen = (applied: { at: number }[]) => {
+  const newest = applied.at(-1)
+  if (!newest) return
+  const value = { at: newest.at, announced: applied.map((m) => m.at) }
+  db.insert(schema.settings)
+    .values({ key: MIGRATIONS_SEEN, value })
+    .onConflictDoUpdate({ target: schema.settings.key, set: { value } })
     .run()
+}
+
+const wasAnnounced = (at: number, seen: MigrationsSeen) =>
+  seen.announced ? seen.announced.has(at) : at <= seen.at
 
 function migrationAlerts(): AlertCandidate[] {
   const applied = edges.migrations()
@@ -629,10 +644,12 @@ function migrationAlerts(): AlertCandidate[] {
   const seen = migrationsSeen()
   // The first look has nothing to compare with: what is applied now is what the human starts from.
   if (seen === null) {
-    markMigrationsSeen(newest.at)
+    markMigrationsSeen(applied)
     return []
   }
-  const fresh = applied.filter((m) => m.at > seen)
+  // A migration can be applied late, from a merged branch, with an older `when` than the newest: it
+  // is fresh too, so the set of announced ones is checked, not only the watermark.
+  const fresh = applied.filter((m) => !wasAnnounced(m.at, seen))
   if (!fresh.length) return []
   return [
     {
@@ -658,8 +675,7 @@ const migrations: AlertType = {
   check: migrationAlerts,
   actions: {
     seen: () => {
-      const newest = edges.migrations().at(-1)
-      if (newest) markMigrationsSeen(newest.at)
+      markMigrationsSeen(edges.migrations())
       return { message: 'Marked as seen.', resolve: true }
     },
   },
