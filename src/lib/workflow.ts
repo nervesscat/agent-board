@@ -1,4 +1,5 @@
 import { COMPLEXITIES, COMPLEXITY_EFFORT, type Complexity } from './constants'
+import { MAX_TAG_LENGTH, normalizeTag } from './tags'
 
 /**
  * The workflow module: the order in which a ticket's agent delegates the build-and-review cycle (read
@@ -8,7 +9,7 @@ import { COMPLEXITIES, COMPLEXITY_EFFORT, type Complexity } from './constants'
  *
  * Pure and shared by the client and the server: no database, no I/O. The long procedure of each step is
  * markdown the server serves (src/server/skill/workflow/<id>.md); this file holds what the page and the
- * served text both show: the catalogue (every step the cycle can have), the four presets (an ordered
+ * served text both show: the catalogue (every step the cycle can have), the presets (an ordered
  * list of those steps, the review rounds per complexity, an effort each), the tweaks a human saves on
  * top of a preset, and `resolveWorkflow`, which turns a preset and its tweaks into the resolved workflow.
  *
@@ -18,7 +19,7 @@ import { COMPLEXITIES, COMPLEXITY_EFFORT, type Complexity } from './constants'
 
 // --- ids ---
 
-export const WORKFLOW_PRESETS = ['light', 'standard', 'thorough', 'maximum'] as const
+export const WORKFLOW_PRESETS = ['light', 'standard', 'thorough', 'maximum', 'content'] as const
 export type WorkflowPresetId = (typeof WORKFLOW_PRESETS)[number]
 /** The preset of a project that never chose one, and of every project stored before presets existed. */
 export const DEFAULT_WORKFLOW_PRESET: WorkflowPresetId = 'standard'
@@ -26,7 +27,7 @@ export const DEFAULT_WORKFLOW_PRESET: WorkflowPresetId = 'standard'
 export const isWorkflowPreset = (value: unknown): value is WorkflowPresetId =>
   typeof value === 'string' && (WORKFLOW_PRESETS as readonly string[]).includes(value)
 
-/** A project's own workflow has an id of this shape: never one of the four presets' ids, never reused. */
+/** A project's own workflow has an id of this shape: never one of the presets' ids, never reused. */
 export const CUSTOM_ID_PREFIX = 'custom-'
 export const isCustomWorkflowId = (value: unknown): value is string =>
   typeof value === 'string' && /^custom-[a-z0-9]{6,32}$/.test(value)
@@ -41,6 +42,7 @@ export const WORKFLOW_STEP_IDS = [
   'build',
   'tests',
   'gate',
+  'rounds',
   'review',
   'preview',
   'intent',
@@ -59,6 +61,12 @@ export const isWorkflowStep = (value: unknown): value is WorkflowStepId =>
 export const WORKFLOW_EFFORTS = ['auto', 'low', 'medium', 'high'] as const
 export type WorkflowEffort = (typeof WORKFLOW_EFFORTS)[number]
 export type EffortLevel = Exclude<WorkflowEffort, 'auto'>
+
+/**
+ * The steps only one preset has (Content's `rounds`): a workflow gets one by its preset, never by an added step,
+ * and the preset's own is always locked on.
+ */
+export const PRESET_ONLY_STEPS: readonly WorkflowStepId[] = ['rounds']
 
 /** The most review rounds a human can set for one complexity; the presets' own never pass it. */
 export const ROUNDS_MAX = 12
@@ -118,6 +126,12 @@ export interface WorkflowStepDef {
 }
 
 const ALWAYS = 'Locked: the ticket cannot be handed off without it.'
+
+/** The human rounds of the Content preset: the human answers each draft on the ticket before the hand-off. */
+const ROUNDS_WHAT =
+  "Human rounds: the human reads the draft on the ticket and answers it. Each round takes the human's words, revises the draft, runs the self-check again and posts what changed, until the human has no more changes to ask for."
+const ROUNDS_HANDOFF =
+  'Each revised draft goes to the human with what changed. The last draft the human accepted is the one the summary and the hand-off describe.'
 
 /** What each agent-run step is called in the graph and the served text. */
 export const AGENT_LABELS: Record<WorkflowAgent, string> = {
@@ -222,6 +236,20 @@ export const WORKFLOW_STEPS: Readonly<Record<WorkflowStepId, WorkflowStepDef>> =
     after: ['build', 'tests'],
     pinned: null,
     span: { phase: 'verify', round: false },
+    hasSubSteps: false,
+  },
+  rounds: {
+    id: 'rounds',
+    label: 'Human rounds',
+    what: ROUNDS_WHAT,
+    handoff: ROUNDS_HANDOFF,
+    agent: 'you',
+    lock: 'always',
+    lockReason: 'Locked: the human reviews the draft before the hand-off.',
+    aboveLow: false,
+    after: ['gate'],
+    pinned: null,
+    span: null,
     hasSubSteps: false,
   },
   review: {
@@ -392,6 +420,13 @@ export interface WorkflowPresetDef {
   id: WorkflowPresetId
   label: string
   description: string
+  /** Offered in a ticket's Workflow picker (the create dialog and the ticket page). A preset that is not is shown only as a ticket's current pick. */
+  pickable: boolean
+  /**
+   * The preset's `text` covers every step it has, so the steps' own text (what runs for the ticket) does not apply:
+   * the preset's words are the whole of what a step says.
+   */
+  ownWording: boolean
   /** The default order. */
   steps: readonly WorkflowStepId[]
   /** The review rounds per complexity: the budget of the review step. */
@@ -562,6 +597,8 @@ export const WORKFLOW_PRESET_DEFS: Readonly<Record<WorkflowPresetId, WorkflowPre
   light: {
     id: 'light',
     label: 'Light',
+    pickable: true,
+    ownWording: false,
     description:
       'Build, gate, one reviewer, the intent check and the hand-off: no spec agent, no environment, no separate hunts.',
     steps: STANDARD_STEPS.filter((id) => id !== 'spec'),
@@ -593,6 +630,8 @@ export const WORKFLOW_PRESET_DEFS: Readonly<Record<WorkflowPresetId, WorkflowPre
   standard: {
     id: 'standard',
     label: 'Standard',
+    pickable: true,
+    ownWording: false,
     description:
       'The full cycle: spec, build, gate, review rounds with spec, environment, verify, two independent hunts, refute and a merge check, then the intent check, PR, CI, preview and hand-off.',
     steps: STANDARD_STEPS,
@@ -609,6 +648,8 @@ export const WORKFLOW_PRESET_DEFS: Readonly<Record<WorkflowPresetId, WorkflowPre
   thorough: {
     id: 'thorough',
     label: 'Thorough',
+    pickable: true,
+    ownWording: false,
     description:
       'Standard plus a dedicated test-writing pass, a third hunt with the security checklist, the intent check at the end of every review round, and one more review round at every level above low.',
     steps: [
@@ -642,6 +683,8 @@ export const WORKFLOW_PRESET_DEFS: Readonly<Record<WorkflowPresetId, WorkflowPre
   maximum: {
     id: 'maximum',
     label: 'Maximum',
+    pickable: true,
+    ownWording: false,
     description:
       'Thorough plus a second, independent spec, a second full review of every round by a different agent that never sees the first, and high effort on every agent.',
     steps: [
@@ -712,9 +755,54 @@ export const WORKFLOW_PRESET_DEFS: Readonly<Record<WorkflowPresetId, WorkflowPre
       },
     },
   },
+  content: {
+    id: 'content',
+    label: 'Content',
+    pickable: false,
+    ownWording: true,
+    description:
+      'Claim, a draft built and self-checked, human rounds on the draft, the summary and the hand-off: no spec, no pull request, CI, preview or review phases.',
+    steps: ['claim', 'build', 'gate', 'rounds', 'summary', 'handoff'],
+    rounds: { low: 0, mid: 0, high: 0, max: 0 },
+    effort: {},
+    review: {
+      phases: [],
+      between: [],
+      survival: () => 'the human accepts the last draft',
+      runs: [],
+    },
+    text: {
+      claim: {
+        what: 'Reads the project (its instructions and its agents) and the whole ticket: the summary first, every post and reply, the decisions with their answers and the attachments. Then claims the ticket. A draft needs no branch of its own unless the ticket names a file in a repo.',
+        handoff:
+          "The ticket's context (its instructions, the human's posts and replies, the decisions with their answers, the attachments) goes into every brief that follows.",
+      },
+      build: {
+        what: 'The builder writes the first draft of the ticket: the text, and any file the ticket asks for. The draft is a working copy the human has not seen yet, so it is labelled as one.',
+        handoff:
+          'The draft goes to the self-check with what the builder used from the ticket. The builder\'s "done" is a claim: the self-check reads the draft itself.',
+      },
+      gate: {
+        what: "The ticket agent's own self-check before the human sees the draft: each thing the ticket asked for is in it, nothing is invented beyond the ticket's words, and the wording, names and figures match what the human gave.",
+        handoff:
+          'A draft that passes goes to the human rounds with a note of what was checked. A draft that fails goes back to the builder with what is wrong; the second return asks the human.',
+      },
+      rounds: {
+        what: ROUNDS_WHAT,
+        handoff: ROUNDS_HANDOFF,
+      },
+      summary: {
+        what: "Writes the ticket's summary, the one post the human reads on top of Main: what the draft says and its current state, what the human changed in the rounds, and how it was checked. Then answers each of the human's posts it had answered with a plan.",
+      },
+      handoff: {
+        what: "Moves the ticket to review and reads the board's answer: the tasks still open and the subagent runs recorded without a report. Each is fixed before the hand-off stands.",
+        handoff: 'The ticket stays in review; the result goes back to whoever started this run.',
+      },
+    },
+  },
 }
 
-/** The presets in the order they are offered, lightest to heaviest. */
+/** The presets in the order they are offered: the four built-in ones lightest to heaviest, then Content. */
 export const WORKFLOW_PRESET_LIST: readonly WorkflowPresetDef[] = WORKFLOW_PRESETS.map(
   (id) => WORKFLOW_PRESET_DEFS[id],
 )
@@ -809,7 +897,7 @@ export function customSource(custom: {
     label: custom.name,
     description: `Your own workflow, copied from ${base.label}.`,
     base,
-    steps: seedOrder && !customOrderProblem(seedOrder) ? seedOrder : base.steps,
+    steps: seedOrder && !customOrderProblem(seedOrder, base.steps) ? seedOrder : base.steps,
     custom: true,
     seed: custom.seed ?? null,
   }
@@ -1034,14 +1122,18 @@ export function effortLevel(effort: WorkflowEffort, complexity: Complexity | nul
  * custom workflow's steps are its own list: each a known kind once, every step with a lock kept (a locked
  * step cannot be removed), `claim` first, `handoff` last, and each step after the ones it must follow.
  */
-export function customOrderProblem(order: readonly string[]): string | null {
+export function customOrderProblem(
+  order: readonly string[],
+  base: readonly WorkflowStepId[] = SHARED_STEP_IDS,
+): string | null {
   const seen = new Set<string>()
   for (const id of order) {
     if (!isWorkflowStep(id)) return `order: "${id}" is not a kind of step the workflow has`
     if (seen.has(id)) return `order: "${id}" is listed twice`
     seen.add(id)
   }
-  for (const id of WORKFLOW_STEP_IDS)
+  // Only the locked steps the workflow's preset has: `base` is that preset's step list.
+  for (const id of base)
     if (WORKFLOW_STEPS[id].lock !== null && !seen.has(id)) return `${id} is locked: it cannot be removed`
   if (order[0] !== 'claim') return 'claim must stay first'
   if (order.at(-1) !== 'handoff') return 'handoff must stay last'
@@ -1054,10 +1146,15 @@ export function customOrderProblem(order: readonly string[]): string | null {
   return null
 }
 
+/** Every step kind but the ones only one preset has: the steps a custom workflow of the built-in presets is made from. */
+const SHARED_STEP_IDS: readonly WorkflowStepId[] = WORKFLOW_STEP_IDS.filter(
+  (id) => !PRESET_ONLY_STEPS.includes(id),
+)
+
 /** What the order of a preset (or a custom workflow's step list) breaks, in words naming the pair, or null when it holds. */
 export function orderProblem(ref: WorkflowRef, order: readonly string[]): string | null {
   const source = sourceOf(ref)
-  if (source.custom) return customOrderProblem(order)
+  if (source.custom) return customOrderProblem(order, source.base.steps)
   const def = source.base
   const own = new Set<string>(def.steps)
   const seen = new Set<string>()
@@ -1110,7 +1207,7 @@ export const removableStep = (id: WorkflowStepId): boolean =>
 
 /** The kinds of step a custom workflow does not have yet, in the catalogue's order. */
 export const addableSteps = (order: readonly WorkflowStepId[]): WorkflowStepId[] =>
-  WORKFLOW_STEP_IDS.filter((id) => !order.includes(id))
+  WORKFLOW_STEP_IDS.filter((id) => !order.includes(id) && !PRESET_ONLY_STEPS.includes(id))
 
 /**
  * The order with a step of a kind the workflow lacks added where it belongs: after the steps that come before
@@ -1123,6 +1220,8 @@ export function addStep(
 ): { ok: true; order: WorkflowStepId[] } | { ok: false; reason: string } {
   if (!isWorkflowStep(id)) return { ok: false, reason: `"${id}" is not a kind of step the workflow has` }
   if (order.includes(id)) return { ok: false, reason: `${id} is already a step of this workflow` }
+  if (PRESET_ONLY_STEPS.includes(id))
+    return { ok: false, reason: `${id} is part of its preset and cannot be added` }
   const canon = (x: WorkflowStepId) => WORKFLOW_STEP_IDS.indexOf(x)
   let preferred = 1
   order.forEach((other, i) => {
@@ -1258,7 +1357,8 @@ export function validateTweaks(
   }
   // The steps the workflow has: a preset's own; a custom workflow's as sent, else as stored.
   const own: readonly WorkflowStepId[] = source.custom
-    ? (tweak.order ?? (context.order && !customOrderProblem(context.order) ? context.order : source.steps))
+    ? (tweak.order ??
+      (context.order && !customOrderProblem(context.order, source.base.steps) ? context.order : source.steps))
     : source.steps
   // A custom workflow always keeps its step list, so a body that leaves it out keeps the stored one.
   if (source.custom && tweak.order === undefined && input.order === undefined) tweak.order = [...own]
@@ -1419,7 +1519,7 @@ function readSaved(ref: WorkflowRef, saved: unknown): PresetTweak | null {
   if (source.custom) {
     // A custom workflow keeps its own step list; one that no longer holds is read as the one it was created with.
     const known = isRecord(saved) && Array.isArray(saved.order) ? saved.order.filter(isWorkflowStep) : []
-    tweak.order = known.length && !customOrderProblem(known) ? known : [...source.steps]
+    tweak.order = known.length && !customOrderProblem(known, source.base.steps) ? known : [...source.steps]
   } else if (isRecord(saved) && Array.isArray(saved.order)) {
     const known = saved.order.filter(
       (id): id is WorkflowStepId => isWorkflowStep(id) && preset.steps.includes(id),
@@ -1586,7 +1686,7 @@ export interface ResolvedWorkflow {
   preset: string
   /** The built-in preset that supplies the review plan and the wording: the preset itself for a preset. */
   base: WorkflowPresetId
-  /** A project's own workflow, not one of the four presets. */
+  /** A project's own workflow, not one of the presets. */
   custom: boolean
   label: string
   description: string
@@ -1750,7 +1850,7 @@ export function resolveWorkflow(
     const number = skipped ? null : ++counter
     const effortDefaultValue = defaultEffort(source, stepId)
     const effort = effortDefaultValue === null ? null : (own?.effort ?? effortDefaultValue)
-    const flowOwn = flowText(stepId, flow)
+    const flowOwn = preset.ownWording ? null : flowText(stepId, flow)
     const handoff = flowOwn?.handoff ?? stepHandoff(source, stepId)
     // Moved: its place among the steps both orders have differs from the default's.
     const moved =
@@ -1827,4 +1927,97 @@ export function reviewPhaseRuns(workflow: ResolvedWorkflow): { phase: ReviewPhas
   const review = workflow.steps.find((s) => s.id === 'review')
   if (!review || review.skipped || !review.review) return []
   return review.review.perRound.map((p) => ({ ...p }))
+}
+
+// --- the tag map ---
+
+/** The most tags a project's tag map holds: the server refuses more. */
+export const WORKFLOW_TAGS_MAX = 50
+
+/** A project's tag map as stored: each tag (as the human or an agent spelled it) to the workflow id it follows. */
+export type WorkflowTags = Record<string, string>
+
+/** The tag map as stored: an entry with no string value or no tag is dropped; a value that is no longer a workflow stays, and is skipped when read. */
+export function readWorkflowTags(saved: unknown): WorkflowTags {
+  const out: WorkflowTags = {}
+  if (!isRecord(saved)) return out
+  for (const [tag, id] of Object.entries(saved))
+    if (normalizeTag(tag) !== '' && typeof id === 'string') out[tag] = id
+  return out
+}
+
+/**
+ * The tag map after a patch (`tags`: a tag set to a workflow id, or to null to remove it; the tags it does not name are
+ * left as they are), checked. A tag is trimmed and 1 to `MAX_TAG_LENGTH` characters, one entry per tag in any casing (a tag the map
+ * already has keeps its spelling), at most `WORKFLOW_TAGS_MAX` entries, and a value is null or one of `valid`, the workflow
+ * ids of the project. Every problem is listed; nothing is applied when one is.
+ */
+export function applyTagPatch(
+  stored: WorkflowTags,
+  patch: unknown,
+  valid: readonly string[],
+): { ok: true; tags: WorkflowTags } | { ok: false; errors: string[] } {
+  if (!isRecord(patch))
+    return { ok: false, errors: ['tags: an object of tag -> workflow id (null removes a tag)'] }
+  const tags: WorkflowTags = { ...stored }
+  const errors: string[] = []
+  const sent = new Set<string>()
+  for (const [raw, value] of Object.entries(patch)) {
+    const tag = normalizeTag(raw)
+    if (!tag || tag.length > MAX_TAG_LENGTH) {
+      errors.push(`tags: "${raw}" must be 1 to ${MAX_TAG_LENGTH} characters`)
+      continue
+    }
+    const key = tag.toLowerCase()
+    if (sent.has(key)) {
+      errors.push(`tags: "${tag}" is given twice`)
+      continue
+    }
+    sent.add(key)
+    if (value !== null && !(typeof value === 'string' && valid.includes(value))) {
+      errors.push(`tags: "${tag}" maps to ${JSON.stringify(value)}: give null or one of ${valid.join(', ')}`)
+      continue
+    }
+    const existing = Object.keys(tags).find((k) => normalizeTag(k).toLowerCase() === key)
+    if (value === null) {
+      if (existing !== undefined) delete tags[existing]
+    } else tags[existing ?? tag] = value
+  }
+  if (!errors.length && Object.keys(tags).length > WORKFLOW_TAGS_MAX)
+    errors.push(`tags: a project has at most ${WORKFLOW_TAGS_MAX} tags`)
+  return errors.length ? { ok: false, errors } : { ok: true, tags }
+}
+
+/** Which rule picked a ticket's workflow: its own, the first of its tags the map names, or the project's. */
+export interface WorkflowPick {
+  id: string
+  source: 'own' | 'tag' | 'project'
+  /** The ticket's spelling of the tag that matched; null unless `source` is `tag`. */
+  tag: string | null
+  /** The ticket's own workflow that is no longer one of the project's (it is skipped); null otherwise. */
+  fellBack: string | null
+}
+
+/**
+ * The workflow a ticket follows, by the rules in order: (1) its own workflow when `live` says it is one of the
+ * project's; (2) else the first of its tags, in the ticket's own order and compared without case, that the tag map
+ * names with a live workflow; (3) else the project's active workflow `project`. A tag whose value is no longer live is skipped.
+ */
+export function pickWorkflow(input: {
+  own: string | null | undefined
+  tags: readonly string[]
+  tagMap: Readonly<WorkflowTags> | null | undefined
+  live: (id: string) => boolean
+  project: string
+}): WorkflowPick {
+  const own = input.own ?? null
+  if (own !== null && input.live(own)) return { id: own, source: 'own', tag: null, fellBack: null }
+  const map = input.tagMap ?? {}
+  for (const raw of input.tags) {
+    const tag = normalizeTag(raw)
+    const key = Object.keys(map).find((k) => normalizeTag(k).toLowerCase() === tag.toLowerCase())
+    if (key === undefined || !input.live(map[key]!)) continue
+    return { id: map[key]!, source: 'tag', tag, fellBack: own }
+  }
+  return { id: input.project, source: 'project', tag: null, fellBack: own }
 }

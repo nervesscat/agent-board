@@ -28,7 +28,7 @@ import {
 } from '#/lib/constants'
 import type { AnnotationDoc } from '#/lib/annotations'
 import type { SavedLayout } from '#/lib/layout'
-import type { CustomWorkflow, ProjectTweaks } from '#/lib/workflow'
+import type { CustomWorkflow, ProjectTweaks, WorkflowTags } from '#/lib/workflow'
 import type { Kind } from '#/lib/kinds'
 import type { RunReportDurationSource, RunReportStep, RunReportTime } from '#/lib/runReports'
 import type { RunType } from '#/lib/runs'
@@ -75,6 +75,9 @@ export const projects = sqliteTable('projects', {
   workflowTweaks: text('workflow_tweaks', { mode: 'json' }).$type<ProjectTweaks>(),
   // The project's own workflows: copies of a preset that are changed on their own (`#/lib/workflow`). Null is none.
   workflowCustom: text('workflow_custom', { mode: 'json' }).$type<CustomWorkflow[]>(),
+  // The tag map (`#/lib/workflow`): a ticket with no workflow of its own follows the one its first matching tag maps to.
+  // Set by agents through `set_workflow_tags`. Null is none.
+  workflowTags: text('workflow_tags', { mode: 'json' }).$type<WorkflowTags>(),
   // The command the board runs, on its own machine, to continue a ticket's work once the human answers a
   // decision card or moves it back to an active stage (src/server/resume.ts). '' is off. Only the
   // signed-in human writes it.

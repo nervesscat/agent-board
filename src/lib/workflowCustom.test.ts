@@ -107,7 +107,8 @@ describe('the steps of a custom workflow', () => {
     expect(addableSteps(standard)).toEqual(['spec2', 'tests'])
     const removable = WORKFLOW_STEP_IDS.filter(removableStep)
     expect(removable).toEqual(['spec', 'spec2', 'tests', 'review', 'preview', 'ci'])
-    for (const id of WORKFLOW_STEP_IDS.filter((x) => !removable.includes(x))) {
+    // The Standard steps that cannot go (a step only Content has is not in its order to remove).
+    for (const id of WORKFLOW_STEP_IDS.filter((x) => !removable.includes(x) && standard.includes(x))) {
       expect(WORKFLOW_STEPS[id].lock !== null || WORKFLOW_STEPS[id].pinned !== null).toBe(true)
       const r = removeStep(standard, id)
       expect(r.ok).toBe(false)
