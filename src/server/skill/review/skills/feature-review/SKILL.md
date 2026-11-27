@@ -145,8 +145,8 @@ Phase 1b does for a hunt: install or reuse the dependencies inside the worktree 
 the project's own install), and write a small `00-env.md` with the test command that runs from the
 worktree (the project's own, from its runbook or scripts), the repo's `Test slots:` folders when `slots=`
 was given, and `Servers: none started`. Spawn one `feature-review-hunt` agent (the Team agent the hunt phase names in the
-project's workflow, `agents=`: by default the project's agent named `hunt`, else the built-in role) with prefix `_frh_`, the context pack, the focus, the diff, the checklists and
-`00-env.md`, and tell it the test slots' rule (a heavy run, such as an end-to-end spec, takes the first
+project's workflow, `agents=`: by default the project's agent named `hunt`, else the built-in role) with prefix `_frh_`, the context pack, the focus, the diff, the checklists,
+`00-env.md` and the browser flag, and tell it the test slots' rule (a heavy run, such as an end-to-end spec, takes the first
 free slot and releases it right after; a targeted unit test or probe takes none). It runs only targeted
 tests and probes from the worktree. Starting a server is the reviewer's own call, only when reproducing
 a finding needs one or, in round 1 of a UI change with the browser flag `yes`, to run the browser probes
@@ -295,7 +295,10 @@ range, the browser flag, `FRONTEND` if given, the build record's path when `buil
 the `slots=` directory when it was given, the repo id (`repoId`) the slot folders are named with,
 the services the strategy table allows, and the output path
 `00-env.md`, with this rule: start only what the criteria's methods need: no app server when no
-criterion uses `run+http` or `browser`, no frontend when none uses `browser`. Wait for it. It
+criterion uses `run+http` or `browser`, no frontend when none uses `browser`, except in round 1
+(`ROUND` 1) when the spec's Classification has `ui` and the browser flag is `yes`: then it also
+starts the app (and the frontend when `FRONTEND` is given), so `00-env.md` lists a base URL for the
+hunts' browser probes. Wait for it. It
 installs or reuses dependencies inside the worktree (a prepared `node_modules` copied by hardlink
 with `cp -al` into a real directory, never a symlink or a junction), proves imports resolve to
 the worktree,

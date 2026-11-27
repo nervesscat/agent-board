@@ -44,7 +44,9 @@ From the worktree:
 4. **The early look**, for an early-look ticket (the claim step's item 5): once, after the first gate
    passes and before review round 1 starts. Start the preview of this head now, as the preview step says
    (its one build of this head: the preview step finds it running and reuses it), and take screenshots
-   of the changed state. Post them on Main as a plain post, not a decision card (an open card, even
+   of the changed state. First answer under every post by the human on the ticket that no agent has
+   replied to yet (a reply with the plan: `comment` with `replyTo`), so the early look never stands in
+   for an answer. Then post them on Main as a plain post, not a decision card (an open card, even
    with `block: false`, reads as waiting on the human for the whole review): `post_update` with
    `tab: main`, `progress: false` and the screenshots in `files`, whose body opens with
    "Direction OK?", says what changed, gives the preview link and says that a reply under this post

@@ -1172,7 +1172,7 @@ describe('the early look and the browser probes for a ticket that touches UI or 
     for (const preset of WORKFLOW_PRESETS) {
       const gate = step(await workflowText(preset, 'mid'), 'Gate')
       expect(gate, preset).toContain(
-        'Post them on Main as a plain post, not a decision card (an open card, even with `block: false`, reads as waiting on the human for the whole review): `post_update` with `tab: main`, `progress: false` and the screenshots in `files`, whose body opens with "Direction OK?", says what changed, gives the preview link and says that a reply under this post changes the ask.',
+        'Then post them on Main as a plain post, not a decision card (an open card, even with `block: false`, reads as waiting on the human for the whole review): `post_update` with `tab: main`, `progress: false` and the screenshots in `files`, whose body opens with "Direction OK?", says what changed, gives the preview link and says that a reply under this post changes the ask.',
       )
       expect(gate, preset).toContain(
         'Do not wait for an answer: the ticket stays in progress and round 1 starts at once.',
@@ -1186,6 +1186,23 @@ describe('the early look and the browser probes for a ticket that touches UI or 
     expect(flat(review('agents/todo-review-ticket.md'))).toContain(
       'A `request_archive` card, an `ask_decision` with `block: false`, or the gate\'s early-look "Direction OK?" post on Main, is not a question you wait on: the ticket stays where it is.',
     )
+  })
+
+  it('answers every unanswered human post on the ticket before the early look, so the post never stands in for an answer', async () => {
+    for (const preset of WORKFLOW_PRESETS) {
+      const gate = step(await workflowText(preset, 'mid'), 'Gate')
+      const answer =
+        'First answer under every post by the human on the ticket that no agent has replied to yet (a reply with the plan: `comment` with `replyTo`), so the early look never stands in for an answer.'
+      expect(gate, preset).toContain(answer)
+      expect(gate.indexOf(answer), preset).toBeLessThan(gate.indexOf('Then post them on Main'))
+    }
+  })
+
+  it('has the board skill name the early-look post among the requests that do not block', async () => {
+    for (const [name, text] of Object.entries(await boardSkills()))
+      expect(flat(text), name).toContain(
+        'The requests that say they do not block (a `request_archive` card, an `ask_decision` posted with `block: false`, or the gate\'s early-look "Direction OK?" post on Main) are not questions you wait on',
+      )
   })
 
   it('reads the replies under the post before each next round and hands a changed ask to the fix pass and the intent check', async () => {
@@ -1306,6 +1323,26 @@ describe('the early look and the browser probes for a ticket that touches UI or 
       .split('\n## ')[0]!
     expect(flat(section)).toContain(
       'the single reviewer, whose `00-env.md` starts no servers, starts the page itself for these probes: from the worktree, on a free port, stopped by its PID before it returns',
+    )
+  })
+
+  it('has the env phase start the app in round 1 of a UI change with the browser flag yes, so the hunts get a base URL', () => {
+    const skill = flat(review('skills/feature-review/SKILL.md'))
+    const phase = skill.split('## Phase 1b: Environment')[1]!.split('## Phase 2:')[0]!
+    expect(phase).toContain('the browser flag')
+    expect(phase).toContain(
+      "no frontend when none uses `browser`, except in round 1 (`ROUND` 1) when the spec's Classification has `ui` and the browser flag is `yes`: then it also starts the app (and the frontend when `FRONTEND` is given), so `00-env.md` lists a base URL for the hunts' browser probes.",
+    )
+    expect(flat(review('agents/feature-review-env.md'))).toContain(
+      "The exception: in round 1 (the prompt's `ROUND` is 1) when the spec's Classification has `ui` and the browser flag is `yes`, also start the app (and the frontend when `FRONTEND` is given), so `00-env.md` lists a base URL for the hunts' browser probes.",
+    )
+    // ROUND reaches every phase's prompt, the env agent's among them.
+    expect(skill).toContain('the review round (`ROUND`, from `round=`, 1 when not given)')
+  })
+
+  it('gives the single reviewer the browser flag its round-1 probes depend on', () => {
+    expect(flat(review('skills/feature-review/SKILL.md'))).toContain(
+      "with prefix `_frh_`, the context pack, the focus, the diff, the checklists, `00-env.md` and the browser flag, and tell it the test slots' rule",
     )
   })
 
