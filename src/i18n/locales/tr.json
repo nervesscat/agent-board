@@ -2912,7 +2912,8 @@
       "description": "Üstlenme, bir taslak oluşturup kendi kendine kontrol etme, taslak üzerinde insan turları, özet ve devir: spec, PR, CI, preview veya inceleme aşaması yok."
     },
     "custom": "Özel",
-    "copiedFrom": "Kendi iş akışın, {{base}} kopyası."
+    "copiedFrom": "Kendi iş akışın, {{base}} kopyası.",
+    "noReview": "inceleme yok"
   },
   "workflowReview": {
     "legend": "Karmaşıklığa göre inceleme turları",

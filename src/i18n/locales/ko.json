@@ -2829,7 +2829,8 @@
       "description": "담당 확보, 초안 작성과 자체 점검, 초안에 대한 사람의 검토 라운드, 요약과 전달. spec, PR, CI, 미리보기, 리뷰 단계는 없어요."
     },
     "custom": "커스텀",
-    "copiedFrom": "직접 만든 워크플로, {{base}} 워크플로에서 복사"
+    "copiedFrom": "직접 만든 워크플로, {{base}} 워크플로에서 복사",
+    "noReview": "검토 없음"
   },
   "workflowReview": {
     "legend": "복잡도별 리뷰 라운드",

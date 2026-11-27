@@ -2914,7 +2914,8 @@
       "description": "Prise en charge, un brouillon construit et vérifié par lui-même, des tours humains sur le brouillon, le résumé et la remise : pas de spec, pas de PR, CI, preview ni phase de revue."
     },
     "custom": "Personnalisé",
-    "copiedFrom": "Le vôtre, copié de {{base}}."
+    "copiedFrom": "Le vôtre, copié de {{base}}.",
+    "noReview": "sans revue"
   },
   "workflowReview": {
     "legend": "Tours de revue par complexité",

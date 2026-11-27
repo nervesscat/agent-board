@@ -3081,7 +3081,8 @@
     "custom": "Свой",
     "copiedFrom": "Свой, скопирован из {{base}}.",
     "stats_few": "{{count}} шага · раунды ревью {{rounds}}",
-    "stats_many": "{{count}} шагов · раунды ревью {{rounds}}"
+    "stats_many": "{{count}} шагов · раунды ревью {{rounds}}",
+    "noReview": "без проверки"
   },
   "workflowReview": {
     "legend": "Раундов ревью по сложности",

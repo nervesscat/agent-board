@@ -2912,7 +2912,8 @@
       "description": "Claim, a draft built and self-checked, human rounds on the draft, the summary and the hand-off: no spec, no pull request, CI, preview or review phases."
     },
     "custom": "Custom",
-    "copiedFrom": "Your own, copied from {{base}}."
+    "copiedFrom": "Your own, copied from {{base}}.",
+    "noReview": "no review"
   },
   "workflowReview": {
     "legend": "Review rounds per complexity",

@@ -2912,7 +2912,8 @@
       "description": "Reivindicar, um rascunho criado e autoverificado, rodadas humanas sobre o rascunho, o resumo e a entrega: sem spec, sem PR, CI, preview nem fases de revisão."
     },
     "custom": "Personalizado",
-    "copiedFrom": "Seu próprio, copiado de {{base}}."
+    "copiedFrom": "Seu próprio, copiado de {{base}}.",
+    "noReview": "sem revisão"
   },
   "workflowReview": {
     "legend": "Rodadas de revisão por complexidade",

@@ -2829,7 +2829,8 @@
       "description": "认领、起草并自检，对草稿进行人工评审轮次，然后是摘要和交付：没有 spec，没有 PR、CI、预览或评审阶段。"
     },
     "custom": "自定义",
-    "copiedFrom": "自定义，复制自 {{base}}。"
+    "copiedFrom": "自定义，复制自 {{base}}。",
+    "noReview": "无评审"
   },
   "workflowReview": {
     "legend": "各复杂度的评审轮数",

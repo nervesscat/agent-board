@@ -2914,7 +2914,8 @@
       "description": "Reservar, un borrador creado y autocomprobado, rondas humanas sobre el borrador, el resumen y la entrega: sin spec, sin PR, CI, preview ni fases de revisión."
     },
     "custom": "Personalizado",
-    "copiedFrom": "Propio, copiado de {{base}}."
+    "copiedFrom": "Propio, copiado de {{base}}.",
+    "noReview": "sin revisión"
   },
   "workflowReview": {
     "legend": "Rondas de revisión por complejidad",

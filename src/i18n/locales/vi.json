@@ -2829,7 +2829,8 @@
       "description": "Nhận việc, một bản nháp được soạn và tự kiểm tra, các vòng người duyệt bản nháp, tóm tắt và bàn giao: không có spec, PR, CI, preview hay giai đoạn đánh giá."
     },
     "custom": "Tùy chỉnh",
-    "copiedFrom": "Của riêng, sao chép từ {{base}}."
+    "copiedFrom": "Của riêng, sao chép từ {{base}}.",
+    "noReview": "không có rà soát"
   },
   "workflowReview": {
     "legend": "Vòng review theo độ phức tạp",

@@ -80,7 +80,7 @@ export function PresetSwitcher({
                     count: steps,
                     rounds: COMPLEXITIES.map((level) => p.rounds[level]).join(' / '),
                   })
-                : t('workflowView.noRounds')}
+                : t('workflowPresets.noReview')}
             </span>
           </button>
         )

@@ -2912,7 +2912,8 @@
       "description": "Übernehmen, ein Entwurf, gebaut und selbst geprüft, menschliche Runden über den Entwurf, die Zusammenfassung und die Übergabe: keine Spec, kein PR, keine CI, kein Preview und keine Review-Phasen."
     },
     "custom": "Eigener",
-    "copiedFrom": "Eigener, kopiert von {{base}}."
+    "copiedFrom": "Eigener, kopiert von {{base}}.",
+    "noReview": "keine Prüfung"
   },
   "workflowReview": {
     "legend": "Review-Runden je Komplexität",

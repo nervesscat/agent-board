@@ -2829,7 +2829,8 @@
       "description": "Klaim, draf yang dibuat dan diperiksa sendiri, putaran manusia atas draf, ringkasan, dan serah terima: tanpa spec, tanpa PR, CI, preview, atau fase tinjauan."
     },
     "custom": "Kustom",
-    "copiedFrom": "Milik Anda sendiri, disalin dari {{base}}."
+    "copiedFrom": "Milik Anda sendiri, disalin dari {{base}}.",
+    "noReview": "tanpa tinjauan"
   },
   "workflowReview": {
     "legend": "Putaran tinjauan per kompleksitas",

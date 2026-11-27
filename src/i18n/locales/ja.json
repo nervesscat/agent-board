@@ -2829,7 +2829,8 @@
       "description": "担当の確保、下書きの作成と自己チェック、下書きに対する人によるレビューの回、サマリー、引き渡し。spec、PR、CI、プレビュー、レビューのフェーズはありません。"
     },
     "custom": "カスタム",
-    "copiedFrom": "独自、{{base}} から複製"
+    "copiedFrom": "独自、{{base}} から複製",
+    "noReview": "レビューなし"
   },
   "workflowReview": {
     "legend": "複雑度ごとのレビューラウンド",

@@ -2912,7 +2912,8 @@
       "description": "Presa in carico, una bozza creata e autoverificata, giri umani sulla bozza, il riepilogo e la consegna: niente spec, niente PR, CI, preview né fasi di revisione."
     },
     "custom": "Personalizzato",
-    "copiedFrom": "Personalizzato, copiato da {{base}}."
+    "copiedFrom": "Personalizzato, copiato da {{base}}.",
+    "noReview": "nessuna revisione"
   },
   "workflowReview": {
     "legend": "Round di revisione per complessità",

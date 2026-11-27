@@ -3081,7 +3081,8 @@
     "custom": "Własny",
     "copiedFrom": "Własny, skopiowany z: {{base}}.",
     "stats_few": "{{count}} kroki · rundy recenzji {{rounds}}",
-    "stats_many": "{{count}} kroków · rundy recenzji {{rounds}}"
+    "stats_many": "{{count}} kroków · rundy recenzji {{rounds}}",
+    "noReview": "bez przeglądu"
   },
   "workflowReview": {
     "legend": "Rundy recenzji według złożoności",
