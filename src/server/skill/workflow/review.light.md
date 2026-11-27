@@ -8,8 +8,9 @@ it is not shown a spec file (its only environment file is the small one below).
   reviewer starts: it installs or reuses the dependencies there (a hardlink copy of a prepared
   `node_modules`, never a symlink, or the project's install) and writes a small `00-env.md` with the test
   command and no servers started, and the reviewer is told the test slots' rule for a heavy run. The
-  reviewer starts a server only when reproducing a finding needs one, on a free port it picks, and stops
-  it by its PID before it returns.
+  reviewer starts a server only when reproducing a finding needs one or, in round 1 of a UI change with
+  the browser flag `yes`, to run the browser probes on the changed pages, from the worktree, on a free port
+  it picks, and stops it by its PID before it returns.
 - The reviewer reads the diff against the ticket's instructions, runs what it needs to reproduce a
   suspected problem (a probe test, a request, the changed page), and reports each finding in the hunt's
   format with a concrete failure scenario; a finding it could not reproduce is reported as unconfirmed,

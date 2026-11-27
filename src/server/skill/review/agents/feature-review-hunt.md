@@ -75,7 +75,8 @@ nothing of yours.
 In round 1 (`ROUND` 1), when your sections include `ui` (a change that touches UI: the spec's
 classification has `ui`, or with no spec the diff changes what a browser renders), the browser flag is
 `yes` and `00-env.md` lists a base URL (the single reviewer, whose `00-env.md` starts no servers,
-starts the page itself as its brief allows), drive a browser against the changed pages, not only the
+starts the page itself for these probes: from the worktree, on a free port, stopped by its PID before
+it returns), drive a browser against the changed pages, not only the
 code and unit probes: a Playwright script run from the worktree, or the browser tools you have. Run
 this fixed list, every item:
 

@@ -1168,25 +1168,31 @@ describe('the early look and the browser probes for a ticket that touches UI or 
       }
   })
 
-  it('posts the preview and screenshots on Main as a "Direction OK?" card that does not block', async () => {
-    const gate = step(await workflowText('standard', 'mid'), 'Gate')
-    expect(gate).toContain(
-      'Post on Main an `ask_decision` with `block: false` whose body opens with "Direction OK?", says what changed and gives the preview link',
-    )
-    expect(gate).toContain('with the options "Looks right" and "Change it: reply under this card"')
-    expect(gate).toContain(
-      "put the screenshots in a reply under the card (`comment` with `parentType: update`, the card's id and `files`)",
-    )
-    expect(gate).toContain(
-      'Do not wait for an answer: the ticket stays in progress and round 1 starts at once.',
+  it('posts the preview and screenshots on Main as a plain "Direction OK?" post, never a decision card', async () => {
+    for (const preset of WORKFLOW_PRESETS) {
+      const gate = step(await workflowText(preset, 'mid'), 'Gate')
+      expect(gate, preset).toContain(
+        'Post them on Main as a plain post, not a decision card (an open card, even with `block: false`, reads as waiting on the human for the whole review): `post_update` with `tab: main`, `progress: false` and the screenshots in `files`, whose body opens with "Direction OK?", says what changed, gives the preview link and says that a reply under this post changes the ask.',
+      )
+      expect(gate, preset).toContain(
+        'Do not wait for an answer: the ticket stays in progress and round 1 starts at once.',
+      )
+      // An open card holds the ticket as waiting on the human, the merge and the pick-up.
+      expect(gate, preset).not.toContain('Post on Main an `ask_decision`')
+      expect(gate, preset).not.toContain('Looks right')
+      expect(gate, preset).not.toContain('reply under this card')
+    }
+    // The ticket agent's own rule that every question blocks names this post as an exception.
+    expect(flat(review('agents/todo-review-ticket.md'))).toContain(
+      'A `request_archive` card, an `ask_decision` with `block: false`, or the gate\'s early-look "Direction OK?" post on Main, is not a question you wait on: the ticket stays where it is.',
     )
   })
 
-  it('reads the replies under the card before each next round and hands a changed ask to the fix pass and the intent check', async () => {
+  it('reads the replies under the post before each next round and hands a changed ask to the fix pass and the intent check', async () => {
     const text = await workflowText('standard', 'mid')
     const gate = step(text, 'Gate')
     expect(gate).toContain(
-      "Before each next round and before the hand-off, read the card's answer and every reply under it: they are the human's words, like a decision answer.",
+      "Before each next round and before the hand-off, read every reply under the post: they are the human's words, like a decision answer.",
     )
     expect(gate).toContain(
       "A reply that changes the ask is handled before that round: it goes to the fix pass's brief as the human's words and to the intent check's brief",
@@ -1195,11 +1201,11 @@ describe('the early look and the browser probes for a ticket that touches UI or 
       'when round 1 survived and no round follows, it gets a fix pass, the gate and one more review round',
     )
     expect(step(text, 'Build')).toContain(
-      'A reply under the early look\'s "Direction OK?" card that changes the ask goes in it first, as the human\'s words.',
+      'A reply under the early look\'s "Direction OK?" post that changes the ask goes in it first, as the human\'s words.',
     )
   })
 
-  it('asks for no early preview or direction card with the preview off, nor for a ticket with no review', async () => {
+  it('asks for no early preview or direction post with the preview off, nor for a ticket with no review', async () => {
     for (const preset of WORKFLOW_PRESETS) {
       const off = flat(await project(preset, 'mid', { steps: { preview: { enabled: false } } }))
       expect(off, preset).not.toContain('Direction OK?')
@@ -1283,6 +1289,24 @@ describe('the early look and the browser probes for a ticket that touches UI or 
       'A probe you could not run (the flag `no`, no base URL, the page unreachable) goes in your report with why.',
     )
     expect(flat(file)).toContain('the round (`ROUND`)')
+  })
+
+  it('lets the single reviewer start the page for the round-1 browser probes on a UI change', async () => {
+    const allowed =
+      'in round 1 of a UI change with the browser flag `yes`, to run the browser probes on the changed pages'
+    const light = flat(await workflowText('light', 'mid'))
+    expect(light).toContain(
+      `The reviewer starts a server only when reproducing a finding needs one or, ${allowed}, from the worktree, on a free port it picks, and stops it by its PID before it returns.`,
+    )
+    expect(flat(review('skills/feature-review/SKILL.md'))).toContain(
+      `Starting a server is the reviewer's own call, only when reproducing a finding needs one or, ${allowed}: it starts it itself on a free port, from the worktree`,
+    )
+    const section = review('agents/feature-review-hunt.md')
+      .split('## Browser probes on a UI change')[1]!
+      .split('\n## ')[0]!
+    expect(flat(section)).toContain(
+      'the single reviewer, whose `00-env.md` starts no servers, starts the page itself for these probes: from the worktree, on a free port, stopped by its PID before it returns',
+    )
   })
 
   it('has the ui checklist and the hunt report template agree with the probe list', () => {

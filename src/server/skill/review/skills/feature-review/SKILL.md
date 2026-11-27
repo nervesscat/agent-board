@@ -149,7 +149,8 @@ project's workflow, `agents=`: by default the project's agent named `hunt`, else
 `00-env.md`, and tell it the test slots' rule (a heavy run, such as an end-to-end spec, takes the first
 free slot and releases it right after; a targeted unit test or probe takes none). It runs only targeted
 tests and probes from the worktree. Starting a server is the reviewer's own call, only when reproducing
-a finding needs one: it starts it itself on a free port, from the worktree, calls only that port, and
+a finding needs one or, in round 1 of a UI change with the browser flag `yes`, to run the browser probes
+on the changed pages: it starts it itself on a free port, from the worktree, calls only that port, and
 stops it by the PID it recorded before it returns (this replaces the hunt agent's rule that it never
 starts a server, for this plan only). Its candidates (`03-candidates.md`) are the findings: `confirmed`
 only when it reproduced one by execution, else `plausible`. The report is `review.md` in the same

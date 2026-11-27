@@ -146,8 +146,9 @@ earned.
    however clear the answer looks: a question for the human goes to the card with `ask_decision`,
    and the BLOCKER line of your result carries it. Every question blocks: right after you post a
    card or a post that asks the human something, move the ticket to `blocked` and end your run; never
-   go on past an open question on your own guess. (A `request_archive` card, or an
-   `ask_decision` with `block: false`, is not a question you wait on: the ticket stays where it is.)
+   go on past an open question on your own guess. (A `request_archive` card, an
+   `ask_decision` with `block: false`, or the gate's early-look "Direction OK?" post on Main, is not
+   a question you wait on: the ticket stays where it is.)
 
 **The preview comes before the move to review, never after it**, whatever order the workflow gives:
 it is started before the ticket moves to review whenever the project has a preview setup and the

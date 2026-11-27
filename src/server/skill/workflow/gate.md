@@ -44,13 +44,14 @@ From the worktree:
 4. **The early look**, for an early-look ticket (the claim step's item 5): once, after the first gate
    passes and before review round 1 starts. Start the preview of this head now, as the preview step says
    (its one build of this head: the preview step finds it running and reuses it), and take screenshots
-   of the changed state. Post on Main an `ask_decision` with `block: false` whose body opens with
-   "Direction OK?", says what changed and gives the preview link, with the options "Looks right" and
-   "Change it: reply under this card"; put the screenshots in a reply under the card (`comment` with
-   `parentType: update`, the card's id and `files`). Do not wait for an answer: the ticket stays in
-   progress and round 1 starts at once.{{if intent}}{{if !roundIntent}} The intent step's round-1 run starts with it (that step
-   says how).{{end}}{{end}} Before each next round and before the hand-off, read the card's answer and every reply
-   under it: they are the human's words, like a decision answer. A reply that changes the ask is
+   of the changed state. Post them on Main as a plain post, not a decision card (an open card, even
+   with `block: false`, reads as waiting on the human for the whole review): `post_update` with
+   `tab: main`, `progress: false` and the screenshots in `files`, whose body opens with
+   "Direction OK?", says what changed, gives the preview link and says that a reply under this post
+   changes the ask. Do not wait for an answer: the ticket stays in progress and round 1 starts at
+   once.{{if intent}}{{if !roundIntent}} The intent step's round-1 run starts with it (that step
+   says how).{{end}}{{end}} Before each next round and before the hand-off, read every reply under the
+   post: they are the human's words, like a decision answer. A reply that changes the ask is
    handled before that round: it goes to the fix pass's brief as the human's words{{if intent}} and to the intent
    check's brief{{end}}; when round 1 survived and no round follows, it gets a fix pass, the gate and one more
    review round, outside the round budget. A project with no preview setup skips the post, and the
