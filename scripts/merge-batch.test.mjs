@@ -380,3 +380,13 @@ describe('train names and unrelated histories', () => {
     expect(String(err.message) + String(err.stderr ?? '')).toContain('unrelated histories')
   })
 })
+
+describe('hardening', () => {
+  it('refuses a branch name that starts with a dash, which git would read as an option', () => {
+    expect(thrownBy(() => orderBatch([{ pr: 1, branch: '--upload-pack=touch /tmp/x' }]))).toMatchObject({
+      code: 'input',
+    })
+    expect(thrownBy(() => orderBatch([{ pr: 1, branch: '-x' }]))).toMatchObject({ code: 'input' })
+    expect(thrownBy(() => parseArgs(['batch.json', '--remote', '-x']))).toMatchObject({ code: 'input' })
+  })
+})

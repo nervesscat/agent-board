@@ -45,7 +45,7 @@ export function orderBatch(entries) {
     throw new BatchError('the batch is empty', { code: 'input' })
   const byPr = new Map()
   for (const e of entries) {
-    if (!e || !Number.isInteger(e.pr) || typeof e.branch !== 'string' || e.branch === '')
+    if (!e || !Number.isInteger(e.pr) || typeof e.branch !== 'string' || !/^\w[\w./-]*$/.test(e.branch))
       throw new BatchError(`an entry needs an integer pr and a branch: ${JSON.stringify(e)}`, {
         code: 'input',
       })
@@ -110,6 +110,7 @@ function git(cwd, args) {
     {
       cwd,
       encoding: 'utf8',
+      env: { ...process.env, LC_ALL: 'C', LANG: 'C' },
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   ).trim()
@@ -130,7 +131,7 @@ export function buildTrain({ repo, remote = 'origin', base = 'dev', entries }) {
     git(repo, ['worktree', 'add', '--detach', tree, baseHead])
     const merged = []
     for (const e of ordered) {
-      git(tree, ['fetch', remote, e.branch])
+      git(tree, ['fetch', remote, `refs/heads/${e.branch}`])
       const sha = git(tree, ['rev-parse', 'FETCH_HEAD'])
       try {
         git(tree, [
@@ -169,7 +170,7 @@ export function buildTrain({ repo, remote = 'origin', base = 'dev', entries }) {
           `the migrations do not check on the train: ${problems.join('; ')}` +
             (blame
               ? `; drop PR #${blame.pr} (${blame.branch}), the newest entry that touches the migrations`
-              : ''),
+              : '; no entry of the batch touches the migrations, so the base itself does not check: nothing in the batch can be dropped'),
           { code: 'migrations', pr: blame?.pr },
         )
       }
@@ -188,7 +189,7 @@ export function buildTrain({ repo, remote = 'origin', base = 'dev', entries }) {
 
 /** Whether a branch changes files in the migrations folder, against the base it was built on. */
 function touchesMigrations(tree, baseHead, branch, remote) {
-  git(tree, ['fetch', remote, branch])
+  git(tree, ['fetch', remote, `refs/heads/${branch}`])
   const sha = git(tree, ['rev-parse', 'FETCH_HEAD'])
   return git(tree, ['diff', '--name-only', `${baseHead}...${sha}`, '--', 'drizzle']).length > 0
 }
@@ -231,7 +232,7 @@ export function parseArgs(argv) {
     const a = argv[i]
     const value = () => {
       const v = argv[++i]
-      if (v === undefined || v.startsWith('--'))
+      if (v === undefined || v.startsWith('-'))
         throw new BatchError(`${a} needs a value\n${USAGE}`, { code: 'input' })
       return v
     }

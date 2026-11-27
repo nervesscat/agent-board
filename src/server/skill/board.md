@@ -780,7 +780,9 @@ the batch stays in Approved and is left out. The orchestrator:
    `merge-train/prs-<numbers>-<base head>`, so a train built on a new base has a new name. It never pushes
    the base or a branch outside `merge-train/`.
 3. Opens one pull request from the train branch into the base, waits for its three checks green on the head,
-   and merges that pull request. GitHub may leave the batch's own pull requests open, although their commits are
+   and merges that pull request. The batch's pull request is the one the orchestrator opens and merges for the batch
+   under the Approved go-ahead of its tickets: no ticket owns it, and the train branch is never a ticket's branch.
+   GitHub may leave the batch's own pull requests open, although their commits are
    in the base now: the ticket then says so, naming the train pull request, and the human closes them. The board
    never closes a pull request.
 4. Moves each ticket of the batch to the project's first done stage and posts on it, naming the train pull
@@ -798,7 +800,8 @@ check named on it. When the script itself refuses a batch, the same rule applies
 PR that conflicts with the train built so far (exit code 3) is taken out and says on its ticket that it must
 be rebased on the base. Exit code 1 is not a refusal of the batch: git or the environment failed, so the message
 is read and the batch is not bisected. A batch whose migrations do not check (exit code 4) drops the entry the script names,
-the newest one that touches the migrations folder.
+the newest one that touches the migrations folder. When the script names no entry, the base itself fails the check:
+no entry of the batch can be dropped, so the batch stops and the ticket says so for the human.
 
 Migrations are not renumbered by the script. Two PRs that add a migration with the same number conflict in the
 journal or fail the migration check, and the newer one waits for the next batch, after its branch takes the next
