@@ -301,7 +301,6 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
       args: z.never().optional(),
     },
     ({ projectId, template }) => {
-      projects.assertMayPickTemplate(projectId, actor, agent)
       const p = projects.setResumeTemplate(projectId, template, actor)
       return {
         resumeTemplate: p.resumeTemplate,
