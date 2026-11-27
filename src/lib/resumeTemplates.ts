@@ -41,6 +41,8 @@ interface Template {
   binary: string
   /** The arguments every run gets, before the model and effort ones. */
   args: readonly string[]
+  /** Constants appended last: the prompt's placeholder (`-` reads stdin) or a fixed message. Never agent text. */
+  trailing: readonly string[]
   model: Record<Model, readonly string[]>
   effort: Record<Effort, readonly string[]>
   /** Whether the CLI takes an effort at all: when not, the effort is not passed and the row says so. */
@@ -55,6 +57,13 @@ const NO_EFFORT = { low: [], medium: [], high: [] } as const satisfies Record<Ef
 const NO_ENV = {} as const
 
 /**
+ * Fixed message for a CLI that takes no prompt on stdin: it tells the run to read the prompt from the file the
+ * board names in BOARD_RESUME_PROMPT_FILE (in env). The prompt itself never reaches argv.
+ */
+export const PROMPT_FILE_MESSAGE =
+  'Read the file named by the environment variable BOARD_RESUME_PROMPT_FILE and follow the instructions in it.'
+
+/**
  * The templates. Claude Code's flags were checked against `claude --help` on the board's machine. Codex
  * and OpenCode are not installed on it: their flags and model ids are unverified, and are named as such
  * where the review needs them.
@@ -65,6 +74,7 @@ const TEMPLATES: Record<TemplateId, Template> = {
     name: 'Claude Code',
     binary: 'claude',
     args: ['-p', '--permission-mode', 'bypassPermissions'],
+    trailing: [],
     model: {
       haiku: ['--model', 'haiku'],
       sonnet: ['--model', 'sonnet'],
@@ -88,19 +98,20 @@ const TEMPLATES: Record<TemplateId, Template> = {
     id: 'codex-exec',
     name: 'Codex',
     binary: 'codex',
-    // UNVERIFIED on this machine (codex is not installed): `exec` reads the prompt from standard input.
-    args: ['exec', '--full-auto'],
+    // Flags from the Codex CLI reference (https://learn.chatgpt.com/docs/developer-commands?surface=cli, the page
+    // developers.openai.com/codex/cli/reference redirects to): `exec`, `--approve-for-me` (automatic approval
+    // review, workspace-write sandbox), `-m/--model`, and `-` ("Use - to pipe the prompt from stdin").
+    // Not confirmed there: `--full-auto` and the `model_reasoning_effort` key, so no effort is passed.
+    // The model ids are NOT confirmed against Codex's own list (not installed here).
+    args: ['exec', '--approve-for-me'],
+    trailing: ['-'],
     model: {
       haiku: ['-m', 'gpt-5-mini'],
       sonnet: ['-m', 'gpt-5'],
       opus: ['-m', 'gpt-5-codex'],
     },
-    effort: {
-      low: ['-c', 'model_reasoning_effort=low'],
-      medium: ['-c', 'model_reasoning_effort=medium'],
-      high: ['-c', 'model_reasoning_effort=high'],
-    },
-    effortPassed: true,
+    effort: NO_EFFORT,
+    effortPassed: false,
     env: NO_ENV,
     modelEnv: { haiku: NO_ENV, sonnet: NO_ENV, opus: NO_ENV },
   },
@@ -108,8 +119,12 @@ const TEMPLATES: Record<TemplateId, Template> = {
     id: 'opencode-run',
     name: 'OpenCode',
     binary: 'opencode',
-    // UNVERIFIED on this machine (opencode is not installed): the prompt on standard input and the model ids.
+    // Flags from the OpenCode docs (https://opencode.ai/docs/cli/commands.md, https://opencode.ai/v2/docs/cli/commands/):
+    // `run` takes its message as a positional argument, and `-m/--model provider/model`. The docs do not say that
+    // `run` reads stdin, so the prompt is read from its file through a fixed message. The model ids are NOT
+    // confirmed (opencode is not installed here; `opencode models anthropic` lists them on a machine that has it).
     args: ['run'],
+    trailing: [PROMPT_FILE_MESSAGE],
     model: {
       haiku: ['-m', 'anthropic/claude-haiku-5-5'],
       sonnet: ['-m', 'anthropic/claude-sonnet-5-5'],
@@ -135,6 +150,11 @@ export function parseEffort(value: unknown): Effort | null {
   return typeof value === 'string' && (EFFORTS as readonly string[]).includes(value)
     ? (value as Effort)
     : null
+}
+
+/** The program a template runs: the one place a template's binary is named (the presets read it too). */
+export function templateBinary(id: TemplateId): string {
+  return TEMPLATES[id].binary
 }
 
 /** The templates the Settings page and the API list: id, name, binary, and whether the CLI takes an effort. */
@@ -170,7 +190,8 @@ export function assemble(id: unknown, model: unknown, effort: unknown): Assemble
   return {
     id,
     binary: t.binary,
-    args,
+    // The constant trailing tokens follow the checked ones: `-` (stdin) or the fixed prompt-file message.
+    args: [...args, ...t.trailing],
     env: { ...t.env, ...t.modelEnv[m] },
     effortPassed: t.effortPassed,
   }

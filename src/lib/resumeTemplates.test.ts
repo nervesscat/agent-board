@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import { COMPLEXITIES } from './constants'
+import { RESUME_PRESETS } from './resume'
 import {
   CHOICES,
   COMPLEXITY_TABLE,
+  PROMPT_FILE_MESSAGE,
   EFFORTS,
   MODELS,
   ResumeTemplateBody,
@@ -82,7 +84,8 @@ describe('resume templates: assembly never carries agent text', () => {
 
   it('refuses any token outside the token shape, so no shell character can reach a command line', () => {
     for (const a of everyAssembly()) {
-      for (const arg of a.args) expect(arg).toMatch(/^[A-Za-z0-9._=:/-]+$/)
+      // The fixed prompt-file message is the one constant with spaces; it is a source constant, not input.
+      for (const arg of a.args) if (arg !== PROMPT_FILE_MESSAGE) expect(arg).toMatch(/^[A-Za-z0-9._=:/-]+$/)
     }
   })
 
@@ -162,5 +165,20 @@ describe('resume templates: model and effort chosen automatically', () => {
 
   it('the choices are the three named reasons', () => {
     expect(CHOICES).toEqual(['run', 'complexity', 'unrecorded'])
+  })
+})
+
+describe('resume templates: the prompt and the presets', () => {
+  it('Codex reads the prompt from stdin with -, and OpenCode gets a fixed message naming the prompt file', () => {
+    expect(assemble('codex-exec', 'haiku', 'low').args.at(-1)).toBe('-')
+    expect(assemble('opencode-run', 'opus', 'high').args.at(-1)).toBe(PROMPT_FILE_MESSAGE)
+    expect(PROMPT_FILE_MESSAGE).toContain('BOARD_RESUME_PROMPT_FILE')
+  })
+
+  it('the free-text presets take their binary from the templates: one source', () => {
+    const binaries = new Map(templateList().map((t) => [t.id, t.binary]))
+    expect(RESUME_PRESETS.find((p) => p.id === 'claude')!.binary).toBe(binaries.get('claude-code'))
+    expect(RESUME_PRESETS.find((p) => p.id === 'codex')!.binary).toBe(binaries.get('codex-exec'))
+    expect(RESUME_PRESETS.find((p) => p.id === 'opencode')!.binary).toBe(binaries.get('opencode-run'))
   })
 })

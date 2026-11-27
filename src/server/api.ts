@@ -380,7 +380,7 @@ api.patch('/api/updates/settings', async ({ request }) => {
 })
 
 // --- projects ---
-api.get('/api/projects', () => json(projects.listProjects()))
+api.get('/api/projects', ({ request }) => json(projects.listProjects(isAgent(request))))
 api.post('/api/projects', async ({ request, actor }) => {
   const body = await readJson(
     request,
@@ -391,9 +391,14 @@ api.post('/api/projects', async ({ request, actor }) => {
     }),
   )
   // Instructions it starts with are a change of them: the human's or an orchestrator's (as the PUT below).
-  return json(projects.createProject(body, actor, callerInfo(request)), 201)
+  return json(
+    projects.seenBy(projects.createProject(body, actor, callerInfo(request)), isAgent(request)),
+    201,
+  )
 })
-api.get('/api/projects/:id', ({ params }) => json(projects.getProjectFull(id(params))))
+api.get('/api/projects/:id', ({ request, params }) =>
+  json(projects.getProjectFull(id(params), isAgent(request))),
+)
 // One page of the tags the project offers to filter by (the tag filter's list): `{tags, next}`.
 api.get('/api/projects/:id/tags', ({ params, url }) => {
   const q = url.searchParams
@@ -453,7 +458,9 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
   if (body.layout !== undefined && isAgent(request))
     throw new HttpError(403, "only the human sets the project's layout")
   // Instructions: the human's or an orchestrator's, with their history (as the PUT below).
-  return json(projects.updateProject(id(params), body, actor, callerInfo(request)))
+  return json(
+    projects.seenBy(projects.updateProject(id(params), body, actor, callerInfo(request)), isAgent(request)),
+  )
 })
 
 // --- the project's workflow (src/server/workflow.ts): read by everyone, changed by the human only ---
@@ -1301,7 +1308,7 @@ api.get('/api/resume/templates', () => json(templateTools()))
 // a template is fixed code, and only free text stays the human's (PATCH /api/projects/:id refuses it to them).
 api.put('/api/projects/:id/resume-template', async ({ request, params, actor }) => {
   const body = await readJson(request, ResumeTemplateBody)
-  return json(projects.setResumeTemplate(id(params), body.template, actor))
+  return json(projects.seenBy(projects.setResumeTemplate(id(params), body.template, actor), isAgent(request)))
 })
 // Every run of every repo of the ticket, each with the workspace it runs from, its state and why it
 // would not start; Start all and Stop all (repoId: one repo's only) answer each run's outcome.

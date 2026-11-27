@@ -4,6 +4,8 @@
  * Settings page.
  */
 
+import { templateBinary } from './resumeTemplates'
+
 export interface ResumePreset {
   id: string
   /** The agent CLI's name as people say it. */
@@ -16,9 +18,24 @@ export interface ResumePreset {
 
 /** The CLIs the Connect an agent page knows (`src/lib/agents.ts`). The human can edit any of them. */
 export const RESUME_PRESETS: readonly ResumePreset[] = [
-  { id: 'claude', name: 'Claude Code', binary: 'claude', command: 'claude -p' },
-  { id: 'codex', name: 'Codex', binary: 'codex', command: 'codex exec' },
-  { id: 'opencode', name: 'OpenCode', binary: 'opencode', command: 'opencode run' },
+  {
+    id: 'claude',
+    name: 'Claude Code',
+    binary: templateBinary('claude-code'),
+    command: `${templateBinary('claude-code')} -p`,
+  },
+  {
+    id: 'codex',
+    name: 'Codex',
+    binary: templateBinary('codex-exec'),
+    command: `${templateBinary('codex-exec')} exec`,
+  },
+  {
+    id: 'opencode',
+    name: 'OpenCode',
+    binary: templateBinary('opencode-run'),
+    command: `${templateBinary('opencode-run')} run`,
+  },
 ]
 
 export const RESUME_COMMAND_MAX = 1_000

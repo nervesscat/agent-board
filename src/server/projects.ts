@@ -54,7 +54,7 @@ function withPhases<T extends Pick<schema.Project, 'defaultPhases' | 'layout' | 
 }
 
 /** Projects with their repos and what they hold, for the top-bar menu and agents' `list_projects`. */
-export function listProjects() {
+export function listProjects(agent = false) {
   const repos = listRepos()
   // The features' count: a PR's own ticket is in the PR queue only.
   const tickets = countBy(schema.tickets.projectId, schema.tickets, isNull(schema.tickets.prId))
@@ -69,7 +69,7 @@ export function listProjects() {
     .orderBy(asc(schema.projects.name))
     .all()
     .map((p) => ({
-      ...withPhases(p),
+      ...seenBy(withPhases(p), agent),
       repos: repos.filter((r) => r.projectId === p.id),
       counts: { tickets: tickets.get(p.id) ?? 0, openPrs: prs.get(p.id) ?? 0 },
     }))
@@ -99,20 +99,35 @@ export function getProject(id: number) {
  * `hostTools` is the last check of the tools on this machine the board runs (null before the first
  * one ends).
  */
-export function getProjectFull(id: number) {
+export function getProjectFull(id: number, agent = false) {
   const project = getProject(id)
   const tickets = projectTagRows(id)
+  return seenBy(
+    {
+      ...project,
+      // Where the work of a project with no git side is kept: a plain folder, no repo.
+      workFolder: hasGitSide(project.kinds) ? null : ensureProjectWorkFolder(id),
+      usedTags: usedTags(tickets.map((t) => t.tags)),
+      tagWeek: recentTagCounts(tickets, new Date()),
+      repos: listRepos(id),
+      stages: listStages(id),
+      agents: listAgents(id),
+      notes: listNotes(id),
+      hostTools: hostToolsForAgents(),
+    },
+    agent,
+  )
+}
+
+/**
+ * A project as this caller may see it. The free-text resume command is the human's: an agent gets it as ''
+ * and learns only whether one is set (`resumeCommandSet`), whichever route or tool it asks through.
+ */
+export function seenBy<T extends { resumeCommand: string }>(project: T, agent: boolean) {
   return {
     ...project,
-    // Where the work of a project with no git side is kept: a plain folder, no repo.
-    workFolder: hasGitSide(project.kinds) ? null : ensureProjectWorkFolder(id),
-    usedTags: usedTags(tickets.map((t) => t.tags)),
-    tagWeek: recentTagCounts(tickets, new Date()),
-    repos: listRepos(id),
-    stages: listStages(id),
-    agents: listAgents(id),
-    notes: listNotes(id),
-    hostTools: hostToolsForAgents(),
+    resumeCommand: agent ? '' : project.resumeCommand,
+    resumeCommandSet: project.resumeCommand.trim() !== '',
   }
 }
 

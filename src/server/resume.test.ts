@@ -1094,14 +1094,8 @@ describe('resume templates: the command the board runs', () => {
     const post = ask(ticket.id, 'Which?')
     features.decide(post.id, 0, '', HUMAN)
     expect(calls[0]!.argv!.binary).toBe('codex')
-    expect(calls[0]!.argv!.args).toEqual([
-      'exec',
-      '--full-auto',
-      '-m',
-      'gpt-5-mini',
-      '-c',
-      'model_reasoning_effort=medium',
-    ])
+    // Codex takes no effort flag here (its key is not confirmed); it reads the prompt from stdin with `-`.
+    expect(calls[0]!.argv!.args).toEqual(['exec', '--approve-for-me', '-m', 'gpt-5-mini', '-'])
     expect(rowsOf(ticket.id)[0]).toMatchObject({ model: 'haiku', effort: 'medium', choice: 'unrecorded' })
     resume.stopWatching()
   })
@@ -1157,7 +1151,15 @@ describe('resume templates: the command the board runs', () => {
     expect(stdin).toContain('Run the tests before a commit.')
     expect(stdin).toContain(`get_workflow (ticketId ${ticket.id})`)
     // OpenCode takes no effort flag here: the effort is not passed, and the row keeps the chosen one.
-    expect(calls[0]!.argv!.args).toEqual(['run', '-m', 'anthropic/claude-haiku-5-5'])
+    // OpenCode's run does not read stdin here: its fixed message names the prompt file in the environment.
+    expect(calls[0]!.argv!.args).toEqual([
+      'run',
+      '-m',
+      'anthropic/claude-haiku-5-5',
+      expect.stringContaining('BOARD_RESUME_PROMPT_FILE'),
+    ])
+    expect(calls[0]!.argv!.args.join(' ')).not.toContain('Run the tests before a commit.')
+    expect(calls[0]!.env.BOARD_RESUME_PROMPT_FILE).toMatch(/\.prompt\.md$/)
     resume.stopWatching()
   })
 
@@ -1219,6 +1221,28 @@ describe('resume templates: the command the board runs', () => {
     expect(resume.ticketResume(features.createTicket(projectId, { title: 'y' }, AGENT).id)).toMatchObject({
       enabled: false,
     })
+  })
+
+  it("an agent never reads the human's free-text command, and learns only that one is set", async () => {
+    const secret = 'deploy-tool --token=SECRET_VALUE_1'
+    setCommand(secret)
+    try {
+      const agent = await call('GET', `/api/projects/${projectId}`, undefined, 'agent')
+      expect(agent.status).toBe(200)
+      expect(JSON.stringify(agent.body)).not.toContain('SECRET_VALUE_1')
+      expect(agent.body).toMatchObject({ resumeCommand: '', resumeCommandSet: true })
+      const list = await call('GET', '/api/projects', undefined, 'agent')
+      expect(JSON.stringify(list.body)).not.toContain('SECRET_VALUE_1')
+      const human = await call('GET', `/api/projects/${projectId}`)
+      expect(human.body).toMatchObject({ resumeCommand: secret, resumeCommandSet: true })
+      const projects = await import('./projects')
+      expect(JSON.stringify(projects.getProjectFull(projectId, true))).not.toContain('SECRET_VALUE_1')
+      expect(projects.getProjectFull(projectId, true).resumeCommandSet).toBe(true)
+    } finally {
+      setCommand('')
+    }
+    const off = await call('GET', `/api/projects/${projectId}`, undefined, 'agent')
+    expect(off.body).toMatchObject({ resumeCommand: '', resumeCommandSet: false })
   })
 
   it('Off leaves the free text alone, and a new answer with nothing set starts no resume', async () => {
