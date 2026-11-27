@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next'
 
+import { isWorkflowPreset } from '#/lib/workflow'
+
 /**
  * The project's tag map, read only: each tag to the workflow a ticket with that tag, and no workflow of its
  * own, follows. Agents set it (the set_workflow_tags tool); the Workflow page shows what is set, and says how
@@ -34,7 +36,9 @@ export function TagMap({
               <tr key={tag} data-tag-row={tag} className="border-b last:border-0">
                 <td className="py-1 pr-3 wrap-anywhere">{tag}</td>
                 <td className="py-1 wrap-anywhere">
-                  {presets.find((p) => p.id === id)?.label ?? t('workflowTags.notOne')}
+                  {isWorkflowPreset(id)
+                    ? t(`workflowPresets.${id}.label`)
+                    : (presets.find((p) => p.id === id)?.label ?? t('workflowTags.notOne'))}
                 </td>
               </tr>
             ))}

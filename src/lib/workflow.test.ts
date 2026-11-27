@@ -777,6 +777,12 @@ describe('the Content preset (A6, A10, A11, A14)', () => {
 describe('the tag map (A3, A6)', () => {
   const VALID = ['light', 'standard', 'thorough', 'maximum', 'content', 'custom-abcdef12']
 
+  it('refuses a tag named __proto__ instead of reporting it saved', () => {
+    const r = applyTagPatch({}, JSON.parse('{"__proto__":"light","Brand":"content"}'), VALID)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.errors.join('; ')).toContain('"__proto__" is not a tag name')
+  })
+
   it('stores a patch: a key sets its tag, null removes it, the tags it does not name stay', () => {
     const first = applyTagPatch({}, { Brand: 'light', UI: 'content' }, VALID)
     expect(first).toEqual({ ok: true, tags: { Brand: 'light', UI: 'content' } })

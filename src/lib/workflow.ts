@@ -1969,6 +1969,11 @@ export function applyTagPatch(
       errors.push(`tags: "${raw}" must be 1 to ${MAX_TAG_LENGTH} characters`)
       continue
     }
+    // `__proto__` is no key of a plain object: assigning it would set the prototype, not a tag.
+    if (tag === '__proto__') {
+      errors.push(`tags: "${tag}" is not a tag name`)
+      continue
+    }
     const key = tag.toLowerCase()
     if (sent.has(key)) {
       errors.push(`tags: "${tag}" is given twice`)
