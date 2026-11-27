@@ -38,9 +38,20 @@ gate, then the review again, as the next round, while the budget below allows on
 fix pass, your gate and one review. Round 1 is the first build with its gate and its review; every later
 round is a fix pass, each followed by the gate and a review, and the rounds are a ceiling, not a quota. Max is
 for work built from scratch (a whole site or app, a new product or a standalone service), and a feature in
-an existing codebase is never max, however difficult. A surviving round ends the cycle at every level. When a round does not survive and no round is left: post
-what is still open, `ask_decision` (ship as is, keep going, drop) and stop: `BLOCKER: decision`. Never
-start one more round on your own. The complexity sets the budget at every review depth: a `deep` review
+an existing codebase is never max, however difficult. A surviving round ends the cycle at every level. When a round does not survive and no round is left,
+the budget asks the human nothing: its confirmed and plausible findings, its failed criteria and the
+merge check's conflicts or new failures go to one fix pass by the builder, then your gate, with no
+review after it. That fix pass is not a review round. Each criterion that round failed needs the builder's
+execution evidence (a test that runs the real code, an HTTP call, a browser action), checked at your gate
+as the gate checks a ticket with no review: a criterion without it is a gate return. A gate that passes goes on to the workflow's next
+steps ({{if preview}}the preview, {{end}}{{if intent}}the intent check, {{end}}the push, the PR, {{if ci}}CI, {{end}}the summary and the hand-off), and the summary's first
+line names the fix no review saw (the summary step). A finding or a criterion the builder could not fix
+is a fix that still fails: post what is still open, `ask_decision` (keep going, ship as is, drop) and
+stop: `BLOCKER: decision`; a gate that returns twice is the gate step's decision. Never start one more
+round on your own. No review follows that fix pass unless the human asks for one more round.
+That holds on a `RETRY` or re-queued run too: on that fix's head, or a later commit of the same
+hand-off (a CI fix), the skip rule's "Otherwise run `/feature-review`" does not apply and no review
+runs, unless the human asked for one more round, `RETRY` names a review, or an intent check's `does not match` on that head owes its review. The complexity sets the budget at every review depth: a `deep` review
 earns no extra round, a `light` one loses none. {{if intent}}An intent return (`does not match`, see the intent step)
 is not a gate return and is outside this budget: it gets its own fix pass and one more review, so "never
 start one more round on your own" does not apply to it. Where this workflow's review text below says its

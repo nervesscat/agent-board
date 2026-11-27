@@ -698,7 +698,8 @@ step's role, never by the Team agent's name. The review step names none: you run
 /feature-review Skill in your own session, and its phases name their own Team agents. Rules that
 hold in every workflow: a fix pass by the **builder** takes the review's confirmed findings, each with
 the project's checks and a new review; a review that does not survive after the workflow's last round
-goes to a human decision; the checks return the build at most twice, and after the second return,
+goes to one fix pass by the builder and the gate, with no review after it, then to the hand-off,
+the summary's first line naming the unreviewed fix (the gate checks the builder's evidence for each criterion it fixed; a fix that still fails goes to a human decision); the checks return the build at most twice, and after the second return,
 when the checks still fail or a criterion still has no evidence, the human decides (keep going or
 drop); the build goes to hand-off only with evidence for every criterion; the **intent** agent runs at its workflow step's effort (`low` by default in every preset) before the hand-off. Max is for work built from scratch (a whole site or app, a new product or standalone service); a feature in an existing codebase is at most high, however difficult. The agents' thinking effort is each workflow
 step's effort, `auto` unless the human set one: `low` for a low ticket, `medium` for mid and high,
@@ -725,8 +726,8 @@ Without those skills, or for one ticket, orchestrate by hand:
    its evidence in `files`: it goes to the Agents tab); when it changes where the ticket stands for
    the human (a review round's verdict, the PR, the preview), rewrite the summary; tick the tasks
    it finished; go where its notes say next.
-3. A call that is the human's (two valid behaviours, a finding that keeps coming back, ship as is
-   or not) → `ask_decision`. In a session with the human, ask them in the chat as well, with the
+3. A call that is the human's (two valid behaviours, a finding that keeps coming back, a fix that
+   still fails) → `ask_decision`. In a session with the human, ask them in the chat as well, with the
    card's options (AskUserQuestion in Claude Code, or the client's equivalent); once they answer
    there, `answer_decision` records it on the card with their words, and work on something else
    until then. An unattended run has no human to ask: it leaves the card open and skips the

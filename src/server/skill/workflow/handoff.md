@@ -2,7 +2,16 @@
 Workflow page): no intent check is run, none is required before the hand-off, and the summary says it was
 turned off on the Workflow page.{{end}} Every item, in order, as the board skill's hand-off checklist says. The board ticks the phases Pushed, PR, CI, Preview, Summary and
 Merged itself as their facts hold (a tick by hand is refused); you tick Implementation and its steps
-(`set_task_done`).
+(`set_task_done`).{{if review}}
+
+**After a fix no review saw** (the review step's budget: the last round did not survive, and its one fix
+pass had no review after it), the hand-off stands only when the gate passed on that fix's head{{if intent}} and the
+intent check returned `matches` on that same head, as for any hand-off{{end}}, and the summary's first line is the
+`Unreviewed fix: <what>, at <sha>` line naming the head handed off (the summary step). Each criterion that round
+failed stands only on the builder's execution evidence, checked at the gate as for a ticket with no review:
+without it there is no hand-off. The ticket goes to `review`
+with no decision card open for the budget: the summary's offer of one more review round is the human's
+override, never a card.{{end}}
 
 1. Implementation and its subtasks ticked (`set_task_done`); the workspace registered.
 2. `update_ticket` to `review`, and read its answer: `missingRunReports` names each subagent run the

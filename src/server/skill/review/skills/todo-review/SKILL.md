@@ -200,9 +200,12 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    Anything missing or wrong: send it back once (below) with the list.
 2. **`blocked`**: the ticket is in a `blocked` stage with an open decision card or a post that
    says what is needed. Then judge the blocker. It stands only in these categories:
-   - `decision`: two valid behaviours, a product or scope call, the workflow's rounds used up, or
-     the gate's two returns used up (the agent asked the human what to do next: ship as is, keep going
-     or drop). The human answers that card: an unattended run never answers it (`answer_decision`),
+   - `decision`: two valid behaviours, a product or scope call, the gate's two returns used up, or
+     a fix that still fails (a finding or criterion the builder could not fix after the last round;
+     the agent asked the human what to do next: ship as is, keep going or drop). Running out of the
+     workflow's rounds is not one: that round's fix goes out unreviewed, with the summary's
+     `Unreviewed fix:` line and its offer of one more round, and a card asking for the budget alone is
+     weak. The human answers that card: an unattended run never answers it (`answer_decision`),
      and it stays blocked for them;
    - `credential`: a secret or account the work cannot be written without, that the project has
      no test mode, emulator, seed or fake for;
@@ -228,7 +231,10 @@ check found>` added. It resumes from the ticket's summary and posts, not from sc
 back in the queue and starts like any other ticket, only after the previous run of that ticket has
 returned (`ticket:<id>`). Each ticket is sent back or re-queued at most once; after that its result
 is recorded as it is. A relaunch after the human's answer, or after a comment that moved the ticket back
-to In progress, is not a send-back and does not count toward that limit.
+to In progress, is not a send-back and does not count toward that limit. Nor is a relaunch after the
+human's reply asking for one more review round on a handed-off ticket (under its `Unreviewed fix:`
+summary, or a comment; the ticket may still be in review, and `list_my_threads` or `latest_actions`
+shows it): relaunch its ticket agent for exactly one more round, briefed with that reply.
 
 Record the row: ticket, title, repo, status, verdict, rounds, depth, PR, preview, blocker, notes.
 
@@ -270,8 +276,8 @@ them.
 - Never two ticket agents on one ticket or one branch. Never move a ticket yourself except to leave
   a comment on an error; the ticket agents own their tickets' stages. Before you call a ticket blocked
   or send one back, check for answered cards and new human comments, and never move a ticket the human
-  just moved: an answer, or a comment that moved it back to In progress, relaunches its agent
-  (`RETRY`), briefed with it.
+  just moved: an answer, a comment that moved it back to In progress, or a reply asking for one more
+  review round, relaunches its agent (`RETRY`), briefed with it.
 - The orchestrator never changes a ticket's complexity: it passes the level on, and the ticket agent
   never changes its own. Neither changes a ticket's workflow preset either: the project's human sets
   the workflow, and the ticket agent follows it.
