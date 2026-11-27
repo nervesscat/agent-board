@@ -200,7 +200,6 @@ export function buildTrain({ repo, remote = 'origin', base = 'dev', entries }) {
       // Removed below.
     }
     fs.rmSync(dir, { recursive: true, force: true })
-    git(repo, ['worktree', 'prune'])
   }
 }
 

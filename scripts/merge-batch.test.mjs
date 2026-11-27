@@ -200,6 +200,22 @@ describe('buildTrain', () => {
     const built = buildTrain({ repo: work, entries: [{ pr: 8, branch: 'sound-migration' }] })
     expect(built.merged).toHaveLength(1)
   })
+
+  it("leaves another worktree's records alone when the train's worktree is removed", () => {
+    const { work } = fixture()
+    const sibling = path.join(path.dirname(work), 'sibling')
+    git(work, 'worktree', 'add', '--detach', sibling, 'dev')
+    fs.writeFileSync(path.join(sibling, 'staged.txt'), 'staged\n')
+    git(sibling, 'add', 'staged.txt')
+    // The sibling's folder goes missing while its records stay behind, as after a deleted checkout.
+    fs.rmSync(sibling, { recursive: true, force: true })
+    branch(work, 'feature-g', { 'g.txt': 'g\n' })
+
+    buildTrain({ repo: work, entries: [{ pr: 17, branch: 'feature-g' }] })
+
+    expect(fs.existsSync(path.join(work, '.git', 'worktrees', 'sibling'))).toBe(true)
+    expect(git(work, 'worktree', 'list', '--porcelain')).toContain(`worktree ${sibling}`)
+  })
 })
 
 describe('pushTrain', () => {
