@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Lists, and with --kill stops, the test leftovers that no live run owns and that are older than --hours
 // (default 4): test boards and their builds, browsers, fake agents, and the run folders of runs that ended.
-// It never touches port 47100 or a data/ path, and never a process without a test marker. Without --kill
+// It never touches a process on the default port 47100 or under a data/ path, and never a process without a test marker. Without --kill
 // it signals nothing and removes nothing.
 //
 //   node scripts/reap-test-leftovers.mjs [--hours <n>] [--kill]
@@ -35,7 +35,7 @@ const USER_HZ = 100
 
 export const hasMarker = (command) => MARKERS.some((marker) => command.includes(marker))
 
-/** The live board's port in the command or environment, or a data/ path in the command: never touched. */
+/** The default port in the command or environment, or a data/ path in the command: never touched. */
 export function isProtected(proc) {
   const env = proc.env ?? {}
   if (proc.command.includes(LIVE_PORT)) return true

@@ -35,8 +35,8 @@ describe('the test-run reaper', () => {
     expect(listed).toEqual([])
   })
 
-  it('classify never matches the live board', () => {
-    // The live board runs on 47100 from the main checkout, with its data/ folder: never listed, even orphaned and old.
+  it('classify never matches the default server', () => {
+    // A server on the default port, or a process under a data/ folder, is never listed, even orphaned and old.
     const byPort = proc({ pid: 300, command: `node ${BOARD} --port 47100`, env: {} })
     const byEnv = proc({ pid: 301, command: `node ${BOARD}`, env: { BOARD_PORT: '47100' } })
     const byData = proc({ pid: 302, command: `node ${BOARD} --data /repo/data/`, env: {} })
