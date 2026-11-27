@@ -277,7 +277,8 @@ export const LayoutBody = z
  * patch that has them is refused whole. Without `who` the caller is taken for a worker.
  * `workStage`: the key of the active stage work starts in (claiming, a status `in_progress` or
  * `active`), null for the first active stage; anything else is a 400. `stallMinutes`: how long an active ticket
- * may go without a work event before it reads as stalled (the caller checks the range). `layout`: kept
+ * may go without a work event before it reads as stalled (the caller checks the range). `waitingLongDays`: how
+ * many days a ticket may wait in a review stage or in To do before Needs you lists it (the caller checks the range). `layout`: kept
  * as it is in effect (`mergeLayout`: unknown ids dropped, locked elements shown), null for the defaults
  * again.
  */
@@ -291,6 +292,7 @@ export function updateProject(
       | 'defaultPhases'
       | 'tagSuggestions'
       | 'stallMinutes'
+      | 'waitingLongDays'
       | 'layout'
       | 'workStage'
       | 'kinds'

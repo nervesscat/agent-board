@@ -418,6 +418,11 @@
       "description": "Dua jam menentukan tampilan sebuah tiket. Lease adalah yang dijaga tetap hidup oleh heartbeat atau kiriman agen: berlangsung sepuluh menit, dan jika habis saat sebuah span masih terbuka, tiket tampil sebagai <lost>Kontak hilang</lost> — agen sudah pergi, bukan menunggu Anda. Tiket tanpa yang terbuka tampil sebagai <stalled>Macet</stalled> setelah tidak ada kabar dari agen (heartbeat, span, penantian, serah terima) dan tidak ada yang dilihat papan darinya (push, PR, preview) selama waktu ini. Kenop ini mengatur ambang keheningan itu, dan ia menentukan lebih dulu: ambang di bawah sepuluh menit menandai tiket yang diam sebelum lease habis. Sepuluh menit lease tetap tidak berubah.",
       "label": "Macet setelah (menit)",
       "invalid": "Bilangan bulat dari {{min}} sampai {{max}}."
+    },
+    "waitingLong": {
+      "title": "Menunggu terlalu lama",
+      "description": "Perlu Anda mencantumkan tiket yang sudah lebih dari sekian hari di tahap tinjauan atau di To do, yang paling lama dulu, beserta lama menunggunya dan baris ringkasan terakhir. Tiket ber-tag Bug atau Security di To do muncul setelah sehari, apa pun nilai ini.",
+      "label": "Muncul setelah (hari)"
     }
   },
   "kinds": {
@@ -2413,7 +2418,8 @@
       "revertTip": "Kembalikan instruksi seperti sebelum perubahan ini",
       "revertBlockedTip": "Instruksi berubah lagi sejak itu: batalkan perubahan yang lebih baru dulu",
       "revert": "Batalkan",
-      "last": "terakhir"
+      "last": "terakhir",
+      "waitingDays_other": "menunggu {{count}} hari"
     },
     "lost": {
       "title": "Kontak hilang",

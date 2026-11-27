@@ -13,6 +13,7 @@ const SETTINGS = [
   'Default phases',
   'Tag suggestions',
   'Stalled tickets',
+  'Waiting too long',
   'Stages',
   'Runs',
   'Resume',

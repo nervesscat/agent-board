@@ -426,6 +426,11 @@
       "description": "Due orologi decidono come appare un ticket. Il lease è ciò che il heartbeat o il post di un agente mantiene vivo: dura dieci minuti e, quando scade con uno span ancora aperto, il ticket appare come <lost>Contatto perso</lost>: l'agente non c'è più, non sta aspettando te. Un ticket senza nulla di aperto appare come <stalled>Fermo</stalled> quando da questo tempo non arriva né una parola di un agente (un heartbeat, uno span, un'attesa, una consegna) né nulla che la bacheca abbia visto (un push, la sua PR, la sua preview). Questa manopola imposta quella soglia di silenzio e decide per prima: una soglia sotto i dieci minuti segnala un ticket silenzioso prima che il lease scada. I dieci minuti del lease restano fissi.",
       "label": "Fermo dopo (minuti)",
       "invalid": "Un numero intero da {{min}} a {{max}}."
+    },
+    "waitingLong": {
+      "title": "In attesa da troppo",
+      "description": "Serve a te elenca un ticket fermo da più di questo numero di giorni in una fase di revisione o in To do, dal più vecchio, con da quanto attende e l'ultima riga del riepilogo. Un ticket con tag Bug o Security in To do compare dopo un giorno, qualunque sia questo valore.",
+      "label": "Compare dopo (giorni)"
     }
   },
   "kinds": {
@@ -2483,7 +2488,9 @@
       "revertTip": "Riporta le istruzioni com'erano prima di questa modifica",
       "revertBlockedTip": "Le istruzioni sono cambiate di nuovo da allora: annulla prima la modifica successiva",
       "revert": "Annulla modifica",
-      "last": "ultima"
+      "last": "ultima",
+      "waitingDays_one": "in attesa da {{count}} giorno",
+      "waitingDays_other": "in attesa da {{count}} giorni"
     },
     "lost": {
       "title": "Contatto perso",

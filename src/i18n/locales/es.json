@@ -426,6 +426,11 @@
       "description": "Dos relojes deciden cómo se ve un ticket. El lease es lo que mantiene vivo el latido o la publicación de un agente: dura diez minutos, y cuando se agota con un span aún abierto el ticket aparece como <lost>Contacto perdido</lost>: el agente se fue, no está esperándote. Un ticket sin nada abierto aparece como <stalled>Estancado</stalled> cuando no llega ninguna palabra de un agente (un latido, un span, una espera, un traspaso) ni nada que el tablero haya visto de él (un push, su PR, su preview) durante este tiempo. Este control fija ese umbral de silencio y decide primero: un umbral menor de diez minutos marca un ticket en silencio antes de que se agote el lease. Los diez minutos del lease no cambian.",
       "label": "Estancado tras (minutos)",
       "invalid": "Un número entero de {{min}} a {{max}}."
+    },
+    "waitingLong": {
+      "title": "Esperando demasiado",
+      "description": "Te necesita lista un ticket que lleva más de estos días en una etapa de revisión o en To do, del más antiguo al más reciente, con cuánto tiempo ha esperado y la última línea de su resumen. Un ticket con la etiqueta Bug o Security en To do aparece tras un día, sea cual sea este valor.",
+      "label": "Aparece tras (días)"
     }
   },
   "kinds": {
@@ -2485,7 +2490,9 @@
       "revertTip": "Deja las instrucciones como estaban antes de este cambio",
       "revertBlockedTip": "Las instrucciones cambiaron de nuevo desde entonces: revierte primero el cambio posterior",
       "revert": "Revertir",
-      "last": "último:"
+      "last": "último:",
+      "waitingDays_one": "esperando desde hace {{count}} día",
+      "waitingDays_other": "esperando desde hace {{count}} días"
     },
     "lost": {
       "title": "Contacto perdido",

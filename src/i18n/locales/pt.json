@@ -426,6 +426,11 @@
       "description": "Dois relógios decidem como um ticket é exibido. O lease é o que o heartbeat ou a publicação de um agente mantém vivo: dura dez minutos e, quando acaba com um span ainda aberto, o ticket aparece como <lost>Contato perdido</lost> — o agente sumiu, não está esperando você. Um ticket sem nada aberto aparece como <stalled>Parado</stalled> quando nenhuma palavra de agente (um heartbeat, um span, uma espera, uma entrega) nem nada que o quadro viu dele (um push, seu PR, seu preview) chega por este tempo. Este controle define esse limite de silêncio e ele decide primeiro: um limite abaixo de dez minutos marca um ticket silencioso antes de o lease acabar. Os dez minutos do lease continuam fixos.",
       "label": "Parado após (minutos)",
       "invalid": "Um número inteiro de {{min}} a {{max}}."
+    },
+    "waitingLong": {
+      "title": "Esperando há tempo demais",
+      "description": "Precisa de você lista um ticket parado há mais do que este número de dias numa etapa de revisão ou em To do, o mais antigo primeiro, com há quanto tempo espera e a última linha do seu resumo. Um ticket com a tag Bug ou Security em To do aparece após um dia, seja qual for este valor.",
+      "label": "Aparece após (dias)"
     }
   },
   "kinds": {
@@ -2483,7 +2488,9 @@
       "revertTip": "Devolva as instruções ao que eram antes desta alteração",
       "revertBlockedTip": "As instruções mudaram de novo desde então: reverta primeiro a alteração posterior",
       "revert": "Reverter",
-      "last": "última"
+      "last": "última",
+      "waitingDays_one": "esperando há {{count}} dia",
+      "waitingDays_other": "esperando há {{count}} dias"
     },
     "lost": {
       "title": "Contato perdido",

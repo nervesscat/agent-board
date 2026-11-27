@@ -13,6 +13,7 @@ import {
   STAGE_COLORS,
   STAGE_KINDS,
   FEED_TABS,
+  WAITING_LONG_DAYS,
 } from '#/lib/constants'
 import { LANGUAGES } from '#/i18n/languages'
 import { AGENT_TOKEN_NAME } from '#/lib/agents'
@@ -422,6 +423,7 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
       defaultPhases: DefaultPhases.optional(),
       tagSuggestions: projects.TagSuggestions.optional(),
       stallMinutes: z.number().int().min(STALL_MINUTES.min).max(STALL_MINUTES.max).optional(),
+      waitingLongDays: z.number().int().min(WAITING_LONG_DAYS.min).max(WAITING_LONG_DAYS.max).optional(),
       layout: projects.LayoutBody.optional(),
       workStage: z.string().min(1).max(100).nullable().optional(),
       kinds: ProjectKinds.optional(),
@@ -442,6 +444,8 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
     throw new HttpError(403, 'only the human sets what the project is for')
   if (body.stallMinutes !== undefined && isAgent(request))
     throw new HttpError(403, 'only the human sets when a ticket reads as stalled')
+  if (body.waitingLongDays !== undefined && isAgent(request))
+    throw new HttpError(403, 'only the human sets how long work may wait before it is listed')
   // They shape every new ticket of the project: agents change the phases of a ticket instead.
   if (body.defaultPhases !== undefined && isAgent(request))
     throw new HttpError(403, "only the human sets the project's default phases")

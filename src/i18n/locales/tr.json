@@ -426,6 +426,11 @@
       "description": "Bir ticket'ın nasıl göründüğünü iki saat belirler. Kira, ajanın heartbeat'inin ya da gönderisinin canlı tuttuğu süredir: on dakika sürer ve açık bir span varken biterse ticket <lost>Bağlantı koptu</lost> görünür: ajan gitmiştir, seni beklemiyor. Açık hiçbir şeyi olmayan ticket, hiçbir ajanın sözü (heartbeat, span, bekleme, devir) ve panonun onda gördüğü hiçbir şey (bir push, PR'ı, preview'ı) bu süre boyunca gelmediyse <stalled>Durmuş</stalled> görünür. Bu ayar o sessizlik eşiğini belirler ve önce o geçerlidir: on dakikadan kısa bir eşik, sessiz bir ticket'ı kira bitmeden işaretler. Kiranın on dakikası sabit kalır.",
       "label": "Durma süresi (dakika)",
       "invalid": "{{min}} ile {{max}} arasında bir tam sayı."
+    },
+    "waitingLong": {
+      "title": "Çok uzun süredir bekliyor",
+      "description": "Seni bekliyor, bir inceleme aşamasında ya da To do'da bu gün sayısından uzun süredir duran ticket'ları, en eskisi önce, ne kadar beklediğiyle ve özetinin son satırıyla listeler. To do'da Bug ya da Security etiketli bir ticket, bu ayar ne olursa olsun bir gün sonra listelenir.",
+      "label": "Şu kadar gün sonra listelenir (gün)"
     }
   },
   "kinds": {
@@ -2483,7 +2488,9 @@
       "revertTip": "Talimatları bu değişiklikten önceki hâline döndür",
       "revertBlockedTip": "Talimatlar o zamandan beri yine değişti: önce sonraki değişikliği geri al",
       "revert": "Geri al",
-      "last": "son"
+      "last": "son",
+      "waitingDays_one": "{{count}} gündür bekliyor",
+      "waitingDays_other": "{{count}} gündür bekliyor"
     },
     "lost": {
       "title": "Bağlantı koptu",

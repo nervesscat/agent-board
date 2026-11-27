@@ -15,7 +15,7 @@ import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { KindPicker } from '#/components/KindPicker'
 import { errorMessage, patch } from '#/lib/api'
-import { STALL_MINUTES } from '#/lib/constants'
+import { STALL_MINUTES, WAITING_LONG_DAYS } from '#/lib/constants'
 import type { Kind } from '#/lib/kinds'
 import { useProject } from '#/lib/project'
 import { useAnchor, useReveal } from '#/lib/reveal'
@@ -52,6 +52,7 @@ export function ProjectSettings({ id }: { id: string }) {
       <DefaultPhases key={id} projectId={id} saved={p.defaultPhases} />
       <TagSuggestions key={`tags-${id}`} projectId={id} saved={p.tagSuggestions} />
       <StallMinutes key={`stall-${id}`} projectId={id} saved={p.stallMinutes} />
+      <WaitingLong key={`waiting-${id}`} projectId={id} saved={p.waitingLongDays} />
       <NotificationSettings key={`notifications-${id}`} projectId={id} />
       <StagesEditor projectId={id} />
       <RunsSettings projectId={id} />
@@ -255,6 +256,74 @@ function TagSuggestions({ projectId, saved }: { projectId: string; saved: string
             {save.isPending ? t('projectSettings.saving') : t('projectSettings.save')}
           </Button>
         </div>
+      </form>
+    </section>
+  )
+}
+
+/**
+ * How many days a ticket may wait in a review stage, or in To do, before Needs you lists it as waiting long,
+ * oldest first. Bug and Security tickets in To do are listed after a day whatever this is.
+ */
+function WaitingLong({ projectId, saved }: { projectId: string; saved: number }) {
+  const { t } = useTranslation()
+  const qc = useQueryClient()
+  const [text, setText] = useState(String(saved))
+  const days = Number(text)
+  const valid = Number.isInteger(days) && days >= WAITING_LONG_DAYS.min && days <= WAITING_LONG_DAYS.max
+  const dirty = valid && days !== saved
+  const save = useMutation({
+    mutationFn: (waitingLongDays: number) =>
+      patch<{ waitingLongDays: number }>(`/api/projects/${projectId}`, { waitingLongDays }),
+    onSuccess: async (row) => {
+      setText(String(row.waitingLongDays))
+      await qc.invalidateQueries({ queryKey: ['project', projectId] })
+      toast.success(t('common.saved'))
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+  return (
+    <section
+      id="waiting-too-long"
+      aria-label={t('projectSettings.waitingLong.title')}
+      className="max-w-3xl scroll-mt-16 space-y-3"
+    >
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight">{t('projectSettings.waitingLong.title')}</h2>
+        <p className="text-sm text-muted-foreground">{t('projectSettings.waitingLong.description')}</p>
+      </div>
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (dirty && !save.isPending) save.mutate(days)
+        }}
+      >
+        <div className="space-y-1">
+          <Label htmlFor="waiting-long-days">{t('projectSettings.waitingLong.label')}</Label>
+          <Input
+            id="waiting-long-days"
+            type="number"
+            inputMode="numeric"
+            min={WAITING_LONG_DAYS.min}
+            max={WAITING_LONG_DAYS.max}
+            step={1}
+            className="w-32"
+            value={text}
+            aria-invalid={!valid}
+            onChange={(e) => setText(e.target.value)}
+          />
+        </div>
+        <Button type="submit" size="sm" disabled={!dirty || save.isPending}>
+          {save.isPending ? t('projectSettings.saving') : t('projectSettings.save')}
+        </Button>
+        <span className="text-xs text-muted-foreground" aria-live="polite">
+          {valid
+            ? dirty
+              ? t('projectSettings.unsaved')
+              : t('projectSettings.noChanges')
+            : t('projectSettings.stall.invalid', { min: WAITING_LONG_DAYS.min, max: WAITING_LONG_DAYS.max })}
+        </span>
       </form>
     </section>
   )

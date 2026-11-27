@@ -19,6 +19,7 @@ type Decision = NeedsYou['decisions'][number]
 type PrToReview = NeedsYou['prs'][number]
 type Thread = NeedsYou['threads'][number]
 type Review = NeedsYou['reviews'][number]
+type WaitingLong = NeedsYou['waitingLong'][number]
 type HumanWait = NeedsYou['humanWaits'][number]
 type BlockedTask = NeedsYou['blockedTasks'][number]
 type InstructionChange = NeedsYou['instructionChanges'][number]
@@ -60,6 +61,8 @@ export const needKeys = {
   pr: (pr: PrToReview) => `pr:${pr.id}:${pr.updatedAt}`,
   thread: (th: Thread) => `thread:${th.parentType}:${th.parentId}:${th.last.id}`,
   review: (t: Review) => `review:${t.id}:${t.updatedAt}`,
+  // By the stage entered: the next stage the ticket enters (and waits in) shows again.
+  waitingLong: (w: WaitingLong) => `waiting:${w.ticketId}:${w.since}`,
   blockedTask: (task: BlockedTask) => `blocked:${task.taskId}`,
   instructionChange: (c: InstructionChange) => `instruction:${c.changeId}`,
   stalled: (s: Stalled) => `stalled:${s.ticketId}:${s.lastSignalAt}`,
@@ -78,6 +81,7 @@ export function undismissed(p: ProjectSummary, dismissed: ReadonlySet<string>): 
   const prs = n.prs.filter((pr) => !dismissed.has(needKeys.pr(pr)))
   const threads = n.threads.filter((th) => !dismissed.has(needKeys.thread(th)))
   const reviews = n.reviews.filter((t) => !dismissed.has(needKeys.review(t)))
+  const waitingLong = n.waitingLong.filter((w) => !dismissed.has(needKeys.waitingLong(w)))
   const blockedTasks = n.blockedTasks.filter((task) => !dismissed.has(needKeys.blockedTask(task)))
   const instructionChanges = n.instructionChanges.filter((c) => !dismissed.has(needKeys.instructionChange(c)))
   const stalled = n.stalled.filter((s) => !dismissed.has(needKeys.stalled(s)))
@@ -87,6 +91,7 @@ export function undismissed(p: ProjectSummary, dismissed: ReadonlySet<string>): 
     prs.length +
     threads.length +
     reviews.length +
+    waitingLong.length +
     blockedTasks.length +
     instructionChanges.length +
     stalled.length
@@ -99,6 +104,7 @@ export function undismissed(p: ProjectSummary, dismissed: ReadonlySet<string>): 
       prs,
       threads,
       reviews,
+      waitingLong,
       blockedTasks,
       instructionChanges,
       stalled,

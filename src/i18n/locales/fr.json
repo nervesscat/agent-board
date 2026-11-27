@@ -426,6 +426,11 @@
       "description": "Deux horloges décident de l’état d’un ticket. Le bail est ce que le heartbeat ou la publication d’un agent maintient en vie : il dure dix minutes, et quand il expire alors qu’un span reste ouvert, le ticket apparaît comme <lost>Contact perdu</lost> — l’agent est parti, il ne vous attend pas. Un ticket sans rien d’ouvert apparaît comme <stalled>Au point mort</stalled> dès que ni un mot d’agent (un heartbeat, un span, une attente, une remise) ni rien que le tableau en ait vu (un push, sa PR, sa preview) n’est arrivé depuis aussi longtemps. Ce réglage fixe ce seuil de silence, et il passe en premier : un seuil inférieur à dix minutes signale un ticket silencieux avant l’expiration du bail. Les dix minutes du bail restent fixes.",
       "label": "Au point mort après (minutes)",
       "invalid": "Un nombre entier de {{min}} à {{max}}."
+    },
+    "waitingLong": {
+      "title": "En attente depuis trop longtemps",
+      "description": "À traiter liste un ticket resté plus longtemps que ce nombre de jours en étape de revue ou dans To do, le plus ancien d'abord, avec son temps d'attente et la dernière ligne de son résumé. Un ticket taggé Bug ou Security dans To do apparaît après un jour, quelle que soit cette valeur.",
+      "label": "Affiché après (jours)"
     }
   },
   "kinds": {
@@ -2485,7 +2490,9 @@
       "revertTip": "Remettre les instructions comme elles étaient avant cette modification",
       "revertBlockedTip": "Les instructions ont changé depuis : annulez d’abord la modification suivante",
       "revert": "Annuler",
-      "last": "dernière"
+      "last": "dernière",
+      "waitingDays_one": "en attente depuis {{count}} jour",
+      "waitingDays_other": "en attente depuis {{count}} jours"
     },
     "lost": {
       "title": "Contact perdu",
