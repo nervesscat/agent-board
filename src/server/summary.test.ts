@@ -13,12 +13,14 @@ let summary: typeof import('./summary')
 let features: typeof import('./features')
 let stagesMod: typeof import('./stages')
 let dbm: typeof import('#/db')
+let projectsMod: typeof import('./projects')
 
 beforeAll(async () => {
   summary = await import('./summary')
   features = await import('./features')
   stagesMod = await import('./stages')
   dbm = await import('#/db')
+  projectsMod = await import('./projects')
 })
 
 // Local times, so "today" is the same calendar day whatever the machine's time zone.
@@ -314,7 +316,9 @@ describe('approved, to merge, by kind', () => {
     const waiting = ticket(pid, 'Waiting for a look', { status: 'review', prNumber: 10 })
     const s = take(pid)
     expect(s.approvedToMerge.map((x) => x.ticketId).sort()).toEqual([moved.id, plain.id].sort())
-    expect(s.needsYou.reviews.map((r) => r.id)).toEqual([waiting.id])
+    // Waiting since before the project's 3 days (created on the 1st): listed as waiting long, not in reviews.
+    expect(s.needsYou.reviews).toEqual([])
+    expect(s.needsYou.waitingLong.map((r) => r.ticketId)).toEqual([waiting.id])
     // Approved tickets are in progress like any being merged, but never listed among the ones to look at.
     expect(s.inProgress.map((t) => t.id)).not.toContain(plain.id)
     expect(s.inProgress.map((t) => t.id)).not.toContain(moved.id)
@@ -408,9 +412,11 @@ describe('needs you', () => {
     ])
     expect(s.needsYou.prs.map((p) => p.number)).toEqual([7])
     expect(s.needsYou.threads).toMatchObject([{ parentType: 'ticket', parentId: asked.id, waiting: 1 }])
-    expect(s.needsYou.reviews).toMatchObject([
-      { id: review.id, prNumber: 7, parent: null },
-      { id: reviewLane.id, parent: { id: review.id } },
+    // Both in review since before the project's 3 days: listed as waiting long, not in reviews.
+    expect(s.needsYou.reviews).toEqual([])
+    expect(s.needsYou.waitingLong).toMatchObject([
+      { ticketId: review.id, parent: null },
+      { ticketId: reviewLane.id, parent: { id: review.id } },
     ])
     // The tickets in progress have no work-timeline event since long before now: stalled, and counted.
     // None is lost contact: nothing is open on them.
@@ -459,7 +465,9 @@ describe('needs you by stage kind', () => {
     expect(empty.decisions).toEqual([])
     expect(empty.threads).toEqual([])
     expect(empty.blockedTasks).toEqual([])
-    expect(empty.total).toBe(0)
+    // The To do ticket has waited since it was made, past the setting: it is the one entry left, waiting long.
+    expect(empty.waitingLong.map((w) => w.status)).toEqual(['todo'])
+    expect(empty.total).toBe(1)
 
     // The same entries on work going on, handed off or stopped: they ask the human.
     const kept = ['in_progress', 'review', 'blocked'].map((status) => ticket(pid, status, { status }))
@@ -482,6 +490,7 @@ describe('needs you by stage kind', () => {
         s.prs.length +
         s.threads.length +
         s.reviews.length +
+        s.waitingLong.length +
         s.blockedTasks.length +
         s.instructionChanges.length +
         s.stalled.length,
@@ -657,8 +666,9 @@ describe('blocked tasks', () => {
       }),
     ])
     expect(base.needsYou.blockedTasks.map((x) => x.taskId)).not.toContain(own.get('deploy')!.id)
-    // The ticket in review is there twice: once to review, once for its blocked task.
-    expect(base.needsYou.reviews.map((r) => r.id)).toEqual([review.id])
+    // The ticket in review has waited past the setting: it is listed once, as waiting long, for its blocked task.
+    expect(base.needsYou.reviews).toEqual([])
+    expect(base.needsYou.waitingLong.map((r) => r.ticketId)).toEqual([review.id])
     // Each ticket's blocked step is the one it works next: the ticket and its lane read Waiting on you
     // from it, so neither is stalled, and the ticket in review is waiting on its own blocked step.
     expect(base.needsYou.stalled).toEqual([])
@@ -1093,5 +1103,158 @@ describe('lost contact: the Overview card lists exactly the tickets whose agent 
       })
       .run()
     expect(take(pid).lostContact).toEqual([])
+  })
+})
+
+describe('waiting long: the Needs you list of work that has sat in review or in To do', () => {
+  const DAY = 86_400_000
+  const agoDate = (days: number) => new Date(NOW.getTime() - days * DAY)
+  const ago = (days: number) => iso(agoDate(days))
+  /** A ticket in `status`, moved there `days` ago (a stage event); created 30 days ago. */
+  function inStage(pid: number, title: string, status: string, days: number, values = {}) {
+    const t = ticket(pid, title, { status, createdAt: ago(30), updatedAt: ago(30), ...values })
+    movedTo(t.id, pid, status, days)
+    return t
+  }
+  function movedTo(ticketId: number, pid: number, toStage: string, days: number, fromStage = '') {
+    dbm.db
+      .insert(dbm.schema.ticketEvents)
+      .values({
+        ticketId,
+        projectId: pid,
+        kind: 'stage',
+        agent: HUMAN,
+        by: HUMAN,
+        fromStage,
+        toStage,
+        at: ago(days),
+      })
+      .run()
+  }
+
+  it('a new project waits 3 days before Needs you lists work, and the setting is the project’s', () => {
+    const pid = project('waiting default')
+    const p = dbm.db.select().from(dbm.schema.projects).where(eq(dbm.schema.projects.id, pid)).get()!
+    expect(p.waitingLongDays).toBe(3)
+  })
+
+  it('lists a review ticket waiting longer than the setting, and not one under it or exactly at it', () => {
+    const pid = project('waiting review')
+    const four = inStage(pid, 'Four days', 'review', 4)
+    const two = inStage(pid, 'Two days', 'review', 2)
+    const exact = inStage(pid, 'Exactly three days', 'review', 3)
+    const s = take(pid).needsYou
+    expect(s.waitingLong.map((w) => w.ticketId)).toEqual([four.id])
+    expect(s.reviews.map((r) => r.id).sort()).toEqual([two.id, exact.id].sort())
+  })
+
+  it('lists the longest waits first', () => {
+    const pid = project('waiting order')
+    const five = inStage(pid, 'Five days', 'review', 5)
+    const six = inStage(pid, 'Six days', 'review', 6)
+    expect(take(pid).needsYou.waitingLong.map((w) => w.ticketId)).toEqual([six.id, five.id])
+  })
+
+  it('follows the project’s setting: lowering it lists the tickets waiting past the new number', () => {
+    const pid = project('waiting setting')
+    const t = inStage(pid, 'Two and a half days', 'review', 2.5)
+    expect(take(pid).needsYou.waitingLong).toEqual([])
+    projectsMod.updateProject(pid, { waitingLongDays: 2 }, HUMAN)
+    expect(take(pid).needsYou.waitingLong.map((w) => w.ticketId)).toEqual([t.id])
+  })
+
+  it('counts a To do ticket from its creation, and lists only the To do stage, not Backlog', () => {
+    const pid = project('waiting todo')
+    const todo = ticket(pid, 'Made four days ago', { status: 'todo', createdAt: ago(4), updatedAt: ago(4) })
+    ticket(pid, 'Parked four days ago', { status: 'backlog', createdAt: ago(4), updatedAt: ago(4) })
+    const listed = take(pid).needsYou.waitingLong
+    expect(listed.map((w) => w.ticketId)).toEqual([todo.id])
+    expect(listed[0]).toMatchObject({ since: ago(4), waitedMs: 4 * DAY })
+  })
+
+  it('lists a Bug or Security ticket in To do after a day whatever the setting, ignoring the tag’s case', () => {
+    const pid = project('waiting urgent')
+    const made = { status: 'todo', createdAt: ago(1.5), updatedAt: ago(1.5) }
+    const bug = ticket(pid, 'Bug', { ...made, tags: ['Bug'] })
+    const security = ticket(pid, 'Security', { ...made, tags: ['security'] })
+    ticket(pid, 'Plain', { ...made, tags: ['UI'] })
+    // The one-day rule is for To do: a Bug in review waits the setting, like any other review.
+    inStage(pid, 'Bug in review', 'review', 1.5, { tags: ['Bug'] })
+    const s = take(pid).needsYou
+    expect(s.waitingLong.map((w) => w.ticketId).sort()).toEqual([bug.id, security.id].sort())
+    expect(s.reviews.map((r) => r.title)).toEqual(['Bug in review'])
+  })
+
+  it('counts a ticket from its last move into the stage: moving out and back in restarts the wait', () => {
+    const pid = project('waiting restart')
+    const again = ticket(pid, 'Moved out and back', {
+      status: 'review',
+      createdAt: ago(10),
+      updatedAt: ago(1),
+    })
+    movedTo(again.id, pid, 'review', 5, 'todo')
+    movedTo(again.id, pid, 'in_progress', 4, 'review')
+    movedTo(again.id, pid, 'review', 1, 'in_progress')
+    const fresh = inStage(pid, 'Moved in four days ago', 'review', 4)
+    const s = take(pid).needsYou
+    expect(s.waitingLong.map((w) => w.ticketId)).toEqual([fresh.id])
+    expect(s.waitingLong[0]).toMatchObject({ since: ago(4), waitedMs: 4 * DAY })
+  })
+
+  it('names each entry: its title, status, assignee, parent, since, the wait and the last summary line', () => {
+    const pid = project('waiting fields')
+    const parent = ticket(pid, 'Parent', { status: 'in_progress' })
+    const lane = inStage(pid, 'Lane', 'review', 4, { parentId: parent.id, assignee: 'builder' })
+    const t = inStage(pid, 'Fix the importer', 'review', 4, { assignee: 'claude' })
+    post(t.id, 'Old version', agoDate(3), { summary: true, progress: false })
+    post(t.id, '\n  Fix the importer retry  \nsecond line', agoDate(1), { summary: true, progress: false })
+    post(t.id, 'A progress post, not the summary', agoDate(0.5))
+    const s = take(pid).needsYou
+    expect(s.waitingLong).toEqual([
+      {
+        ticketId: lane.id,
+        title: 'Lane',
+        status: 'review',
+        assignee: 'builder',
+        parent: { id: parent.id, title: 'Parent' },
+        review: true,
+        since: ago(4),
+        waitedMs: 4 * DAY,
+        lastSummary: null,
+      },
+      {
+        ticketId: t.id,
+        title: 'Fix the importer',
+        status: 'review',
+        assignee: 'claude',
+        parent: null,
+        review: true,
+        since: ago(4),
+        waitedMs: 4 * DAY,
+        lastSummary: 'Fix the importer retry',
+      },
+    ])
+  })
+
+  it('a review ticket past the setting is listed under waitingLong only, and the total counts each entry once', () => {
+    const pid = project('waiting total')
+    const waited = inStage(pid, 'Waited', 'review', 4)
+    const recent = inStage(pid, 'Recent', 'review', 1)
+    const todo = ticket(pid, 'To do', { status: 'todo', createdAt: ago(4), updatedAt: ago(4) })
+    const s = take(pid).needsYou
+    expect(s.reviews.map((r) => r.id)).toEqual([recent.id])
+    expect(s.waitingLong.map((w) => w.ticketId)).toEqual([waited.id, todo.id])
+    expect(s.total).toBe(
+      s.decisions.length +
+        s.humanWaits.length +
+        s.prs.length +
+        s.threads.length +
+        s.reviews.length +
+        s.waitingLong.length +
+        s.blockedTasks.length +
+        s.instructionChanges.length +
+        s.stalled.length,
+    )
+    expect(s.total).toBe(3)
   })
 })

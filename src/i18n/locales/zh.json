@@ -418,6 +418,11 @@
       "description": "有两个计时决定 ticket 如何显示。租约由智能体的心跳或动态维持：它持续十分钟，到期时若仍有未结束的 span，ticket 会显示为<lost>失联</lost>：智能体已不在，不是在等你。没有未结束项的 ticket，在这么长时间内既没有任何智能体的消息（心跳、span、等待、交接），也没有看板观察到的任何动静（推送、它的 PR、它的 preview）时，就显示为<stalled>停滞</stalled>。此项设定这个静默阈值，并且优先生效：低于十分钟的阈值会在租约到期之前就把静默的 ticket 标出来。租约的十分钟是固定的。",
       "label": "停滞时间（分钟）",
       "invalid": "一个从{{min}}到{{max}}的整数。"
+    },
+    "waitingLong": {
+      "title": "等待过久",
+      "description": "待你处理会列出在审核阶段或 To do 中等待超过这些天数的 ticket，最久的在前，并显示等待时长和摘要的最后一行。To do 中带有 Bug 或 Security 标签的 ticket 无论此设置为何，一天后即会列出。",
+      "label": "超过几天后列出（天）"
     }
   },
   "kinds": {
@@ -2413,7 +2418,8 @@
       "revertTip": "把说明恢复成此次更改之前的样子",
       "revertBlockedTip": "说明此后又被更改：请先还原之后的更改",
       "revert": "还原",
-      "last": "最后"
+      "last": "最后",
+      "waitingDays_other": "等待 {{count}} 天"
     },
     "lost": {
       "title": "失联",

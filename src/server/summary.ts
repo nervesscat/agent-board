@@ -1,7 +1,7 @@
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, max, ne } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
-import type { StageKind } from '#/lib/constants'
+import { type StageKind, URGENT_TODO_DAYS, URGENT_TODO_TAGS } from '#/lib/constants'
 import { mergeLayout, shownIn } from '#/lib/layout'
 import { askingHuman } from '#/lib/needsYou'
 import { stageColumn } from '#/lib/stages'
@@ -17,7 +17,7 @@ import { refreshPrsInBackground } from './prs'
 import { listAgents } from './projectAgents'
 import { listRepos } from './repos'
 import { reportDueFor } from './reportDue'
-import { listStages, type Stage } from './stages'
+import { listStages, startStage, type Stage } from './stages'
 import { timelinesFor } from './workTimeline'
 
 /**
@@ -293,10 +293,74 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       ]
     })
     .sort((a, b) => Date.parse(a.lastSignalAt) - Date.parse(b.lastSignalAt))
+  // Tickets that waited too long: in a review stage, or in To do (the project's start stage), longer than
+  // the project's setting; a Bug or Security ticket in To do after a day. Waiting counts from the stage the
+  // ticket entered (the work timeline's `stage.since`). A review ticket listed here is not in `reviews`.
+  const todoStage = startStage(stages)
+  const inTodo = (t: Row) => todoStage.kind === 'open' && t.status === todoStage.key
+  const urgentTags = new Set<string>(URGENT_TODO_TAGS.map((tag) => tag.toLowerCase()))
+  const waitLimitDays = (t: Row) =>
+    inTodo(t) && t.tags.some((tag) => urgentTags.has(tag.trim().toLowerCase()))
+      ? URGENT_TODO_DAYS
+      : project.waitingLongDays
+  const waiting = tickets.flatMap((t) => {
+    const inReview = kind(t.status) === 'review' && !t.approvedAt && t.status !== 'approved'
+    if (!inReview && !inTodo(t)) return []
+    const { since } = timelines.get(t.id)!.timeline.stage
+    const waitedMs = now.getTime() - Date.parse(since)
+    if (waitedMs <= waitLimitDays(t) * DAY_MS) return []
+    return [
+      {
+        ticketId: t.id,
+        title: t.title,
+        status: t.status,
+        assignee: t.assignee,
+        parent: parentOf(t),
+        // In a review stage (else in To do): the review list counts it, the To do one does not.
+        review: inReview,
+        // When the ticket entered its stage, and how long it has waited since (milliseconds).
+        since,
+        waitedMs,
+      },
+    ]
+  })
+  // The last summary line of each: the first non-empty line of its newest summary version, null without one.
+  const summaryLine = new Map<number, string | null>()
+  if (waiting.length) {
+    const versions = db
+      .select({ ticketId: schema.updates.ticketId, body: schema.updates.body })
+      .from(schema.updates)
+      .where(
+        and(
+          inArray(
+            schema.updates.ticketId,
+            waiting.map((w) => w.ticketId),
+          ),
+          eq(schema.updates.summary, true),
+        ),
+      )
+      .orderBy(desc(schema.updates.createdAt), desc(schema.updates.id))
+      .all()
+    for (const v of versions)
+      if (!summaryLine.has(v.ticketId))
+        summaryLine.set(
+          v.ticketId,
+          v.body
+            .split('\n')
+            .map((line) => line.trim())
+            .find((line) => line !== '') ?? null,
+        )
+  }
+  const waitingLong = waiting
+    .map((w) => ({ ...w, lastSummary: summaryLine.get(w.ticketId) ?? null }))
+    .sort((a, b) => Date.parse(a.since) - Date.parse(b.since) || a.ticketId - b.ticketId)
+  const waitingIds = new Set(waitingLong.map((w) => w.ticketId))
   // Not what is approved already: a ticket judged by the human, or one in the Approved stage (a lane
   // is judged by moving there), which is listed as approved, to merge below.
   const reviews = tickets
-    .filter((t) => kind(t.status) === 'review' && !t.approvedAt && t.status !== 'approved')
+    .filter(
+      (t) => kind(t.status) === 'review' && !t.approvedAt && t.status !== 'approved' && !waitingIds.has(t.id),
+    )
     .map((t) => ({
       id: t.id,
       title: t.title,
@@ -514,6 +578,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       prs: prsToReview,
       threads,
       reviews,
+      waitingLong,
       blockedTasks,
       instructionChanges,
       stalled,
@@ -523,6 +588,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         prsToReview.length +
         threads.length +
         reviews.length +
+        waitingLong.length +
         blockedTasks.length +
         instructionChanges.length +
         stalled.length,

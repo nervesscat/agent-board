@@ -426,6 +426,11 @@
       "description": "Zwei Uhren bestimmen, wie ein Ticket erscheint. Die Lease hält der Heartbeat oder Beitrag eines Agents am Leben: Sie dauert zehn Minuten, und läuft sie mit einem noch offenen Span ab, erscheint das Ticket als <lost>Kontakt verloren</lost> — der Agent ist weg und wartet nicht auf dich. Ein Ticket ohne offenen Span erscheint als <stalled>Stockt</stalled>, sobald so lange weder ein Wort eines Agents (Heartbeat, Span, Warten, Übergabe) noch etwas, das das Board davon gesehen hat (ein Push, sein PR, seine Preview), eingegangen ist. Dieser Regler legt diese Stille-Schwelle fest und entscheidet zuerst: Eine Schwelle unter zehn Minuten markiert ein stilles Ticket, bevor die Lease abläuft. Die zehn Minuten der Lease bleiben fest.",
       "label": "Stockt nach (Minuten)",
       "invalid": "Eine ganze Zahl von {{min}} bis {{max}}."
+    },
+    "waitingLong": {
+      "title": "Zu lange wartend",
+      "description": "Braucht dich listet ein Ticket, das länger als diese Anzahl Tage in einer Review-Phase oder in To do liegt, das älteste zuerst, mit seiner Wartezeit und der letzten Zeile seiner Zusammenfassung. Ein Ticket mit dem Tag Bug oder Security in To do erscheint nach einem Tag, egal welcher Wert hier steht.",
+      "label": "Erscheint nach (Tagen)"
     }
   },
   "kinds": {
@@ -2483,7 +2488,9 @@
       "revertTip": "Die Anweisungen auf den Stand vor dieser Änderung zurücksetzen",
       "revertBlockedTip": "Die Anweisungen wurden seitdem erneut geändert: Nimm zuerst die spätere Änderung zurück",
       "revert": "Zurücknehmen",
-      "last": "letzte"
+      "last": "letzte",
+      "waitingDays_one": "wartet seit {{count}} Tag",
+      "waitingDays_other": "wartet seit {{count}} Tagen"
     },
     "lost": {
       "title": "Kontakt verloren",

@@ -279,9 +279,12 @@ const readyForYou: AlertType = {
   scope: 'project',
   check(ctx) {
     const projectId = projectOf(ctx)
-    const since = new Map(
-      summaryOf(ctx).needsYou.reviews.map((r) => [r.id, Date.parse(r.stage?.since ?? r.updatedAt)]),
-    )
+    const needs = summaryOf(ctx).needsYou
+    // A review waiting longer than the project's setting is in `waitingLong`, not `reviews`.
+    const since = new Map<number, number>([
+      ...needs.reviews.map((r): [number, number] => [r.id, Date.parse(r.stage?.since ?? r.updatedAt)]),
+      ...needs.waitingLong.map((w): [number, number] => [w.ticketId, Date.parse(w.since)]),
+    ])
     return reviewTickets(projectId).flatMap(({ ticket, queue }): AlertCandidate[] => {
       const from = since.get(ticket.id)
       if (from === undefined || ticket.approvedAt || ticket.disapprovedAt) return []
@@ -449,7 +452,8 @@ const needsDigest: AlertType = {
     const counts: [number, string, string][] = [
       [n.decisions.length - archive.size, 'decision', 'decisions'],
       [archive.size, 'archive request', 'archive requests'],
-      [n.reviews.length, 'review', 'reviews'],
+      // A review waiting past the setting is in `waitingLong`: counted here with the reviews, as before.
+      [n.reviews.length + n.waitingLong.filter((w) => w.review).length, 'review', 'reviews'],
       [n.prs.length, 'PR to review', 'PRs to review'],
       [n.blockedTasks.length, 'blocked task', 'blocked tasks'],
       [n.threads.length, 'thread', 'threads'],

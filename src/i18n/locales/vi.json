@@ -418,6 +418,11 @@
       "description": "Hai đồng hồ quyết định cách một ticket hiển thị. Lease là thứ mà heartbeat hoặc bài đăng của agent giữ sống: kéo dài mười phút, và khi hết mà vẫn còn một span mở thì ticket hiện là <lost>Mất liên lạc</lost> — agent đã biến mất, không phải đang chờ bạn. Ticket không có gì đang mở hiện là <stalled>Đình trệ</stalled> khi suốt chừng này thời gian không có lời nào từ agent (heartbeat, span, chờ, bàn giao) và không có gì board thấy về nó (một lần push, PR, preview của nó). Núm này đặt ngưỡng im lặng đó, và nó quyết định trước: ngưỡng dưới mười phút sẽ đánh dấu ticket im lặng trước khi lease hết. Mười phút của lease giữ cố định.",
       "label": "Đình trệ sau (phút)",
       "invalid": "Một số nguyên từ {{min}} đến {{max}}."
+    },
+    "waitingLong": {
+      "title": "Chờ quá lâu",
+      "description": "Cần bạn liệt kê ticket đã nằm ở giai đoạn đánh giá hoặc To do lâu hơn số ngày này, cũ nhất trước, kèm thời gian đã chờ và dòng tóm tắt cuối. Ticket gắn thẻ Bug hoặc Security trong To do được liệt kê sau một ngày, bất kể cài đặt này.",
+      "label": "Hiện sau (ngày)"
     }
   },
   "kinds": {
@@ -2413,7 +2418,8 @@
       "revertTip": "Đưa hướng dẫn về như trước thay đổi này",
       "revertBlockedTip": "Hướng dẫn đã đổi lại từ đó: hãy hoàn tác thay đổi sau trước",
       "revert": "Hoàn tác",
-      "last": "cuối"
+      "last": "cuối",
+      "waitingDays_other": "chờ {{count}} ngày"
     },
     "lost": {
       "title": "Mất liên lạc",

@@ -426,6 +426,11 @@
       "description": "Two clocks decide how a ticket reads. The lease is what an agent's heartbeat or post keeps alive: it lasts ten minutes, and when it runs out with a span still open the ticket reads as <lost>Lost contact</lost> — the agent is gone, not waiting on you. A ticket with nothing open reads as <stalled>Stalled</stalled> once no agent's word (a heartbeat, a span, a wait, a hand-off) and nothing the board has seen of it (a push, its PR, its preview) has come for this long. This dial sets that silence threshold, and it decides first: a threshold under ten minutes flags a silent ticket before the lease runs out. The lease's ten minutes stay fixed.",
       "label": "Stalled after (minutes)",
       "invalid": "A whole number from {{min}} to {{max}}."
+    },
+    "waitingLong": {
+      "title": "Waiting too long",
+      "description": "Needs you lists a ticket that has sat in a review stage, or in To do, for longer than this many days, oldest first, with how long it has waited and its last summary line. A Bug or Security ticket in To do is listed after a day, whatever this is set to.",
+      "label": "Listed after (days)"
     }
   },
   "kinds": {
@@ -2483,7 +2488,9 @@
       "revertTip": "Put the instructions back as they were before this change",
       "revertBlockedTip": "The instructions changed again since: revert the later change first",
       "revert": "Revert",
-      "last": "last"
+      "last": "last",
+      "waitingDays_one": "waiting {{count}} day",
+      "waitingDays_other": "waiting {{count}} days"
     },
     "lost": {
       "title": "Lost contact",

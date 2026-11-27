@@ -16,6 +16,7 @@ type Decision = NeedsYou['decisions'][number]
 type PrToReview = NeedsYou['prs'][number]
 type Thread = NeedsYou['threads'][number]
 type Review = NeedsYou['reviews'][number]
+type WaitingLong = NeedsYou['waitingLong'][number]
 type BlockedTask = NeedsYou['blockedTasks'][number]
 type InstructionChange = NeedsYou['instructionChanges'][number]
 type Stalled = NeedsYou['stalled'][number]
@@ -25,6 +26,7 @@ const pr = (id: number, updatedAt = '2026-01-01T00:00:00.000Z') => ({ id, update
 const thread = (parentId: number, lastId: number, parentType: 'ticket' | 'update' = 'update') =>
   ({ parentType, parentId, last: { id: lastId } }) as Thread
 const review = (id: number, updatedAt = '2026-01-01T00:00:00.000Z') => ({ id, updatedAt }) as Review
+const waitingLong = (ticketId: number, since: string) => ({ ticketId, since }) as WaitingLong
 const blockedTask = (taskId: number) => ({ taskId }) as BlockedTask
 const instructionChange = (changeId: number) => ({ changeId }) as InstructionChange
 const stalled = (ticketId: number, lastSignalAt: string) => ({ ticketId, lastSignalAt }) as Stalled
@@ -37,6 +39,7 @@ function project(needs: Partial<Omit<NeedsYou, 'total'>>): ProjectSummary {
     prs: [],
     threads: [],
     reviews: [],
+    waitingLong: [],
     blockedTasks: [],
     instructionChanges: [],
     stalled: [],
@@ -148,11 +151,23 @@ describe('what is hidden', () => {
       prs: [],
       threads: [],
       reviews: [],
+      waitingLong: [],
       blockedTasks: [],
       instructionChanges: [],
       stalled: [],
       total: 0,
     })
+  })
+
+  it('hides a waiting-long entry once it is opened, and counts only the ones left', () => {
+    const p = project({
+      waitingLong: [waitingLong(42, '2026-01-02T03:04:05.000Z'), waitingLong(43, '2026-01-03T00:00:00.000Z')],
+      reviews: [review(44)],
+    })
+    const shown = undismissed(p, new Set([needKeys.waitingLong(p.needsYou.waitingLong[0]!)])).needsYou
+    expect(shown.waitingLong).toEqual([waitingLong(43, '2026-01-03T00:00:00.000Z')])
+    expect(shown.total).toBe(2)
+    expect(p.needsYou.total).toBe(3)
   })
 
   it('hides a human wait once it is opened, and shows it again when a newer one starts', () => {
@@ -197,6 +212,15 @@ describe('an entry comes back when its fact changes', () => {
       reviews: [review(42, '2026-01-04T00:00:00.000Z')],
     })
     expect(undismissed(changed, dismissed).needsYou.total).toBe(3)
+  })
+
+  it('a waiting-long entry shows again when it enters a new stage', () => {
+    const dismissed = new Set([needKeys.waitingLong(waitingLong(42, '2026-01-02T03:04:05.000Z'))])
+    expect(needKeys.waitingLong(waitingLong(42, '2026-01-02T03:04:05.000Z'))).toBe(
+      'waiting:42:2026-01-02T03:04:05.000Z',
+    )
+    const again = project({ waitingLong: [waitingLong(42, '2026-01-09T10:00:00.000Z')] })
+    expect(undismissed(again, dismissed).needsYou.waitingLong).toHaveLength(1)
   })
 
   it('a decision stays hidden while it is the same card', () => {

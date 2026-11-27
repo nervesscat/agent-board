@@ -74,8 +74,11 @@ function projectsAsTheyWere(rows: Record<string, unknown>[]) {
     if ('kinds' in row) expect(row.kinds).toBe('["software"]')
     if ('workflow_preset' in row) expect(row.workflow_preset).toBe('standard')
     if ('workflow_tweaks' in row) expect(row.workflow_tweaks).toBeNull()
+    if ('waiting_long_days' in row) expect(row.waiting_long_days).toBe(3)
   }
-  return rows.map(({ kinds: _k, workflow_preset: _p, workflow_tweaks: _t, ...rest }) => rest)
+  return rows.map(
+    ({ kinds: _k, workflow_preset: _p, workflow_tweaks: _t, waiting_long_days: _w, ...rest }) => rest,
+  )
 }
 
 /**
@@ -1674,6 +1677,7 @@ describe('0051_agent_cards', () => {
           resume_timeout_minutes: _timeout,
           workflow_preset: _preset,
           workflow_tweaks: _tweaks,
+          waiting_long_days: _waiting,
           ...kept
         } = row
         return kept
@@ -2125,7 +2129,11 @@ describe('0066_drop_workflow_instruction_edits', () => {
     })
     // Nothing else of any project changed: not its name, its id, its preset.
     const after = sqlite.prepare('SELECT * FROM projects ORDER BY id').all() as Record<string, unknown>[]
-    const withoutTweaks = ({ workflow_tweaks: _t, ...rest }: Record<string, unknown>) => rest
+    const withoutTweaks = ({
+      workflow_tweaks: _t,
+      waiting_long_days: _w,
+      ...rest
+    }: Record<string, unknown>) => rest
     expect(after.map(withoutTweaks)).toEqual(before.map(withoutTweaks))
     expect(after.map((r) => [r.id, r.workflow_preset])).toEqual(before.map((r) => [r.id, r.workflow_preset]))
     sqlite.close()

@@ -157,6 +157,14 @@ export const KNOWN_PHASES = ['spec', 'build', 'review', 'verify', 'pr', 'preview
 /** How long an active ticket may go without an event before it reads as stalled, unless its project says. */
 export const STALL_MINUTES = { default: 30, min: 1, max: 1440 } as const
 /**
+ * How many days a ticket may wait in a review stage, or in To do, before Needs you lists it as waiting long,
+ * unless its project says. Only the human sets it.
+ */
+export const WAITING_LONG_DAYS = { default: 3, min: 1, max: 365 } as const
+/** The tags that make a To do ticket resurface in Needs you after this many days, whatever the project's setting. */
+export const URGENT_TODO_TAGS = ['Bug', 'Security'] as const
+export const URGENT_TODO_DAYS = 1
+/**
  * How long a ticket's lease lasts: a heartbeat, a post, a span or hand-off event, or the board's own
  * event keeps the ticket `working` for this long. Past it, an open span reads as `lost` contact (the
  * agent is gone) and a ticket with nothing open waits for `stallMinutes` before it reads as stalled.

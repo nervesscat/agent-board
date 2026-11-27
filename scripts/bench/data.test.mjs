@@ -26,12 +26,26 @@ afterAll(() => fs.rmSync(root, { recursive: true, force: true, maxRetries: 3 }))
  * liveness it works out against that clock. A ticket whose last word came today reads Working early in
  * the day and Stalled late in it, so `liveness` (`silentMinutes`, the `stalled` flag it sets, the
  * `stalled` and `lostContact` lists it fills) is left out, and so is the count of the stalled rows in
- * `needsYou.total`, which it feeds. What is left must not differ.
+ * `needsYou.total`, which it feeds. The same goes for the waiting-too-long list: a ticket crosses the
+ * project's setting at a time of day, so its `waitedMs` and the list's membership move with the clock
+ * (`waitingLong` and the rows' `waitedMs` are left out, and their count in `needsYou.total`). What is
+ * left must not differ.
  */
-const READ_CLOCK = new Set(['now', 'liveness', 'silentMinutes', 'stalled', 'lostContact'])
+const READ_CLOCK = new Set([
+  'now',
+  'liveness',
+  'silentMinutes',
+  'stalled',
+  'lostContact',
+  'waitingLong',
+  'waitedMs',
+])
 const withoutReadTimes = (value) => {
   const copy = JSON.parse(JSON.stringify(value))
-  for (const p of copy.projects ?? []) if (p.needsYou?.stalled) p.needsYou.total -= p.needsYou.stalled.length
+  for (const p of copy.projects ?? []) {
+    if (p.needsYou?.stalled) p.needsYou.total -= p.needsYou.stalled.length
+    if (p.needsYou?.waitingLong) p.needsYou.total -= p.needsYou.waitingLong.length
+  }
   return JSON.parse(
     JSON.stringify(copy, (k, v) =>
       (k === 'now' && typeof v === 'string') || READ_CLOCK.has(k) ? undefined : v,

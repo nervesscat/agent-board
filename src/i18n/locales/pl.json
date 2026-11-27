@@ -442,6 +442,11 @@
       "description": "Dwa zegary decydują, jak wygląda zgłoszenie. Lease podtrzymuje heartbeat lub wpis agenta: trwa dziesięć minut, a gdy wygaśnie przy wciąż otwartym span, zgłoszenie wygląda jak <lost>Utracony kontakt</lost> — agent zniknął, nie czeka na ciebie. Zgłoszenie bez niczego otwartego wygląda jak <stalled>Zastałe</stalled>, gdy przez tak długi czas nie przyszło żadne słowo agenta (heartbeat, span, oczekiwanie, przekazanie) ani nic, co tablica o nim zauważyła (push, jego PR, jego podgląd). To pokrętło ustawia ten próg ciszy i rozstrzyga jako pierwsze: próg poniżej dziesięciu minut oznacza ciche zgłoszenie, zanim wygaśnie lease. Dziesięć minut lease pozostaje stałe.",
       "label": "Zastałe po (minutach)",
       "invalid": "Liczba całkowita od {{min}} do {{max}}."
+    },
+    "waitingLong": {
+      "title": "Czeka zbyt długo",
+      "description": "Czeka na ciebie pokazuje zgłoszenia, które dłużej niż tyle dni leżą w etapie przeglądu lub w To do, od najstarszego, z czasem oczekiwania i ostatnią linią podsumowania. Zgłoszenie z tagiem Bug lub Security w To do pojawia się po jednym dniu, niezależnie od tego ustawienia.",
+      "label": "Pokaż po (dniach)"
     }
   },
   "kinds": {
@@ -2626,7 +2631,11 @@
       "revertTip": "Przywróć instrukcje do stanu sprzed tej zmiany",
       "revertBlockedTip": "Instrukcje zmieniły się od tego czasu: najpierw cofnij późniejszą zmianę",
       "revert": "Cofnij",
-      "last": "ostatnia"
+      "last": "ostatnia",
+      "waitingDays_one": "czeka {{count}} dzień",
+      "waitingDays_few": "czeka {{count}} dni",
+      "waitingDays_many": "czeka {{count}} dni",
+      "waitingDays_other": "czeka {{count}} dnia"
     },
     "lost": {
       "title": "Utracony kontakt",

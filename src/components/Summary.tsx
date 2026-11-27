@@ -380,10 +380,23 @@ function Agents({ p }: CardProps) {
   return <AgentsAtWork p={p} className="lg:order-1 lg:col-span-full" />
 }
 
+/** A day in milliseconds: how a waiting ticket's wait is counted in days. */
+const WAITING_DAY_MS = 86_400_000
+
 function NeedsYou({ p, now, dismiss }: CardProps) {
   const { t: tr } = useTranslation()
-  const { decisions, humanWaits, prs, threads, reviews, blockedTasks, instructionChanges, stalled, total } =
-    p.needsYou
+  const {
+    decisions,
+    humanWaits,
+    prs,
+    threads,
+    reviews,
+    waitingLong,
+    blockedTasks,
+    instructionChanges,
+    stalled,
+    total,
+  } = p.needsYou
   const pid = String(p.project.id)
   const settle = useSettleInstructions(pid)
   return (
@@ -699,6 +712,32 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                     now={now}
                     variant="inline"
                   />
+                </>
+              }
+            />
+          ))}
+          {waitingLong.map((w) => (
+            <Row
+              key={`wl${w.ticketId}`}
+              icon={<Hourglass className="text-amber-600 dark:text-amber-400" />}
+              title={
+                <TicketLink
+                  p={p}
+                  id={w.ticketId}
+                  title={w.title}
+                  hash="tasks"
+                  onClick={() => dismiss(needKeys.waitingLong(w))}
+                />
+              }
+              meta={
+                <>
+                  <StageBadge p={p} status={w.status} />
+                  {w.parent && <span className="truncate">{tr('overview.laneOf', { id: w.parent.id })}</span>}
+                  {w.assignee && <Who p={p} name={w.assignee} />}
+                  <span>
+                    {tr('overview.needsYou.waitingDays', { count: Math.floor(w.waitedMs / WAITING_DAY_MS) })}
+                  </span>
+                  {w.lastSummary && <span className="min-w-0 truncate">{w.lastSummary}</span>}
                 </>
               }
             />
