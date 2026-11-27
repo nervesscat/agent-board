@@ -32,14 +32,16 @@ const stub = http.createServer((req, res) => {
   const chunks = []
   req.on('data', (c) => chunks.push(c))
   req.on('end', () => {
+    const waitId = ++nextWaitId
     seen.push({
       method: req.method,
       url: req.url,
       token: req.headers.authorization,
       body: JSON.parse(Buffer.concat(chunks).toString('utf8')),
+      waitId,
     })
     res.writeHead(201, { 'content-type': 'application/json' })
-    res.end(JSON.stringify({ waitId: ++nextWaitId, event: {} }))
+    res.end(JSON.stringify({ waitId, event: {} }))
   })
 })
 let url
@@ -345,6 +347,51 @@ describe('claim', () => {
     expect(fs.existsSync(lock)).toBe(false)
   })
 
+  it('a claim lock with an empty pid file, older than the grace, is taken over and a claim takes a slot', async () => {
+    const locks = newLocks()
+    const lock = path.join(locks, 'claim.lock')
+    fs.mkdirSync(lock)
+    fs.writeFileSync(path.join(lock, 'pid'), '')
+    const old = (Date.now() - 2 * MIN) / 1000
+    fs.utimesSync(lock, old, old)
+    const got = await claim({
+      locks,
+      repo: '1',
+      holder: '7 smoke',
+      pid: process.pid,
+      pollMs: 1,
+      timeoutMs: 2000,
+    })
+    expect(got.ok).toBe(true)
+    expect(got.slot).toBe('tests-1-1')
+    expect(fs.existsSync(lock)).toBe(false)
+  })
+
+  it('a claim whose lock is moved away before its pid is written retries and takes a slot', async () => {
+    const locks = newLocks()
+    const lock = path.join(locks, 'claim.lock')
+    const realWrite = fs.writeFileSync
+    let moved = false
+    fs.writeFileSync = (file, ...rest) => {
+      if (!moved && String(file) === path.join(lock, 'pid')) {
+        moved = true
+        // A reclaim takes the fresh lock away between the mkdir and this write.
+        fs.rmSync(lock, { recursive: true })
+      }
+      return realWrite(file, ...rest)
+    }
+    let got
+    try {
+      got = await claim({ locks, repo: '1', holder: '7 smoke', pid: process.pid, pollMs: 1, timeoutMs: 2000 })
+    } finally {
+      fs.writeFileSync = realWrite
+    }
+    expect(moved).toBe(true)
+    expect(got.ok).toBe(true)
+    expect(got.slot).toBe('tests-1-1')
+    expect(fs.existsSync(lock)).toBe(false)
+  })
+
   it('a claim lock held by a live pid is waited on, and the wait is not recorded as a slot wait', async () => {
     const locks = newLocks()
     const lock = path.join(locks, 'claim.lock')
@@ -370,6 +417,51 @@ describe('claim', () => {
     const got = await pending
     expect(got.slot).toBe('tests-1-1')
     expect(seen).toEqual([])
+  })
+
+  it('a queue file of a live pid, not refreshed for two minutes, is dead and does not block a claim', async () => {
+    const locks = newLocks()
+    const queue = path.join(locks, 'queue')
+    fs.mkdirSync(queue)
+    // The pid is this process's, so it is alive; only the age of the file says the waiter is gone.
+    const stale = path.join(queue, `2026-01-01T00-00-00-000Z-${process.pid}`)
+    fs.writeFileSync(stale, `${process.pid}\n`)
+    const old = (Date.now() - 2 * MIN) / 1000
+    fs.utimesSync(stale, old, old)
+    const got = await claim({
+      locks,
+      repo: '1',
+      holder: '7 smoke',
+      pid: process.pid,
+      pollMs: 1,
+      timeoutMs: 2000,
+    })
+    expect(got.ok).toBe(true)
+    expect(got.slot).toBe('tests-1-1')
+    expect(fs.existsSync(stale)).toBe(false)
+  })
+
+  it('a stop signal while a claim waits ends the wait on the ticket and exits 3', async () => {
+    const locks = newLocks()
+    holdSlot(locks, 'tests-1-1', { holder: '3 build' })
+    holdSlot(locks, 'tests-1-2', { holder: '4 review' })
+    const child = spawn(
+      process.execPath,
+      [SCRIPT, 'claim', locks, '1', '7 smoke', '--project', '1', '--ticket', '7'],
+      {
+        env: { ...process.env, BOARD_URL: url, BOARD_TOKEN: 'secret-token', BOARD_SLOT_POLL_MS: '20' },
+        stdio: 'ignore',
+      },
+    )
+    const exited = new Promise((resolve) => child.on('exit', (code, signal) => resolve({ code, signal })))
+    await waitFor(() => seen.some((r) => r.body.kind === 'wait_start'))
+    child.kill('SIGTERM')
+    const out = await exited
+    expect(out.code).toBe(3)
+    const start = seen.find((r) => r.body.kind === 'wait_start')
+    const end = seen.find((r) => r.body.kind === 'wait_end')
+    expect(end.body.waitId).toBe(start.waitId)
+    expect(fs.readdirSync(path.join(locks, 'queue'))).toEqual([])
   })
 
   it('a newcomer queues behind a waiting claim: a freed slot goes to the queued claim', async () => {

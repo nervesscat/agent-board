@@ -17,10 +17,12 @@
 // Waiters queue in <locks>/queue, first in first served, and poll. A wait is recorded on the ticket:
 // wait_start (reason lock, the slot name as the note) when queued, wait_end with its waitId when the
 // wait ends. Without a project and ticket the wait is not recorded. A newcomer queues behind a live
-// waiter instead of taking a free slot, so the queue is served in order.
+// waiter instead of taking a free slot, so the queue is served in order. A waiter refreshes its queue
+// file's mtime at each poll; a queue file not refreshed for max(60 s, 3 polls) is dead, whatever its pid.
 // Every claim and reclaim runs under one lock: the folder `<locks>/claim.lock` (a plain mkdir, its pid
-// written inside). A lock whose pid is dead is taken over; a live one makes the caller poll. Releasing
-// does not take the lock.
+// written inside). A lock whose pid is dead is taken over; a live one makes the caller poll. A lock with
+// no usable pid (empty, or not a number) is taken over once it is a minute old. Releasing does not take
+// the lock.
 // A caller that keeps a long-lived process passes `--pid <its pid>` to `claim` (the default is its
 // parent process, which is gone once the caller's shell exits). Heavy commands use `run`, which holds
 // the slot for as long as its command lives.
@@ -31,10 +33,13 @@
 //   BOARD_SLOT_LOCKS, BOARD_SLOT_REPO   the locks folder and repo id `run` uses, when not given as options
 //   BOARD_SLOT_POLL_MS   how often a waiter looks for a free slot (default 10000)
 //
-// `run` holds a slot around one command: its stdio is the command's, its exit code is the command's
-// (3 when it could not wait for a slot, 4 when a release was refused). `claim` prints `<slot dir>` TAB
+// `run` holds a slot around one command: its stdio is the command's. `claim` prints `<slot dir>` TAB
 // `<token>` on stdout for a caller that keeps a long-lived process, and `release` frees a slot by that
-// token. Exit codes: 0 done, 2 usage, 3 gave up waiting (the holders are on stderr), 4 release refused.
+// token. Exit codes: `run` exits with the command's own exit code; 3 when no slot was free before the
+// timeout (or a stop signal arrived while it waited: then 128 + the signal number). `claim` exits 0 with
+// a slot, 3 when it gave up waiting (the holders are on stderr). 4 is `release` refusing (nothing
+// removed) and is `release`'s alone: a `run` whose release is refused logs it and still exits with the
+// command's code. 2 is a usage error.
 
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
@@ -253,8 +258,16 @@ export function tryClaim({ locks, repo, holder, pid, full = false, now, isAlive,
   return null
 }
 
-/** The live waiter files in the queue, oldest first; a waiter whose process is dead is removed. */
-function liveWaiters(queueDir, isAlive) {
+/** How long a waiter's queue file may go without its refresh (one per poll) before the waiter is gone. */
+const WAITER_MIN_STALE_MS = 60_000
+const waiterStaleMs = (pollMs) => Math.max(WAITER_MIN_STALE_MS, 3 * pollMs)
+
+/**
+ * The live waiter files in the queue, oldest first. A waiter is live while its process is alive and its
+ * queue file was refreshed lately; any other queue file is removed (a pid the system has reused does not
+ * keep it).
+ */
+function liveWaiters(queueDir, { now, isAlive, pollMs }) {
   const live = []
   let names
   try {
@@ -263,37 +276,56 @@ function liveWaiters(queueDir, isAlive) {
     return live
   }
   for (const name of names) {
+    const file = path.join(queueDir, name)
     const pid = Number(name.slice(name.lastIndexOf('-') + 1))
-    if (Number.isInteger(pid) && isAlive(pid)) live.push(name)
-    else fs.rmSync(path.join(queueDir, name), { force: true })
+    let mtimeMs
+    try {
+      mtimeMs = fs.statSync(file).mtimeMs
+    } catch {
+      continue
+    }
+    const fresh = now() - mtimeMs <= waiterStaleMs(pollMs)
+    if (fresh && Number.isInteger(pid) && isAlive(pid)) live.push(name)
+    else fs.rmSync(file, { force: true })
   }
   return live
 }
 
 /** Whether this waiter is first in line: no live waiter ahead of it. */
-function isHead(queueDir, mine, isAlive) {
-  const live = liveWaiters(queueDir, isAlive)
+function isHead(queueDir, mine, waiting) {
+  const live = liveWaiters(queueDir, waiting)
   return live.length === 0 || live[0] === path.basename(mine)
+}
+
+/** Refreshes a queue file's mtime (the waiter is still waiting); a file already removed is no matter. */
+function touch(file, ms) {
+  const seconds = ms / 1000
+  try {
+    fs.utimesSync(file, seconds, seconds)
+  } catch {}
 }
 
 const LOCK_FOLDER = 'claim.lock'
 const TIMED_OUT = Symbol('timed out waiting for the claim lock')
 
-/** Whether the claim lock's holder is gone: its pid is dead, or it has no pid file a minute after it was made. */
+/**
+ * Whether the claim lock's holder is gone: its pid is dead. A lock with no usable pid (no pid file, an
+ * empty one, or one that is not a positive whole number) is gone once it is older than the grace.
+ */
 function lockStale(lockDir, { now, isAlive }) {
   let text = null
   try {
     text = fs.readFileSync(path.join(lockDir, 'pid'), 'utf8')
   } catch {}
-  if (text === null) {
+  const pid = text === null ? NaN : Number(text.trim())
+  if (!(Number.isInteger(pid) && pid > 0)) {
     try {
       return now() - fs.statSync(lockDir).mtimeMs > GRACE_MS
     } catch {
       return false
     }
   }
-  const pid = Number(text.trim())
-  return Number.isInteger(pid) && pid > 0 && !isAlive(pid)
+  return !isAlive(pid)
 }
 
 /** Moves a stale claim lock away and removes it, or puts it back when a live claim took it meanwhile. */
@@ -326,7 +358,13 @@ function takeClaimLock(lockDir, owner, ctx) {
       reclaimLock(lockDir, ctx)
       continue
     }
-    fs.writeFileSync(path.join(lockDir, 'pid'), `${owner}\n`)
+    try {
+      fs.writeFileSync(path.join(lockDir, 'pid'), `${owner}\n`)
+    } catch (err) {
+      // A reclaim moved the fresh lock away between the mkdir and this write: the lock is lost, so go round.
+      if (err.code === 'ENOENT') continue
+      throw err
+    }
     return true
   }
   return false
@@ -366,12 +404,53 @@ export function holderLines(locks, repo, full = false) {
   })
 }
 
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+/** Sleeps `ms`, or until `signal` aborts (a stop ends the poll at once). */
+const delay = (ms, signal) =>
+  new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms)
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer)
+        resolve()
+      },
+      { once: true },
+    )
+  })
+
+const STOP_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP']
 
 /**
- * Claims a slot, waiting in the queue while none is free. Resolves { ok: true, dir, slot, token } or
- * { ok: false, holders } once `timeoutMs` has passed. The wait is recorded through `recorder` (see
- * createRecorder), if there is one; its start and end are the only recorded events.
+ * Listens for a stop signal while a claim is in progress. `name` is the signal once one has arrived,
+ * `stopped` resolves then, and `dispose` removes the listeners (a claim calls it on every path).
+ */
+function listenForStop() {
+  const controller = new AbortController()
+  const stop = {
+    name: null,
+    controller,
+    stopped: new Promise((resolve) => controller.signal.addEventListener('abort', resolve, { once: true })),
+    dispose: null,
+  }
+  const handlers = STOP_SIGNALS.map((name) => {
+    const handler = () => {
+      if (!stop.name) stop.name = name
+      controller.abort()
+    }
+    process.on(name, handler)
+    return [name, handler]
+  })
+  stop.dispose = () => {
+    for (const [name, handler] of handlers) process.off(name, handler)
+  }
+  return stop
+}
+
+/**
+ * Claims a slot, waiting in the queue while none is free. Resolves { ok: true, dir, slot, token }, or
+ * { ok: false, holders, signal } once `timeoutMs` has passed or a stop signal (`signal`, a name such as
+ * 'SIGTERM') arrived. The wait is recorded through `recorder` (see createRecorder), if there is one; its
+ * start and its end are the only recorded events, and the end is posted on every path.
  */
 export async function claim({
   locks,
@@ -389,6 +468,7 @@ export async function claim({
   queuePid = process.pid,
 }) {
   const deadline = now() + timeoutMs
+  const waiting = { now, isAlive, pollMs }
   const attempt = () =>
     withClaimLock(locks, () => tryClaim({ locks, repo, holder, pid, full, now, isAlive, beforeRename }), {
       owner: queuePid,
@@ -398,44 +478,49 @@ export async function claim({
       pollMs,
       deadline,
     })
-  const gaveUp = () => ({ ok: false, holders: holderLines(locks, repo, full) })
-  fs.mkdirSync(locks, { recursive: true })
   const queueDir = path.join(locks, 'queue')
-
-  // A newcomer takes a free slot only when no live waiter is queued ahead of it.
-  if (liveWaiters(queueDir, isAlive).length === 0) {
-    const first = await attempt()
-    if (first === TIMED_OUT) return gaveUp()
-    if (first) return { ok: true, ...first }
-  }
-
-  fs.mkdirSync(queueDir, { recursive: true })
-  const mine = path.join(queueDir, `${new Date(now()).toISOString().replace(/[:.]/g, '-')}-${queuePid}`)
-  fs.writeFileSync(mine, `${queuePid}\n`)
-  const note = full ? fullName(repo) : `${slotName(repo, 1)} to ${slotName(repo, SLOT_COUNT)}`
-  if (!recorder) log(`waiting for a test slot; the wait is not recorded (no project and ticket given)`)
-  const waitId = recorder ? await recorder.start(note) : null
-  const endWait = async () => {
-    if (recorder && waitId !== null) await recorder.end(waitId)
+  fs.mkdirSync(locks, { recursive: true })
+  const stop = listenForStop()
+  let mine = null
+  let waitId = null
+  const gaveUp = () => ({ ok: false, holders: holderLines(locks, repo, full), signal: stop.name })
+  const granted = (got) => {
+    if (!stop.name) return { ok: true, ...got }
+    // A stop arrived while the slot was being taken: give it back, so nothing starts that was stopped.
+    release(got.dir, got.token)
+    return gaveUp()
   }
   try {
+    // A newcomer takes a free slot only when no live waiter is queued ahead of it.
+    if (liveWaiters(queueDir, waiting).length === 0) {
+      const first = await attempt()
+      if (first === TIMED_OUT) return gaveUp()
+      if (first) return granted(first)
+    }
+    if (stop.name) return gaveUp()
+
+    fs.mkdirSync(queueDir, { recursive: true })
+    mine = path.join(queueDir, `${new Date(now()).toISOString().replace(/[:.]/g, '-')}-${queuePid}`)
+    fs.writeFileSync(mine, `${queuePid}\n`)
+    const note = full ? fullName(repo) : `${slotName(repo, 1)} to ${slotName(repo, SLOT_COUNT)}`
+    if (!recorder) log(`waiting for a test slot; the wait is not recorded (no project and ticket given)`)
+    waitId = recorder ? await recorder.start(note) : null
     for (;;) {
-      if (isHead(queueDir, mine, isAlive)) {
+      if (isHead(queueDir, mine, waiting)) {
         const got = await attempt()
         if (got === TIMED_OUT) break
-        if (got) {
-          await endWait()
-          return { ok: true, ...got }
-        }
+        if (got) return granted(got)
       }
-      if (now() >= deadline) break
-      await sleep(pollMs)
+      touch(mine, now())
+      if (stop.name || now() >= deadline) break
+      await Promise.race([sleep(pollMs, stop.controller.signal), stop.stopped])
     }
+    return gaveUp()
   } finally {
-    fs.rmSync(mine, { force: true })
+    if (mine !== null) fs.rmSync(mine, { force: true })
+    if (recorder && waitId !== null) await recorder.end(waitId)
+    stop.dispose()
   }
-  await endWait()
-  return gaveUp()
 }
 
 /** Frees a slot when its holder.txt carries this token; false (nothing removed) otherwise. */
@@ -574,7 +659,10 @@ function parseRun(args, env) {
 }
 
 function reportGaveUp(result) {
-  log(`no test slot free before the timeout; holders:\n${result.holders.join('\n')}`)
+  const why = result.signal
+    ? `stopped by ${result.signal} while waiting for a test slot`
+    : 'no test slot free before the timeout'
+  log(`${why}; holders:\n${result.holders.join('\n')}`)
 }
 
 async function runCommand(cfg) {
@@ -582,7 +670,7 @@ async function runCommand(cfg) {
   const got = await claim({ ...cfg, pid: process.pid })
   if (!got.ok) {
     reportGaveUp(got)
-    return 3
+    return got.signal ? 128 + os.constants.signals[got.signal] : 3
   }
   const [file, ...args] = cfg.command
   const child = spawn(file, args, { stdio: 'inherit' })
