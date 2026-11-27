@@ -1265,6 +1265,20 @@ describe("the tag map and the rule that picks a ticket's workflow", () => {
     ).result.tools
   }
 
+  it('refuses a tag named __proto__ on the route and the tool, and saves nothing', async () => {
+    const pid = await newProject()
+    const body = JSON.parse('{"tags":{"__proto__":"light","Brand":"content"}}')
+    const res = await call('PUT', tagsUrl(pid), body, 'agent')
+    expect(res.status).toBe(400)
+    expect(projectRow(pid).workflowTags).toBeNull()
+    const viaTool = await tool('set_workflow_tags', {
+      projectId: pid,
+      tags: JSON.parse('{"__proto__":"light"}'),
+    })
+    expect(viaTool.error).toContain('"__proto__" is not a tag name')
+    expect(projectRow(pid).workflowTags).toBeNull()
+  })
+
   it('is unset at first, and an agent sets it as a patch that get_project reads back (A1, A2)', async () => {
     const pid = await newProject()
     expect(projectRow(pid).workflowTags).toBeNull()
