@@ -39,6 +39,32 @@ From the worktree:
 3. When the workflow has a review for this ticket: pick the review depth for this round (**Review
    depth**, in your instructions) and add a line with it, its measure and the head SHA to
    `WORKDIR/depth.md`. A ticket with no review has no review depth: skip this.
+{{if review}}
+{{if preview}}
+4. **The early look**, for an early-look ticket (the claim step's item 5): once, after the first gate
+   passes and before review round 1 starts. Start the preview of this head now, as the preview step says
+   (its one build of this head: the preview step finds it running and reuses it), and take screenshots
+   of the changed state. Post on Main an `ask_decision` with `block: false` whose body opens with
+   "Direction OK?", says what changed and gives the preview link, with the options "Looks right" and
+   "Change it: reply under this card"; put the screenshots in a reply under the card (`comment` with
+   `parentType: update`, the card's id and `files`). Do not wait for an answer: the ticket stays in
+   progress and round 1 starts at once.{{if intent}}{{if !roundIntent}} The intent step's round-1 run starts with it (that step
+   says how).{{end}}{{end}} Before each next round and before the hand-off, read the card's answer and every reply
+   under it: they are the human's words, like a decision answer. A reply that changes the ask is
+   handled before that round: it goes to the fix pass's brief as the human's words{{if intent}} and to the intent
+   check's brief{{end}}; when round 1 survived and no round follows, it gets a fix pass, the gate and one more
+   review round, outside the round budget. A project with no preview setup skips the post, and the
+   summary says why.
+{{else}}
+{{if intent}}
+{{if !roundIntent}}
+4. **The early look**, for an early-look ticket (the claim step's item 5): once, after the first gate
+   passes and before review round 1 starts, start the intent step's round-1 run (that step says how).
+   The preview step is turned off, so there is no preview and no direction post.
+{{end}}
+{{end}}
+{{end}}
+{{end}}
 
 **When the workflow has no review for this ticket** (a low ticket, or a review turned off), the change
 survives when the gate passed and the builder's evidence covers every criterion: each one shows execution
@@ -47,3 +73,14 @@ of the real code (the test or the run its evidence names), or is `UNVERIFIED` on
 criterion without that evidence goes back to the builder as a gate return. After the second return, a
 criterion that still has no evidence is the decision above, never a hand-off. Only a gate that passed with
 that evidence for every criterion may go on.
+{{if !review}}
+
+**A browser probe for a ticket that touches UI** (the claim step's item 5), in this gate, about five
+minutes and no more: on the changed pages, hover what reacts to hover, scroll each page to its end, check
+that sticky elements (headers, bars, toolbars) stay put and cover nothing, and repeat it all at 390 px
+width. Run it against {{if preview}}the preview of this head, started here as the preview step says (its one build of
+this head, which that step reuses){{else}}the app started from the worktree on a free port from `PORTS` (the preview
+step is turned off), stopped by its PID after{{end}}, and keep its screenshots for the summary. What it finds wrong
+goes back to the builder as a gate return. A probe script it writes is kept in `WORKDIR/probes/`, and the
+gate after a fix pass reruns it.
+{{end}}

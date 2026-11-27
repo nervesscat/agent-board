@@ -66,6 +66,9 @@ whenever the repo has rule files.
 5. Screens that already used a changed component still render.
 6. State that should survive refresh or navigation does.
 7. The UI handles a slow or failed backend response without a blank screen.
+8. In a real browser, the changed pages pass the hunt's fixed probe list (`feature-review-hunt.md`,
+   "Browser probes on a UI change"): 390 px width, long unbroken strings, dark mode, keyboard focus,
+   and slow or failed saves.
 
 ## background-job
 

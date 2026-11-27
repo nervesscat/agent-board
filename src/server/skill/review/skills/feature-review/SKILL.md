@@ -176,8 +176,8 @@ checks each read `not run: single-reviewer plan`.
    Teardown step 2 does, then delete `LEFTOVER.md`; still locked, stop with the error
    "git lock on MAIN: <path>". If the claim
    is live, or `git -C MAIN worktree list` already registers `WORKTREE`, stop with the
-   error "review of <target> already in flight (see WORKDIR/CLAIM.md)" and do nothing else. Otherwise remove and recreate `WORKDIR`
-   and write `WORKDIR/CLAIM.md` with the target, the start time, and the session or
+   error "review of <target> already in flight (see WORKDIR/CLAIM.md)" and do nothing else. Otherwise remove and recreate `WORKDIR`,
+   keeping only its `probes/` folder (the hunt's kept probe scripts, rerun in the next round), and write `WORKDIR/CLAIM.md` with the target, the start time, and the session or
    runner identity. Teardown deletes the claim file last.
 2. Resolve the **commit under review** and the **base**. Run every `git fetch` here and
    in the agents with `GIT_TERMINAL_PROMPT=0` and a timeout of about two minutes: an

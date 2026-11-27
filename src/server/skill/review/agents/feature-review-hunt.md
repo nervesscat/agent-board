@@ -13,7 +13,7 @@ for volume. **Zero candidates is a normal result.**
 ## Input
 
 `WORKTREE` (the repo root for you), `MAIN` (the developer's checkout, never touch it),
-`WORKDIR`, a temp-file prefix, the review contract, a browser flag, and paths to
+`WORKDIR`, a temp-file prefix, the review contract, the round (`ROUND`), a browser flag, and paths to
 `01-spec.md`, `00-env.md`, `00-diff.patch`, `00-context.md`, `00-focus.md`, `checklists.md`,
 and your two output files. Start from `00-focus.md`; read outside it only to follow a reference
 from it.
@@ -66,8 +66,39 @@ result, and the orchestrator asks the human.
    pre-existing issues in code the diff did not touch. A real blocker filed as an
    "optional note" never reaches the author, and that has happened.
 
-Probe files: only inside the worktree, only under your prefix, deleted before you finish.
-Never edit a tracked file. `git -C WORKTREE status --porcelain` must show nothing of yours.
+Probe files in the worktree: only under your prefix, deleted before you finish (the copies in
+`WORKDIR/probes/` stay). Never edit a tracked file. `git -C WORKTREE status --porcelain` must show
+nothing of yours.
+
+## Browser probes on a UI change
+
+In round 1 (`ROUND` 1), when your sections include `ui` (a change that touches UI: the spec's
+classification has `ui`, or with no spec the diff changes what a browser renders), the browser flag is
+`yes` and `00-env.md` lists a base URL (the single reviewer, whose `00-env.md` starts no servers,
+starts the page itself as its brief allows), drive a browser against the changed pages, not only the
+code and unit probes: a Playwright script run from the worktree, or the browser tools you have. Run
+this fixed list, every item:
+
+1. **390 px width**: each changed page in a 390 px wide window; nothing overflows sideways, is cut off
+   or overlaps.
+2. **Long unbroken strings**: a name, title or field of 200 characters with no space, and a long URL;
+   the layout holds.
+3. **Dark mode**: the changed pages in the dark color scheme; text and controls stay readable.
+4. **Keyboard focus**: every new control reached and used with Tab, Shift+Tab, Enter, Space and
+   Escape; focus is visible and lands where it should (a dialog keeps it and gives it back).
+5. **Slow or failed saves**: the page's save requests delayed, then failed (route interception); the
+   page shows the save is pending, never saves twice, and shows the error without losing what was
+   typed.
+
+A probe that fails with a concrete scenario is a candidate (step 6). A probe you could not run (the
+flag `no`, no base URL, the page unreachable) goes in your report with why. In a later round, rerun
+the kept probes (below) and the items the fix touched.
+
+**Kept probes.** `WORKDIR/probes/` keeps probe scripts from one round to the next (the review's setup
+keeps that folder when it recreates `WORKDIR`). Look there first: rerun each script that fits the
+change at this head (copied into the worktree under your prefix, run, the copy deleted), and write new
+ones only for what they miss. Save a copy of each probe worth rerunning (every browser probe script, a
+probe test for a candidate) in `WORKDIR/probes/`, named with your prefix, before you finish.
 
 ## Output
 
