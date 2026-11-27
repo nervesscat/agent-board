@@ -481,44 +481,53 @@ export async function claim({
   const queueDir = path.join(locks, 'queue')
   fs.mkdirSync(locks, { recursive: true })
   const stop = listenForStop()
-  let mine = null
-  let waitId = null
   const gaveUp = () => ({ ok: false, holders: holderLines(locks, repo, full), signal: stop.name })
-  const granted = (got) => {
-    if (!stop.name) return { ok: true, ...got }
-    // A stop arrived while the slot was being taken: give it back, so nothing starts that was stopped.
-    release(got.dir, got.token)
-    return gaveUp()
+  // Waits for a slot: the slot taken (a folder with its holder), or null when the wait ends without one.
+  // The queue file is removed and the wait end is posted on every path, before this returns.
+  const waitForSlot = async () => {
+    let mine = null
+    let waitId = null
+    try {
+      // A newcomer takes a free slot only when no live waiter is queued ahead of it.
+      if (liveWaiters(queueDir, waiting).length === 0) {
+        const first = await attempt()
+        if (first === TIMED_OUT) return null
+        if (first) return first
+      }
+      if (stop.name) return null
+
+      fs.mkdirSync(queueDir, { recursive: true })
+      mine = path.join(queueDir, `${new Date(now()).toISOString().replace(/[:.]/g, '-')}-${queuePid}`)
+      fs.writeFileSync(mine, `${queuePid}\n`)
+      const note = full ? fullName(repo) : `${slotName(repo, 1)} to ${slotName(repo, SLOT_COUNT)}`
+      if (!recorder) log(`waiting for a test slot; the wait is not recorded (no project and ticket given)`)
+      waitId = recorder ? await recorder.start(note) : null
+      for (;;) {
+        if (isHead(queueDir, mine, waiting)) {
+          const got = await attempt()
+          if (got === TIMED_OUT) return null
+          if (got) return got
+        }
+        touch(mine, now())
+        if (stop.name || now() >= deadline) return null
+        await Promise.race([sleep(pollMs, stop.controller.signal), stop.stopped])
+      }
+    } finally {
+      if (mine !== null) fs.rmSync(mine, { force: true })
+      if (recorder && waitId !== null) await recorder.end(waitId)
+    }
   }
   try {
-    // A newcomer takes a free slot only when no live waiter is queued ahead of it.
-    if (liveWaiters(queueDir, waiting).length === 0) {
-      const first = await attempt()
-      if (first === TIMED_OUT) return gaveUp()
-      if (first) return granted(first)
+    const got = await waitForSlot()
+    if (!got) return gaveUp()
+    // A stop that arrived while the slot was taken or the wait end was posted: give the slot back, so
+    // nothing starts that was stopped. The listeners are still installed here, so such a stop is seen.
+    if (stop.name) {
+      release(got.dir, got.token)
+      return gaveUp()
     }
-    if (stop.name) return gaveUp()
-
-    fs.mkdirSync(queueDir, { recursive: true })
-    mine = path.join(queueDir, `${new Date(now()).toISOString().replace(/[:.]/g, '-')}-${queuePid}`)
-    fs.writeFileSync(mine, `${queuePid}\n`)
-    const note = full ? fullName(repo) : `${slotName(repo, 1)} to ${slotName(repo, SLOT_COUNT)}`
-    if (!recorder) log(`waiting for a test slot; the wait is not recorded (no project and ticket given)`)
-    waitId = recorder ? await recorder.start(note) : null
-    for (;;) {
-      if (isHead(queueDir, mine, waiting)) {
-        const got = await attempt()
-        if (got === TIMED_OUT) break
-        if (got) return granted(got)
-      }
-      touch(mine, now())
-      if (stop.name || now() >= deadline) break
-      await Promise.race([sleep(pollMs, stop.controller.signal), stop.stopped])
-    }
-    return gaveUp()
+    return { ok: true, ...got }
   } finally {
-    if (mine !== null) fs.rmSync(mine, { force: true })
-    if (recorder && waitId !== null) await recorder.end(waitId)
     stop.dispose()
   }
 }

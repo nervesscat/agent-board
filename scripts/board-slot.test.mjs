@@ -464,6 +464,62 @@ describe('claim', () => {
     expect(fs.readdirSync(path.join(locks, 'queue'))).toEqual([])
   })
 
+  it('a stop signal while the wait end is posted gives the granted slot back and exits 3', async () => {
+    const locks = newLocks()
+    holdSlot(locks, 'tests-1-1', { holder: '3 build' })
+    const freed = holdSlot(locks, 'tests-1-2', { holder: '4 review' })
+    // A board whose answer to wait_end is held until the test lets it go.
+    const posted = []
+    let answerEnd = null
+    const slow = http.createServer((req, res) => {
+      const chunks = []
+      req.on('data', (c) => chunks.push(c))
+      req.on('end', () => {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+        posted.push(body.kind)
+        const reply = () => {
+          res.writeHead(201, { 'content-type': 'application/json' })
+          res.end(JSON.stringify({ waitId: 77, event: {} }))
+        }
+        if (body.kind === 'wait_end') answerEnd = reply
+        else reply()
+      })
+    })
+    await new Promise((resolve) => slow.listen(0, '127.0.0.1', resolve))
+    const child = spawn(
+      process.execPath,
+      [SCRIPT, 'claim', locks, '1', '7 smoke', '--project', '1', '--ticket', '7'],
+      {
+        env: {
+          ...process.env,
+          BOARD_URL: `http://127.0.0.1:${slow.address().port}`,
+          BOARD_TOKEN: 'secret-token',
+          BOARD_SLOT_POLL_MS: '20',
+        },
+        stdio: 'ignore',
+      },
+    )
+    const exited = new Promise((resolve) => child.on('exit', (code, signal) => resolve({ code, signal })))
+    try {
+      await waitFor(() => posted.includes('wait_start'))
+      fs.rmSync(freed, { recursive: true })
+      // The slot is granted and wait_end is on its way: the stop arrives here.
+      await waitFor(() => answerEnd !== null)
+      child.kill('SIGTERM')
+      // Let the signal reach the child before its wait_end answer lets the claim finish.
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      answerEnd()
+      const out = await exited
+      expect(out).toEqual({ code: 3, signal: null })
+      expect(posted).toEqual(['wait_start', 'wait_end'])
+      expect(fs.existsSync(freed)).toBe(false)
+      expect(fs.readdirSync(path.join(locks, 'queue'))).toEqual([])
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+      slow.close()
+    }
+  })
+
   it('a newcomer queues behind a waiting claim: a freed slot goes to the queued claim', async () => {
     const locks = newLocks()
     const one = holdSlot(locks, 'tests-1-1', { token: 'held-1' })
