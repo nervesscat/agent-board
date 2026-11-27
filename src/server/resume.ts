@@ -628,7 +628,7 @@ export function startResume(s: Start): schema.TicketResume {
         .run()
     reply(
       s.postId ?? null,
-      `Continuing: the board started ${row.command}${picked ? ` (${picked.model}, ${picked.effort} effort)` : ''}${path.basename(cwd) ? ` in ${path.basename(cwd)}` : ''}.`,
+      `Continuing: the board started ${row.command}${picked ? ` (${picked.model}${launch?.effortPassed ? `, ${picked.effort} effort` : ''})` : ''}${path.basename(cwd) ? ` in ${path.basename(cwd)}` : ''}.`,
     )
     logActivity({
       projectId: ticket.projectId,

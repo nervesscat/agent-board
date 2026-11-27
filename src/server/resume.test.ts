@@ -1100,6 +1100,35 @@ describe('resume templates: the command the board runs', () => {
     resume.stopWatching()
   })
 
+  it('names the effort in the reply only for a template whose CLI takes one', async () => {
+    stubRunner()
+    await setTemplate('codex-exec')
+    const codex = features.createTicket(
+      projectId,
+      { title: 'Codex reply', status: 'in_progress', assignee: AGENT, complexity: 'low' },
+      AGENT,
+    )
+    const codexPost = ask(codex.id, 'Which?')
+    features.decide(codexPost.id, 0, '', HUMAN)
+    const codexReply = repliesOf(codexPost.id).find((c) => c.body.startsWith('Continuing:'))!
+    expect(codexReply.body).toContain('(haiku)')
+    expect(codexReply.body).not.toContain('effort')
+    resume.stopWatching()
+
+    stubRunner()
+    await setTemplate('claude-code')
+    const claude = features.createTicket(
+      projectId,
+      { title: 'Claude reply', status: 'in_progress', assignee: AGENT, complexity: 'high' },
+      AGENT,
+    )
+    const claudePost = ask(claude.id, 'Which?')
+    features.decide(claudePost.id, 0, '', HUMAN)
+    const claudeReply = repliesOf(claudePost.id).find((c) => c.body.startsWith('Continuing:'))!
+    expect(claudeReply.body).toContain('(opus, high effort)')
+    resume.stopWatching()
+  })
+
   it('never puts the title, the card, the human words or the instructions in argv, the command or env', async () => {
     const calls = stubRunner()
     await setTemplate('claude-code')
