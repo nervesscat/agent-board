@@ -760,6 +760,45 @@ allow it:
    done in `get_project`: Release when the project has one, where a merged ticket waits for a release;
    Done in the default layout) and post on the ticket, naming the PR and the merge commit.
 
+### Approved as one batch
+
+Several Approved PRs can land together behind one CI run on the combined tree, instead of one merge at a
+time, when the repo has `scripts/merge-batch.mjs` (its header says how it runs). The batch is a merge train:
+the approved branches are merged in order into a branch made from the base, the train goes up as one pull
+request into the base, its three checks run once on the combined tree, and landing that pull request lands
+the batch. A merge train needs no repository setting and no change to the workflows, and it works under the
+branch rule the repo already has (checks green, up to date with the base).
+
+The order is the `needs` of each ticket first (a PR whose ticket needs another merged PR of the batch comes
+after it), then the approved column's order, top first. A ticket whose needed work is neither merged nor in
+the batch stays in Approved and is left out. The orchestrator:
+
+1. Writes the batch file: one entry per ticket's PR in that order, with `pr`, `branch`, `needs` (the PR
+   numbers of the batch it needs first) and `adds_migration`.
+2. Runs `node scripts/merge-batch.mjs <batch file> --push` from any worktree of the repo, never by switching
+   the main checkout's branch. The script builds the train from the base's current head and pushes it as
+   `merge-train/prs-<numbers>`. It never pushes the base or a branch outside `merge-train/`.
+3. Opens one pull request from the train branch into the base, waits for its three checks green on the head,
+   and merges that pull request. Then, for each PR of the batch: if GitHub still shows it open, its commits are
+   in the base now, so it is closed with a comment naming the train pull request.
+4. Moves each ticket of the batch to the project's first done stage and posts on it, naming the train pull
+   request and the merge commit.
+
+When the base moves while the train is open, the train is behind: run the script again (it builds from the
+base's new head), push the same train branch, and wait for the checks on the new head. Then merge.
+
+When the train's checks fail, read the failure first; a clear one-off flake gets one re-run. Otherwise bisect
+by dropping the newest entry (the last in the batch's order): run the script without it, push, and check the
+new head. Keep dropping until the checks are green. The dropped ticket stays in Approved, with the failing
+check named on it. When the script itself refuses a batch, the same rule applies to the entry it names: a
+PR that conflicts with the train built so far (exit code 3) is taken out and says on its ticket that it must
+be rebased on the base; a batch whose migrations do not check (exit code 4) drops the newest entry that adds a
+migration.
+
+Migrations are not renumbered by the script. Two PRs that add a migration with the same number conflict in the
+journal or fail the migration check, and the newer one waits for the next batch, after its branch takes the next
+free number on the base. Once migration names are collision-free, this rule is unnecessary.
+
 When something keeps it from merging (red checks, a conflict that needs a product call), say exactly
 what on the ticket, and leave it in Approved. It does not merge around it, and it does not ask whether
 it may merge. `get_summary` and `get_live_work` list these tickets as "approved, to merge".
