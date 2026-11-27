@@ -3039,5 +3039,30 @@
       "difficulty": "En yüksek zorluk",
       "confidence": "En yüksek güven"
     }
+  },
+  "stageHistory": {
+    "title": "Aşama geçmişi",
+    "moves": "Aşamalar arası geçişler",
+    "sendBacks": "Geri göndermeler: {{count}}",
+    "merged": "Birleştirildi {{at}}",
+    "empty": "Kayıtlı aşama geçişi yok.",
+    "moved": "{{from}} → {{to}}",
+    "created": "{{to}} içinde oluşturuldu",
+    "how": {
+      "human": "taşıyan: {{by}}",
+      "verdict": "{{by}} kararıyla",
+      "agent": "{{by}} ajanı taşıdı",
+      "board": "pano taşıdı",
+      "boardFor": "pano {{by}} için taşıdı",
+      "unrecorded": "kimin taşıdığı kaydedilmedi"
+    },
+    "sentBack": "Geri gönderildi",
+    "reasonLabel": "Geri gönderme nedeni",
+    "reason": {
+      "none": "Neden yok",
+      "defect": "Hata",
+      "changed-mind": "Fikir değişti",
+      "new-ask": "Yeni istek"
+    }
   }
 }

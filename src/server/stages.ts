@@ -1,4 +1,4 @@
-import { and, asc, count, eq, isNull } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { DEFAULT_STAGES, STAGE_KINDS, type StageColor, type StageKind } from '#/lib/constants'
@@ -108,15 +108,44 @@ export function movePatch(
   return { ...startedPatch(stages, from, to, startedAt), ...(from !== to ? { rank: null } : {}) }
 }
 
-/** A ticket sent back from done is no longer approved: the approval was for the work it closed. */
-export function reopenPatch(
+/**
+ * The approval fields a move writes, so they say whether the ticket has the human's go-ahead whatever
+ * moved it. Into an approved-kind stage from any other (`from` null: created there): approved now, by
+ * `by` (the human who moved it, or whose act made the board move it), and no longer disapproved. Out of an
+ * approved or done stage to one of neither kind: the approval is taken back (it was for the work it
+ * closed, or the go-ahead to merge). Approved to done, and a move between two approved-kind stages,
+ * keep it. A ticket with no call of its own (`noCall`: a lane, whose stage is the call, or a PR's own
+ * ticket, reviewed on the PR queue) is never given one. The verdict (`setVerdict`) writes its own.
+ */
+export function approvalPatch(
   stages: Stage[],
-  from: string,
+  from: string | null,
   to: string,
-): { approvedAt?: null; approvedBy?: string; closedByApproval?: boolean } {
-  return kindOf(stages, from) === 'done' && kindOf(stages, to) !== 'done'
-    ? { approvedAt: null, approvedBy: '', closedByApproval: false }
-    : {}
+  by: string,
+  opts: { noCall?: boolean } = {},
+): {
+  approvedAt?: string | null
+  approvedBy?: string
+  closedByApproval?: boolean
+  disapprovedAt?: null
+  disapprovedBy?: string
+} {
+  if (from === to) return {}
+  const was = from === null ? null : kindOf(stages, from)
+  const is = kindOf(stages, to)
+  if (is === 'approved' && was !== 'approved')
+    return opts.noCall
+      ? {}
+      : {
+          approvedAt: new Date().toISOString(),
+          approvedBy: by,
+          closedByApproval: false,
+          disapprovedAt: null,
+          disapprovedBy: '',
+        }
+  if ((was === 'approved' || was === 'done') && is !== 'approved' && is !== 'done')
+    return { approvedAt: null, approvedBy: '', closedByApproval: false }
+  return {}
 }
 
 /**
@@ -298,12 +327,31 @@ export function deleteStage(projectId: number, id: number, opts: { moveTo?: stri
           updatedAt: new Date().toISOString(),
           // Work starts for them when they go from a stage that is not one of work into one that is.
           ...(isWorking(stages, stage.key) ? {} : startedPatch(stages, stage.key, target.key)),
+          // Out of Approved the go-ahead is taken back; into it, only the tickets with a call get one (below).
+          ...approvalPatch(stages, stage.key, target.key, actor, { noCall: true }),
         })
         .where(and(eq(schema.tickets.projectId, projectId), eq(schema.tickets.status, stage.key)))
         .run()
+    // Into Approved, the one who deleted the stage gave the go-ahead to its top-level tickets.
+    const given = target ? approvalPatch(stages, stage.key, target.key, actor) : {}
+    if (target && given.approvedAt && moved.length)
+      tx.update(schema.tickets)
+        .set(given)
+        .where(
+          and(
+            inArray(
+              schema.tickets.id,
+              moved.map((t) => t.id),
+            ),
+            isNull(schema.tickets.parentId),
+            isNull(schema.tickets.prId),
+          ),
+        )
+        .run()
     tx.delete(schema.stages).where(eq(schema.stages.id, id)).run()
   })
-  for (const t of moved) noteStageMove(t.id, stage.key, target!.key)
+  // The board moved them, for the one who deleted their stage.
+  for (const t of moved) noteStageMove(t.id, stage.key, target!.key, { by: actor, how: 'board' })
   log(
     projectId,
     actor,

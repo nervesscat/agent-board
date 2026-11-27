@@ -699,13 +699,19 @@ async function refreshRepoPrs(repo: schema.Repo): Promise<RowChange[]> {
   return changes
 }
 
-/** A merge the board saw first now, on the work timeline of the PR's tickets and of its own ticket. */
+/**
+ * A merge the board saw first now, on the work timeline of the PR's tickets and of its own ticket, and
+ * GitHub's merge time on each of them (the latest of their PRs' when they have several).
+ */
 function noteMerge(repo: schema.Repo, pr: schema.Pr) {
   const tickets = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, repo.projectId)).all()
-  const ids = featureTicketsOf(tickets, listRepos(repo.projectId), pr).map((t) => t.id)
+  const named = featureTicketsOf(tickets, listRepos(repo.projectId), pr)
   const own = prTicketOf(tickets, pr.id)
-  for (const id of own ? [...ids, own.id] : ids)
-    noteBoardEvent(id, 'merge', { note: `PR #${pr.number} merged` })
+  for (const t of own ? [...named, own] : named) {
+    noteBoardEvent(t.id, 'merge', { note: `PR #${pr.number} merged` })
+    if (pr.mergedAt && (!t.mergedAt || Date.parse(pr.mergedAt) > Date.parse(t.mergedAt)))
+      db.update(schema.tickets).set({ mergedAt: pr.mergedAt }).where(eq(schema.tickets.id, t.id)).run()
+  }
 }
 
 /**

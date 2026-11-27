@@ -2955,5 +2955,30 @@
       "difficulty": "难度最高",
       "confidence": "信心最高"
     }
+  },
+  "stageHistory": {
+    "title": "阶段历史",
+    "moves": "阶段之间的移动",
+    "sendBacks": "退回次数：{{count}}",
+    "merged": "已合并 {{at}}",
+    "empty": "没有记录的阶段移动。",
+    "moved": "{{from}} → {{to}}",
+    "created": "创建于 {{to}}",
+    "how": {
+      "human": "由 {{by}} 移动",
+      "verdict": "依据 {{by}} 的裁定",
+      "agent": "由代理 {{by}} 移动",
+      "board": "由看板移动",
+      "boardFor": "由看板代 {{by}} 移动",
+      "unrecorded": "未记录是谁移动的"
+    },
+    "sentBack": "已退回",
+    "reasonLabel": "退回原因",
+    "reason": {
+      "none": "无原因",
+      "defect": "缺陷",
+      "changed-mind": "改变主意",
+      "new-ask": "新需求"
+    }
   }
 }

@@ -149,6 +149,17 @@ export const BOARD_EVENT_KINDS = ['push', 'pr', 'preview', 'merge', 'stage'] as 
 export type BoardEventKind = (typeof BOARD_EVENT_KINDS)[number]
 export const EVENT_KINDS = [...AGENT_EVENT_KINDS, ...BOARD_EVENT_KINDS] as const
 export type EventKind = (typeof EVENT_KINDS)[number]
+/**
+ * How a ticket's stage changed, on its stage events: the human moved it (a drag on the board, a status
+ * change), the human's verdict moved it (approve, disapprove, or take the call back), an agent moved it
+ * (`update_ticket`, `claim_ticket`, `create_ticket`), or the board did on its own (a decision card, a
+ * resume, a PR's own ticket following its PR, a deleted stage's tickets).
+ */
+export const STAGE_HOWS = ['human', 'verdict', 'agent', 'board'] as const
+export type StageHow = (typeof STAGE_HOWS)[number]
+/** Why the human sent a ticket back from review: a defect in the work, a change of mind, or a new ask. */
+export const SEND_BACK_REASONS = ['defect', 'changed-mind', 'new-ask'] as const
+export type SendBackReason = (typeof SEND_BACK_REASONS)[number]
 /** What an agent waits on: the test lock, the builder, the MCP server being down, the human, or else. */
 export const WAIT_REASONS = ['lock', 'builder', 'mcp', 'human', 'other'] as const
 export type WaitReason = (typeof WAIT_REASONS)[number]

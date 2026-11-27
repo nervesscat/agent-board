@@ -17,8 +17,8 @@ import { resolveTool } from './hostTools'
 import { HttpError, notFound } from './http'
 import { ticketRepo } from './repos'
 import { worktreeEnv } from './runs'
-import { firstOfKind, kindOf, listStages, movePatch, projectWorkStage, reopenPatch } from './stages'
-import { noteStageMove } from './workTimeline'
+import { approvalPatch, firstOfKind, kindOf, listStages, movePatch, projectWorkStage } from './stages'
+import { BOARD_MOVE, noteStageMove } from './workTimeline'
 
 /**
  * Resume: the board continues a ticket's work itself. An agent that asked a question has ended its turn,
@@ -413,11 +413,11 @@ function moveTo(ticket: schema.Ticket, key: string) {
     .set({
       status: key,
       ...movePatch(stages, ticket.status, key, ticket.startedAt),
-      ...reopenPatch(stages, ticket.status, key),
+      ...approvalPatch(stages, ticket.status, key, BOARD),
     })
     .where(eq(schema.tickets.id, ticket.id))
     .run()
-  noteStageMove(ticket.id, ticket.status, key)
+  noteStageMove(ticket.id, ticket.status, key, BOARD_MOVE)
 }
 
 const WAITING = 'an agent is waiting for this answer'

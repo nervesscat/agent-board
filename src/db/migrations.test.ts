@@ -52,9 +52,9 @@ const withoutDropped = ({
 }: Record<string, unknown>) => rest
 
 /**
- * Tickets gained closed_by_approval in 0056 and workflow_preset in 0065: no ticket that existed had closed
- * on an approval or named a workflow, so the columns are 0 and null on every one, and the other columns are
- * compared as they were.
+ * Tickets gained closed_by_approval in 0056, workflow_preset in 0065 and merged_at in 0067: no ticket that
+ * existed had closed on an approval, named a workflow or had a merge time stored, so the columns are 0 and
+ * null on every one, and the other columns are compared as they were.
  */
 function ticketsAsTheyWere(rows: Record<string, unknown>[]) {
   // Before those migrations the table has no such columns: the rows are compared as they are.
@@ -62,7 +62,8 @@ function ticketsAsTheyWere(rows: Record<string, unknown>[]) {
   const first = rows[0]!
   if ('closed_by_approval' in first) expect(rows.map((r) => r.closed_by_approval)).toEqual(rows.map(() => 0))
   if ('workflow_preset' in first) expect(rows.map((r) => r.workflow_preset)).toEqual(rows.map(() => null))
-  return rows.map(({ closed_by_approval: _c, workflow_preset: _w, ...rest }) => rest)
+  if ('merged_at' in first) expect(rows.map((r) => r.merged_at)).toEqual(rows.map(() => null))
+  return rows.map(({ closed_by_approval: _c, workflow_preset: _w, merged_at: _m, ...rest }) => rest)
 }
 
 /**
@@ -1589,6 +1590,11 @@ describe('0050_widen_ticket_complexity', () => {
       ...after,
       tickets: ticketsAsTheyWere(after.tickets as Record<string, unknown>[]),
       ticket_needs: needsWithAutoColumns(after.ticket_needs as Record<string, unknown>[]),
+      // 0067 adds who moved a ticket and how to the stage events: '' on every event that existed.
+      ticket_events: (after.ticket_events as Record<string, unknown>[]).map(({ moved_by, how, ...rest }) => {
+        expect([moved_by, how]).toEqual(['', ''])
+        return rest
+      }),
     }).toEqual(before)
     expect(
       Object.fromEntries(
@@ -1958,10 +1964,11 @@ describe('0060_lane_verdicts_to_stages', () => {
         closed_by_approval: 0,
       })
     // Top-level tickets, parents included, and the PR review are as they were: every column.
-    // A later migration (0065) adds the workflow column, null on every ticket that existed.
+    // Later migrations add the workflow column (0065) and the merge time (0067), null on every ticket that existed.
     const asBefore = (id: number) => {
-      const { workflow_preset: workflow, ...rest } = read(id)
+      const { workflow_preset: workflow, merged_at: mergedAt, ...rest } = read(id)
       expect(workflow).toBeNull()
+      expect(mergedAt).toBeNull()
       return rest
     }
     expect([topApproved, topRejected, topClosed, parent, otherParent, prReview].map(asBefore)).toEqual(before)
@@ -2395,5 +2402,51 @@ describe('0064_approved_kind', () => {
     expect(changed(3)).toEqual([])
     // A ticket keeps its stage.
     expect(sqlite.prepare('SELECT status FROM tickets').all()).toEqual([{ status: 'release' }])
+  })
+})
+
+describe('0067_stage_history_send_backs_merged_at', () => {
+  it('only adds: every ticket and event that existed reads as it was, with no invented history', () => {
+    const sqlite = databaseAt('0066_drop_workflow_instruction_edits')
+    const project = Number(sqlite.prepare("INSERT INTO projects (name) VALUES ('p')").run().lastInsertRowid)
+    const ticket = Number(
+      sqlite
+        .prepare(
+          "INSERT INTO tickets (project_id, title, status, created_by, approved_at, approved_by) VALUES (?, 'approved', 'approved', 'enrique', NULL, '')",
+        )
+        .run(project).lastInsertRowid,
+    )
+    const event = (kind: string, from: string, to: string) =>
+      sqlite
+        .prepare(
+          "INSERT INTO ticket_events (ticket_id, project_id, kind, agent, by, from_stage, to_stage) VALUES (?, ?, ?, 'board', 'board', ?, ?)",
+        )
+        .run(ticket, project, kind, from, to)
+    event('stage', '', 'todo')
+    event('stage', 'review', 'approved')
+    event('merge', '', '')
+    const before = {
+      tickets: sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[],
+      events: sqlite.prepare('SELECT * FROM ticket_events ORDER BY id').all() as Record<string, unknown>[],
+    }
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    expect(columns(sqlite, 'tickets')).toContain('merged_at')
+    expect(columns(sqlite, 'ticket_events')).toEqual(expect.arrayContaining(['moved_by', 'how']))
+    const tickets = sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[]
+    expect(tickets.map(({ merged_at: m }) => m)).toEqual([null])
+    expect(tickets.map(({ merged_at: _m, ...rest }) => rest)).toEqual(before.tickets)
+    const events = sqlite.prepare('SELECT * FROM ticket_events ORDER BY id').all() as Record<
+      string,
+      unknown
+    >[]
+    expect(events.map((e) => [e.moved_by, e.how])).toEqual([
+      ['', ''],
+      ['', ''],
+      ['', ''],
+    ])
+    expect(events.map(({ moved_by: _m, how: _h, ...rest }) => rest)).toEqual(before.events)
+    expect(sqlite.prepare('SELECT count(*) AS n FROM ticket_send_backs').get()).toEqual({ n: 0 })
   })
 })

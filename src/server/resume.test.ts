@@ -462,6 +462,16 @@ describe('resume: failure', () => {
     expect(resume.ticketResume(ticket.id).current).toMatchObject({ state: 'failed' })
   })
 
+  it('records the board as the one that moved it when a failed resume blocks the ticket again', async () => {
+    const { ticket } = await failed(commandFor(outFile(), '3'))
+    const { stageHistoryOf } = await import('./stageHistory')
+    expect(stageHistoryOf(ticket.id).at(-1)).toMatchObject({
+      to: 'blocked',
+      by: 'board',
+      how: 'board',
+    })
+  })
+
   it('the words say the ticket is back in blocked only when it moved, and a ticket that stayed is not claimed blocked', async () => {
     const run = async (stay: boolean) => {
       resume.setResumeRunner({

@@ -5,6 +5,7 @@ import type { StageKind } from '#/lib/constants'
 import { logActivity } from './activity'
 import { listRepos } from './repos'
 import {
+  approvalPatch,
   firstOfKind,
   kindOf,
   lastOfKind,
@@ -14,7 +15,7 @@ import {
   startStage,
   type Stage,
 } from './stages'
-import { noteStageMove } from './workTimeline'
+import { BOARD_MOVE, noteStageMove } from './workTimeline'
 
 /**
  * A PR's own ticket: the ticket the board opens for each open PR of the queue that no feature ticket names,
@@ -130,7 +131,7 @@ export function openPrTickets(projectId: number, statusOf: (pr: schema.Pr) => Pr
           .returning()
           .get()
         tickets.push(row)
-        noteStageMove(row.id, null, row.status)
+        noteStageMove(row.id, null, row.status, BOARD_MOVE)
         logActivity({
           projectId,
           actor: 'board',
@@ -159,11 +160,12 @@ export function movePrTicket(pr: Pr, status: PrTicketStatus, actor = 'board') {
     .set({
       status: stage.key,
       ...movePatch(stages, own.status, stage.key, own.startedAt),
+      ...approvalPatch(stages, own.status, stage.key, actor, { noCall: true }),
       updatedAt: new Date().toISOString(),
     })
     .where(eq(schema.tickets.id, own.id))
     .run()
-  noteStageMove(own.id, own.status, stage.key)
+  noteStageMove(own.id, own.status, stage.key, BOARD_MOVE)
   logActivity({
     projectId: pr.projectId,
     actor,
@@ -193,10 +195,15 @@ export function cancelSupersededPrTickets(t: schema.Ticket, actor: string) {
     const kind = own ? kindOf(stages, own.status) : undefined
     if (!own || kind === 'done' || kind === 'cancelled') continue
     db.update(schema.tickets)
-      .set({ status: cancel.key, rank: null, updatedAt: new Date().toISOString() })
+      .set({
+        status: cancel.key,
+        rank: null,
+        ...approvalPatch(stages, own.status, cancel.key, actor, { noCall: true }),
+        updatedAt: new Date().toISOString(),
+      })
       .where(eq(schema.tickets.id, own.id))
       .run()
-    noteStageMove(own.id, own.status, cancel.key)
+    noteStageMove(own.id, own.status, cancel.key, BOARD_MOVE)
     logActivity({
       projectId: t.projectId,
       actor,

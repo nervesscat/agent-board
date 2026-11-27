@@ -3041,5 +3041,30 @@
       "difficulty": "Mayor dificultad",
       "confidence": "Mayor confianza"
     }
+  },
+  "stageHistory": {
+    "title": "Historial de etapas",
+    "moves": "Movimientos entre etapas",
+    "sendBacks": "Devoluciones: {{count}}",
+    "merged": "Fusionado {{at}}",
+    "empty": "No hay movimientos de etapa registrados.",
+    "moved": "{{from}} → {{to}}",
+    "created": "Creado en {{to}}",
+    "how": {
+      "human": "movido por {{by}}",
+      "verdict": "por el veredicto de {{by}}",
+      "agent": "movido por el agente {{by}}",
+      "board": "movido por el tablero",
+      "boardFor": "movido por el tablero para {{by}}",
+      "unrecorded": "no se registró quién lo movió"
+    },
+    "sentBack": "Devuelto",
+    "reasonLabel": "Motivo de la devolución",
+    "reason": {
+      "none": "Sin motivo",
+      "defect": "Defecto",
+      "changed-mind": "Cambio de opinión",
+      "new-ask": "Nueva petición"
+    }
   }
 }

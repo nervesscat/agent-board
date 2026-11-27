@@ -3210,5 +3210,30 @@
       "difficulty": "Najwyższa trudność",
       "confidence": "Najwyższa pewność"
     }
+  },
+  "stageHistory": {
+    "title": "Historia etapów",
+    "moves": "Przejścia między etapami",
+    "sendBacks": "Odesłania: {{count}}",
+    "merged": "Scalono {{at}}",
+    "empty": "Brak zapisanych przejść między etapami.",
+    "moved": "{{from}} → {{to}}",
+    "created": "Utworzono w {{to}}",
+    "how": {
+      "human": "przeniesione przez {{by}}",
+      "verdict": "werdyktem {{by}}",
+      "agent": "przeniesione przez agenta {{by}}",
+      "board": "przeniesione przez tablicę",
+      "boardFor": "przeniesione przez tablicę dla {{by}}",
+      "unrecorded": "nie zapisano, kto je przeniósł"
+    },
+    "sentBack": "Odesłane",
+    "reasonLabel": "Powód odesłania",
+    "reason": {
+      "none": "Bez powodu",
+      "defect": "Błąd",
+      "changed-mind": "Zmiana zdania",
+      "new-ask": "Nowa prośba"
+    }
   }
 }

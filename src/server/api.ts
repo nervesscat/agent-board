@@ -13,6 +13,7 @@ import {
   STAGE_COLORS,
   STAGE_KINDS,
   FEED_TABS,
+  SEND_BACK_REASONS,
 } from '#/lib/constants'
 import { LANGUAGES } from '#/i18n/languages'
 import { AGENT_TOKEN_NAME } from '#/lib/agents'
@@ -49,6 +50,7 @@ import { authMode, servedEntrance } from './config'
 import { dailyReport, today } from './daily'
 import { WAIT_MAX_SECONDS, waitAndReport } from './answerWait'
 import * as features from './features'
+import * as stageHistory from './stageHistory'
 import { GalleryQuery, listGallery } from './gallery'
 import { listDirs } from './fs'
 import { assertRepo, listBranches } from './git'
@@ -129,6 +131,9 @@ const NewTask = z.union([
 const agentOnly = (request: Request) => {
   if (!isAgent(request)) throw new HttpError(403, 'only a connected agent posts as one of the project agents')
 }
+const SendBackReason = z.enum(SEND_BACK_REASONS, {
+  error: `a send-back's reason is one of ${SEND_BACK_REASONS.join(', ')}`,
+})
 const TicketPatch = z.object({
   title: z.string().min(1).max(200).optional(),
   body: z.string().max(50_000).optional(),
@@ -810,6 +815,8 @@ api.patch('/api/tickets/:id', async ({ request, params, actor }) =>
         TicketPatch.extend({
           force: z.boolean().optional(),
           position: z.number().int().positive().optional(),
+          // The human's reason for a move from a review stage back to work (a send-back); with any other move a 400.
+          sendBackReason: SendBackReason.optional(),
         }),
       ),
       actor,
@@ -817,6 +824,12 @@ api.patch('/api/tickets/:id', async ({ request, params, actor }) =>
     ),
   ),
 )
+// The reason of one of the ticket's send-backs, the human's pick (null clears it); any other value is a 400.
+api.put('/api/tickets/:id/send-backs/:sendBackId', async ({ request, params, actor }) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human gives a send-back its reason')
+  const body = await readJson(request, z.object({ reason: SendBackReason.nullable() }))
+  return json(stageHistory.setSendBackReason(id(params), id(params, 'sendBackId'), body.reason, actor))
+})
 // Files for the instructions: uploads (POST /api/uploads) bound to the ticket.
 api.post('/api/tickets/:id/attachments', async ({ request, params, actor }) => {
   const body = await readJson(request, z.object({ attachmentIds: z.array(z.number().int()).min(1) }))
@@ -925,7 +938,7 @@ api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
         .optional(),
     }),
   )
-  return json(features.claimTicket(id(params), actor, body))
+  return json(features.claimTicket(id(params), actor, { ...body, agent: isAgent(request) }))
 })
 api.get('/api/tickets/:id/git', async ({ params, url }) =>
   json(await needs.ticketGitView(id(params), { includes: url.searchParams.get('includes') === '1' })),
@@ -1348,14 +1361,13 @@ api.post('/api/tickets/:id/updates', async ({ request, params, actor }) => {
     }),
   )
   if (body.as) agentOnly(request)
-  return json(
-    features.postUpdate(id(params), body.body, body.attachmentIds, actor, {
-      as: body.as,
-      progress: body.progress,
-      tab: body.tab,
-    }),
-    201,
-  )
+  const post = features.postUpdate(id(params), body.body, body.attachmentIds, actor, {
+    as: body.as,
+    progress: body.progress,
+    tab: body.tab,
+  })
+  if (!isAgent(request)) stageHistory.reasonFromComment(post.ticketId, body.body, actor)
+  return json(post, 201)
 })
 // The ticket's summary, at the top of the feed's main tab: each write is a new version (change: what
 // changed, one line, from the second on); GET has every version, newest first. `as` is agents only.
@@ -1486,7 +1498,18 @@ api.post('/api/comments', async ({ request, actor }) => {
     }),
   )
   if (body.as) agentOnly(request)
-  return json(features.addComment(body, actor), 201)
+  const comment = features.addComment(body, actor)
+  // The human's word on a ticket can name the reason of its latest send-back.
+  if (!isAgent(request)) {
+    const ticketId =
+      body.parentType === 'ticket'
+        ? body.parentId
+        : body.parentType === 'update'
+          ? features.getPost(body.parentId).ticketId
+          : null
+    if (ticketId !== null) stageHistory.reasonFromComment(ticketId, body.body, actor)
+  }
+  return json(comment, 201)
 })
 api.patch('/api/comments/:id', async ({ request, params, actor }) => {
   const body = await readJson(request, z.object({ body: z.string().min(1).max(20_000) }))

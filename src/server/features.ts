@@ -2,7 +2,13 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { retryWhileLocked } from '#/db/busy'
-import { COMMENT_PARENTS, type Complexity, DEFAULT_COMPLEXITY, type FeedTab } from '#/lib/constants'
+import {
+  COMMENT_PARENTS,
+  type Complexity,
+  DEFAULT_COMPLEXITY,
+  type FeedTab,
+  type SendBackReason,
+} from '#/lib/constants'
 import type { WorkflowPresetId } from '#/lib/workflow'
 import { hasGitSide } from '#/lib/kinds'
 import { judgedByStage } from '#/lib/lanes'
@@ -55,8 +61,8 @@ import {
   kindOf,
   listStages,
   matchStages,
+  approvalPatch,
   movePatch,
-  reopenPatch,
   projectWorkStage,
   resolveStage,
   startStage,
@@ -66,7 +72,8 @@ import {
 import { assertUnattached, attachTo, attachmentView } from './uploads'
 import { answerLanded } from './answerWait'
 import { resumeAfterAnswer, resumeAfterMove } from './resume'
-import { noteBoardEvent, noteStageMove } from './workTimeline'
+import { BOARD_MOVE, noteBoardEvent, noteStageMove } from './workTimeline'
+import { isSendBack, recordSendBack } from './stageHistory'
 
 // --- tickets ---
 
@@ -612,6 +619,7 @@ export function createTicket(
     repos?: TicketRepoInput[]
   },
   actor: string,
+  opts: { agent?: boolean } = {},
 ) {
   input = newTicketPrimary(input)
   const { parent, repo, baseBranch } = placement(projectId, input)
@@ -651,6 +659,8 @@ export function createTicket(
             body: input.body ?? '',
             status,
             ...startedPatch(stages, null, status),
+            // Created straight into Approved (the human only): that is the go-ahead, by whoever created it.
+            ...approvalPatch(stages, null, status, actor, { noCall: !!parent }),
             // A lane copies its parent's level as it is now; a later change to the parent does not reach it.
             // Work with no repo (a project with no software kind) has no review rounds: low, the builder's own check.
             complexity: input.complexity ?? parent?.complexity ?? (repo ? DEFAULT_COMPLEXITY : 'low'),
@@ -670,7 +680,7 @@ export function createTicket(
           .get()
         syncPrimaryRow(row)
         if (input.repos) writeOtherRepos(row.id, resolveTicketRepos(row, input.repos))
-        noteStageMove(row.id, null, row.status)
+        noteStageMove(row.id, null, row.status, { by: actor, how: opts.agent ? 'agent' : 'human' })
         if (row.prNumber) noteBoardEvent(row.id, 'pr', { note: `PR #${row.prNumber}` })
         if (input.tasks?.length) addTasks(row.id, input.tasks, actor, { quiet: true })
         if (attachmentIds.length) attachTo(attachmentIds, { ticketId: row.id })
@@ -802,7 +812,11 @@ export function updateTicket(
     repos?: TicketRepoInput[]
   },
   actor: string,
-  opts: { agent?: boolean } = {},
+  opts: {
+    agent?: boolean
+    /** The human's reason for a send-back this move makes (a review stage back to work). */
+    sendBackReason?: SendBackReason
+  } = {},
 ) {
   const before = getTicket(id)
   const { repos: reposGiven, ...fields } = patch
@@ -836,18 +850,44 @@ export function updateTicket(
       ...patch,
       status: resolveStage(stages, patch.status, projectWorkStage(before.projectId, stages)).key,
     }
+  // Only the human sends a ticket back from review; an agent's or the board's move over the same stages is not one.
+  const sendBack =
+    !opts.agent &&
+    !!patch.status &&
+    patch.status !== before.status &&
+    isSendBack(stages, before.status, patch.status)
+  if (opts.sendBackReason && !sendBack)
+    throw new HttpError(
+      400,
+      "sendBackReason goes with the human's move of a ticket from a review or approved stage back to an active or open one",
+    )
   const row = db
     .update(schema.tickets)
     .set({
       ...patch,
       ...(patch.status ? movePatch(stages, before.status, patch.status, before.startedAt) : {}),
-      ...(patch.status ? reopenPatch(stages, before.status, patch.status) : {}),
+      ...(patch.status
+        ? approvalPatch(stages, before.status, patch.status, actor, {
+            noCall: before.parentId !== null || before.prId !== null,
+          })
+        : {}),
       updatedAt: new Date().toISOString(),
     })
     .where(eq(schema.tickets.id, id))
     .returning()
     .get()!
-  noteStageMove(id, before.status, row.status)
+  const moved = noteStageMove(id, before.status, row.status, {
+    by: actor,
+    how: opts.agent ? 'agent' : 'human',
+  })
+  if (sendBack)
+    recordSendBack(row, {
+      eventId: moved?.id ?? null,
+      from: before.status,
+      to: row.status,
+      by: actor,
+      reason: opts.sendBackReason,
+    })
   if (row.prNumber !== null && row.prNumber !== before.prNumber)
     noteBoardEvent(id, 'pr', { note: `PR #${row.prNumber}` })
   const changes: string[] = []
@@ -993,7 +1033,13 @@ function stopIfClosed(t: schema.Ticket, stages: ReturnType<typeof listStages>, a
 export function claimTicket(
   id: number,
   actor: string,
-  opts: { branch?: string; as?: string; repos?: { repoId: number; branch: string }[] } = {},
+  opts: {
+    branch?: string
+    as?: string
+    repos?: { repoId: number; branch: string }[]
+    /** false when the human claims it; an agent's claim otherwise. */
+    agent?: boolean
+  } = {},
 ) {
   const before = getTicket(id)
   // Each repo's branch, the primary's as `branch` (which wins when both name it); a repo of the project
@@ -1055,7 +1101,10 @@ export function claimTicket(
         next.push({ ...r, name: '', baseBranch: '', prNumber: null, primary: false })
     writeOtherRepos(id, resolveTicketRepos(row, next))
   }
-  noteStageMove(id, before.status, row.status)
+  noteStageMove(id, before.status, row.status, {
+    by: assignee,
+    how: opts.agent === false ? 'human' : 'agent',
+  })
   if (row.parentId) touch(row.parentId)
   const tookOver = before.assignee && before.assignee !== assignee ? ` from ${before.assignee}` : ''
   if (before.assignee !== assignee || start)
@@ -1184,7 +1233,7 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     .where(eq(schema.tickets.id, id))
     .returning()
     .get()!
-  noteStageMove(id, t.status, row.status)
+  noteStageMove(id, t.status, row.status, { by: actor, how: 'verdict' })
   if (row.status !== t.status) stopIfClosed(row, stages, actor)
   const what = `ticket #${id} ${t.title}`
   logActivity({
@@ -2563,10 +2612,14 @@ function postDecision(
   const blocked = firstOfKind(stages, 'blocked')
   if ((input.block ?? true) && blocked && ticket.status !== blocked.key) {
     db.update(schema.tickets)
-      .set({ status: blocked.key, ...movePatch(stages, ticket.status, blocked.key, ticket.startedAt) })
+      .set({
+        status: blocked.key,
+        ...movePatch(stages, ticket.status, blocked.key, ticket.startedAt),
+        ...approvalPatch(stages, ticket.status, blocked.key, 'board'),
+      })
       .where(eq(schema.tickets.id, ticketId))
       .run()
-    noteStageMove(ticketId, ticket.status, blocked.key)
+    noteStageMove(ticketId, ticket.status, blocked.key, BOARD_MOVE)
   }
   logActivity({
     projectId: ticket.projectId,
@@ -2724,7 +2777,7 @@ function settleDecision(post: { id: number; ticketId: number }, actor: string, r
         .set({ status: back.key, ...movePatch(stages, ticket.status, back.key, ticket.startedAt) })
         .where(eq(schema.tickets.id, ticket.id))
         .run()
-      noteStageMove(ticket.id, ticket.status, back.key)
+      noteStageMove(ticket.id, ticket.status, back.key, BOARD_MOVE)
     }
   }
   touch(ticket.id)

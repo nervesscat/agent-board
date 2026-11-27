@@ -434,7 +434,15 @@ auto}`. Merged is left out: merging is the human's, except on a ticket in Approv
    `review` once its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was
    dropped: say why in a comment). The human's verdict on a top-level ticket is `approvedAt` /
    `approvedBy` or `disapprovedAt` / `disapprovedBy` (disapproving also cancels it; approving a
-   ticket tagged `PR`, a PR review, also moves it to `done`): read it, never set it. A lane has no
+   ticket tagged `PR`, a PR review, also moves it to `done`): read it, never set it. `approvedAt` /
+   `approvedBy` are set whenever a ticket reaches an approved stage (the verdict, the human's move, or
+   the board moving it there for the human) and cleared when the approval is taken back (the verdict
+   withdrawn, or any move from Approved to a stage that is neither approved nor done). `get_ticket`
+   also returns `stageHistory` (every move, oldest first: `from`, `to`, `at`, `by`, `how`: `human`,
+   `verdict`, `agent` or `board`; `by` and `how` are null on moves recorded before they were kept),
+   `sendBacks` with `sendBackCount` (the human's moves from review back to work, each with a `reason`:
+   `defect`, `changed-mind`, `new-ask` or null) and `mergedAt` (GitHub's merge time, once the board
+   has seen the merge). A lane has no
    verdict: its stage is the call (Approved or Done is accepted, Cancelled is dropped), so ask in
    its thread before moving one of those. Archiving is the human's too:
    `archivedAt` set means the ticket (and its lanes) is finished and off the board; `list_tickets`

@@ -2955,5 +2955,30 @@
       "difficulty": "Kesulitan tertinggi",
       "confidence": "Keyakinan tertinggi"
     }
+  },
+  "stageHistory": {
+    "title": "Riwayat tahap",
+    "moves": "Perpindahan antar tahap",
+    "sendBacks": "Dikembalikan: {{count}}",
+    "merged": "Digabung {{at}}",
+    "empty": "Belum ada perpindahan tahap yang tercatat.",
+    "moved": "{{from}} → {{to}}",
+    "created": "Dibuat di {{to}}",
+    "how": {
+      "human": "dipindahkan oleh {{by}}",
+      "verdict": "oleh putusan {{by}}",
+      "agent": "dipindahkan oleh agen {{by}}",
+      "board": "dipindahkan oleh papan",
+      "boardFor": "dipindahkan oleh papan untuk {{by}}",
+      "unrecorded": "siapa yang memindahkannya tidak tercatat"
+    },
+    "sentBack": "Dikembalikan",
+    "reasonLabel": "Alasan pengembalian",
+    "reason": {
+      "none": "Tanpa alasan",
+      "defect": "Cacat",
+      "changed-mind": "Berubah pikiran",
+      "new-ask": "Permintaan baru"
+    }
   }
 }

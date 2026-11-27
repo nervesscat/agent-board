@@ -7,6 +7,7 @@ import {
   type BoardEventKind,
   KNOWN_PHASES,
   LEASE_TTL_MINUTES,
+  type StageHow,
   WAIT_REASONS,
   type WaitReason,
 } from '#/lib/constants'
@@ -258,36 +259,55 @@ export function heartbeat(projectId: number, ticketId: number, input: EventBase,
 // --- what the board sees itself ---
 
 /**
- * Record an event the board saw on a ticket (agent and by `board`). It never fails its caller: a push,
- * a merge or a stage move goes through whether or not its event could be written.
+ * Record an event the board saw on a ticket (agent and by `board`), and answer it. It never fails its
+ * caller: a push, a merge or a stage move goes through whether or not its event could be written (then
+ * it answers undefined).
  */
 export function noteBoardEvent(
   ticketId: number,
   kind: BoardEventKind,
-  fields: { note?: string; fromStage?: string; toStage?: string } = {},
-) {
+  fields: { note?: string; fromStage?: string; toStage?: string; movedBy?: string; how?: StageHow } = {},
+): TicketEvent | undefined {
   try {
     const t = db
       .select({ id: schema.tickets.id, projectId: schema.tickets.projectId })
       .from(schema.tickets)
       .where(eq(schema.tickets.id, ticketId))
       .get()
-    if (!t) return
-    insert(t, 'board', {
+    if (!t) return undefined
+    return insert(t, 'board', {
       kind,
       note: (fields.note ?? '').slice(0, 500),
       fromStage: fields.fromStage ?? '',
       toStage: fields.toStage ?? '',
+      movedBy: fields.movedBy ?? '',
+      how: fields.how ?? '',
     })
   } catch (err) {
     console.error(`could not record the ${kind} event of ticket ${ticketId}:`, err)
+    return undefined
   }
 }
 
-/** A ticket's move between stages (`from` null: it was created), when it moved at all. */
-export function noteStageMove(ticketId: number, from: string | null, to: string) {
-  if (from === to) return
-  noteBoardEvent(ticketId, 'stage', { fromStage: from ?? '', toStage: to })
+/** Who moved a ticket between stages and how: the human's or an agent's name, or `board` for its own. */
+export type StageMover = { by: string; how: StageHow }
+
+/** The board's own move: a decision card, a resume, a PR's own ticket, a superseded PR ticket. */
+export const BOARD_MOVE: StageMover = { by: 'board', how: 'board' }
+
+/**
+ * A ticket's move between stages (`from` null: it was created), when it moved at all, with who moved it
+ * and how. The row stays the board's (`agent` and `by` are `board`), so a move never reads as an agent's
+ * word for the lease or the last heard; who moved it is `movedBy`. Answers the event, when written.
+ */
+export function noteStageMove(ticketId: number, from: string | null, to: string, mover: StageMover) {
+  if (from === to) return undefined
+  return noteBoardEvent(ticketId, 'stage', {
+    fromStage: from ?? '',
+    toStage: to,
+    movedBy: mover.by.slice(0, 120),
+    how: mover.how,
+  })
 }
 
 // --- reads ---

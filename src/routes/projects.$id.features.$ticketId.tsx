@@ -108,6 +108,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#
 import { Tip } from '#/components/ui/tooltip'
 import { autoPhaseOf } from '#/lib/autoPhases'
 import { WorkTimelineCard } from '#/components/WorkTimelineCard'
+import { StageHistoryCard } from '#/components/StageHistoryCard'
 import {
   del,
   errorMessage,
@@ -387,6 +388,7 @@ function TicketPage() {
     'ticket.timeline': (
       <div id="timeline" className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)]">
         <WorkTimelineCard key={t.id} t={t} />
+        <StageHistoryCard key={`history-${t.id}`} t={t} onChange={invalidate} />
       </div>
     ),
     'ticket.lanes': (

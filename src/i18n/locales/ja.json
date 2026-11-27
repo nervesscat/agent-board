@@ -2955,5 +2955,30 @@
       "difficulty": "難易度が高い順",
       "confidence": "確信度が高い順"
     }
+  },
+  "stageHistory": {
+    "title": "ステージ履歴",
+    "moves": "ステージ間の移動",
+    "sendBacks": "差し戻し: {{count}}",
+    "merged": "マージ {{at}}",
+    "empty": "記録されたステージ移動はありません。",
+    "moved": "{{from}} → {{to}}",
+    "created": "{{to}} で作成",
+    "how": {
+      "human": "{{by}} が移動",
+      "verdict": "{{by}} の判定による",
+      "agent": "エージェント {{by}} が移動",
+      "board": "ボードが移動",
+      "boardFor": "{{by}} のためにボードが移動",
+      "unrecorded": "誰が移動したかは記録されていません"
+    },
+    "sentBack": "差し戻し",
+    "reasonLabel": "差し戻しの理由",
+    "reason": {
+      "none": "理由なし",
+      "defect": "不具合",
+      "changed-mind": "気が変わった",
+      "new-ask": "新しい依頼"
+    }
   }
 }

@@ -24,6 +24,8 @@ import {
   type ReportFormat,
   type StageColor,
   type StageKind,
+  type StageHow,
+  type SendBackReason,
   type FeedTab,
 } from '#/lib/constants'
 import type { AnnotationDoc } from '#/lib/annotations'
@@ -304,6 +306,9 @@ export const tickets = sqliteTable(
     // The opposite call: the human rejected it, which also cancels it. At most one of the two is set.
     disapprovedAt: text('disapproved_at'),
     disapprovedBy: text('disapproved_by').notNull().default(''),
+    // When its PR was merged, as GitHub tells it (the latest of its PRs'), once the board has seen the
+    // merge; null until then, and on tickets merged before the board kept it.
+    mergedAt: text('merged_at'),
     // Put away by the human off the board and the default lists; a lane goes with its ticket. Null while on the board.
     archivedAt: text('archived_at'),
     archivedBy: text('archived_by').notNull().default(''),
@@ -355,6 +360,11 @@ export const ticketEvents = sqliteTable(
     // On stage events: the stage keys it moved from ('' when the ticket was created) and to.
     fromStage: text('from_stage').notNull().default(''),
     toStage: text('to_stage').notNull().default(''),
+    // On stage events: who moved it (the human's or the agent's name, `board` for the board's own) and how
+    // (STAGE_HOWS). `agent` and `by` stay `board` on them: a move is never an agent's word on the timeline.
+    // Both '' on the rows written before the board kept them. Checked in code, not by a CHECK.
+    movedBy: text('moved_by').notNull().default(''),
+    how: text().$type<StageHow | ''>().notNull().default(''),
     at: now(),
   },
   (t) => [
@@ -363,6 +373,34 @@ export const ticketEvents = sqliteTable(
     check('ticket_events_kind', sql.raw(`kind IN (${EVENT_KINDS.map((k) => `'${k}'`).join(', ')})`)),
     check('ticket_events_reason', sql.raw(`reason IN ('', ${WAIT_REASONS.map((k) => `'${k}'`).join(', ')})`)),
   ],
+)
+
+// The human sending a ticket back from review (a review or approved stage) to an active or open one: one
+// row per such move, beside its stage event, with the reason when one was picked or named
+// (SEND_BACK_REASONS, '' for none; checked in code). Written by src/server/stageHistory.ts.
+export const ticketSendBacks = sqliteTable(
+  'ticket_send_backs',
+  {
+    id: id(),
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // The stage event of the move; null when that event could not be written.
+    eventId: integer('event_id').references(() => ticketEvents.id, { onDelete: 'set null' }),
+    fromStage: text('from_stage').notNull(),
+    toStage: text('to_stage').notNull(),
+    // The human who moved it.
+    by: text().notNull(),
+    reason: text().$type<SendBackReason | ''>().notNull().default(''),
+    // Who gave the reason and when: '' and null while it has none.
+    reasonBy: text('reason_by').notNull().default(''),
+    reasonAt: text('reason_at'),
+    at: now(),
+  },
+  (t) => [index('ticket_send_backs_ticket').on(t.ticketId, t.at)],
 )
 
 // A ticket that cannot be done before another ticket's branch is merged into its base: a stacked
@@ -1026,6 +1064,7 @@ export type TicketRepo = typeof ticketRepos.$inferSelect
 export type Pr = typeof prs.$inferSelect
 export type Ticket = typeof tickets.$inferSelect
 export type TicketEvent = typeof ticketEvents.$inferSelect
+export type TicketSendBack = typeof ticketSendBacks.$inferSelect
 export type Task = typeof tasks.$inferSelect
 export type Workspace = typeof workspaces.$inferSelect
 export type Update = typeof updates.$inferSelect

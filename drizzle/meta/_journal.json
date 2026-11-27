@@ -470,6 +470,13 @@
       "when": 1795474710106,
       "tag": "0066_drop_workflow_instruction_edits",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "6",
+      "when": 1795753923363,
+      "tag": "0067_stage_history_send_backs_merged_at",
+      "breakpoints": true
     }
   ]
 }

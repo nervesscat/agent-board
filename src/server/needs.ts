@@ -3,6 +3,7 @@ import crypto from 'node:crypto'
 import { and, asc, eq, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
+import type { SendBackReason } from '#/lib/constants'
 import { hasGitSide } from '#/lib/kinds'
 import { isClosed } from '#/lib/stages'
 import { activityOf } from '#/lib/workTimeline'
@@ -28,6 +29,7 @@ import { getProject } from './projects'
 import { onRefsListed, readRefs } from './push'
 import { listRepos } from './repos'
 import { missingReports, missingReviewPhases, ticketReports } from './runReports'
+import { historyOf } from './stageHistory'
 import {
   deleteStage,
   lastOfKind,
@@ -341,6 +343,9 @@ export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {
     progressAt: timeline.progressAt,
     waitingOnHuman: timeline.waitingOnHuman,
     work: workOf(timeline),
+    // Its moves between stages with who and how, oldest first, and the human's send-backs from review
+    // (empty on a ticket with none recorded). mergedAt, on the row, is GitHub's merge time.
+    ...historyOf(full.id),
   }
 }
 
@@ -871,11 +876,17 @@ type Patch = Parameters<typeof features.updateTicket>[1]
  */
 export async function changeTicket(
   id: number,
-  input: Patch & { needs?: number[]; force?: boolean; position?: number },
+  input: Patch & {
+    needs?: number[]
+    force?: boolean
+    position?: number
+    /** The human's reason when the move sends the ticket back from review (`updateTicket`). */
+    sendBackReason?: SendBackReason
+  },
   actor: string,
   opts: { agent: boolean },
 ) {
-  const { needs, force, position, ...patch } = input
+  const { needs, force, position, sendBackReason, ...patch } = input
   const before = features.getTicket(id)
   if (position !== undefined) features.checkPlacement(before, position)
   // An agent never puts a ticket in Approved: the orchestrator reads that stage as the human's go-ahead.
@@ -905,8 +916,13 @@ export async function changeTicket(
   const row = db.transaction(
     () => {
       if (needs !== undefined) setNeeds(id, named ?? ids, actor, { agent: opts.agent })
+      if (sendBackReason && patch.status === undefined)
+        throw new HttpError(
+          400,
+          'sendBackReason goes with a move (status); a send-back on the ticket takes its own',
+        )
       const changed = Object.keys(patch).length
-        ? features.updateTicket(id, patch, actor, opts)
+        ? features.updateTicket(id, patch, actor, { ...opts, sendBackReason })
         : features.getTicket(id)
       return position !== undefined ? features.placeTicket(id, position, actor) : changed
     },
@@ -964,7 +980,7 @@ export async function newTicket(
   }
   const seeded = defaultPhases ?? !rest.parentId
   const tasks = seeded ? phasedTasks(getProject(projectId).defaultPhases, rest.tasks ?? []) : rest.tasks
-  const row = features.createTicket(projectId, { ...rest, tasks }, actor)
+  const row = features.createTicket(projectId, { ...rest, tasks }, actor, opts)
   if (ids.length) setNeeds(row.id, ids, actor)
   return row
 }

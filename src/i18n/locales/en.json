@@ -3039,5 +3039,30 @@
       "difficulty": "Highest difficulty",
       "confidence": "Highest confidence"
     }
+  },
+  "stageHistory": {
+    "title": "Stage history",
+    "moves": "Moves between stages",
+    "sendBacks": "Send-backs: {{count}}",
+    "merged": "Merged {{at}}",
+    "empty": "No stage moves recorded.",
+    "moved": "{{from}} → {{to}}",
+    "created": "Created in {{to}}",
+    "how": {
+      "human": "moved by {{by}}",
+      "verdict": "by the verdict of {{by}}",
+      "agent": "moved by the agent {{by}}",
+      "board": "moved by the board",
+      "boardFor": "moved by the board for {{by}}",
+      "unrecorded": "who moved it was not recorded"
+    },
+    "sentBack": "Sent back",
+    "reasonLabel": "Send-back reason",
+    "reason": {
+      "none": "No reason",
+      "defect": "Defect",
+      "changed-mind": "Changed mind",
+      "new-ask": "New ask"
+    }
   }
 }

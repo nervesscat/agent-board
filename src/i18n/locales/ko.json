@@ -2955,5 +2955,30 @@
       "difficulty": "난이도 높은 순",
       "confidence": "확신도 높은 순"
     }
+  },
+  "stageHistory": {
+    "title": "단계 기록",
+    "moves": "단계 간 이동",
+    "sendBacks": "되돌림: {{count}}",
+    "merged": "병합됨 {{at}}",
+    "empty": "기록된 단계 이동이 없습니다.",
+    "moved": "{{from}} → {{to}}",
+    "created": "{{to}}에서 생성됨",
+    "how": {
+      "human": "{{by}}이(가) 이동",
+      "verdict": "{{by}}의 판정으로",
+      "agent": "에이전트 {{by}}이(가) 이동",
+      "board": "보드가 이동",
+      "boardFor": "{{by}}을(를) 위해 보드가 이동",
+      "unrecorded": "누가 이동했는지 기록되지 않았습니다"
+    },
+    "sentBack": "되돌림",
+    "reasonLabel": "되돌린 이유",
+    "reason": {
+      "none": "이유 없음",
+      "defect": "결함",
+      "changed-mind": "마음이 바뀜",
+      "new-ask": "새 요청"
+    }
   }
 }

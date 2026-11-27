@@ -2955,5 +2955,30 @@
       "difficulty": "Độ khó cao nhất",
       "confidence": "Độ tin cậy cao nhất"
     }
+  },
+  "stageHistory": {
+    "title": "Lịch sử giai đoạn",
+    "moves": "Chuyển giữa các giai đoạn",
+    "sendBacks": "Lần trả lại: {{count}}",
+    "merged": "Đã hợp nhất {{at}}",
+    "empty": "Chưa ghi nhận lần chuyển giai đoạn nào.",
+    "moved": "{{from}} → {{to}}",
+    "created": "Tạo trong {{to}}",
+    "how": {
+      "human": "do {{by}} chuyển",
+      "verdict": "theo phán quyết của {{by}}",
+      "agent": "do tác tử {{by}} chuyển",
+      "board": "do bảng chuyển",
+      "boardFor": "do bảng chuyển thay {{by}}",
+      "unrecorded": "không ghi nhận ai đã chuyển"
+    },
+    "sentBack": "Đã trả lại",
+    "reasonLabel": "Lý do trả lại",
+    "reason": {
+      "none": "Không có lý do",
+      "defect": "Lỗi",
+      "changed-mind": "Đổi ý",
+      "new-ask": "Yêu cầu mới"
+    }
   }
 }

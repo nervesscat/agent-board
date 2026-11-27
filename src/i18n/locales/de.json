@@ -3039,5 +3039,30 @@
       "difficulty": "Höchste Schwierigkeit",
       "confidence": "Höchste Sicherheit"
     }
+  },
+  "stageHistory": {
+    "title": "Phasenverlauf",
+    "moves": "Wechsel zwischen Phasen",
+    "sendBacks": "Zurückgeschickt: {{count}}",
+    "merged": "Gemergt {{at}}",
+    "empty": "Keine Phasenwechsel erfasst.",
+    "moved": "{{from}} → {{to}}",
+    "created": "Erstellt in {{to}}",
+    "how": {
+      "human": "verschoben von {{by}}",
+      "verdict": "durch das Urteil von {{by}}",
+      "agent": "verschoben vom Agenten {{by}}",
+      "board": "vom Board verschoben",
+      "boardFor": "vom Board verschoben für {{by}}",
+      "unrecorded": "wer es verschoben hat, wurde nicht erfasst"
+    },
+    "sentBack": "Zurückgeschickt",
+    "reasonLabel": "Grund für das Zurückschicken",
+    "reason": {
+      "none": "Kein Grund",
+      "defect": "Fehler",
+      "changed-mind": "Meinung geändert",
+      "new-ask": "Neuer Wunsch"
+    }
   }
 }

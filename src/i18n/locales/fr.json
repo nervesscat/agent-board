@@ -3041,5 +3041,30 @@
       "difficulty": "Difficulté décroissante",
       "confidence": "Confiance décroissante"
     }
+  },
+  "stageHistory": {
+    "title": "Historique des étapes",
+    "moves": "Passages entre étapes",
+    "sendBacks": "Renvois : {{count}}",
+    "merged": "Fusionné {{at}}",
+    "empty": "Aucun passage d'étape enregistré.",
+    "moved": "{{from}} → {{to}}",
+    "created": "Créé dans {{to}}",
+    "how": {
+      "human": "déplacé par {{by}}",
+      "verdict": "par le verdict de {{by}}",
+      "agent": "déplacé par l'agent {{by}}",
+      "board": "déplacé par le tableau",
+      "boardFor": "déplacé par le tableau pour {{by}}",
+      "unrecorded": "l'auteur du déplacement n'a pas été enregistré"
+    },
+    "sentBack": "Renvoyé",
+    "reasonLabel": "Motif du renvoi",
+    "reason": {
+      "none": "Sans motif",
+      "defect": "Défaut",
+      "changed-mind": "Changement d'avis",
+      "new-ask": "Nouvelle demande"
+    }
   }
 }

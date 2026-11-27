@@ -3039,5 +3039,30 @@
       "difficulty": "Difficoltà più alta",
       "confidence": "Fiducia più alta"
     }
+  },
+  "stageHistory": {
+    "title": "Cronologia delle fasi",
+    "moves": "Passaggi tra fasi",
+    "sendBacks": "Rimandi: {{count}}",
+    "merged": "Unito {{at}}",
+    "empty": "Nessun passaggio di fase registrato.",
+    "moved": "{{from}} → {{to}}",
+    "created": "Creato in {{to}}",
+    "how": {
+      "human": "spostato da {{by}}",
+      "verdict": "per il verdetto di {{by}}",
+      "agent": "spostato dall'agente {{by}}",
+      "board": "spostato dalla bacheca",
+      "boardFor": "spostato dalla bacheca per {{by}}",
+      "unrecorded": "chi l'ha spostato non è stato registrato"
+    },
+    "sentBack": "Rimandato",
+    "reasonLabel": "Motivo del rimando",
+    "reason": {
+      "none": "Nessun motivo",
+      "defect": "Difetto",
+      "changed-mind": "Cambio di idea",
+      "new-ask": "Nuova richiesta"
+    }
   }
 }
