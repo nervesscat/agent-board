@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { COMMENT_PARENTS, COMPLEXITIES, FEED_TABS, STALL_MINUTES } from '#/lib/constants'
 import { hasGitSide } from '#/lib/kinds'
 import { WORKFLOW_PRESETS } from '#/lib/workflow'
+import { TemplateChoice } from '#/lib/resumeTemplates'
 import type { RunConfigInput } from '#/lib/runs'
 import { listActors, noteActor } from './actors'
 import * as agentCards from './agentCards'
@@ -238,7 +239,7 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
     'list_projects',
     'All projects on the board, each with its repos (id, name, checkout path, GitHub slug, base branch).',
     {},
-    () => projects.listProjects(),
+    () => projects.listProjects(agent),
   )
   tool(
     'find_project',
@@ -258,7 +259,7 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
     'get_project',
     "One project with its repos, its stages (the board's columns in order: key, name, kind), its agents (personas with a name, instructions, delegation notes saying when the orchestrator should call them, a reportTemplate each run fills in before it hands back, and a picture; tickets can be reserved for them), notes (the project's short shared facts, each {id, label, body, createdBy, createdAt, updatedAt, position} in order: a pinned note first; read them before starting and add one for anything a future session must not rediscover; list_notes, add_note, update_note and delete_note), defaultPhases (the top-level phases every new ticket starts with, in order; built in: Implementation, Pushed, PR, CI, Preview, Summary, Merged; [] when the project seeds none; only the human changes the list; a top-level task named Pushed, PR, CI, Preview, Summary or Merged is ticked by the board, never by hand), tagSuggestions (the tags the human offers for tickets; built in: Bug, UI, Implementation, Report), usedTags (the tags its tickets carry, most used first, each in the casing to reuse), stallMinutes (how many minutes an active ticket may go without a work-timeline event before it reads as stalled; only the human changes it), workStage (the key of the active stage claim_ticket and a status of in_progress or active go to; null for the first active stage; only the human changes it), workflowPreset (the workflow the project's tickets follow: light, standard, thorough or maximum, a ticket may name another; only the human changes it) and workflowTweaks (what the human changed in each preset: order, steps' switches and efforts, the Team agent picked for a node (agents) and the review rounds; null for none): read get_workflow for the steps a ticket's agent has to follow, in order, hostTools (the board's last check of the tools on its machine: checkedAt, and for each of git, gh, claude, node and pnpm its name, found, version, signedIn for gh, ok and optional; one not ok also says what it breaks, the problem and the fix: a feature that needs it fails until the human fixes it; optional is true for claude, which only the board's own report generation needs, never ticket or project agents; null before the first check ends) and the instructions agents must follow when working on it (only the human and an orchestrator change them: set_project_instructions; a worker asks its orchestrator). Read this before touching a project.",
     { projectId: z.number().int() },
-    ({ projectId }) => projects.getProjectFull(projectId),
+    ({ projectId }) => projects.getProjectFull(projectId, agent),
   )
   tool(
     'get_workflow',
@@ -286,6 +287,26 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
       projects.updateProject(projectId, { tagSuggestions: tags }, actor)
       const { tagSuggestions, usedTags } = projects.getProjectFull(projectId)
       return { tagSuggestions, usedTags }
+    },
+  )
+
+  tool(
+    'set_resume_template',
+    "Turn on, change or turn off the resume template the board runs to continue a ticket's work: when the human answers a decision card on the board or moves a ticket from blocked or review back to an active stage, the board starts one of its own templates with this project's instructions and the steps of the ticket. template: claude-code (Claude Code), codex-exec (Codex) or opencode-run (OpenCode); null turns it off. The board fixes the command line: there is no command to send, and the model and effort are chosen for each run (the asking run's, else the ticket's complexity). A free-text command the human set in Settings wins over the template. Returns the project's resumeTemplate, resumeTemplateBy (your name) and resumeTemplateAt.",
+    {
+      projectId: z.number().int(),
+      template: TemplateChoice,
+      // Refused, not stripped: a command sent here is an error, and only the human writes a command.
+      command: z.never().optional(),
+      args: z.never().optional(),
+    },
+    ({ projectId, template }) => {
+      const p = projects.setResumeTemplate(projectId, template, actor)
+      return {
+        resumeTemplate: p.resumeTemplate,
+        resumeTemplateBy: p.resumeTemplateBy,
+        resumeTemplateAt: p.resumeTemplateAt,
+      }
     },
   )
 

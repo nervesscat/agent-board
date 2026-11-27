@@ -2889,7 +2889,13 @@
     "timeoutProblem": "Bilangan bulat dari {{min}} sampai {{max}}.",
     "unsaved": "Ada perubahan belum disimpan.",
     "noChanges": "Tidak ada perubahan.",
-    "off": "Melanjutkan mati."
+    "off": "Melanjutkan mati.",
+    "templateTitle": "Templat",
+    "templateIntro": "Templat adalah baris perintah tetap yang disediakan papan. Agen dapat memilih satu dengan tokennya, dan papan memilih model dan usaha untuk setiap run. Perintah di atas didahulukan daripada templat.",
+    "templateActive": "Aktif: {{name}}, dipilih oleh {{by}} pada {{at}}.",
+    "templateNone": "Tidak ada templat: jawaban tidak memulai run.",
+    "templateOff": "Mati",
+    "templateCommandWins": "Ada perintah di atas: perintah itu yang berjalan, templat tidak dipakai."
   },
   "resumeCard": {
     "title": "Lanjutkan",
@@ -2906,7 +2912,13 @@
       "succeeded": "Selesai",
       "failed": "Gagal",
       "skipped": "Tidak dimulai"
-    }
+    },
+    "chosen": "model {{model}}, usaha {{effort}}",
+    "whyRun": "dari run yang bertanya",
+    "whyComplexity": "dari tabel untuk kompleksitas tiket",
+    "whyUnrecorded": "model run tidak tercatat: dari tabel untuk kompleksitas tiket",
+    "noEffort": "CLI ini tidak punya pengaturan usaha",
+    "template": "Templat: {{name}}"
   },
   "runReportsWindow": {
     "reports": "Laporan",

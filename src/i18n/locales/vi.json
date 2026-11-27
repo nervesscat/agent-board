@@ -2889,7 +2889,13 @@
     "timeoutProblem": "Một số nguyên từ {{min}} đến {{max}}.",
     "unsaved": "Có thay đổi chưa lưu.",
     "noChanges": "Không có thay đổi.",
-    "off": "Tiếp tục tự động đang tắt."
+    "off": "Tiếp tục tự động đang tắt.",
+    "templateTitle": "Mẫu",
+    "templateIntro": "Mẫu là một dòng lệnh cố định do bảng cung cấp. Một tác tử có thể chọn một mẫu bằng token của nó, và bảng chọn mô hình và nỗ lực cho mỗi lần chạy. Lệnh ở trên được ưu tiên hơn mẫu.",
+    "templateActive": "Đang dùng: {{name}}, do {{by}} chọn lúc {{at}}.",
+    "templateNone": "Chưa đặt mẫu: một câu trả lời không khởi chạy lần chạy nào.",
+    "templateOff": "Tắt",
+    "templateCommandWins": "Có lệnh được đặt ở trên: lệnh đó chạy, mẫu không được dùng."
   },
   "resumeCard": {
     "title": "Tiếp tục",
@@ -2906,7 +2912,13 @@
       "succeeded": "Đã xong",
       "failed": "Thất bại",
       "skipped": "Không khởi động"
-    }
+    },
+    "chosen": "mô hình {{model}}, nỗ lực {{effort}}",
+    "whyRun": "từ lần chạy đã hỏi",
+    "whyComplexity": "theo bảng độ phức tạp của phiếu",
+    "whyUnrecorded": "mô hình của lần chạy chưa được ghi: theo bảng độ phức tạp của phiếu",
+    "noEffort": "CLI này không có cài đặt nỗ lực",
+    "template": "Mẫu: {{name}}"
   },
   "runReportsWindow": {
     "reports": "Báo cáo",

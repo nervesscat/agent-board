@@ -32,6 +32,7 @@ import type { ProjectTweaks, WorkflowPresetId } from '#/lib/workflow'
 import type { Kind } from '#/lib/kinds'
 import type { RunReportDurationSource, RunReportStep, RunReportTime } from '#/lib/runReports'
 import type { RunType } from '#/lib/runs'
+import type { TemplateId } from '#/lib/resumeTemplates'
 
 export { COMMENT_PARENTS, STAGE_KINDS, type CommentParent, type StageColor, type StageKind }
 
@@ -78,6 +79,11 @@ export const projects = sqliteTable('projects', {
   resumeCommand: text('resume_command').notNull().default(''),
   // How many minutes a resumed run may go on before the board stops it and calls it failed.
   resumeTimeoutMinutes: integer('resume_timeout_minutes').notNull().default(240),
+  // The fixed resume template the board runs when the project has no free-text command (src/lib/resumeTemplates.ts).
+  // '' is off. An agent with its token may pick one; the two below say who picked it and when.
+  resumeTemplate: text('resume_template').notNull().default(''),
+  resumeTemplateBy: text('resume_template_by').notNull().default(''),
+  resumeTemplateAt: text('resume_template_at').notNull().default(''),
 })
 
 // The columns of a project's board, in order. A ticket's status is the key of one of them; the key
@@ -766,6 +772,13 @@ export const ticketResumes = sqliteTable(
     pidIdentity: text('pid_identity'),
     // The command's name as shown (its first word); the command itself is the project's setting.
     command: text().notNull().default(''),
+    // The template the run was built from ('' for a free-text command), and the model and effort it runs with
+    // and why they were chosen: 'run' (the asking run's), 'complexity' (the table) or 'unrecorded' (the table,
+    // as the asking run's values are not recorded).
+    template: text().$type<TemplateId | ''>().notNull().default(''),
+    model: text().notNull().default(''),
+    effort: text().notNull().default(''),
+    choice: text().notNull().default(''),
     exitCode: integer('exit_code'),
     // Why it was skipped or failed, or what is unknown about how it ended.
     reason: text().notNull().default(''),

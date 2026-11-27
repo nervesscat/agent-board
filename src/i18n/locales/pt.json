@@ -2972,7 +2972,13 @@
     "timeoutProblem": "Um número inteiro de {{min}} a {{max}}.",
     "unsaved": "Alterações não salvas.",
     "noChanges": "Nenhuma alteração.",
-    "off": "A retomada está desativada."
+    "off": "A retomada está desativada.",
+    "templateTitle": "Predefinição",
+    "templateIntro": "Uma predefinição é uma linha de comando fixa fornecida pelo quadro. Um agente pode escolher uma com o seu token, e o quadro escolhe o modelo e o esforço de cada execução. Um comando acima tem prioridade sobre a predefinição.",
+    "templateActive": "Ativa: {{name}}, escolhida por {{by}} em {{at}}.",
+    "templateNone": "Nenhuma predefinição definida: uma resposta não inicia nenhuma execução.",
+    "templateOff": "Desligar",
+    "templateCommandWins": "Há um comando definido acima: ele é executado e a predefinição não é usada."
   },
   "resumeCard": {
     "title": "Retomar",
@@ -2989,7 +2995,13 @@
       "succeeded": "Finalizado",
       "failed": "Falhou",
       "skipped": "Não iniciado"
-    }
+    },
+    "chosen": "modelo {{model}}, esforço {{effort}}",
+    "whyRun": "a partir da execução que perguntou",
+    "whyComplexity": "a partir da tabela de complexidade do ticket",
+    "whyUnrecorded": "o modelo da execução não foi registado: a partir da tabela de complexidade do ticket",
+    "noEffort": "esta CLI não tem definição de esforço",
+    "template": "Predefinição: {{name}}"
   },
   "runReportsWindow": {
     "reports": "Relatórios",

@@ -7,15 +7,16 @@ import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
-import { errorMessage, get, patch } from '#/lib/api'
+import { errorMessage, get, patch, put } from '#/lib/api'
+import { stamp } from '#/lib/format'
 import { useProject } from '#/lib/project'
 import { RESUME_COMMAND_MAX, RESUME_PRESETS, RESUME_TIMEOUT, resumeCommandProblem } from '#/lib/resume'
 
 /**
- * The project's resume command: what the board runs on its own machine to continue a ticket once the
- * human answers a decision card or moves it from blocked or review back to an active stage. Empty is off.
- * It runs with the board user's rights, so only the signed-in human writes it. Its own section of the
- * project's settings.
+ * The project's resume: a template the board ships (an agent may pick it) or a free-text command only the
+ * human writes. What the board runs on its own machine to continue a ticket once the human answers a decision
+ * card or moves it from blocked or review back to an active stage. A free-text command wins over the template.
+ * Its own section of the project's settings.
  */
 export function ResumeSettings({ projectId }: { projectId: string }) {
   const { t } = useTranslation()
@@ -24,6 +25,20 @@ export function ResumeSettings({ projectId }: { projectId: string }) {
   const { data: tools } = useQuery({
     queryKey: ['resume-tools'],
     queryFn: () => get<{ id: string; binary: string; found: boolean }[]>('/api/resume/tools'),
+  })
+  const { data: templates } = useQuery({
+    queryKey: ['resume-templates'],
+    queryFn: () => get<{ id: string; name: string; found: boolean }[]>('/api/resume/templates'),
+  })
+  const pickTemplate = useMutation({
+    mutationFn: (template: string | null) =>
+      put<{ resumeTemplate: string }>(`/api/projects/${projectId}/resume-template`, { template }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['project', projectId] })
+      void qc.invalidateQueries({ queryKey: ['ticket-resume'] })
+      toast.success(t('common.saved'))
+    },
+    onError: (err) => toast.error(errorMessage(err)),
   })
   const [command, setCommand] = useState(p?.resumeCommand ?? '')
   const [minutesText, setMinutesText] = useState(String(p?.resumeTimeoutMinutes ?? RESUME_TIMEOUT.default))
@@ -133,6 +148,55 @@ export function ResumeSettings({ projectId }: { projectId: string }) {
           </span>
         </div>
       </form>
+      <div className="space-y-2 rounded-lg border p-3">
+        <h3 className="text-sm font-medium">{t('resumeSettings.templateTitle')}</h3>
+        <p className="text-xs text-muted-foreground">{t('resumeSettings.templateIntro')}</p>
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label={t('resumeSettings.templateTitle')}
+        >
+          {templates?.map((tpl) => (
+            <Button
+              key={tpl.id}
+              type="button"
+              variant={p.resumeTemplate === tpl.id ? 'secondary' : 'outline'}
+              size="sm"
+              aria-pressed={p.resumeTemplate === tpl.id}
+              disabled={pickTemplate.isPending}
+              onClick={() => pickTemplate.mutate(tpl.id)}
+            >
+              {tpl.name}
+              <Badge variant={tpl.found ? 'secondary' : 'outline'} className="ml-1">
+                {tpl.found ? t('resumeSettings.found') : t('resumeSettings.notFound')}
+              </Badge>
+            </Button>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!p.resumeTemplate || pickTemplate.isPending}
+            onClick={() => pickTemplate.mutate(null)}
+          >
+            {t('resumeSettings.templateOff')}
+          </Button>
+        </div>
+        <p className="text-xs" aria-live="polite">
+          {p.resumeTemplate && templates?.some((tpl) => tpl.id === p.resumeTemplate)
+            ? t('resumeSettings.templateActive', {
+                name: templates.find((tpl) => tpl.id === p.resumeTemplate)?.name,
+                by: p.resumeTemplateBy,
+                at: stamp(p.resumeTemplateAt),
+              })
+            : t('resumeSettings.templateNone')}
+          {p.resumeTemplate && p.resumeCommand.trim() && (
+            <span className="block text-amber-700 dark:text-amber-400">
+              {t('resumeSettings.templateCommandWins')}
+            </span>
+          )}
+        </p>
+      </div>
     </section>
   )
 }

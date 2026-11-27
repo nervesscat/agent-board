@@ -2889,7 +2889,13 @@
     "timeoutProblem": "{{min}} 到 {{max}} 之间的整数。",
     "unsaved": "有未保存的更改。",
     "noChanges": "没有更改。",
-    "off": "恢复已关闭。"
+    "off": "恢复已关闭。",
+    "templateTitle": "模板",
+    "templateIntro": "模板是看板提供的固定命令行。智能体可以用自己的令牌选择一个，看板为每次运行选择模型和投入程度。上方的命令优先于模板。",
+    "templateActive": "当前：{{name}}，由 {{by}} 于 {{at}} 选择。",
+    "templateNone": "未设置模板：回答不会启动任何运行。",
+    "templateOff": "关闭",
+    "templateCommandWins": "上方已设置命令：它会运行，不使用模板。"
   },
   "resumeCard": {
     "title": "恢复",
@@ -2906,7 +2912,13 @@
       "succeeded": "已完成",
       "failed": "失败",
       "skipped": "未启动"
-    }
+    },
+    "chosen": "模型 {{model}}，投入 {{effort}}",
+    "whyRun": "来自提出问题的那次运行",
+    "whyComplexity": "来自任务复杂度对照表",
+    "whyUnrecorded": "未记录该运行的模型：来自任务复杂度对照表",
+    "noEffort": "该 CLI 没有投入程度设置",
+    "template": "模板：{{name}}"
   },
   "runReportsWindow": {
     "reports": "报告",

@@ -205,6 +205,7 @@ Lanes of a ticket you are working are yours to create (next section).
   to the human always moves the whole ticket to `blocked` right after it is posted (an `ask_decision`
   card or an asking post), and you end your work; "only when nothing else can go on" is for a step
   that needs a human action that is not a question, which is tagged blocked on the task while work goes on.
+- A question can restart you. When the project has a resume command or a resume template (its Settings, Resume), the board runs it once the human answers the card or moves the ticket back to an active stage. A template is picked with `set_resume_template` (`template`: `claude-code`, `codex-exec` or `opencode-run`; `null` turns it off): it takes no command, and the model and effort are chosen for each run. The resumed run gets the project's instructions and is pointed at `get_workflow` for the ticket.
 - Parallel work goes in lanes. When parts of the ticket run at once (subagents, worktrees, another
   agent), `create_ticket` for each part with `parentId` = the ticket, a short title, the part's
   brief as `body` ([Delegating](#delegating)), its own `branch`, `assignee` and `tasks`. Its repo

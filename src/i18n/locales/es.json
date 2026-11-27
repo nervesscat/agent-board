@@ -2974,7 +2974,13 @@
     "timeoutProblem": "Un número entero de {{min}} a {{max}}.",
     "unsaved": "Cambios sin guardar.",
     "noChanges": "Sin cambios.",
-    "off": "La reanudación está desactivada."
+    "off": "La reanudación está desactivada.",
+    "templateTitle": "Plantilla",
+    "templateIntro": "Una plantilla es una línea de comando fija que trae el tablero. Un agente puede elegir una con su token, y el tablero elige el modelo y el esfuerzo de cada ejecución. Un comando de arriba tiene prioridad sobre la plantilla.",
+    "templateActive": "Activa: {{name}}, elegida por {{by}} el {{at}}.",
+    "templateNone": "No hay plantilla: una respuesta no inicia ninguna ejecución.",
+    "templateOff": "Apagar",
+    "templateCommandWins": "Hay un comando arriba: se ejecuta y no se usa la plantilla."
   },
   "resumeCard": {
     "title": "Reanudar",
@@ -2991,7 +2997,13 @@
       "succeeded": "Terminado",
       "failed": "Fallido",
       "skipped": "No arrancado"
-    }
+    },
+    "chosen": "modelo {{model}}, esfuerzo {{effort}}",
+    "whyRun": "de la ejecución que preguntó",
+    "whyComplexity": "de la tabla para la complejidad del ticket",
+    "whyUnrecorded": "el modelo de la ejecución no está registrado: de la tabla para la complejidad del ticket",
+    "noEffort": "esta CLI no tiene ajuste de esfuerzo",
+    "template": "Plantilla: {{name}}"
   },
   "runReportsWindow": {
     "reports": "Informes",
