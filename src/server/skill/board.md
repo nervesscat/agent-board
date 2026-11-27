@@ -780,22 +780,24 @@ the batch stays in Approved and is left out. The orchestrator:
    `merge-train/prs-<numbers>-<base head>`, so a train built on a new base has a new name. It never pushes
    the base or a branch outside `merge-train/`.
 3. Opens one pull request from the train branch into the base, waits for its three checks green on the head,
-   and merges that pull request. Then, for each PR of the batch: if GitHub still shows it open, its commits are
-   in the base now, so it is closed with a comment naming the train pull request.
+   and merges that pull request. GitHub may leave the batch's own pull requests open, although their commits are
+   in the base now: the ticket then says so, naming the train pull request, and the human closes them. The board
+   never closes a pull request.
 4. Moves each ticket of the batch to the project's first done stage and posts on it, naming the train pull
    request and the merge commit.
 
 When the base moves while the train is open, the train is behind: run the script again. It builds from the
-base's new head and pushes under a new name, so the old train branch is left alone (delete it with the batch),
+base's new head and pushes under a new name, so the old train branch is left alone (the human removes it once the batch lands),
 and the checks run on the new train's head. Then merge that pull request. The script never replaces a train:
 a name already on the remote is refused (exit code 2), so running the same batch again on the same base means
-deleting that train branch first, or giving the batch another name with `--train`.
+the human deletes that train branch first, or the batch is given another name with `--train`.
 
 When the train's checks fail, read the failure first; a clear one-off flake gets one re-run. Otherwise bisect by dropping the newest entry
 (the last in the batch's order): run the script without it, push, and check the new head. Keep dropping until the checks are green. The dropped ticket stays in Approved, with the failing
 check named on it. When the script itself refuses a batch, the same rule applies to the entry it names: a
 PR that conflicts with the train built so far (exit code 3) is taken out and says on its ticket that it must
-be rebased on the base; a batch whose migrations do not check (exit code 4) drops the entry the script names,
+be rebased on the base. Exit code 1 is not a refusal of the batch: git or the environment failed, so the message
+is read and the batch is not bisected. A batch whose migrations do not check (exit code 4) drops the entry the script names,
 the newest one that touches the migrations folder.
 
 Migrations are not renumbered by the script. Two PRs that add a migration with the same number conflict in the
