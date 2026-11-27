@@ -292,6 +292,16 @@ api.get('/api/agent-setup/board-beat', () => {
     },
   })
 })
+// The test-slot command (scripts/board-slot.mjs) a ticket agent saves as board-slot.mjs and takes its test slots with.
+api.get('/api/agent-setup/board-slot', () => {
+  return new Response(agents.boardSlot(), {
+    headers: {
+      'content-type': 'text/javascript; charset=utf-8',
+      'content-disposition': 'attachment; filename="board-slot.mjs"',
+      'cache-control': 'no-store',
+    },
+  })
+})
 // feature-review, review-queue, todo-review and their agents, as a tar to extract into ~/.claude.
 api.get('/api/agent-setup/review-skills', ({ url }) => {
   if (url.searchParams.get('list') !== null) return json(agents.reviewBundlePaths())
