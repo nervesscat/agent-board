@@ -141,12 +141,16 @@ export function buildTrain({ repo, remote = 'origin', base = 'dev', entries }) {
           `Merge ${e.branch} (PR #${e.pr}) into the merge train`,
           sha,
         ])
-      } catch {
+      } catch (err) {
         try {
           git(tree, ['merge', '--abort'])
         } catch {
           // No merge in progress: nothing to abort.
         }
+        // Only a merge that stopped on conflicting changes is a conflict; any other refusal (unrelated
+        // histories, a missing object) is reported as git reported it.
+        const out = `${err?.stdout ?? ''}${err?.stderr ?? ''}`
+        if (!/CONFLICT|Automatic merge failed/.test(out)) throw err
         throw new BatchError(`PR #${e.pr} (${e.branch}) conflicts with the train built so far`, {
           code: 'conflict',
           pr: e.pr,
@@ -190,9 +194,19 @@ function touchesMigrations(tree, baseHead, branch, remote) {
 }
 
 /** Push the train's head to a branch of its own. Refuses the base and anything outside merge-train/. */
-export function pushTrain({ repo, remote = 'origin', train, head }) {
-  if (!/^merge-train\/[\w./-]+$/.test(train) || train.includes('..'))
+/** A train branch name: merge-train/<name>, a valid git branch name. Refused as bad input otherwise. */
+export function checkTrainName(repo, train) {
+  if (!train.startsWith('merge-train/') || train.length === 'merge-train/'.length)
     throw new BatchError(`the train branch must be merge-train/<name>, not ${train}`, { code: 'input' })
+  try {
+    git(repo, ['check-ref-format', `refs/heads/${train}`])
+  } catch {
+    throw new BatchError(`${train} is not a valid branch name`, { code: 'input' })
+  }
+}
+
+export function pushTrain({ repo, remote = 'origin', train, head }) {
+  checkTrainName(repo, train)
   if (git(repo, ['ls-remote', '--heads', remote, `refs/heads/${train}`]) !== '')
     throw new BatchError(
       `${train} is already on ${remote}: a train is never replaced. Delete that branch to rebuild it, or give this batch another name with --train`,
@@ -241,6 +255,7 @@ function main(argv) {
   }
   const entries = readBatch(opts.file)
   const repo = process.cwd()
+  if (opts.train !== undefined) checkTrainName(repo, opts.train)
   const built = buildTrain({ repo, remote: opts.remote, base: opts.base, entries })
   const train = opts.train ?? trainName(orderBatch(entries), built.base)
   console.log(

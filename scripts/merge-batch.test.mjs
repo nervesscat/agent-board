@@ -9,6 +9,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import {
   BatchError,
   buildTrain,
+  checkTrainName,
   isEntrypoint,
   orderBatch,
   parseArgs,
@@ -209,7 +210,7 @@ describe('pushTrain', () => {
 
     expect(() => pushTrain({ repo: work, train: 'dev', head: built.head })).toThrow('must be merge-train/')
     expect(() => pushTrain({ repo: work, train: 'merge-train/../dev', head: built.head })).toThrow(
-      'must be merge-train/',
+      'not a valid branch name',
     )
 
     pushTrain({ repo: work, train: 'merge-train/prs-3', head: built.head })
@@ -341,5 +342,41 @@ describe('pushes never replace a train', () => {
       buildTrain({ repo: work, entries: [{ pr: 12, branch: 'adds-bad-migration' }] }),
     )
     expect(err.message).toContain('drop PR #12 (adds-bad-migration)')
+  })
+})
+
+describe('train names and unrelated histories', () => {
+  it('refuses a train name git would reject, before anything is built or pushed', () => {
+    const { work } = fixture()
+    for (const bad of [
+      'merge-train/x/',
+      'merge-train//y',
+      'merge-train/a/.b',
+      'merge-train/',
+      'dev',
+      'merge-train/a..b',
+    ]) {
+      expect(
+        thrownBy(() => checkTrainName(work, bad)),
+        bad,
+      ).toMatchObject({ code: 'input' })
+    }
+    expect(() => checkTrainName(work, 'merge-train/prs-1-abc1234')).not.toThrow()
+  })
+
+  it('reports a branch with unrelated history as git reported it, not as a conflict', () => {
+    const { work } = fixture()
+    git(work, 'checkout', '-q', '--orphan', 'unrelated')
+    git(work, 'rm', '-rq', '--cached', '.')
+    fs.writeFileSync(path.join(work, 'island.txt'), 'island\n')
+    git(work, 'add', '-A')
+    git(work, 'commit', '-q', '-m', 'an unrelated history')
+    git(work, 'push', '-q', 'origin', 'unrelated')
+    git(work, 'checkout', '-q', 'dev')
+
+    const err = thrownBy(() => buildTrain({ repo: work, entries: [{ pr: 13, branch: 'unrelated' }] }))
+    expect(err).toBeDefined()
+    expect(err).not.toBeInstanceOf(BatchError)
+    expect(String(err.message) + String(err.stderr ?? '')).toContain('unrelated histories')
   })
 })
