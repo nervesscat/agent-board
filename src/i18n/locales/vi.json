@@ -2792,6 +2792,7 @@
     "sectionLabel": "Quy trình {{label}}",
     "projects": "của dự án",
     "summary_other": "{{count}} bước cho ticket mức {{complexity}} · review: {{rounds}}",
+    "summaryNoReview_other": "{{count}} bước cho ticket {{complexity}} · không có rà soát",
     "created": "Đã tạo quy trình",
     "renamed": "Đã đổi tên",
     "deleted": "Đã xóa quy trình",

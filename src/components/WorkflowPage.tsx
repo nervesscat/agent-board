@@ -381,11 +381,16 @@ export function WorkflowPage({
             )}
           </h2>
           <p className="text-xs text-muted-foreground" data-summary>
-            {tr('workflowPage.summary', {
-              count: workflow.numbered,
-              complexity: tr(`workflowGraph.complexity.${complexity}`),
-              rounds: roundsText(rounds),
-            })}
+            {workflow.order.includes('review')
+              ? tr('workflowPage.summary', {
+                  count: workflow.numbered,
+                  complexity: tr(`workflowGraph.complexity.${complexity}`),
+                  rounds: roundsText(rounds),
+                })
+              : tr('workflowPage.summaryNoReview', {
+                  count: workflow.numbered,
+                  complexity: tr(`workflowGraph.complexity.${complexity}`),
+                })}
           </p>
           {current.custom && (
             <div className="ml-auto w-full sm:w-auto">

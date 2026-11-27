@@ -2792,6 +2792,7 @@
     "sectionLabel": "{{label}}工作流",
     "projects": "项目的",
     "summary_other": "复杂度为{{complexity}}的 ticket 共{{count}}步 · 评审：{{rounds}}",
+    "summaryNoReview_other": "{{complexity}}工单 {{count}} 个步骤 · 无评审",
     "created": "工作流已创建",
     "renamed": "已重命名",
     "deleted": "工作流已删除",

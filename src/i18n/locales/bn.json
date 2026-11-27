@@ -2873,6 +2873,8 @@
     "projects": "প্রজেক্টের",
     "summary_one": "{{complexity}} ticket-এর জন্য {{count}}টি পদক্ষেপ · রিভিউ: {{rounds}}",
     "summary_other": "{{complexity}} ticket-এর জন্য {{count}}টি পদক্ষেপ · রিভিউ: {{rounds}}",
+    "summaryNoReview_one": "{{complexity}} টিকিটের জন্য {{count}}টি ধাপ · কোনো পর্যালোচনা নেই",
+    "summaryNoReview_other": "{{complexity}} টিকিটের জন্য {{count}}টি ধাপ · কোনো পর্যালোচনা নেই",
     "created": "ওয়ার্কফ্লো তৈরি হয়েছে",
     "renamed": "নাম বদলানো হয়েছে",
     "deleted": "ওয়ার্কফ্লো মোছা হয়েছে",

@@ -2875,6 +2875,8 @@
     "projects": "del proyecto",
     "summary_one": "{{count}} paso en un ticket de complejidad {{complexity}} · revisión: {{rounds}}",
     "summary_other": "{{count}} pasos en un ticket de complejidad {{complexity}} · revisión: {{rounds}}",
+    "summaryNoReview_one": "{{count}} paso para un ticket {{complexity}} · sin revisión",
+    "summaryNoReview_other": "{{count}} pasos para un ticket {{complexity}} · sin revisión",
     "created": "Flujo de trabajo creado",
     "renamed": "Renombrado",
     "deleted": "Flujo de trabajo eliminado",

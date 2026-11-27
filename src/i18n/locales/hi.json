@@ -2873,6 +2873,8 @@
     "projects": "प्रोजेक्ट का",
     "summary_one": "{{complexity}} ticket के लिए {{count}} स्टेप · रिव्यू: {{rounds}}",
     "summary_other": "{{complexity}} ticket के लिए {{count}} स्टेप · रिव्यू: {{rounds}}",
+    "summaryNoReview_one": "{{complexity}} टिकट के लिए {{count}} चरण · कोई समीक्षा नहीं",
+    "summaryNoReview_other": "{{complexity}} टिकट के लिए {{count}} चरण · कोई समीक्षा नहीं",
     "created": "workflow बनाया गया",
     "renamed": "नाम बदला गया",
     "deleted": "workflow हटाया गया",

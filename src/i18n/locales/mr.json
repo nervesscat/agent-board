@@ -2873,6 +2873,8 @@
     "projects": "प्रोजेक्टचा",
     "summary_one": "{{complexity}} ticket साठी {{count}} टप्पा · रिव्ह्यू: {{rounds}}",
     "summary_other": "{{complexity}} ticket साठी {{count}} टप्पे · रिव्ह्यू: {{rounds}}",
+    "summaryNoReview_one": "{{complexity}} तिकिटासाठी {{count}} पायरी · पुनरावलोकन नाही",
+    "summaryNoReview_other": "{{complexity}} तिकिटासाठी {{count}} पायऱ्या · पुनरावलोकन नाही",
     "created": "वर्कफ्लो तयार झाला",
     "renamed": "नाव बदलले",
     "deleted": "वर्कफ्लो हटवला",

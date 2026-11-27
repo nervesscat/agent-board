@@ -2792,6 +2792,7 @@
     "sectionLabel": "{{label}}ワークフロー",
     "projects": "プロジェクトの",
     "summary_other": "複雑度「{{complexity}}」のチケットで{{count}}ステップ · レビュー: {{rounds}}",
+    "summaryNoReview_other": "{{complexity}}チケットの{{count}}ステップ · レビューなし",
     "created": "ワークフローを作成しました",
     "renamed": "名前を変更しました",
     "deleted": "ワークフローを削除しました",

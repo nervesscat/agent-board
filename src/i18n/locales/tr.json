@@ -2873,6 +2873,8 @@
     "projects": "projenin",
     "summary_one": "{{count}} adım · karmaşıklık {{complexity}} · inceleme: {{rounds}}",
     "summary_other": "{{count}} adım · karmaşıklık {{complexity}} · inceleme: {{rounds}}",
+    "summaryNoReview_one": "{{complexity}} iş için {{count}} adım · inceleme yok",
+    "summaryNoReview_other": "{{complexity}} iş için {{count}} adım · inceleme yok",
     "created": "İş akışı oluşturuldu",
     "renamed": "Yeniden adlandırıldı",
     "deleted": "İş akışı silindi",

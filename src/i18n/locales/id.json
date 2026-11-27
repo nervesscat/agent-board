@@ -2792,6 +2792,7 @@
     "sectionLabel": "Alur kerja {{label}}",
     "projects": "milik proyek",
     "summary_other": "{{count}} langkah untuk tiket {{complexity}} · tinjauan: {{rounds}}",
+    "summaryNoReview_other": "{{count}} langkah untuk tiket {{complexity}} · tanpa tinjauan",
     "created": "Alur kerja dibuat",
     "renamed": "Namanya diganti",
     "deleted": "Alur kerja dihapus",

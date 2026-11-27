@@ -2873,6 +2873,8 @@
     "projects": "the project's",
     "summary_one": "{{count}} step for a {{complexity}} ticket · review: {{rounds}}",
     "summary_other": "{{count}} steps for a {{complexity}} ticket · review: {{rounds}}",
+    "summaryNoReview_one": "{{count}} step for a {{complexity}} ticket · no review",
+    "summaryNoReview_other": "{{count}} steps for a {{complexity}} ticket · no review",
     "created": "Workflow created",
     "renamed": "Renamed",
     "deleted": "Workflow deleted",

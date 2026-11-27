@@ -2873,6 +2873,8 @@
     "projects": "del progetto",
     "summary_one": "{{count}} passaggio per un ticket di complessità {{complexity}} · revisione: {{rounds}}",
     "summary_other": "{{count}} passaggi per un ticket di complessità {{complexity}} · revisione: {{rounds}}",
+    "summaryNoReview_one": "{{count}} passaggio per un ticket {{complexity}} · nessuna revisione",
+    "summaryNoReview_other": "{{count}} passaggi per un ticket {{complexity}} · nessuna revisione",
     "created": "Workflow creato",
     "renamed": "Rinominato",
     "deleted": "Workflow eliminato",

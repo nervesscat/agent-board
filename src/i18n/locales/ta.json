@@ -2873,6 +2873,8 @@
     "projects": "திட்டத்தினது",
     "summary_one": "{{complexity}} ticket-க்கு {{count}} படி · மதிப்பாய்வு: {{rounds}}",
     "summary_other": "{{complexity}} ticket-க்கு {{count}} படிகள் · மதிப்பாய்வு: {{rounds}}",
+    "summaryNoReview_one": "{{complexity}} டிக்கெட்டுக்கு {{count}} படி · மதிப்பாய்வு இல்லை",
+    "summaryNoReview_other": "{{complexity}} டிக்கெட்டுக்கு {{count}} படிகள் · மதிப்பாய்வு இல்லை",
     "created": "பணிப்பாய்வு உருவாக்கப்பட்டது",
     "renamed": "பெயர் மாற்றப்பட்டது",
     "deleted": "பணிப்பாய்வு நீக்கப்பட்டது",

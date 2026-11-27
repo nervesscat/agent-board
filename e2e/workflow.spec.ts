@@ -117,7 +117,7 @@ test('the page offers the five presets with their descriptions, and picking one 
 }) => {
   await open(page, project.id)
   const presets = page.getByRole('group', { name: 'Workflow presets' })
-  await expect(presets.getByRole('button')).toHaveCount(5)
+  await expect(presets.getByRole('button')).toHaveCount(6)
   const buttons = presets.getByRole('button')
   for (const [i, name] of ['Light', 'Standard', 'Thorough', 'Maximum', 'Content'].entries())
     await expect(buttons.nth(i)).toContainText(name)

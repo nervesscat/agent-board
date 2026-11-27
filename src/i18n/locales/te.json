@@ -2873,6 +2873,8 @@
     "projects": "ప్రాజెక్ట్‌ది",
     "summary_one": "{{complexity}} ticketకు {{count}} స్టెప్ · రివ్యూ: {{rounds}}",
     "summary_other": "{{complexity}} ticketకు {{count}} స్టెప్‌లు · రివ్యూ: {{rounds}}",
+    "summaryNoReview_one": "{{complexity}} టికెట్‌కు {{count}} దశ · సమీక్ష లేదు",
+    "summaryNoReview_other": "{{complexity}} టికెట్‌కు {{count}} దశలు · సమీక్ష లేదు",
     "created": "వర్క్‌ఫ్లో సృష్టించబడింది",
     "renamed": "పేరు మార్చబడింది",
     "deleted": "వర్క్‌ఫ్లో తొలగించబడింది",

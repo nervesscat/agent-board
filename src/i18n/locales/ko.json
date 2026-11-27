@@ -2792,6 +2792,7 @@
     "sectionLabel": "{{label}} 워크플로",
     "projects": "프로젝트의",
     "summary_other": "{{complexity}} 티켓에 {{count}}단계 · 리뷰: {{rounds}}",
+    "summaryNoReview_other": "{{complexity}} 티켓의 {{count}}단계 · 검토 없음",
     "created": "워크플로를 만들었어요",
     "renamed": "이름을 바꿨어요",
     "deleted": "워크플로를 삭제했어요",
