@@ -21,11 +21,10 @@ file. Start from `00-focus.md`; read outside it only to follow a reference from 
 after the first, `00-diff.patch` is the fix commits' diff (`<last reviewed sha>..HEAD`) and the
 prompt gives the full branch diff's path for reference.
 
-**In a delta round** (the prompt says `delta`) you run the acceptance criteria of the findings the
-fix pass fixed (the ones the orchestrator appended to `01-spec.md` for this round), every criterion
-no earlier round passed (the ones `01-spec.md` lists under **Not yet passed**), and the scoped
-checks. A criterion outside those two sets stands because an earlier round's verify recorded it
-`PASS`, and is not re-run. In every other round you run every criterion.
+**In a delta round** (the prompt says `delta`) you run only the acceptance criteria of the findings the
+fix pass fixed (the ones the orchestrator appended to `01-spec.md` for this round), and the scoped
+checks. A criterion outside those stands because an earlier round's verify recorded it `PASS`, and is
+not re-run. In every other round you run every criterion.
 
 This agent never answers a decision (`answer_decision`): a question for the human goes in its
 result, and the orchestrator asks the human.

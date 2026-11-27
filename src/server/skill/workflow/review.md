@@ -41,12 +41,13 @@ phase agent's: you may not widen a round, narrow one or skip a phase on your own
 - **A delta round** follows, after round 1, a round whose confirmed findings refute rated all `minor`
   (the Severity column of that round's `04-verdicts.md`), and only such a round: it had at least one
   confirmed finding{{if intent}} and no intent `does not match` sent it back{{end}}. It runs the delta arguments this workflow gives
-  (`delta`): verify runs the fixed findings' criteria and every criterion no earlier round passed, one
-  hunt runs on the fix commits' diff only, refute rates what they raise and the merge check runs as in
-  any round. A delta round has no depth.
+  (`delta`): verify runs only the fixed findings' criteria, one hunt runs on the fix commits' diff
+  only, refute rates what they raise and the merge check runs as in any round. A delta round has no depth.
 - **A full round** follows every other round that did not survive: one with any `medium` or `major`
   confirmed finding, and one with no confirmed finding at all, whatever sent it back (a plausible
-  finding, a criterion that is not `PASS`, the works check or a merge-check failure).{{if intent}} **A round that
+  finding, a criterion that is not `PASS`, the works check or a merge-check failure). A delta round that
+  does not survive only because a criterion that no round has passed was not run by it is followed by a
+  full round, not another delta round.{{if intent}} **A round that
   follows an intent `does not match` is always a full round**, whatever the severity of that round's
   findings.{{end}} A full round runs every phase the workflow lists but the spec, with the arguments it gives
   for a full round after the first.
@@ -74,8 +75,9 @@ phase agent's: you may not widen a round, narrow one or skip a phase on your own
   fix pass was class-level and names the class.
 - **What survives a delta round**: the survival rule, with "every acceptance criterion" read as the ones
   its verify ran plus the ones an earlier round's verify recorded `PASS`. A criterion stands only when a
-  round actually passed it: one that no round passed (a `FAIL` whose candidate was refuted, an
-  `UNVERIFIED`) is run by the delta round's verify and counts with that result.
+  round actually passed it. One that no round has passed (on the **Not yet passed** list: a `FAIL` whose
+  candidate was refuted, an `UNVERIFIED`) and that the delta round's verify did not run means the delta
+  round does not survive; the next round is then a full round, which runs every criterion.
 
 **The budget** is the `rounds` this workflow lists for the ticket's complexity. A round is one build or
 fix pass, your gate and one review. Round 1 is the first build with its gate and its review; every later

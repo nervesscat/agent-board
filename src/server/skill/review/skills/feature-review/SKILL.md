@@ -143,10 +143,13 @@ spec is written once, in round 1, so no round after the first has a `spec` phase
 phase. After round 1, a round whose confirmed findings refute rated all `minor` (the Severity column
 of that round's `04-verdicts.md`) is followed by a **delta round** (`delta`), and only such a round:
 it had at least one confirmed finding and no intent `does not match` sent it back. In a delta round
-verify runs the acceptance criteria of the findings the fix pass fixed (the ones the orchestrator
-appended, Phase 1) and every criterion no earlier round passed (the spec's **Not yet passed** list,
-Phase 1), one hunt runs on the fix commits' diff only, refute rates what those two raise, and the
-merge check runs as in any round (Phase 3b). Every other round that did not survive is followed by a
+verify runs only the acceptance criteria of the findings the fix pass fixed (the ones the orchestrator
+appended, Phase 1), one hunt runs on the fix commits' diff only, refute rates what those two raise, and
+the merge check runs as in any round (Phase 3b). A delta round survives only when every acceptance
+criterion is `PASS` by execution: the ones its verify ran plus the ones an earlier round's verify
+recorded `PASS`. A criterion that no round has passed (it is on the **Not yet passed** list, Phase 1)
+and that the delta round did not run makes the round not survive, and the next round is a full round,
+which runs every criterion. Every other round that did not survive is followed by a
 full round with every phase the workflow lists: one with any `medium` or `major` confirmed finding,
 and one with no confirmed finding at all, whatever sent it back (a plausible finding, a criterion
 that is not `PASS`, the works check or a merge-check failure). A round that follows an intent
@@ -406,11 +409,10 @@ and refute's targeted unit tests and probes; a targeted end-to-end spec is heavy
 end-to-end run, so it takes a slot the same way, released right after it. With `E2E_SKIP_BUILD=1`
 in `00-env.md`, verify's end-to-end command reuses the caller's build instead of building again.
 
-**In a delta round** (`delta`) the plan has one verify and one hunt. Verify runs the acceptance
+**In a delta round** (`delta`) the plan has one verify and one hunt. Verify runs only the acceptance
 criteria of the findings the fix pass fixed (the ones appended to `01-spec.md` for this round,
-Phase 1), every criterion no earlier round passed (the spec's **Not yet passed** list) and the
-scoped checks; a criterion it does not run stands only because an earlier round's verify recorded it
-`PASS`.
+Phase 1) and the scoped checks; a criterion it does not run stands only because an earlier round's
+verify recorded it `PASS`.
 The one hunt reviews the fix diff (`00-diff.patch`, `<last reviewed sha>..HEAD`) only, with the
 checklist sections the strategy table gives; code outside that diff is out of its scope.
 
